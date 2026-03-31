@@ -38,12 +38,16 @@ else:
     logging.error("❌ GEMINI_API_KEY não encontrada - /gerente não funcionará!")
 
 # Importar analytics
+
+# Importa analytics e decorator centralizado
 try:
     from analytics.bot_analytics import BotAnalytics
     analytics = BotAnalytics()
     ANALYTICS_ENABLED = True
+except Exception as e:
+    logging.warning(f"Analytics desabilitado: {e}")
+    ANALYTICS_ENABLED = False
 
-# Importa decorator centralizado
 from .analytics_utils import track_analytics
 
 # --- IMPORTS RESTANTES DO PROJETO ---
