@@ -18,8 +18,7 @@ from gerente_financeiro.handlers import (
     help_callback,
     help_command,
     cancel,
-    painel_notificacoes,
-    importar_of
+    painel_notificacoes
 )
 from gerente_financeiro.agendamentos_handler import (
     agendamento_start, agendamento_conv, agendamento_menu_callback, cancelar_agendamento_callback
@@ -107,7 +106,7 @@ def test_full_registration():
         ("/debuglogs", lambda: CommandHandler("debuglogs", lambda u, c: None)),  # Placeholder
         ("/teste_assistente", lambda: teste_assistente_handler),
         ("/meu_wrapped", lambda: meu_wrapped_handler),
-        ("/importar", lambda: CommandHandler("importar", importar_of)),
+
     ]
 
     # Comandos bancários removidos

@@ -152,13 +152,12 @@ from jobs import configurar_jobs
 # --- IMPORTS DOS HANDLERS (AGORA ORGANIZADOS) ---
 from gerente_financeiro.handlers import (
     create_gerente_conversation_handler, 
-        create_cadastro_email_conversation_handler,
+    create_cadastro_email_conversation_handler,
     handle_action_button_callback,
     help_callback,  
     help_command,
     cancel,
     painel_notificacoes,
-    importar_of,
     confirmar_callback,
     cancelar_callback
 )
