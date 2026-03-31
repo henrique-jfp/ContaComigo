@@ -118,8 +118,8 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 ANALYTICS_ENABLED = True
             except ImportError:
                 ANALYTICS_ENABLED = False
-                    )
 
+                )
                 context.user_data["delete_user_cleanup"] = []
             else:
                 await query.edit_message_text(
@@ -130,7 +130,6 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 )
                 logger.error(f"❌ Falha ao deletar dados do usuário {username} (ID: {user_id})")
                 context.user_data["delete_user_cleanup"] = []
-        
         except Exception as e:
             logger.error(f"❌ ERRO CRÍTICO ao deletar dados do usuário {user_id}: {e}", exc_info=True)
             await query.edit_message_text(
@@ -140,10 +139,8 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 parse_mode="HTML"
             )
             context.user_data["delete_user_cleanup"] = []
-            
         return ConversationHandler.END
-        
-    else: # delete_confirm_no
+    else:  # delete_confirm_no
         await query.edit_message_text("✅ Ufa! Seus dados estão seguros. Operação cancelada.")
         logger.info(f"ℹ️ Usuário {query.from_user.id} cancelou deleção de dados")
         context.user_data["delete_user_cleanup"] = []
