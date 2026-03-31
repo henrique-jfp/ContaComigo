@@ -7,6 +7,8 @@ try:
 except ImportError:
     ANALYTICS_ENABLED = False
 
+
+def track_command_usage_decorator(command_name):
     """Decorator para tracking de comandos"""
     import functools
     def decorator(func):
@@ -15,7 +17,6 @@ except ImportError:
             if ANALYTICS_ENABLED and update.effective_user:
                 user_id = update.effective_user.id
                 username = update.effective_user.username or update.effective_user.first_name or "Usuário"
-                
                 try:
                     analytics.track_command_usage(
                         user_id=user_id,
@@ -26,7 +27,6 @@ except ImportError:
                     logging.info(f"📊 Analytics: {username} usou /{command_name}")
                 except Exception as e:
                     logging.error(f"❌ Erro no analytics: {e}")
-            
             return await func(update, context)
         return wrapper
     return decorator
