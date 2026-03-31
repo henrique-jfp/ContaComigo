@@ -191,7 +191,7 @@ def apply_migrations():
         import psycopg2
         
         DATABASE_URL = os.getenv("DATABASE_URL")
-        migration_file = Path(__file__).parent / "migrations" / "002_create_pluggy_tables.sql"
+
         
         if not migration_file.exists():
             logger.warning(f"⚠️  Migration não encontrada: {migration_file}")
@@ -205,17 +205,17 @@ def apply_migrations():
         cursor.execute("""
             SELECT COUNT(*) 
             FROM information_schema.tables 
-            WHERE table_name = 'pluggy_items'
+
         """)
         
         if cursor.fetchone()[0] > 0:
-            logger.info("ℹ️  Tabelas Open Finance já existem, pulando migration")
+            logger.info("ℹ️  Tabelas bancárias já existem, pulando migration")
             cursor.close()
             conn.close()
             return
         
         # Aplicar migration
-        logger.info("📄 Aplicando migration 002: Tabelas Open Finance/Pluggy")
+
         with open(migration_file, 'r', encoding='utf-8') as f:
             sql_content = f.read()
         

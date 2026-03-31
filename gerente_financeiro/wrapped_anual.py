@@ -84,7 +84,7 @@ def infer_payment_method(origem: Optional[str], descricao: Optional[str]) -> str
     # Cartões: detectar presença de palavras-chave e, se possível, manter o nome do emissor
     if 'cartao' in o or 'credito' in o or 'debito' in o or 'visa' in d or 'master' in d or 'elo' in d or 'amex' in d:
         # Se a origem textual contiver o nome do banco, tenta preservar
-        if o_raw and len(o_raw) > 3 and o_raw.lower() not in ('openfinance', 'open finance'):
+        if o_raw and len(o_raw) > 3:
             # Normaliza capitalização mínima
             return o_raw
         # Caso contrário, decide entre crédito/débito por palavras-chave
@@ -98,10 +98,9 @@ def infer_payment_method(origem: Optional[str], descricao: Optional[str]) -> str
     if 'boleto' in d or 'boleto' in o:
         return 'Boleto'
 
-    # Nunca retornar 'Open Finance' como forma de pagamento — é apenas origem
-    # Caso a origem contenha 'openfinance', preferir 'Conta' ou o nome da conta
-    if 'openfinance' in o or 'open finance' in d:
-        return o_raw if o_raw and o_raw.lower() not in ('openfinance', 'open finance') else 'Conta'
+    # Nunca retornar origem bancária como forma de pagamento
+    # Caso a origem contenha algum termo de integração removida, ignorar
+        return o_raw
 
     # Fallback: se a origem contém algo plausível, title-case; senão 'Desconhecido'
     if o:

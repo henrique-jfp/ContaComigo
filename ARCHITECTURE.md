@@ -13,7 +13,7 @@ ContaComigo/
 ├── gerente_financeiro/             # 📊 Módulo principal de gestão financeira
 │   ├── handlers.py                 # Handler principal da conversa
 │   ├── services.py                 # Lógica de negócios
-│   ├── open_finance_oauth_handler.py # Integração Open Finance (100+ bancos)
+
 │   ├── ocr_handler.py              # OCR do Google Vision para notas
 │   ├── pdf_generator.py            # Geração de PDF de relatórios
 │   ├── investment_handler.py       # Rastreamento de investimentos
@@ -36,12 +36,7 @@ ContaComigo/
 │   ├── utils_google_calendar.py    # Integração Google Calendar
 │   └── utils_validation.py         # Validação de entrada
 │
-├── open_finance/                   # 🏦 Open Finance / Open Banking
-│   ├── pluggy_client.py            # Cliente da API Pluggy
-│   ├── bank_connector.py           # Gerenciamento de conexão bancária
-│   ├── data_sync.py                # Sincronização de contas e transações
-│   ├── connector_map.py            # Mapeamento de conectores de bancos
-│   └── README.md                   # Documentação da API Pluggy
+
 │
 ├── database/                       # 🗄️ Camada de banco de dados
 │   └── database.py                 # Gerenciamento de sessão SQLAlchemy
@@ -53,7 +48,7 @@ ContaComigo/
 │   └── metrics.py                  # Definição de métricas
 │
 ├── migrations/                     # 🔄 Migrações de banco de dados
-│   ├── 002_create_pluggy_tables.sql
+
 │   └── 003_create_investments_table.sql
 │
 ├── static/                         # 🎨 Arquivos web
@@ -88,17 +83,17 @@ ContaComigo/
 1. ENTRADA DO USUÁRIO
    └─ /start → Onboarding
    └─ /lancamento → Transação manual
-   └─ /sincronizar → Sincronização bancária (Open Finance)
+   └─ /sincronizar → Sincronização bancária
    └─ Foto → Extração OCR
 
 2. PROCESSAMENTO
-   └─ API Open Finance → Busca contas e transações
+   └─ API bancária → Busca contas e transações
    └─ Google Vision → Extrai dados da nota fiscal
    └─ Gemini IA → Categorização e análise
    └─ Banco de dados → Armazena e valida
 
 3. ARMAZENAMENTO
-   └─ PluggyTransaction (transações bancárias)
+   └─ Transações bancárias
    └─ Lancamento (entradas do usuário)
    └─ Investment (investimentos)
    └─ Agendamento (despesas recorrentes)
@@ -115,10 +110,10 @@ ContaComigo/
    └─ Resumos por email
 ```
 
-## 🏦 Integração Open Finance
+## 🏦 Integração bancária
 
 ```
-Banco → API Pluggy → ContaComigo → Banco de Dados
+Banco → API bancária → ContaComigo → Banco de Dados
  ↓
 100+ bancos suportados (Bradesco, Itaú, Nubank, etc)
  ↓
@@ -128,14 +123,12 @@ Fluxo OAuth → Token → Lista de contas → Transações
 ## 🗄️ Principais Modelos de Banco de Dados
 
 - **Usuario**: Perfil e configurações do usuário
-- **PluggyItem**: Token de conexão com banco
-- **PluggyAccount**: Detalhes da conta bancária
-- **PluggyTransaction**: Transações do banco
+Removido: PluggyItem, PluggyAccount, PluggyTransaction
 - **Lancamento**: Entrada manual de transação
 - **Investment**: Portfolio de investimentos
 - **Meta**: Objetivo financeiro
 - **Agendamento**: Despesas agendadas
-- **PluggyInvestment**: Investimentos retornados pelos bancos
+Removido: PluggyInvestment
 
 ## ⚡ Performance e Concorrência
 

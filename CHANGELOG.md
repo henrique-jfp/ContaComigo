@@ -86,7 +86,7 @@
   - Solves critical concurrency issue affecting user experience
 
 ### ✨ Improvements
-- **Account Pagination**: Implemented full pagination support for fetching bank accounts and investments from Pluggy API
+REMOVIDO: Integração Pluggy/Open Finance
   - Ensures no accounts are hidden on subsequent pages (fixes missing "Cofrinho" accounts)
 - **Investment Detection**: Automatic detection of investments in checking accounts via `automaticallyInvestedBalance`
 - **Architecture**: Moved synchronous blocking operations to separate threads following python-telegram-bot best practices
@@ -98,7 +98,7 @@
 - Improved error messaging and user feedback
 
 ### 🧹 Chores
-- Removed obsolete test files (`test_gemini_model.py`, `test_pluggy_oauth.py`)
+Removidos arquivos de teste obsoletos (`test_gemini_model.py`)
 - Removed deprecated migration scripts (`apply_migration_*.py`)
 - Removed obsolete documentation files (bugfix and configuration guides consolidated into main docs)
 - Cleaned up `__pycache__` directories
@@ -109,7 +109,7 @@
 ## [1.0.0] - Previous Release
 
 ### Features
-- Open Finance OAuth integration with 100+ bank support
+REMOVIDO: Integração Open Finance OAuth
 - Telegram bot with comprehensive financial management
 - Transaction categorization and analytics
 - Investment tracking

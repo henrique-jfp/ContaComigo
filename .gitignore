@@ -38,7 +38,7 @@ debug_logs/
 .tmp/
 temp/
 
-# 🧪 Test & Debug Files (exceto test_pluggy_oauth.py que é funcional)
+# 🧪 Test & Debug Files
 debug_*.py
 investigate_*.py
 analyze_*.py

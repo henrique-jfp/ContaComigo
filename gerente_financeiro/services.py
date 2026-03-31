@@ -1628,11 +1628,10 @@ def _obter_estatisticas_cache():
 async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -> str:
     """
     Coleta e formata um resumo completo do ecossistema financeiro do usuário.
-    VERSÃO 6.0 - Com OPEN FINANCE integrado + cache inteligente + análise comportamental.
+    VERSÃO 6.0 - cache inteligente + análise comportamental.
     
     Agora busca dados de:
     1. Lançamentos manuais (tabela lancamentos)
-    2. 🏦 Transações bancárias reais (tabela bank_transactions via Open Finance)
     """
     # Limpeza automática de cache
     _limpar_cache_expirado()
@@ -1641,17 +1640,10 @@ async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -
     lancamentos = db.query(Lancamento).filter(Lancamento.id_usuario == usuario.id).options(
         joinedload(Lancamento.categoria)
     ).order_by(Lancamento.data_transacao.asc()).all()
-    
-    # 🏦 NOVO: Busca transações bancárias do Open Finance
-    transacoes_bancarias = _buscar_transacoes_open_finance(db, usuario.id)
-    
-    # 🏦 Mescla os dois conjuntos de dados
-    total_transacoes = len(lancamentos) + len(transacoes_bancarias)
-    
-    if total_transacoes == 0:
+    total_lancamentos = len(lancamentos)
+    if total_lancamentos == 0:
         return json.dumps({"resumo": "Nenhum dado financeiro encontrado."}, indent=2, ensure_ascii=False)
 
-    # Gera chave de cache baseada na data do último lançamento (mais estável)
     ultima_data = lancamentos[-1].data_transacao.strftime('%Y-%m-%d')
     chave_cache = _gerar_chave_cache(
         usuario.id, 
@@ -1659,27 +1651,22 @@ async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -
         ultima_data=ultima_data,
         total_lancamentos=len(lancamentos)
     )
-    
-    # 🧠 Cache inteligente com invalidação por hash
+
     dados_cache = _obter_do_cache(chave_cache, db, usuario.id)
     if dados_cache:
         logger.info(f"✅ Contexto financeiro obtido do CACHE para usuário {usuario.id}")
         return dados_cache
-    
+
     logger.info(f"🔄 Cache MISS ou INVALIDADO - recalculando contexto para usuário {usuario.id}")
 
-    # Análise comportamental completa
     analise_comportamental = analisar_comportamento_financeiro(lancamentos)
-    
-    # Dados de mercado e econômicos
     dados_mercado = await _obter_dados_mercado_financeiro()
     dados_economicos = await _obter_dados_economicos_contexto()
-    
-    # Classificação comparativa
+
     economia_mensal = analise_comportamental.get('economia_media_mensal', 0)
     gastos_mensais = abs(analise_comportamental.get('total_despesas_90d', 0)) / 3  # Aproximação mensal
     situacao_comparativa = await _classificar_situacao_comparativa(economia_mensal, gastos_mensais)
-    
+
     data_minima = lancamentos[0].data_transacao.strftime('%d/%m/%Y')
     data_maxima = lancamentos[-1].data_transacao.strftime('%d/%m/%Y')
     resumo_mensal = {}
@@ -1701,39 +1688,7 @@ async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -
         {"descricao": o.descricao, "valor_meta": f"R$ {o.valor_meta:.2f}", "valor_atual": f"R$ {o.valor_atual:.2f}"}
         for o in metas_db
     ]
-    
-    # 🏦 Adiciona transações bancárias ao resumo mensal
-    for transacao in transacoes_bancarias:
-        try:
-            data_str = transacao.get('data')
-            if data_str:
-                data_obj = datetime.strptime(data_str, '%Y-%m-%d')
-                mes_ano = data_obj.strftime('%Y-%m')
-                
-                if mes_ano not in resumo_mensal:
-                    resumo_mensal[mes_ano] = {'receitas': 0.0, 'despesas': 0.0}
-                
-                valor = float(transacao.get('valor', 0))
-                if valor > 0:
-                    # Converte string de volta para float se necessário
-                    if isinstance(resumo_mensal[mes_ano]['receitas'], str):
-                        resumo_mensal[mes_ano]['receitas'] = float(resumo_mensal[mes_ano]['receitas'].replace('R$ ', '').replace(',', '.'))
-                    resumo_mensal[mes_ano]['receitas'] += valor
-                else:
-                    if isinstance(resumo_mensal[mes_ano]['despesas'], str):
-                        resumo_mensal[mes_ano]['despesas'] = float(resumo_mensal[mes_ano]['despesas'].replace('R$ ', '').replace(',', '.'))
-                    resumo_mensal[mes_ano]['despesas'] += abs(valor)
-        except Exception as e:
-            logger.warning(f"Erro ao processar transação bancária: {e}")
-    
-    # Formata valores monetários no resumo mensal
-    for mes, valores in resumo_mensal.items():
-        if isinstance(valores['receitas'], float):
-            valores['receitas'] = f"R$ {valores['receitas']:.2f}"
-        if isinstance(valores['despesas'], float):
-            valores['despesas'] = f"R$ {valores['despesas']:.2f}"
-    
-    # 🏦 Mescla lançamentos manuais + transações bancárias
+
     todos_dados_financeiros = [
         {
             "data": l.data_transacao.strftime('%Y-%m-%d'),
@@ -1746,25 +1701,10 @@ async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -
             "hora": l.data_transacao.hour,
             "fonte": "manual"
         } for l in lancamentos
-    ] + [
-        {
-            "data": t['data'],
-            "descricao": t['descricao'],
-            "valor": t['valor'],
-            "tipo": t['tipo'],
-            "categoria": t['categoria'],
-            "conta": t['conta'],
-            "tipo_conta": t['tipo_conta'],
-            "banco": t['banco'],
-            "dia_semana": datetime.strptime(t['data'], '%Y-%m-%d').weekday() if t['data'] else None,
-            "fonte": "open_finance"  # 🏦 Identifica origem
-        } for t in transacoes_bancarias
     ]
-    
-    # Ordena tudo por data
+
     todos_dados_financeiros.sort(key=lambda x: x['data'], reverse=True)
-    
-    # Contexto completo com OPEN FINANCE integrado
+
     contexto_completo = {
         "informacoes_gerais": {
             "data_atual": datetime.now().strftime('%d/%m/%Y'),
@@ -1774,13 +1714,6 @@ async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -
             "insights_automaticos": _gerar_insights_automaticos(lancamentos),
             "padroes_detectados": _detectar_padroes_comportamentais(lancamentos),
             "estatisticas_cache": _obter_estatisticas_cache(),
-            # 🏦 NOVO: Estatísticas Open Finance
-            "open_finance": {
-                "ativo": len(transacoes_bancarias) > 0,
-                "total_transacoes_bancarias": len(transacoes_bancarias),
-                "total_lancamentos_manuais": len(lancamentos),
-                "bancos_conectados": list(set([t['banco'] for t in transacoes_bancarias]))
-            }
         },
         "analise_comportamental_avancada": analise_comportamental,
         "contexto_economico": {
@@ -1789,18 +1722,16 @@ async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -
             "situacao_comparativa": situacao_comparativa
         },
         "resumo_por_mes": resumo_mensal,
-        # 🏦 DADOS MESCLADOS (manual + bancário)
         "todos_lancamentos": todos_dados_financeiros
     }
 
     resultado = json.dumps(contexto_completo, indent=2, ensure_ascii=False)
-    
-    # 🧠 Salva no cache com hash de transações
+
     _salvar_no_cache(chave_cache, resultado, db, usuario.id)
     logger.info(f"💾 Contexto salvo no cache para usuário {usuario.id}")
-    logger.info(f"✅ Contexto financeiro v6.0 (com Open Finance) calculado para usuário {usuario.id}")
-    logger.info(f"📊 Total: {len(lancamentos)} manuais + {len(transacoes_bancarias)} bancárias = {total_transacoes} transações")
-    
+    logger.info(f"✅ Contexto financeiro v6.0 calculado para usuário {usuario.id}")
+    logger.info(f"📊 Total: {len(lancamentos)} lançamentos manuais")
+
     return resultado
 
 # --- CACHE ESPECÍFICO PARA RESPOSTAS DA IA ---
@@ -1876,97 +1807,3 @@ def _limpar_cache_ia_expirado():
     if expirados:
         logger.info(f"🧹 Cache IA: Removidas {len(expirados)} entradas expiradas")
 
-# ==================== 🏦 INTEGRAÇÃO OPEN FINANCE ====================
-
-def _buscar_transacoes_open_finance(db: Session, user_id: int) -> List[Dict]:
-    """
-    Busca transações bancárias reais do Open Finance (últimos 90 dias).
-    
-    Retorna lista de dicionários no mesmo formato dos lançamentos manuais
-    para facilitar mesclagem e análise.
-    
-    Args:
-        db: Sessão do banco de dados
-        user_id: ID do usuário (Telegram ID)
-    
-    Returns:
-        Lista de transações bancárias formatadas
-    """
-    try:
-        # Query com JOIN triplo: transactions -> accounts -> connections
-        query = text("""
-            SELECT 
-                bt.transaction_id,
-                bt.description,
-                bt.amount,
-                bt.date,
-                bt.type,
-                bt.category,
-                bt.merchant_name,
-                ba.account_name,
-                ba.account_type,
-                bc.connector_id
-            FROM bank_transactions bt
-            INNER JOIN bank_accounts ba ON bt.account_id = ba.id
-            INNER JOIN bank_connections bc ON ba.connection_id = bc.id
-            WHERE bc.user_id = :user_id
-                AND bc.status = 'UPDATED'
-                AND bt.date >= CURRENT_DATE - INTERVAL '90 days'
-            ORDER BY bt.date DESC
-        """)
-        
-        resultado = db.execute(query, {"user_id": user_id})
-        transacoes = []
-        
-        for row in resultado:
-            # Formata no mesmo padrão dos lançamentos manuais
-            transacao = {
-                "id": row[0],  # transaction_id
-                "data": row[3].strftime('%Y-%m-%d') if row[3] else None,
-                "descricao": row[1] or row[6] or "Transação bancária",  # description ou merchant_name
-                "valor": float(row[2]) if row[2] else 0.0,
-                "tipo": "Receita" if row[2] > 0 else "Despesa",
-                "categoria": row[5] or "Open Finance",
-                "conta": row[7] or "Banco conectado",  # account_name
-                "tipo_conta": row[8],  # CREDIT_CARD, CHECKING, SAVINGS
-                "fonte": "open_finance",  # 🏦 Identificador de origem
-                "banco": _mapear_banco_por_connector(row[9])  # Nome do banco
-            }
-            # Tenta extrair itens a partir da descrição/merchant_name (heurística local)
-            try:
-                descricao_full = (row[1] or '') + ' ' + (row[6] or '')
-                itens_extraidos = _extrair_itens_de_descricao(descricao_full, float(row[2]) if row[2] else 0.0)
-                if itens_extraidos:
-                    transacao['itens'] = itens_extraidos
-            except Exception:
-                pass
-            transacoes.append(transacao)
-        
-        logger.info(f"✅ {len(transacoes)} transações bancárias encontradas para user {user_id}")
-        return transacoes
-        
-    except Exception as e:
-        logger.warning(f"⚠️ Erro ao buscar transações Open Finance: {e}")
-        return []  # Retorna lista vazia se Open Finance não estiver configurado
-
-def _mapear_banco_por_connector(connector_id: int) -> str:
-    """
-    Mapeia connector_id para nome do banco.
-    
-    IDs comuns (Pluggy):
-    - 201: Nubank
-    - 205: Inter
-    - 208: C6 Bank
-    - 207: Banco do Brasil
-    """
-    mapeamento = {
-        201: "Nubank",
-        205: "Banco Inter",
-        208: "C6 Bank",
-        207: "Banco do Brasil",
-        209: "Itaú",
-        210: "Bradesco",
-        211: "Santander",
-        212: "Caixa"
-    }
-    return mapeamento.get(connector_id, f"Banco {connector_id}")

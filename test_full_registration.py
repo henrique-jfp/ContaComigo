@@ -42,13 +42,8 @@ from gerente_financeiro.investment_handler import get_investment_handlers
 from gerente_financeiro.assistente_proativo_handler import teste_assistente_handler
 from gerente_financeiro.wrapped_anual_handler import meu_wrapped_handler
 
-# Open Finance
-try:
-    from gerente_financeiro.open_finance_oauth_handler import OpenFinanceOAuthHandler
-    OPEN_FINANCE_OAUTH_ENABLED = True
-except Exception as e:
-    OPEN_FINANCE_OAUTH_ENABLED = False
-    print(f"Open Finance disabled: {e}")
+# Integração bancária removida
+    # Blocos bancários removidos
 
 def test_full_registration():
     print("🔄 Testando registro completo de handlers...")
@@ -88,19 +83,8 @@ def test_full_registration():
         ("edit_conv", lambda: edit_conv),
     ]
 
-    # Open Finance OAuth
-    of_oauth_handler = None
-    if OPEN_FINANCE_OAUTH_ENABLED:
-        try:
-            print("🔄 Instanciando OpenFinanceOAuthHandler...")
-            of_oauth_handler = OpenFinanceOAuthHandler()
-            print("🔄 Criando conversation handler...")
-            conversation_builders.append(
-                ("open_finance_oauth_conv", lambda: of_oauth_handler.get_conversation_handler())
-            )
-            print("✅ Open Finance OAuth handler registrado")
-        except Exception as e:
-            print(f"❌ Erro ao registrar Open Finance OAuth: {e}")
+    # Integração bancária removida
+    # Blocos bancários removidos
 
     for name, builder in conversation_builders:
         build_and_add(name, builder)
@@ -126,16 +110,8 @@ def test_full_registration():
         ("/importar", lambda: CommandHandler("importar", importar_of)),
     ]
 
-    # Open Finance commands
-    if OPEN_FINANCE_OAUTH_ENABLED and of_oauth_handler:
-        command_builders.extend([
-            ("/minhas_contas", lambda: CommandHandler("minhas_contas", of_oauth_handler.minhas_contas)),
-            ("/sincronizar", lambda: CommandHandler("sincronizar", of_oauth_handler.sincronizar)),
-            ("/importar_transacoes", lambda: CommandHandler("importar_transacoes", of_oauth_handler.importar_transacoes)),
-            ("/categorizar", lambda: CommandHandler("categorizar", of_oauth_handler.categorizar_lancamentos)),
-            ("/debug_open_finance", lambda: CommandHandler("debug_open_finance", of_oauth_handler.debug_open_finance)),
-        ])
-        print("✅ Comandos Open Finance adicionados")
+    # Comandos bancários removidos
+        # Blocos bancários removidos
 
     for name, builder in command_builders:
         print(f"🔧 Tentando registrar comando: {name}")
@@ -163,15 +139,8 @@ def test_full_registration():
         ("dashboard_callback", lambda: CallbackQueryHandler(dashboard_callback_handler, pattern="^dashboard_")),
     ]
 
-    # Open Finance callbacks
-    if OPEN_FINANCE_OAUTH_ENABLED and of_oauth_handler:
-        callback_builders.extend([
-            ("import_callback", lambda: CallbackQueryHandler(of_oauth_handler.handle_import_callback, pattern="^import_")),
-            ("action_callback", lambda: CallbackQueryHandler(of_oauth_handler.handle_action_callback, pattern="^action_")),
-            ("of_sync_now", lambda: CallbackQueryHandler(of_oauth_handler.handle_sync_now_callback, pattern="^of_sync_now_")),
-            ("of_view_accounts", lambda: CallbackQueryHandler(of_oauth_handler.handle_view_accounts_callback, pattern="^of_view_accounts$"))
-        ])
-        print("✅ Callback handlers Open Finance adicionados")
+    # Callbacks bancários removidos
+        # Blocos bancários removidos
 
     for name, builder in callback_builders:
         build_and_add(name, builder)

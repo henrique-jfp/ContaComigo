@@ -262,138 +262,19 @@ class MetaSPX(Base):
         return f"<MetaSPX(tipo={self.tipo}, lucro_meta=R${self.meta_lucro_liquido})>"
 
 
-# ==================== OPEN FINANCE / PLUGGY ====================
 
-class PluggyItem(Base):
-    """
-    Representa uma conexão bancária do usuário via Pluggy.
-    Um 'item' é uma instituição financeira conectada (ex: Nubank, Inter).
-    """
-    __tablename__ = 'pluggy_items'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    id_usuario = Column(Integer, ForeignKey('usuarios.id'), nullable=False, index=True)
-    
-    # Dados da Pluggy
-    pluggy_item_id = Column(String, unique=True, nullable=False, index=True)  # ID do item na Pluggy
-    connector_id = Column(String, nullable=False)  # ID do conector (banco) na Pluggy
-    connector_name = Column(String, nullable=False)  # Nome do banco (ex: "Nubank")
-    
-    # Status da conexão
-    status = Column(String, nullable=False)  # UPDATED, UPDATING, LOGIN_ERROR, etc
-    status_detail = Column(String, nullable=True)  # Detalhes do erro, se houver
-    
-    # Dados de execução
-    execution_status = Column(String, nullable=True)  # SUCCESS, ERROR, PARTIAL_SUCCESS
-    last_updated_at = Column(DateTime, nullable=True)  # Última sincronização bem-sucedida
-    
-    # Metadata
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    
-    # Relacionamentos
-    usuario = relationship("Usuario", backref="pluggy_items")
-    accounts = relationship("PluggyAccount", back_populates="item", cascade="all, delete-orphan")
-    
-    def __repr__(self):
-        return f"<PluggyItem(id={self.pluggy_item_id}, bank={self.connector_name}, status={self.status})>"
-
-
-class PluggyAccount(Base):
-    """
-    Representa uma conta bancária específica dentro de um item.
-    Um item pode ter múltiplas contas (ex: conta corrente + cartão de crédito).
-    """
-    __tablename__ = 'pluggy_accounts'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    id_item = Column(Integer, ForeignKey('pluggy_items.id'), nullable=False, index=True)
-    
-    # Dados da Pluggy
-    pluggy_account_id = Column(String, unique=True, nullable=False, index=True)  # ID da conta na Pluggy
-    
-    # Informações da conta
-    type = Column(String, nullable=False)  # BANK, CREDIT, INVESTMENT
-    subtype = Column(String, nullable=True)  # CHECKING_ACCOUNT, CREDIT_CARD, SAVINGS_ACCOUNT
-    number = Column(String, nullable=True)  # Número da conta (parcialmente mascarado)
-    name = Column(String, nullable=False)  # Nome da conta (ex: "Conta Corrente")
-    
-    # Saldos
-    balance = Column(Numeric(15, 2), nullable=True)  # Saldo atual
-    currency_code = Column(String(3), default="BRL")  # BRL, USD, etc
-    
-        # Limite de crédito (apenas para cartões)
-    credit_limit = Column(Numeric(15, 2), nullable=True)
-    credit_level = Column(String, nullable=True)
-    credit_brand = Column(String, nullable=True)
-    credit_closing_date = Column(String, nullable=True)
-    credit_due_date = Column(String, nullable=True)
-    
-    # Metadata
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    
-    # Relacionamentos
-    item = relationship("PluggyItem", back_populates="accounts")
-    transactions = relationship("PluggyTransaction", back_populates="account", cascade="all, delete-orphan")
-    
-    def __repr__(self):
-        return f"<PluggyAccount(id={self.pluggy_account_id}, type={self.type}, balance=R${self.balance})>"
-
-
-class PluggyTransaction(Base):
-    """
-    Representa uma transação bancária sincronizada da Pluggy.
-    """
-    __tablename__ = 'pluggy_transactions'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    id_account = Column(Integer, ForeignKey('pluggy_accounts.id'), nullable=False, index=True)
-    
-    # Dados da Pluggy
-    pluggy_transaction_id = Column(String, unique=True, nullable=False, index=True)  # ID da transação na Pluggy
-    
-    # Informações da transação
-    description = Column(String, nullable=False)  # Descrição da transação
-    amount = Column(Numeric(15, 2), nullable=False)  # Valor (positivo=entrada, negativo=saída)
-    date = Column(Date, nullable=False, index=True)  # Data da transação
-    
-    # Categoria (se fornecida pela Pluggy)
-    category = Column(String, nullable=True)
-    
-    # Status
-    status = Column(String, nullable=True)  # PENDING, POSTED
-    type = Column(String, nullable=True)  # DEBIT, CREDIT
-    
-    # Merchant/Payee
-    merchant_name = Column(String, nullable=True)
-    merchant_category = Column(String, nullable=True)
-    
-    # Controle de importação
-    imported_to_lancamento = Column(Boolean, default=False)  # Se já foi importado para lançamentos
-    id_lancamento = Column(Integer, ForeignKey('lancamentos.id'), nullable=True)  # Link para lançamento criado
-    
-    # Metadata
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    
-    # Relacionamentos
-    account = relationship("PluggyAccount", back_populates="transactions")
-    lancamento = relationship("Lancamento", foreign_keys=[id_lancamento])
-    
-    def __repr__(self):
-        return f"<PluggyTransaction(id={self.pluggy_transaction_id}, amount=R${self.amount}, date={self.date})>"
 
 
 # ==================== MODELS DE INVESTIMENTOS ====================
 
+
 class Investment(Base):
-    """Investimentos do usuário (manual ou via Pluggy)"""
+    """Investimentos do usuário"""
     __tablename__ = 'investments'
     
     id = Column(Integer, primary_key=True, index=True)
     id_usuario = Column(Integer, ForeignKey('usuarios.id', ondelete='CASCADE'), nullable=False)
-    id_account = Column(Integer, ForeignKey('pluggy_accounts.id', ondelete='SET NULL'), nullable=True)
+    # id_account removido
     
     # Informações básicas
     nome = Column(String(255), nullable=False)
@@ -412,7 +293,7 @@ class Investment(Base):
     
     # Controle
     ativo = Column(Boolean, default=True)
-    fonte = Column(String(50), default='MANUAL')  # MANUAL, PLUGGY
+    fonte = Column(String(50), default='MANUAL')  # MANUAL
     
     # Metadata
     observacoes = Column(Text)
@@ -421,7 +302,6 @@ class Investment(Base):
     
     # Relacionamentos
     usuario = relationship("Usuario", back_populates="investments")
-    account = relationship("PluggyAccount", foreign_keys=[id_account])
     snapshots = relationship("InvestmentSnapshot", back_populates="investment", cascade="all, delete-orphan")
     
     def __repr__(self):

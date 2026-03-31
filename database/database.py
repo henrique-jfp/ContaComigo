@@ -85,8 +85,6 @@ def deletar_todos_dados_usuario(telegram_id: int) -> bool:
     Encontra um usuário pelo seu telegram_id e deleta o registro dele.
     Devido ao cascade, todos os dados associados (lançamentos, metas, etc.)
     serão deletados automaticamente.
-    
-    IMPORTANTE: Também deleta conexões bancárias na API Pluggy (Open Finance).
     """
     db = next(get_db())
     try:
@@ -99,84 +97,11 @@ def deletar_todos_dados_usuario(telegram_id: int) -> bool:
         
         logging.info(f"🗑️ Iniciando deleção COMPLETA do usuário {telegram_id} (DB ID: {usuario_a_deletar.id})...")
         
-        # ==================== DELETAR CONEXÕES OPEN FINANCE ====================
-        try:
-            from models import PluggyItem, PluggyAccount, PluggyTransaction
-            from gerente_financeiro.open_finance_oauth_handler import pluggy_request
-            
-            # Buscar todos os items do usuário
-            pluggy_items = db.query(PluggyItem).filter(PluggyItem.id_usuario == usuario_a_deletar.id).all()
-            
-            if pluggy_items:
-                logging.info(f"🔄 Deletando {len(pluggy_items)} conexão(ões) Open Finance do usuário {telegram_id}...")
-                
-                # 1. Deletar na API Pluggy (isso remove tudo na Pluggy)
-                for item in pluggy_items:
-                    try:
-                        pluggy_request("DELETE", f"/items/{item.pluggy_item_id}")
-                        logging.info(f"✅ Item {item.pluggy_item_id} ({item.connector_name}) deletado na Pluggy")
-                    except Exception as e:
-                        logging.warning(f"⚠️ Erro ao deletar item {item.pluggy_item_id} na Pluggy: {e}")
-                
-            # 2. Deletar do banco LOCAL na ORDEM CORRETA (evitar FK violation)
-            item_ids = [item.id for item in pluggy_items]
-            
-            # 2.1. Primeiro: pluggy_transactions (referencia pluggy_accounts via id_account)
-            deleted_txns = db.query(PluggyTransaction).filter(
-                PluggyTransaction.id_account.in_(
-                    db.query(PluggyAccount.id).filter(PluggyAccount.id_item.in_(item_ids))
-                )
-            ).delete(synchronize_session=False)
-            logging.info(f"✅ {deleted_txns} transações Open Finance deletadas")
-            
-            # 2.2. Segundo: pluggy_accounts (referencia pluggy_items via id_item)
-            deleted_accounts = db.query(PluggyAccount).filter(
-                PluggyAccount.id_item.in_(item_ids)
-            ).delete(synchronize_session=False)
-            logging.info(f"✅ {deleted_accounts} contas Open Finance deletadas")
-            
-            # 2.3. Terceiro: pluggy_items (agora sem dependências)
-            deleted_items = db.query(PluggyItem).filter(
-                PluggyItem.id_usuario == usuario_a_deletar.id
-            ).delete(synchronize_session=False)
-            logging.info(f"✅ {deleted_items} conexões Open Finance deletadas")
-            db.flush()  # Aplica as mudanças imediatamente
-        
-        except ImportError:
-            logging.info("ℹ️ Tabelas Open Finance ainda não existem, pulando deleção...")
-        except Exception as e:
-            logging.error(f"❌ Erro ao deletar conexões Open Finance: {e}", exc_info=True)
-            db.rollback()
-            raise  # Re-raise para abortar a deleção completa
-        
-        # ==================== DELETAR TOKENS BANCÁRIOS (user_bank_tokens) ====================
-        # Alguns tokens bancários (ex: tokens de OAuth/Pluggy) podem estar em tabelas
-        # auxiliares que referenciam diretamente "usuarios" sem ON DELETE CASCADE.
-        # Para evitar ForeignKeyViolation ao deletar o usuário, limpamos essas
-        # tabelas explicitamente aqui.
 
-        try:
-            # Usamos SQL direto porque a tabela pode não ter modelo SQLAlchemy
-            deleted_tokens = db.execute(
-                text("DELETE FROM user_bank_tokens WHERE id_usuario = :id_usuario"),
-                {"id_usuario": usuario_a_deletar.id}
-            ).rowcount
-            logging.info(f"✅ {deleted_tokens} tokens bancários (user_bank_tokens) deletados")
-            db.flush()
-        except Exception as e:
-            # Em caso de erro, fazemos rollback e abortamos a deleção completa
-            logging.error(
-                f"❌ Erro ao deletar tokens bancários (user_bank_tokens) do usuário {telegram_id}: {e}",
-                exc_info=True,
-            )
-            db.rollback()
-            raise
+        
+
 
         # ==================== DELETAR USUÁRIO ====================
-        # A mágica acontece aqui! Cascade deleta:
-        # - lancamentos, contas, objetivos, agendamentos, conquistas_usuario
-        # - pluggy_items → pluggy_accounts → pluggy_transactions (cascade)
-        
         logging.info(f"🔥 Deletando usuário {telegram_id} do banco...")
         db.delete(usuario_a_deletar)
         db.commit()
@@ -193,7 +118,6 @@ def deletar_todos_dados_usuario(telegram_id: int) -> bool:
         logging.info(f"   📊 Lançamentos: deletados (cascade)")
         logging.info(f"   🎯 Metas: deletadas (cascade)")
         logging.info(f"   📅 Agendamentos: deletados (cascade)")
-        logging.info(f"   🏦 Conexões Open Finance: deletadas na API + banco")
         logging.info(f"   🎮 Gamificação: deletada (cascade)")
         logging.info(f"   ⚙️ Configurações: deletadas (cascade)")
         

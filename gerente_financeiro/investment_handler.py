@@ -19,7 +19,7 @@ from telegram.ext import (
 from database.database import get_db
 from models import (
     Usuario, Investment, InvestmentSnapshot, InvestmentGoal, 
-    PatrimonySnapshot, PluggyAccount, PluggyItem
+    PatrimonySnapshot
 )
 from sqlalchemy import func, and_, desc
 
@@ -56,15 +56,11 @@ async def investimentos_command(update: Update, context: ContextTypes.DEFAULT_TY
             message = (
                 "📈 *Seus Investimentos*\n\n"
                 "Você ainda não tem investimentos cadastrados\\.\n\n"
-                "💡 Use /adicionar\\_investimento para começar\\!\n"
-                "💡 Ou conecte seu banco com /conectar\\_banco para importar automaticamente\\."
+                "💡 Use /adicionar\\_investimento para começar\\!"
             )
-            
             keyboard = [
                 [InlineKeyboardButton("➕ Adicionar Investimento", callback_data="inv_add")],
-                [InlineKeyboardButton("🏦 Conectar Banco", callback_data="inv_connect_bank")],
             ]
-            
             await update.message.reply_text(
                 message,
                 reply_markup=InlineKeyboardMarkup(keyboard),
@@ -297,27 +293,14 @@ async def patrimonio_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 await update.message.reply_text(text)
             return
         
-        # Buscar saldo em contas bancárias (Pluggy)
-        contas_pluggy = (
-            db.query(PluggyAccount)
-            .join(PluggyItem)
-            .filter(PluggyItem.id_usuario == usuario.id)
-            .all()
-        )
-        
-        total_contas = sum(float(conta.balance or 0) for conta in contas_pluggy if conta.type in ['BANK', 'CHECKING', 'SAVINGS'])
-        
         # Buscar investimentos
         investments = (
             db.query(Investment)
             .filter(and_(Investment.id_usuario == usuario.id, Investment.ativo == True))
             .all()
         )
-        
         total_investimentos = sum(float(inv.valor_atual) for inv in investments)
-        
-        # Total patrimonial
-        total_patrimonio = total_contas + total_investimentos
+        total_patrimonio = total_investimentos
         
         # Buscar último snapshot para comparar
         ultimo_snapshot = (
@@ -336,13 +319,8 @@ async def patrimonio_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         # Montar mensagem
         message = "💎 *Seu Patrimônio*\n\n"
-        
-        message += f"💳 *Contas Bancárias*\n"
-        message += f"   R$ {total_contas:,.2f}\n\n".replace(",", "X").replace(".", ",").replace("X", ".")
-        
         message += f"📈 *Investimentos*\n"
         message += f"   R$ {total_investimentos:,.2f}\n\n".replace(",", "X").replace(".", ",").replace("X", ".")
-        
         message += f"━━━━━━━━━━━━━━━━━━━━\n"
         message += f"💰 *TOTAL*: R$ {total_patrimonio:,.2f}\n".replace(",", "X").replace(".", ",").replace("X", ".")
         
@@ -441,12 +419,6 @@ async def investment_callback_handler(update: Update, context: ContextTypes.DEFA
         await query.edit_message_text(
             "➕ Para adicionar um investimento manualmente, use:\n"
             "/adicionar_investimento"
-        )
-    
-    elif callback_data == "inv_connect_bank":
-        await query.edit_message_text(
-            "🏦 Para conectar seu banco e importar investimentos automaticamente, use:\n"
-            "/conectar_banco"
         )
     
     elif callback_data == "inv_goals":

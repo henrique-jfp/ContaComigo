@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy.orm import Session
 from models import Lancamento
-from gerente_financeiro.open_finance_oauth_handler import OpenFinanceOAuthHandler
+ 
 from database.database import get_db
 
 @pytest.mark.asyncio
@@ -28,7 +28,7 @@ def test_categorizar_lancamentos(monkeypatch):
     class DummyContext:
         pass
 
-    handler = OpenFinanceOAuthHandler()
+    # handler removido
     import asyncio
     update = DummyUpdate()
     context = DummyContext()

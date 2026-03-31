@@ -7,7 +7,6 @@ try:
 except ImportError:
     ANALYTICS_ENABLED = False
 
-def track_analytics(command_name):
     """Decorator para tracking de comandos"""
     import functools
     def decorator(func):
@@ -31,6 +30,8 @@ def track_analytics(command_name):
             return await func(update, context)
         return wrapper
     return decorator
+
+from .analytics_utils import track_analytics
 
 import logging
 from datetime import datetime

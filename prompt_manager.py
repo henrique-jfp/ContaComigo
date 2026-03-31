@@ -1,16 +1,15 @@
 from importlib import import_module
-from prompts import gerente_financeiro, open_finance, analytics
+from prompts import gerente_financeiro, analytics
 
 class PromptManager:
     def __init__(self):
         self.prompts = {
             'gerente_financeiro': [],
-            'open_finance': [],
             'analytics': []
         }
 
     def carregar_prompts(self):
-        for modulo in [gerente_financeiro, open_finance, analytics]:
+        for modulo in [gerente_financeiro, analytics]:
             for nome_arquivo in dir(modulo):
                 if nome_arquivo.startswith('Prompt'):
                     classe_prompt = getattr(modulo, nome_arquivo)

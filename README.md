@@ -1,26 +1,31 @@
-# 🤝 ContaComigo: Seu Parceiro Financeiro que Não Te Julga
 
-> **Seu parceiro financeiro pessoal no Telegram com IA, OCR e Open Banking**
+# 💸 MaestroFin: Seu Gerente Financeiro com IA
+
+> **Seu parceiro financeiro pessoal no Telegram com IA, OCR e Gamificação**
 
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 
 ### **Transforme o caos financeiro em decisões inteligentes através de conversas naturais**
 
-[![Telegram](https://img.shields.io/badge/Telegram-Bot-26A5E4?style=flat&logo=telegram&logoColor=white)](https://t.me/ContaComigoBot)
+
+[![Telegram](https://img.shields.io/badge/Telegram-Bot-26A5E4?style=flat&logo=telegram&logoColor=white)](https://t.me/MaestroFinBot)
 
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169E1?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 
-[![🚀 Demo ao Vivo](https://img.shields.io/badge/🚀%20Demo%20ao%20Vivo-contacomigo--unified.onrender.com-00D4AA?style=for-the-badge&logoColor=white)](https://contacomigo-unified.onrender.com)
+
+[![🚀 Demo ao Vivo](https://img.shields.io/badge/🚀%20Demo%20ao%20Vivo-maestrofin.onrender.com-00D4AA?style=for-the-badge&logoColor=white)](https://maestrofin.onrender.com)
 
 [![License](https://img.shields.io/badge/License-Dual%20(Commercial)-orange.svg)](LICENSE)
 
-[![💬 Teste no Telegram](https://img.shields.io/badge/💬%20Teste%20no%20Telegram-@ContaComigoBot-0088CC?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/ContaComigoBot)
+
+[![💬 Teste no Telegram](https://img.shields.io/badge/💬%20Teste%20no%20Telegram-@MaestroFinBot-0088CC?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/MaestroFinBot)
 
 ---
 
+
 ## 🎯 **O que é?**
 
-**🤔 O PROBLEMA**: 73% das pessoas não sabem para onde vai seu dinheiro  
+**🤔 O PROBLEMA**: 73% das pessoas não sabem para onde vai seu dinheiro
 
 **⚡ A SOLUÇÃO**: IA + OCR + Gamificação = Controle financeiro que funciona de verdade
 
@@ -28,12 +33,11 @@ Um bot do Telegram completo para controle financeiro pessoal que combina:
 
 - 🤖 **IA conversacional** (Google Gemini) para análises em linguagem natural
 - 📸 **OCR automático** (Google Vision) para extrair dados de cupons e faturas
-- 🏦 **Open Finance/Open Banking** via Pluggy API para sincronização bancária
 - 📊 **Dashboard web** com gráficos interativos
 - 🎮 **Gamificação** com XP, ranking e conquistas
 - 📅 **Agendamentos** para despesas recorrentes
 
-**Por que usar?** Porque controlar finanças não precisa ser chato nem demorado. Com o ContaComigo, você conversa naturalmente e tudo é registrado, categorizado e analisado automaticamente.
+**Por que usar?** Porque controlar finanças não precisa ser chato nem demorado. Com o MaestroFin, você conversa naturalmente e tudo é registrado, categorizado e analisado automaticamente.
 
 ---
 
@@ -56,7 +60,6 @@ Um bot do Telegram completo para controle financeiro pessoal que combina:
 - **OCR Automático**: Foto da nota fiscal → Todas as compras extraídas em 3 segundos
 - **Gamificação Viciante**: XP, ranking, conquistas = você QUER usar todo dia
 - **Relatórios PDF**: Profissionais e completos
-- **Open Finance**: Conecte suas contas bancárias de forma segura
 
 ---
 
@@ -109,17 +112,18 @@ Este projeto utiliza **Licenciamento Duplo**:
 
 ---
 
+
 ## 🙏 **Agradecimentos**
 
 - **Google Gemini** pela IA conversacional incrível
 - **Google Cloud Vision** pelo OCR preciso
-- **Pluggy** pela API Open Finance robusta
 - **python-telegram-bot** pela biblioteca excelente
 - **Comunidade Python** pelo ecossistema incrível
 
 ---
 
 ## 📞 **Contato**
+
 
 - 🐛 **Issues**: [GitHub Issues](https://github.com/henrique-jfp/MaestroFin/issues)
 - 💬 **Telegram**: [@MaestroFinBot](https://t.me/MaestroFinBot)
@@ -129,6 +133,7 @@ Este projeto utiliza **Licenciamento Duplo**:
 ---
 
 <div align="center">
+
 
 ### ⭐ **Se esse projeto te ajudou, deixa uma estrela!** ⭐
 

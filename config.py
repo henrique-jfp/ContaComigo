@@ -71,20 +71,7 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
 EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER")
 PIX_KEY = os.getenv("PIX_KEY")
 
-# ----- PLUGGY / OPEN FINANCE -----
-PLUGGY_CLIENT_ID = os.getenv("PLUGGY_CLIENT_ID")
-PLUGGY_CLIENT_SECRET = os.getenv("PLUGGY_CLIENT_SECRET")
 
-# Whitelist de usuários autorizados a usar Open Finance
-# Formato: lista de IDs do Telegram separados por vírgula
-# Exemplo: "6157591255,123456789,987654321"
-PLUGGY_WHITELIST = os.getenv("PLUGGY_WHITELIST", "")
-PLUGGY_WHITELIST_IDS = [int(uid.strip()) for uid in PLUGGY_WHITELIST.split(",") if uid.strip().isdigit()]
-
-if PLUGGY_WHITELIST_IDS:
-    logging.info(f"🔐 Open Finance restrito a {len(PLUGGY_WHITELIST_IDS)} usuário(s) autorizado(s)")
-else:
-    logging.info("🌐 Open Finance disponível para TODOS os usuários (Trial Mode)")
 
 
 # --- VALIDAÇÃO E CONFIGURAÇÃO ADICIONAL ---
@@ -107,8 +94,7 @@ if not PIX_KEY:
     missing_vars.append("PIX_KEY")
 if not EMAIL_HOST_PASSWORD:
     missing_vars.append("EMAIL_HOST_PASSWORD")
-if not PLUGGY_CLIENT_ID or not PLUGGY_CLIENT_SECRET:
-    missing_vars.append("PLUGGY_CLIENT_ID/PLUGGY_CLIENT_SECRET")
+
 
 if missing_vars:
     logging.warning(f"⚠️ Variáveis não configuradas: {', '.join(missing_vars)}")
@@ -128,9 +114,7 @@ logging.info(f"   📧 SENDER_EMAIL: {'✅ Configurado' if SENDER_EMAIL else '�
 logging.info(f"   📧 EMAIL_RECEIVER: {'✅ Configurado' if EMAIL_RECEIVER else '❌ Não encontrado'}")
 logging.info(f"   💳 PIX_KEY: {'✅ Configurado' if PIX_KEY else '❌ Não encontrado'}")
 
-# Log de Pluggy / Open Finance
-logging.info(f"   🔌 PLUGGY_CLIENT_ID: {'✅ Configurado' if PLUGGY_CLIENT_ID else '❌ Não encontrado'}")
-logging.info(f"   🔌 PLUGGY_CLIENT_SECRET: {'✅ Configurado' if PLUGGY_CLIENT_SECRET else '❌ Não encontrado'}")
+
 
 # Configurar credenciais do Google de forma mais flexível
 if GOOGLE_APPLICATION_CREDENTIALS:

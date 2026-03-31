@@ -6,7 +6,7 @@
 CREATE TABLE IF NOT EXISTS investments (
     id SERIAL PRIMARY KEY,
     id_usuario INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
-    id_account INTEGER REFERENCES pluggy_accounts(id) ON DELETE SET NULL,
+    -- id_account removido
     
     -- Informações básicas
     nome VARCHAR(255) NOT NULL,
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS investments (
     
     -- Controle
     ativo BOOLEAN DEFAULT TRUE,
-    fonte VARCHAR(50) DEFAULT 'MANUAL', -- MANUAL, PLUGGY
+    fonte VARCHAR(50) DEFAULT 'MANUAL',
     
     -- Metadata
     observacoes TEXT,
@@ -116,13 +116,13 @@ CREATE INDEX IF NOT EXISTS idx_patrimony_usuario ON patrimony_snapshots(id_usuar
 CREATE INDEX IF NOT EXISTS idx_patrimony_mes ON patrimony_snapshots(mes_referencia);
 
 -- ==================== COMENTÁRIOS ====================
-COMMENT ON TABLE investments IS 'Investimentos do usuário (manual ou via Pluggy)';
+COMMENT ON TABLE investments IS 'Investimentos do usuário (manual)';
 COMMENT ON TABLE investment_snapshots IS 'Histórico de valores dos investimentos para análise de rentabilidade';
 COMMENT ON TABLE investment_goals IS 'Metas financeiras específicas para investimentos';
 COMMENT ON TABLE patrimony_snapshots IS 'Snapshot mensal do patrimônio total do usuário';
 
 COMMENT ON COLUMN investments.tipo IS 'Tipo de investimento: CDB, LCI, POUPANCA, TESOURO, ACAO, FUNDO, COFRINHO';
-COMMENT ON COLUMN investments.fonte IS 'Origem dos dados: MANUAL (usuário) ou PLUGGY (sincronização)';
+COMMENT ON COLUMN investments.fonte IS 'Origem dos dados: MANUAL (usuário)';
 COMMENT ON COLUMN investment_snapshots.rentabilidade_periodo IS 'Quanto o investimento rendeu desde o último snapshot';
 COMMENT ON COLUMN patrimony_snapshots.total_patrimonio IS 'Soma de saldo em contas + investimentos';
 

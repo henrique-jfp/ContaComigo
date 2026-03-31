@@ -15,42 +15,8 @@ try:
 except ImportError:
     ANALYTICS_ENABLED = False
 
-def track_analytics(command_name):
-    """Decorator para tracking de comandos"""
-    import functools
-    def decorator(func):
-        @functools.wraps(func)
-        async def wrapper(update, context):
-            if ANALYTICS_ENABLED and update.effective_user:
-                user_id = update.effective_user.id
-                username = update.effective_user.username or update.effective_user.first_name or "Usuário"
-                
-                try:
-                    analytics.track_command_usage(
-                        user_id=user_id,
-                        username=username,
-                        command=command_name,
-                        success=True
-                    )
-                    analytics.track_daily_user(user_id, username, command_name)
-                    logging.info(f"📊 Analytics: {username} usou /{command_name}")
-                    
-                    # 🆕 Tracking avançado de onboarding
-                    if command_name == "start":
-                        advanced_analytics.track_onboarding_step(
-                            user_id=user_id,
-                            username=username,
-                            step_name="start",
-                            completed=True,
-                            metadata={"command_timestamp": str(update.message.date)}
-                        )
-                    
-                except Exception as e:
-                    logging.error(f"❌ Erro no analytics: {e}")
-            
-            return await func(update, context)
-        return wrapper
-    return decorator
+
+from .analytics_utils import track_analytics
 
 from database.database import get_db, get_or_create_user # <-- Importação adicionada
 from models import Usuario, Conta

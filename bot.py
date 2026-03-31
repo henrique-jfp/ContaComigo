@@ -189,15 +189,7 @@ from gerente_financeiro.assistente_proativo_handler import teste_assistente_hand
 # 🎊 WRAPPED ANUAL
 from gerente_financeiro.wrapped_anual_handler import meu_wrapped_handler
 
-# 🏦 OPEN FINANCE OAUTH (substitui handler antigo)
-try:
-    from gerente_financeiro.open_finance_oauth_handler import OpenFinanceOAuthHandler
-    from open_finance.data_sync import schedule_daily_sync
-    OPEN_FINANCE_OAUTH_ENABLED = True
-    logging.info("✅ Open Finance OAuth habilitado")
-except Exception as e:
-    OPEN_FINANCE_OAUTH_ENABLED = False
-    logging.error(f"❌ Open Finance OAuth não disponível: {e}", exc_info=True)
+
 
 # --- COMANDOS DE DEBUG (REMOVER EM PRODUÇÃO) ---
 @track_analytics("debugocr")
@@ -411,19 +403,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("edit_conv", lambda: edit_conv),
     ]
     
-    # 🔐 Open Finance OAuth - Substitui handler antigo
-    of_oauth_handler = None
-    if OPEN_FINANCE_OAUTH_ENABLED:
-        try:
-            logger.info("🔄 Instanciando OpenFinanceOAuthHandler...")
-            of_oauth_handler = OpenFinanceOAuthHandler()
-            logger.info("🔄 Criando conversation handler...")
-            conversation_builders.append(
-                ("open_finance_oauth_conv", lambda: of_oauth_handler.get_conversation_handler())
-            )
-            logger.info("✅ Open Finance OAuth handler registrado")
-        except Exception as e:
-            logger.error(f"❌ Erro ao registrar Open Finance OAuth: {e}", exc_info=True)
+
 
     for name, builder in conversation_builders:
         build_and_add(name, builder)
@@ -450,16 +430,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("cancelar_importacao_callback", lambda: CallbackQueryHandler(cancelar_callback, pattern="^cancelar_importacao$")),
     ]
     
-    # Adicionar comandos Open Finance se habilitado
-    if OPEN_FINANCE_OAUTH_ENABLED and of_oauth_handler:
-        command_builders.extend([
-            ("/minhas_contas", lambda: CommandHandler("minhas_contas", of_oauth_handler.minhas_contas)),
-            ("/sincronizar", lambda: CommandHandler("sincronizar", of_oauth_handler.sincronizar)),
-            ("/importar_transacoes", lambda: CommandHandler("importar_transacoes", of_oauth_handler.importar_transacoes)),
-            ("/categorizar", lambda: CommandHandler("categorizar", of_oauth_handler.categorizar_lancamentos)),
-            ("/debug_open_finance", lambda: CommandHandler("debug_open_finance", of_oauth_handler.debug_open_finance)),
-        ])
-        logger.info("✅ Comandos Open Finance adicionados: /minhas_contas, /sincronizar, /importar_transacoes, /categorizar, /debug_open_finance")
+
     
     # Adicionar handlers de investimentos
     try:
@@ -485,15 +456,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("dashboard_callback", lambda: CallbackQueryHandler(dashboard_callback_handler, pattern="^dashboard_")),
     ]
     
-    # Adicionar callback handlers Open Finance
-    if OPEN_FINANCE_OAUTH_ENABLED and of_oauth_handler:
-        callback_builders.extend([
-            ("import_callback", lambda: CallbackQueryHandler(of_oauth_handler.handle_import_callback, pattern="^import_")),
-            ("action_callback", lambda: CallbackQueryHandler(of_oauth_handler.handle_action_callback, pattern="^action_")),
-            ("of_sync_now", lambda: CallbackQueryHandler(of_oauth_handler.handle_sync_now_callback, pattern="^of_sync_now_")),
-            ("of_view_accounts", lambda: CallbackQueryHandler(of_oauth_handler.handle_view_accounts_callback, pattern="^of_view_accounts$"))
-        ])
-        logger.info("✅ Callback handlers Open Finance adicionados (import, action, sync_now, view_accounts)")
+
 
     for name, builder in callback_builders:
         build_and_add(name, builder)
@@ -623,30 +586,7 @@ def create_application_ultra_robust():
         except Exception as job_error:
             logger.warning(f"⚠️ Jobs falhou: {job_error} - continuando")
         
-        # 🏦 OPEN FINANCE AUTO-SYNC
-        if OPEN_FINANCE_OAUTH_ENABLED:
-            try:
-                from open_finance.data_sync import DataSynchronizer
-                synchronizer = DataSynchronizer()
-                
-                # Usar o scheduler existente do bot
-                application.job_queue.run_daily(
-                    synchronizer.sync_all_connections,
-                    time=datetime.strptime("06:00", "%H:%M").time(),
-                    name="daily_bank_sync"
-                )
-                
-                # Também rodar a cada 6 horas
-                application.job_queue.run_repeating(
-                    synchronizer.sync_all_connections,
-                    interval=21600,  # 6 horas em segundos
-                    first=10,  # Esperar 10 segundos para primeira execução
-                    name="periodic_bank_sync"
-                )
-                
-                logger.info("✅ Sincronização automática Open Finance ativada (6h + a cada 6h)")
-            except Exception as e:
-                logger.error(f"❌ Erro ao agendar sync Open Finance: {e}")
+
         
         logger.info("🎯 [ULTRA-ROBUST] Aplicação criada com SUCESSO!")
         return application

@@ -110,37 +110,14 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             # Chama a função do banco de dados para fazer a exclusão
             sucesso = deletar_todos_dados_usuario(telegram_id=user_id)
             
-            if sucesso:
-                cleanup_messages = context.user_data.get("delete_user_cleanup", [])
-
-                await query.edit_message_text(
-                    "✅ <b>Dados apagados com sucesso!</b>\n\n"
-                    "Tudo foi permanentemente removido:\n"
-                    "  ✓ Lançamentos\n"
-                    "  ✓ Metas\n"
-                    "  ✓ Agendamentos\n"
-                    "  ✓ Conexões bancárias (Open Finance)\n"
-                    "  ✓ Configurações\n"
-                    "  ✓ Histórico de gamificação\n\n"
-                    "Obrigado por usar o Maestro Financeiro! 💜\n\n"
-                    "Para começar de novo, use /start\n\n"
-                    "<i>Esta conversa será limpa automaticamente em instantes.</i>",
-                    parse_mode="HTML"
-                )
-                logger.info(f"✅ Usuário {username} (ID: {user_id}) teve todos os dados deletados com sucesso")
-
-                cleanup_messages.append(query.message.message_id)
-
-                # Agenda remoção das mensagens do bot para que a conversa fique vazia
-                chat_id = query.message.chat_id
-                for message_id in set(cleanup_messages):
-                    context.application.create_task(
-                        delete_message_after_delay(
-                            bot=context.bot,
-                            chat_id=chat_id,
-                            message_id=message_id,
-                            delay_seconds=12,
-                        )
+            from .analytics_utils import track_analytics
+            try:
+                from analytics.bot_analytics import BotAnalytics
+                from analytics.advanced_analytics import advanced_analytics
+                analytics = BotAnalytics()
+                ANALYTICS_ENABLED = True
+            except ImportError:
+                ANALYTICS_ENABLED = False
                     )
 
                 context.user_data["delete_user_cleanup"] = []
