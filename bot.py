@@ -157,8 +157,7 @@ from gerente_financeiro.handlers import (
     help_callback,  
     help_command,
     cancel,
-    painel_notificacoes,
-    cancelar_callback
+    painel_notificacoes
 )
 from gerente_financeiro.agendamentos_handler import (
     agendamento_start, agendamento_conv, agendamento_menu_callback, cancelar_agendamento_callback
@@ -425,7 +424,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("/meu_wrapped", lambda: meu_wrapped_handler),
         ("/importar", lambda: CommandHandler("importar", importar_of)),
         # ("confirmar_importacao_callback", lambda: CallbackQueryHandler(confirmar_callback, pattern="^confirmar_importacao$")),  # Removido: confirmar_callback não existe mais
-        ("cancelar_importacao_callback", lambda: CallbackQueryHandler(cancelar_callback, pattern="^cancelar_importacao$")),
+        # ("cancelar_importacao_callback", lambda: CallbackQueryHandler(cancelar_callback, pattern="^cancelar_importacao$")),  # Removido: cancelar_callback não existe mais
     ]
     
 
