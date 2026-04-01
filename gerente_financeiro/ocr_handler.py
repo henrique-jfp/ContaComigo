@@ -540,7 +540,7 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
                 
                 logger.info("🤖 Configurando Gemini...")
                 import os
-        raw_key = os.getenv("GEMINI_API_KEY", "")
+                raw_key = os.getenv("GEMINI_API_KEY", "")
                 genai.configure(api_key=raw_key.strip().strip("'\""))
                 model = genai.GenerativeModel('gemini-2.5-flash')  # ✅ Modelo 2.5 (v1beta)
                 
