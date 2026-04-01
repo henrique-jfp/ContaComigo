@@ -9,7 +9,7 @@ from telegram.ext import (
 )
 
 # --- CORREÇÃO: Importamos as funções do ocr_handler, mas não os estados ---
-from .ocr_handler import ocr_action_processor
+from .ocr_handler import ocr_action_processor, ocr_iniciar_como_subprocesso
 from .handlers import cancel, criar_teclado_colunas
 from .utils_validation import (
     validar_valor_monetario, validar_descricao,
@@ -397,6 +397,11 @@ async def ask_data_directly(update, context, categoria_nome=None, subcategoria_n
 
 async def save_manual_lancamento_and_return(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Salva o lançamento manual e exibe confirmação elegante."""
+    if 'novo_lancamento' not in context.user_data:
+        # Se os dados não existem mais no context, avisa o usuário
+        await update.message.reply_text("❌ Fluxo expirado ou corrompido. Use /cancelar e tente novamente.")
+        return ConversationHandler.END
+
     data_texto = update.message.text.lower().strip()
     
     try:
@@ -496,7 +501,7 @@ manual_entry_conv = ConversationHandler(
         AWAITING_LAUNCH_ACTION: [
             CallbackQueryHandler(start_manual_flow, pattern='^manual_type_'),
             CallbackQueryHandler(finish_flow, pattern='^manual_finish$'),
-            MessageHandler(filters.PHOTO | filters.Document.IMAGE | filters.Document.MimeType("application/pdf"), ocr_action_processor),
+            MessageHandler(filters.PHOTO | filters.Document.IMAGE | filters.Document.MimeType("application/pdf"), ocr_iniciar_como_subprocesso),
         ],
         ASK_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_description)],
         ASK_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_value)],

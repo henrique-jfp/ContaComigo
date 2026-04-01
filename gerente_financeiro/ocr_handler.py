@@ -539,7 +539,9 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
                     raise Exception("GEMINI_API_KEY não configurado")
                 
                 logger.info("🤖 Configurando Gemini...")
-                genai.configure(api_key=config.GEMINI_API_KEY)
+                import os
+        raw_key = os.getenv("GEMINI_API_KEY", "")
+                genai.configure(api_key=raw_key.strip().strip("'\""))
                 model = genai.GenerativeModel('gemini-2.5-flash')  # ✅ Modelo 2.5 (v1beta)
                 
                 # Converter para PIL Image
@@ -622,6 +624,9 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
             db.close()
         
         # Processar com IA
+        import os
+        raw_key = os.getenv("GEMINI_API_KEY", "")
+        genai.configure(api_key=raw_key.strip().strip("'\""))
         model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
         prompt = PROMPT_IA_OCR.format(texto_ocr=texto_ocr, categorias_disponiveis=categorias_contexto)
         
@@ -830,7 +835,9 @@ async def ocr_fallback_gemini(image_content):
             return None
         
         # Configurar Gemini
-        genai.configure(api_key=config.GEMINI_API_KEY)
+        import os
+        raw_key = os.getenv("GEMINI_API_KEY", "")
+        genai.configure(api_key=raw_key.strip().strip("'\""))
         model = genai.GenerativeModel('gemini-2.5-flash')  # ✅ Modelo 2.5 (v1beta)
         logger.info("✅ Gemini configurado")
         

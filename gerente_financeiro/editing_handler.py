@@ -59,7 +59,12 @@ logger = logging.getLogger(__name__)
 
 async def start_editing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Inicia o fluxo de edição de lançamento."""
-    context.user_data.clear()
+    # Remover apenas as chaves do próprio editing_handler em vez de .clear() total
+    context.user_data.pop('edit_method', None)
+    context.user_data.pop('edit_lancamento_id', None)
+    context.user_data.pop('edit_field', None)
+    context.user_data.pop('edit_lancamento', None)
+    
     keyboard = [
         [InlineKeyboardButton("📋 Ver 5 últimos", callback_data="method_last")],
         [InlineKeyboardButton("🔎 Buscar por nome", callback_data="method_search")],
