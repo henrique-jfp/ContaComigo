@@ -102,14 +102,11 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
     if action == "delete_confirm_yes":
         user_id = query.from_user.id
         username = query.from_user.username or query.from_user.first_name or "Usuário"
-        
         logger.info(f"🗑️ Usuário {username} (ID: {user_id}) confirmou deleção total de dados")
         await query.edit_message_text("🔄 Processando deleção... ⏳\n\nIsso pode levar alguns segundos...")
-        
         try:
             # Chama a função do banco de dados para fazer a exclusão
             sucesso = deletar_todos_dados_usuario(telegram_id=user_id)
-            
             from .analytics_utils import track_analytics
             try:
                 from analytics.bot_analytics import BotAnalytics
@@ -118,9 +115,12 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 ANALYTICS_ENABLED = True
             except ImportError:
                 ANALYTICS_ENABLED = False
-
+            if sucesso:
+                await query.edit_message_text(
+                    "✅ <b>Todos os seus dados foram apagados com sucesso.</b>\n\nSe quiser recomeçar, basta usar /start",
+                    parse_mode="HTML"
                 )
-                context.user_data["delete_user_cleanup"] = []
+                logger.info(f"✅ Dados do usuário {username} (ID: {user_id}) deletados com sucesso")
             else:
                 await query.edit_message_text(
                     "❌ <b>Erro ao apagar dados</b>\n\n"
@@ -129,7 +129,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                     parse_mode="HTML"
                 )
                 logger.error(f"❌ Falha ao deletar dados do usuário {username} (ID: {user_id})")
-                context.user_data["delete_user_cleanup"] = []
+            context.user_data["delete_user_cleanup"] = []
         except Exception as e:
             logger.error(f"❌ ERRO CRÍTICO ao deletar dados do usuário {user_id}: {e}", exc_info=True)
             await query.edit_message_text(
