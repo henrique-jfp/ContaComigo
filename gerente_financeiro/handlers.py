@@ -1,3 +1,4 @@
+import os
 # --- PAINEL DE NOTIFICAÇÕES (STUB) ---
 def painel_notificacoes(update=None, context=None):
     """
@@ -17,7 +18,6 @@ import functools
 from datetime import datetime, timedelta, timezone
 from dateutil.relativedelta import relativedelta
 from typing import List, Tuple, Dict, Any
-import os
 from .services import preparar_contexto_financeiro_completo
 import google.generativeai as genai
 from sqlalchemy.orm import Session, joinedload
@@ -32,7 +32,7 @@ import config
 
 # Configurar Gemini API (CRÍTICO - deve ser feito logo após importar config)
 if config.GEMINI_API_KEY:
-    genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'\"")) if config.GEMINI_API_KEY else None
+    genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'\"").strip().strip()) if config.GEMINI_API_KEY else None
     logging.info("✅ Gemini API configurada em handlers.py")
 else:
     logging.error("❌ GEMINI_API_KEY não encontrada - /gerente não funcionará!")
@@ -884,9 +884,8 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
             # Tentar com o modelo configurado, se falhar usar fallback
             try:
                 # Re-configura a API key logo antes da chamada para ter 100% de certeza que não se perdeu e limpando aspas
-                import os
-                raw_key = os.getenv("GEMINI_API_KEY", "")
-                genai.configure(api_key=raw_key.strip().strip('"\''))
+                raw_key = config.GEMINI_API_KEY
+                genai.configure(api_key=raw_key.strip().strip("'\"").strip().strip())
                 model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
                 response = await model.generate_content_async(prompt_final)
                 resposta_ia = _limpar_resposta_ia(response.text)
@@ -903,9 +902,8 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
                 )
                 
                 # Fallback para modelo mais estável (alias oficial)
-                import os
-                raw_key = os.getenv("GEMINI_API_KEY", "")
-                genai.configure(api_key=raw_key.strip().strip('"\''))
+                raw_key = config.GEMINI_API_KEY
+                genai.configure(api_key=raw_key.strip().strip("'\"").strip().strip())
                 model = genai.GenerativeModel('gemini-flash-latest')
                 response = await model.generate_content_async(prompt_final)
                 resposta_ia = _limpar_resposta_ia(response.text)

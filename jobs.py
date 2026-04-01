@@ -42,12 +42,16 @@ def configurar_jobs(job_queue):
             name="assistente_proativo_diario"
         )
         
-        # Job anual 31/dez às 13:00 - Wrapped Financeiro do Ano
-        from apscheduler.triggers.cron import CronTrigger
+        # Job diário que verifica se é 31/Dez para enviar o Wrapped
+        async def wrapped_check(context):
+            from datetime import datetime
+            now = datetime.now()
+            if now.month == 12 and now.day == 31:
+                await job_wrapped_anual(context)
+
         job_queue.run_daily(
-            job_wrapped_anual,
+            wrapped_check,
             time=time(hour=13, minute=0),
-            days=(30,),  # Dia 31 (0-indexed, então 30 = 31)
             name="wrapped_anual_31_dezembro"
         )
         

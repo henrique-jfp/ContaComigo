@@ -491,7 +491,7 @@ def main() -> None:
 
     # Configuração da API do Gemini
     try:
-        genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'\"")) if config.GEMINI_API_KEY else None
+        genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'\"").strip().strip()) if config.GEMINI_API_KEY else None
         logger.info("API do Gemini configurada.")
     except Exception as e:
         logger.critical(f"Falha ao configurar a API do Gemini: {e}")
@@ -537,7 +537,7 @@ def create_application_ultra_robust():
         logger.error(f"❌ Erro banco de dados: {db_error} - continuando")
 
     try:
-        genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'\"")) if config.GEMINI_API_KEY else None
+        genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'\"").strip().strip()) if config.GEMINI_API_KEY else None
         logger.info("✅ API do Gemini configurada.")
     except Exception as e:
         logger.error(f"❌ Erro Gemini: {e} - continuando")
