@@ -185,60 +185,73 @@ def apply_migrations():
     """Aplica migrations pendentes no banco de dados"""
     try:
         logger.info("🔄 Verificando migrations pendentes...")
+        
+        # Importar após carregar ambiente
         from pathlib import Path
         import psycopg2
+        
         DATABASE_URL = os.getenv("DATABASE_URL")
         MIGRATIONS_DIR = Path("migrations")
+        
         if not MIGRATIONS_DIR.exists():
             logger.warning(f"⚠️  Diretório de migrations não encontrado: {MIGRATIONS_DIR}")
             return
+            
         migration_files = sorted(MIGRATIONS_DIR.glob("*.sql"))
         if not migration_files:
             logger.warning(f"⚠️  Nenhum arquivo de migration encontrado em {MIGRATIONS_DIR}")
             return
+            
+        # Conectar e aplicar
         conn = psycopg2.connect(DATABASE_URL)
         cursor = conn.cursor()
-        for migration_file in migration_files:
-            logger.info(f"➡️  Aplicando migration: {migration_file}")
-            with open(migration_file, 'r', encoding='utf-8') as f:
+        
+        for m_file in migration_files:
+            logger.info(f"➡️  Aplicando migration: {m_file}")
+            with open(m_file, 'r', encoding='utf-8') as f:
                 sql_content = f.read()
             cursor.execute(sql_content)
             conn.commit()
-            logger.info(f"✅ Migration aplicada: {migration_file}")
+            logger.info(f"✅ Migration {m_file.name} aplicada com sucesso!")
+        
         cursor.close()
         conn.close()
+        
     except Exception as e:
         logger.error(f"❌ Erro ao aplicar migrations: {e}")
         # Não falhar a aplicação por causa de migration
         # As tabelas podem já existir ou ser criadas depois
+
+def main() -> None:
+    """
+    Ponto de entrada principal da aplicação.
+    Orquestra a inicialização baseada nas configurações detectadas.
+    """
+    logger.info("🚀 Iniciando Conta Comigo...")
+    
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
+    if not load_environment():
+        logger.error("❌ Falha ao carregar ambiente. Encerrando...")
+        sys.exit(1)
+
+    apply_migrations()
+    
+    settings = get_settings()
+
     if settings.mode == ExecutionMode.BOT:
         start_telegram_bot()
     elif settings.mode == ExecutionMode.DASHBOARD:
-        try:
-            logger.info("🔄 Verificando migrations pendentes...")
-            from pathlib import Path
-            import psycopg2
-            DATABASE_URL = os.getenv("DATABASE_URL")
-            MIGRATIONS_DIR = Path("migrations")
-            if not MIGRATIONS_DIR.exists():
-                logger.warning(f"⚠️  Diretório de migrations não encontrado: {MIGRATIONS_DIR}")
-                return
-            migration_files = sorted(MIGRATIONS_DIR.glob("*.sql"))
-            if not migration_files:
-                logger.warning(f"⚠️  Nenhum arquivo de migration encontrado em {MIGRATIONS_DIR}")
-                return
-            conn = psycopg2.connect(DATABASE_URL)
-            cursor = conn.cursor()
-            for migration_file in migration_files:
-                logger.info(f"➡️  Aplicando migration: {migration_file}")
-                with open(migration_file, 'r', encoding='utf-8') as f:
-                    sql_content = f.read()
-                cursor.execute(sql_content)
-                conn.commit()
-                logger.info(f"✅ Migration aplicada: {migration_file}")
-            cursor.close()
-            conn.close()
-        except Exception as e:
-            logger.error(f"❌ Erro ao aplicar migrations: {e}")
-            # Não falhar a aplicação por causa de migration
-            # As tabelas podem já existir ou ser criadas depois
+        start_dashboard()
+    elif settings.mode == ExecutionMode.LOCAL_DEV:
+        logger.info("🔄 Modo LOCAL: Iniciando bot em uma thread e dashboard no processo principal.")
+        bot_thread = Thread(target=start_telegram_bot, daemon=True)
+        bot_thread.start()
+        start_dashboard()
+    else:
+        logger.error(f"❌ Modo de execução desconhecido: {settings.mode}. Encerrando.")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

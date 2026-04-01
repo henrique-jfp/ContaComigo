@@ -346,21 +346,6 @@ def auto_register_command(application, command_name):
         return func
     return decorator
 
-def hotpatch_importar_handler():
-    app = create_application_ultra_robust()
-    if app is None:
-        print("❌ Hotpatch: Application não criada!")
-        return
-    # Detecta se já está registrado
-    handlers = [h for h in getattr(app, 'handlers', []) if getattr(h, 'command', None) == 'importar']
-    if not handlers:
-        auto_register_command(app, "importar")(importar_of)
-        print("🔥 Hotpatch: /importar injetado dinamicamente!")
-    else:
-        print("✅ Hotpatch: /importar já registrado!")
-
-hotpatch_importar_handler()
-
 
 def _register_default_handlers(application: Application, safe_mode: bool = False) -> None:
     """Registra em um único ponto os handlers necessários para o bot."""
