@@ -132,3 +132,34 @@ if GOOGLE_APPLICATION_CREDENTIALS:
         logging.info("⚠️ Funcionalidades do Google Vision podem não funcionar")
 else:
     logging.info("ℹ️ GOOGLE_APPLICATION_CREDENTIALS não configurado - funcionalidades OCR limitadas")
+# 🧠 ENOZ MODE: METAPROGRAMMING INTERCEPTION FOR GEMINI
+# Intercepts every genai.configure() in the entire project
+# cleans the string and caches the authentication.
+import os
+import google.generativeai as _genai
+
+_orig_configure = _genai.configure
+
+def _genius_configure(*args, **kwargs):
+    if hasattr(_genai, '_enzo_patched_configured'):
+        return # Never run twice, Google hates that.
+    
+    if 'api_key' in kwargs:
+        # Maximum violence sanitation
+        clean = kwargs['api_key'].strip().strip("'\"").strip()
+        kwargs['api_key'] = clean
+        os.environ['GOOGLE_API_KEY'] = clean
+        os.environ['GEMINI_API_KEY'] = clean
+    elif len(args) > 0:
+        clean = args[0].strip().strip("'\"").strip()
+        args = (clean,) + args[1:]
+        os.environ['GOOGLE_API_KEY'] = clean
+        os.environ['GEMINI_API_KEY'] = clean
+
+    _genai._enzo_patched_configured = True
+    return _orig_configure(*args, **kwargs)
+
+_genai.configure = _genius_configure
+
+if GEMINI_API_KEY:
+    _genai.configure(api_key=GEMINI_API_KEY)
