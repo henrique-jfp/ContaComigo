@@ -1362,7 +1362,7 @@ def create_gerente_conversation_handler():
         },
         fallbacks=[
             CommandHandler(["cancel", "cancelar", "sair", "parar"], cancel),
-            MessageHandler(filters.Regex(r'^(?i)/?\s*(cancelar|cancel|sair|parar)$'), cancel)
+            MessageHandler(filters.Regex(r'(?i)^/?\s*(cancelar|cancel|sair|parar)$'), cancel)
         ],
     )
 

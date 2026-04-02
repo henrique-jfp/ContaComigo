@@ -378,7 +378,7 @@ grafico_conv = ConversationHandler(
     },
     fallbacks=[
         CommandHandler(['cancelar', 'cancel', 'sair', 'parar'], cancel),
-        MessageHandler(filters.Regex(r'^(?i)/?\s*(cancelar|cancel|sair|parar)$'), cancel)
+        MessageHandler(filters.Regex(r'(?i)^/?\s*(cancelar|cancel|sair|parar)$'), cancel)
     ],
     # Adiciona timeout para evitar conversas órfãs
     conversation_timeout=300,  # 5 minutos

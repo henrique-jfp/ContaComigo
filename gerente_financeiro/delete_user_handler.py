@@ -152,7 +152,7 @@ delete_user_conv = ConversationHandler(
     },
     fallbacks=[
         CommandHandler(['cancelar', 'cancel', 'sair', 'parar'], cancel),
-        MessageHandler(filters.Regex(r'^(?i)/?\s*(cancelar|cancel|sair|parar)$'), cancel)
+        MessageHandler(filters.Regex(r'(?i)^/?\s*(cancelar|cancel|sair|parar)$'), cancel)
     ],
     per_message=False,  # False porque mistura CommandHandler e CallbackQueryHandler
     per_user=True,

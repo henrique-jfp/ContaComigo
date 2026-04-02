@@ -513,7 +513,7 @@ manual_entry_conv = ConversationHandler(
     },
     fallbacks=[
         CommandHandler(['cancelar', 'cancel', 'sair', 'parar'], cancel),
-        MessageHandler(filters.Regex(r'^(?i)/?\s*(cancelar|cancel|sair|parar)$'), cancel)
+        MessageHandler(filters.Regex(r'(?i)^/?\s*(cancelar|cancel|sair|parar)$'), cancel)
     ],
     per_message=False,
     per_user=True,

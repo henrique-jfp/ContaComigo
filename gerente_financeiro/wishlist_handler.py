@@ -602,7 +602,7 @@ wishlist_conv = ConversationHandler(
     },
     fallbacks=[
         CommandHandler(['cancelar', 'cancel', 'sair', 'parar'], cancel_wishlist),
-        MessageHandler(filters.Regex(r'^(?i)/?\s*(cancelar|cancel|sair|parar)$'), cancel_wishlist)
+        MessageHandler(filters.Regex(r'(?i)^/?\s*(cancelar|cancel|sair|parar)$'), cancel_wishlist)
     ],
     per_message=False,
     per_user=True,
