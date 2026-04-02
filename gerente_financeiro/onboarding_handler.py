@@ -659,7 +659,10 @@ configurar_conv = ConversationHandler(
         PERFIL_ASK_OBJETIVO: [CallbackQueryHandler(ask_perfil_objetivo, pattern='^perfil_objetivo_')],
         PERFIL_ASK_HABITO: [CallbackQueryHandler(finalizar_perfil, pattern='^perfil_habito_')],
     },
-    fallbacks=[CommandHandler('cancelar', cancel)],
+    fallbacks=[
+        CommandHandler(['cancelar', 'cancel', 'sair', 'parar'], cancel),
+        MessageHandler(filters.Regex(r'^(?i)/?\s*(cancelar|cancel|sair|parar)$'), cancel)
+    ],
     per_message=False,  # False porque mistura MessageHandler e CallbackQueryHandler
     per_user=True,
     per_chat=True

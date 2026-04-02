@@ -40,12 +40,7 @@ from functools import lru_cache
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ContextTypes,
-    ConversationHandler,
-    CommandHandler,
-    CallbackQueryHandler,
-)
+from telegram.ext import filters, ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler, MessageHandler
 from telegram.error import TelegramError
 
 from database.database import get_db, DatabaseError, ServiceError  # Agora importando do database.py
@@ -381,7 +376,10 @@ grafico_conv = ConversationHandler(
             CallbackQueryHandler(chart_callback_handler, pattern='^grafico_')
         ]
     },
-    fallbacks=[CommandHandler('cancelar', cancel)],
+    fallbacks=[
+        CommandHandler(['cancelar', 'cancel', 'sair', 'parar'], cancel),
+        MessageHandler(filters.Regex(r'^(?i)/?\s*(cancelar|cancel|sair|parar)$'), cancel)
+    ],
     # Adiciona timeout para evitar conversas órfãs
     conversation_timeout=300,  # 5 minutos
     name="grafico_conversation",

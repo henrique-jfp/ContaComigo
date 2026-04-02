@@ -35,9 +35,7 @@ def track_analytics(command_name):
 import asyncio
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler
-)
+from telegram.ext import filters, ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler, MessageHandler
 
 # Importando a função que vamos criar no próximo passo
 from database.database import deletar_todos_dados_usuario
@@ -152,7 +150,10 @@ delete_user_conv = ConversationHandler(
     states={
         CONFIRM_DELETION: [CallbackQueryHandler(handle_confirmation, pattern='^delete_confirm_')]
     },
-    fallbacks=[CommandHandler('cancelar', cancel)],
+    fallbacks=[
+        CommandHandler(['cancelar', 'cancel', 'sair', 'parar'], cancel),
+        MessageHandler(filters.Regex(r'^(?i)/?\s*(cancelar|cancel|sair|parar)$'), cancel)
+    ],
     per_message=False,  # False porque mistura CommandHandler e CallbackQueryHandler
     per_user=True,
     per_chat=True

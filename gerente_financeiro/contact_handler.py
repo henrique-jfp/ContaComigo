@@ -278,7 +278,10 @@ contact_conv = ConversationHandler(
         AWAIT_SUBJECT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_subject)],
         AWAIT_BODY: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_body_and_send)],
     },
-    fallbacks=[CommandHandler('cancelar', cancel)],
+    fallbacks=[
+        CommandHandler(['cancelar', 'cancel', 'sair', 'parar'], cancel),
+        MessageHandler(filters.Regex(r'^(?i)/?\s*(cancelar|cancel|sair|parar)$'), cancel)
+    ],
             per_message=False,  # False porque mistura MessageHandler e CallbackQueryHandler
     per_user=True,
     per_chat=True

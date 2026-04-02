@@ -634,7 +634,10 @@ agendamento_conv = ConversationHandler(
             CallbackQueryHandler(handle_agendamento_confirmation, pattern='^ag_confirm_')
         ]
     },
-    fallbacks=[CommandHandler('cancelar', cancel)],
+    fallbacks=[
+        CommandHandler(['cancelar', 'cancel', 'sair', 'parar'], cancel),
+        MessageHandler(filters.Regex(r'^(?i)/?\s*(cancelar|cancel|sair|parar)$'), cancel)
+    ],
     per_message=False,  # False porque mistura MessageHandler e CallbackQueryHandler
     per_user=True,
     per_chat=True

@@ -1360,7 +1360,10 @@ def create_gerente_conversation_handler():
         states={
             AWAIT_GERENTE_QUESTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_natural_language)],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[
+            CommandHandler(["cancel", "cancelar", "sair", "parar"], cancel),
+            MessageHandler(filters.Regex(r'^(?i)/?\s*(cancelar|cancel|sair|parar)$'), cancel)
+        ],
     )
 
 # --- STUB PARA CORRIGIR IMPORTAÇÃO DO EMAIL ---

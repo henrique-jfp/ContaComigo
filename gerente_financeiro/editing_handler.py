@@ -332,7 +332,10 @@ edit_conv = ConversationHandler(
         AWAIT_NEW_CATEGORY: [CallbackQueryHandler(receive_new_category, pattern=r'^newcat_')],
         AWAIT_NEW_SUBCATEGORY: [CallbackQueryHandler(receive_new_subcategory, pattern=r'^newsubcat_')]
     },
-    fallbacks=[CommandHandler('cancelar', cancel)],
+    fallbacks=[
+        CommandHandler(['cancelar', 'cancel', 'sair', 'parar'], cancel),
+        MessageHandler(filters.Regex(r'^(?i)/?\s*(cancelar|cancel|sair|parar)$'), cancel)
+    ],
     per_message=False,  # False porque mistura MessageHandler e CallbackQueryHandler
     per_user=True,
     per_chat=True

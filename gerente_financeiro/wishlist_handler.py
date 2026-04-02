@@ -600,7 +600,10 @@ wishlist_conv = ConversationHandler(
         ASK_WISHLIST_PRAZO: [MessageHandler(filters.TEXT & ~filters.COMMAND, analisar_e_apresentar_opcoes)],
         ESCOLHER_OPCAO_VIABILIDADE: [CallbackQueryHandler(processar_opcao_escolhida, pattern='^wishlist_')],
     },
-    fallbacks=[CommandHandler('cancelar', cancel_wishlist)],
+    fallbacks=[
+        CommandHandler(['cancelar', 'cancel', 'sair', 'parar'], cancel_wishlist),
+        MessageHandler(filters.Regex(r'^(?i)/?\s*(cancelar|cancel|sair|parar)$'), cancel_wishlist)
+    ],
     per_message=False,
     per_user=True,
     per_chat=True
