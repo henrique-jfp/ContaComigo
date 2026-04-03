@@ -631,7 +631,8 @@ async def save_horario(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 # --- CONVERSATION HANDLER UNIFICADO ---
 configurar_conv = ConversationHandler(
     entry_points=[
-        CommandHandler('configurar', configurar_start),  # Vai direto ao menu
+        CommandHandler('configurar', configurar_start),
+        MessageHandler(filters.Regex(r"^⚙️ Ajustes$"), configurar_start),  # Vai direto ao menu
         CommandHandler('start', start_onboarding)        # Inclui saudação de boas-vindas
     ],
     states={

@@ -37,6 +37,7 @@ import logging
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
+    MessageHandler,
     ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 )
 
@@ -322,7 +323,8 @@ async def receive_new_subcategory(update: Update, context: ContextTypes.DEFAULT_
 # =============================================================================
 
 edit_conv = ConversationHandler(
-    entry_points=[CommandHandler('editar', start_editing)],
+    entry_points=[CommandHandler('editar', start_editing)
+, MessageHandler(filters.Regex(r"^✍️ Editar$"), start_editing)],
     states={
         CHOOSE_METHOD: [CallbackQueryHandler(choose_search_method, pattern=r'^method_')],
         AWAIT_SEARCH_QUERY: [MessageHandler(filters.TEXT & ~filters.COMMAND, list_search_results)],

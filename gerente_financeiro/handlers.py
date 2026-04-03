@@ -1,3 +1,5 @@
+from telegram.ext import MessageHandler
+from telegram.ext import MessageHandler
 import os
 # --- PAINEL DE NOTIFICAÇÕES (STUB) ---
 def painel_notificacoes(update=None, context=None):
@@ -13,10 +15,14 @@ import json
 import logging
 import random
 import re
+from telegram.ext import MessageHandler
+
 import time
 import functools
 from datetime import datetime, timedelta, timezone
-from dateutil.relativedelta import relativedelta
+from dateutil.relativedelta import re
+from telegram.ext import MessageHandler
+lativedelta
 from typing import List, Tuple, Dict, Any
 from .services import preparar_contexto_financeiro_completo
 import google.generativeai as genai
@@ -1367,7 +1373,8 @@ def self_healing_decorator(func):
 def create_gerente_conversation_handler():
     from telegram.ext import ConversationHandler, CommandHandler, MessageHandler, filters
     return ConversationHandler(
-        entry_points=[CommandHandler("gerente", start_gerente)],
+        entry_points=[CommandHandler("gerente", start_gerente)
+, MessageHandler(filters.Regex(r"^🤖 Maestro$"), start_gerente)],
         states={
             AWAIT_GERENTE_QUESTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_natural_language)],
         },

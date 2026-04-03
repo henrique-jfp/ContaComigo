@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
+    MessageHandler,
     ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 )
 
@@ -496,7 +497,8 @@ async def finish_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
 # --- HANDLER UNIFICADO ---
 manual_entry_conv = ConversationHandler(
-    entry_points=[CommandHandler('lancamento', manual_entry_start)],
+    entry_points=[CommandHandler('lancamento', manual_entry_start)
+, MessageHandler(filters.Regex(r"^💳 Lançamento$"), manual_entry_start)],
     states={
         AWAITING_LAUNCH_ACTION: [
             CallbackQueryHandler(start_manual_flow, pattern='^manual_type_'),
