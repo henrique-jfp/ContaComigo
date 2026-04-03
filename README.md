@@ -31,13 +31,44 @@ Saidas:
 
 ## Funcionalidades
 
-- **Lançamento por audio (frictionless):** processa `filters.VOICE` com Gemini 2.5 Flash.
+Entrada e lancamentos:
+- **Audio (frictionless):** processa `filters.VOICE` com Gemini 2.5 Flash.
 - **OCR robusto:** Google Vision com fallback para Gemini Vision.
-- **Memoria comportamental:** resumo semanal do perfil do usuario para personalizar respostas.
+- **Entrada manual guiada:** conversa passo a passo para registrar gastos.
+- **Edicao de transacoes:** ajuste de valor, categoria, conta e descricao.
+
+Analise e IA:
 - **Conversa natural:** analises e comandos por linguagem humana.
-- **Gamificacao:** XP, niveis e streaks.
-- **Metas e agendamentos:** objetivos financeiros e despesas recorrentes.
-- **Dashboard e relatorios:** HTML e PDF.
+- **IA dedicada:** insights, economia, comparacoes e alertas.
+- **Memoria comportamental:** resumo semanal do perfil do usuario para personalizar respostas.
+- **Assistente proativo:** alertas de gastos fora do padrao, metas em risco e assinaturas recorrentes.
+- **Dados externos:** cotacoes, indicadores, cripto, cambio e noticias.
+
+Planejamento e visao:
+- **Metas financeiras** e **wishlist** com analise de viabilidade.
+- **Agendamentos recorrentes** com parcelas e frequencia definida.
+- **Investimentos e patrimonio** com dashboards dedicados.
+
+Engajamento e relatatorios:
+- **Gamificacao:** XP, niveis, rankings e streaks.
+- **Graficos avancados** (pizza, barras, linha, area e composicoes).
+- **Relatorios PDF** e **dashboard web**.
+- **Wrapped anual** (retrospectiva financeira automatica).
+- **Contato e suporte** via fluxo conversacional.
+
+---
+
+## Exemplos rapidos
+
+Texto natural:
+- "Gastei 89,90 no mercado ontem"
+- "Mostre meus gastos com transporte este mes"
+
+Audio:
+- Envie uma mensagem de voz com o gasto narrado.
+
+OCR:
+- Envie foto ou PDF de nota fiscal.
 
 ---
 
@@ -47,9 +78,19 @@ Saidas:
 - **python-telegram-bot 22.x**
 - **google-generativeai** (Gemini)
 - **google-cloud-vision**
-- **SQLAlchemy 2.x**
-- **PostgreSQL**
-- **Jinja2 + WeasyPrint**
+- **SQLAlchemy 2.x** + **PostgreSQL**
+- **Flask** + **gunicorn** (dashboard)
+- **APScheduler** (jobs)
+- **ReportLab** (PDF) + **Jinja2** (templates)
+- **matplotlib / plotly / seaborn** (graficos)
+
+---
+
+## Documentacao complementar
+
+- Arquitetura: [ARCHITECTURE.md](ARCHITECTURE.md)
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
+- Licenca: [LICENSE](LICENSE)
 
 ---
 
@@ -62,7 +103,40 @@ Para detalhes, consulte [ARCHITECTURE.md](ARCHITECTURE.md).
 - [gerente_financeiro/audio_handler.py](gerente_financeiro/audio_handler.py): audio e Gemini.
 - [gerente_financeiro/ocr_handler.py](gerente_financeiro/ocr_handler.py): OCR.
 - [gerente_financeiro/ai_memory_service.py](gerente_financeiro/ai_memory_service.py): memoria comportamental.
+- [gerente_financeiro/assistente_proativo.py](gerente_financeiro/assistente_proativo.py): alertas inteligentes.
+- [gerente_financeiro/ia_handlers.py](gerente_financeiro/ia_handlers.py): comandos de IA (insights, economia, comparacoes, alertas).
+- [gerente_financeiro/investment_handler.py](gerente_financeiro/investment_handler.py): investimentos e patrimonio.
+- [gerente_financeiro/wishlist_handler.py](gerente_financeiro/wishlist_handler.py): wishlist e metas.
+- [gerente_financeiro/agendamentos_handler.py](gerente_financeiro/agendamentos_handler.py): recorrencias e parcelas.
+- [gerente_financeiro/editing_handler.py](gerente_financeiro/editing_handler.py): edicao de transacoes.
+- [gerente_financeiro/graficos.py](gerente_financeiro/graficos.py): graficos.
+- [gerente_financeiro/relatorio_handler.py](gerente_financeiro/relatorio_handler.py): relatorios.
 - [gerente_financeiro/prompt_manager.py](gerente_financeiro/prompt_manager.py): prompts e templates.
+
+---
+
+## Fluxo (resumo visual)
+
+```mermaid
+flowchart TD
+  U[Usuario] -->|Texto| T[Handler principal]
+  U -->|Audio| A[Audio handler]
+  U -->|Foto/PDF| O[OCR handler]
+
+  A --> G[Gemini 2.5 Flash]
+  O --> V[Google Vision]
+  V -->|Fallback| GV[Gemini Vision]
+
+  T --> P[Prompt Manager]
+  P --> G
+
+  G --> D[Persistencia no banco]
+  D --> R[Relatorios e dashboard]
+  D --> W[Wrapped anual]
+  D --> AP[Assistente proativo]
+  D --> AI[Memoria comportamental]
+  AI --> P
+```
 
 ---
 
@@ -117,10 +191,35 @@ Abra o bot no Telegram e envie `/start`.
 
 ---
 
+## Deploy
+
+- Docker: use [Dockerfile](Dockerfile) e [start.sh](start.sh).
+- Producao: configure variaveis de ambiente e banco PostgreSQL.
+
+---
+
 ## Jobs e memoria comportamental
 
-O job `job_atualizar_perfis_ia` roda semanalmente e atualiza o campo `perfil_ia`.
-Veja [gerente_financeiro/ai_memory_service.py](gerente_financeiro/ai_memory_service.py).
+Jobs principais:
+- `job_atualizar_perfis_ia`: atualiza o campo `perfil_ia` semanalmente.
+- `job_assistente_proativo`: alertas inteligentes diarios.
+- `wrapped_anual`: retrospecao anual automatica.
+
+Veja [gerente_financeiro/ai_memory_service.py](gerente_financeiro/ai_memory_service.py) e [jobs.py](jobs.py).
+
+---
+
+## Privacidade e seguranca
+
+- Dados sensiveis ficam no banco configurado em `DATABASE_URL`.
+- Tokens e chaves sao lidos por variaveis de ambiente.
+- Fluxo de exclusao de usuario disponivel.
+
+---
+
+## Contribuicao
+
+Contribuicoes sao bem-vindas via Issues e Pull Requests. Para discussoes comerciais, use o contato abaixo.
 
 ---
 
