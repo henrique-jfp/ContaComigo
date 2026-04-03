@@ -44,7 +44,7 @@ def _get_engine(db_url: str) -> Engine:
         ssl_args['connect_args'] = {
             'sslmode': 'require',
             'connect_timeout': 10,
-            'application_name': 'maestrofin_analytics_migration'
+            'application_name': 'contacomigo_analytics_migration'
         }
     return create_engine(db_url, **ssl_args)
 

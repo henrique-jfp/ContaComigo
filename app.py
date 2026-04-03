@@ -35,12 +35,12 @@ except Exception as e:
         return {
             "status": "error",
             "message": f"Erro na inicialização: {str(e)}",
-            "service": "MaestroFin"
+            "service": "ContaComigo"
         }
     
     @app.route('/health')
     def health():
-        return {"status": "ok", "service": "MaestroFin"}
+        return {"status": "ok", "service": "ContaComigo"}
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 10000))

@@ -1,5 +1,5 @@
 """
-Sistema de Jobs e Tarefas Agendadas - MaestroFin
+Sistema de Jobs e Tarefas Agendadas - ContaComigo
 """
 import logging
 from datetime import datetime, time

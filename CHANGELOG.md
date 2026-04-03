@@ -1,4 +1,4 @@
-# Changelog - Maestro Financeiro
+# Changelog - ContaComigo
 
 ## [3.4.0] - 2026-04-03
 

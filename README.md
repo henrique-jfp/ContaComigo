@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Database-PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="Postgres" />
 </div>
 
-<h1 align="center">MaestroFin</h1>
+<h1 align="center">ContaComigo</h1>
 
 > **Assistente financeiro no Telegram com IA multimodal, OCR e automacao de lancamentos.**
 
@@ -14,7 +14,7 @@
 
 ## Visao geral
 
-O **MaestroFin** eh um bot no Telegram para controle financeiro pessoal com foco em **baixo atrito**.
+O **ContaComigo** eh um bot no Telegram para controle financeiro pessoal com foco em **baixo atrito**.
 O usuario registra gastos por texto, audio ou foto e recebe analises em linguagem natural.
 
 Principais entradas:
@@ -155,8 +155,8 @@ flowchart TD
 ### Instalacao
 
 ```bash
-git clone https://github.com/henrique-jfp/MaestroFin.git
-cd MaestroFin
+git clone https://github.com/henrique-jfp/ContaComigo.git
+cd ContaComigo
 
 python -m venv .venv
 source .venv/bin/activate
@@ -242,7 +242,7 @@ Contato para licenca comercial: **henriquejfp.dev@gmail.com**
 
 ## Contato
 
-- Telegram: [@MaestroFinBot](https://t.me/MaestroFinBot)
+- Telegram: [@ContaComigoBot](https://t.me/ContaComigoBot)
 - LinkedIn: [henrique-jfp](https://linkedin.com/in/henrique-jfp)
 
 ---

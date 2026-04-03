@@ -1,5 +1,5 @@
 """
-Metas Financeiras - MaestroFin
+Metas Financeiras - ContaComigo
 =============================
 
 Fluxo de metas com plano mensal, acompanhamento visual e lembretes mensais.

@@ -58,7 +58,7 @@ from .analytics_utils import track_analytics
 
 from database.database import get_db, get_or_create_user, buscar_lancamentos_usuario
 from models import Categoria, Lancamento, Subcategoria, Usuario, ItemLancamento, Conta
-from .prompts import PROMPT_GERENTE_VDM, PROMPT_INSIGHT_FINAL
+from .prompts import PROMPT_ALFREDO, PROMPT_INSIGHT_FINAL
 from .states import (
     AWAIT_GERENTE_QUESTION, ASK_OBJETIVO_DESCRICAO, ASK_OBJETIVO_VALOR, ASK_OBJETIVO_PRAZO,
     AWAIT_EMAIL_NOTIFICACAO
@@ -231,7 +231,7 @@ PERGUNTAS_ESPECIFICAS = {
 
 # --- PROMPT PARA ANÁLISE DE IMPACTO ---
 PROMPT_ANALISE_IMPACTO = """
-**TAREFA:** Você é o **Maestro Financeiro**, um assistente de finanças. O usuário pediu uma informação de mercado e agora quer entender o impacto dela.
+**TAREFA:** Você é o **Alfredo**, assistente financeiro do **ContaComigo**. O usuário pediu uma informação de mercado e agora quer entender o impacto dela.
 Seja conciso e direto. Forneça uma análise útil e sugestões práticas.
 
 **NOME DO USUÁRIO:** {user_name}
@@ -285,7 +285,7 @@ class ContextoConversa:
         contexto = []
         for item in self.historico[-5:]:
             contexto.append(f"Usuário: {item['pergunta']}")
-            contexto.append(f"Maestro: {item['resposta']}")
+            contexto.append(f"Alfredo: {item['resposta']}")
         
         return "\n".join(contexto)
     
@@ -527,7 +527,7 @@ def obter_contexto_usuario(context: ContextTypes.DEFAULT_TYPE) -> ContextoConver
 HELP_TEXTS = {
     "main": (
         "Olá, <b>{user_name}</b>! 👋\n\n"
-        "Bem-vindo ao <b>Maestro Financeiro</b>, seu assistente pessoal para dominar suas finanças. "
+        "Bem-vindo ao <b>ContaComigo</b>, seu assistente pessoal para dominar suas finanças. "
         "Sou um bot completo, com inteligência artificial, gráficos, relatórios e muito mais.\n\n"
         "Navegue pelas seções abaixo para descobrir tudo que posso fazer por você:"
     ),
@@ -694,7 +694,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     except Exception as e:
         logger.error(f"Erro no help_command para o usuário {user.id}: {e}", exc_info=True)
         # Mensagem de fallback caso ocorra um erro
-        await update.message.reply_text("Olá! Sou seu Maestro Financeiro. Use os botões para explorar minhas funções.")
+        await update.message.reply_text("Olá! Sou o Alfredo do ContaComigo. Use os botões para explorar minhas funções.")
     finally:
         db.close()
 
@@ -765,7 +765,7 @@ async def start_gerente(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             mensagem = f"""
 🎩 <b>Olá, {user_name}!</b>
 
-Sou seu <b>Maestro Financeiro</b> - um analista sênior especializado em transformar seus dados em decisões inteligentes. 
+Sou o <b>Alfredo</b> do <b>ContaComigo</b> - um analista sênior especializado em transformar seus dados em decisões inteligentes. 
 
 <b>💡 O que posso fazer por você:</b>
 • Analisar padrões nos seus gastos
@@ -878,7 +878,7 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
             )
             
             # Gera nova resposta
-            prompt_final = PROMPT_GERENTE_VDM.format(
+            prompt_final = PROMPT_ALFREDO.format(
                 user_name=usuario_db.nome_completo.split(' ')[0] if usuario_db.nome_completo else "você",
                 pergunta_usuario=user_question,
                 contexto_financeiro_completo=contexto_financeiro_str,
@@ -957,7 +957,7 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
             # Se não for JSON, é uma análise de texto. Envia para o usuário.
             resposta_texto, reply_markup = parse_action_buttons(resposta_ia)
             await enviar_texto_em_blocos(context.bot, chat_id, resposta_texto, reply_markup=reply_markup)
-            contexto_conversa.adicionar_interacao(user_question, resposta_texto, tipo="gerente_vdm_analise")
+            contexto_conversa.adicionar_interacao(user_question, resposta_texto, tipo="alfredo_analise")
 
     except Exception as e:
         erro_detalhado = f"Erro CRÍTICO em handle_natural_language (V4): {str(e)}"
@@ -1242,7 +1242,7 @@ async def handle_analise_geral(update, context, user_question, usuario_db, conte
     analise_json = json.dumps(analise_comportamental, indent=2, ensure_ascii=False)
     
     # Passamos o valor pré-calculado para o prompt
-    prompt_usado = PROMPT_GERENTE_VDM.format(
+    prompt_usado = PROMPT_ALFREDO.format(
         user_name=usuario_db.nome_completo or "você",
         perfil_investidor=usuario_db.perfil_investidor or "Não definido",
         pergunta_usuario=user_question,
@@ -1299,7 +1299,7 @@ async def gerar_resposta_ia(update, context, prompt, user_question, usuario_db, 
         # (O código de formatação que fizemos antes continua aqui, sem alterações)
         titulo = dados_ia.get("titulo_resposta", "Análise Rápida")
         valor_total = dados_ia.get("valor_total", 0.0)
-        comentario = dados_ia.get("comentario_maestro", "Aqui está o que encontrei.")
+        comentario = dados_ia.get("comentario_alfredo", "Aqui está o que encontrei.")
         detalhamento = dados_ia.get("detalhamento", [])
         proximo_passo = dados_ia.get("proximo_passo", {})
 

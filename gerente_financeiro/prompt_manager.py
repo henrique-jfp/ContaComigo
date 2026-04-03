@@ -58,7 +58,7 @@ class PromptManager:
         """
         # Lógica de Roteamento baseada na Intenção
         if config.intent == "function_call":
-            persona = self._load_template_content("system/persona_gerente_vdm.md", user_name=config.user_name, pergunta_usuario=config.user_query, perfil_ia=config.perfil_ia)
+            persona = self._load_template_content("system/persona_alfredo.md", user_name=config.user_name, pergunta_usuario=config.user_query, perfil_ia=config.perfil_ia)
             function_rules = self._load_template_content("rules/function_calling.md")
             
             return self._load_template_content(
@@ -114,7 +114,7 @@ class PromptManager:
 
         elif config.intent == "general_analysis":
             # Para análises gerais, montamos um prompt mais completo
-            persona = self._load_template_content("system/persona_gerente_vdm.md", user_name=config.user_name, pergunta_usuario=config.user_query, perfil_ia=config.perfil_ia)
+            persona = self._load_template_content("system/persona_alfredo.md", user_name=config.user_name, pergunta_usuario=config.user_query, perfil_ia=config.perfil_ia)
             formatting_rules = self._load_template_content("rules/formatting_html.md")
 
             skills_content = ""

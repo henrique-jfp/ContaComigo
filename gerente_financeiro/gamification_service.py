@@ -69,7 +69,7 @@ LEVELS = {
     7: {"xp_necessario": 6000, "titulo": "Guru dos Investimentos", "multiplicador": 1.6},
     8: {"xp_necessario": 9000, "titulo": "Lenda do Controle", "multiplicador": 1.7},
     9: {"xp_necessario": 13000, "titulo": "Imperador Financeiro", "multiplicador": 1.8},
-    10: {"xp_necessario": 18000, "titulo": "Maestro Supremo", "multiplicador": 2.0},
+    10: {"xp_necessario": 18000, "titulo": "ContaComigo Supremo", "multiplicador": 2.0},
 }
 
 STREAK_BONUS = {

@@ -1,6 +1,6 @@
 # Deploy com WeasyPrint (HTML → PDF) — Guia rápido
 
-Este documento descreve como preparar e deployar o MaestroFin em um container Docker com suporte a WeasyPrint, permitindo conversão fiel do HTML (`relatorio_inspiracao.html`) em PDF.
+Este documento descreve como preparar e deployar o ContaComigo em um container Docker com suporte a WeasyPrint, permitindo conversão fiel do HTML (`relatorio_inspiracao.html`) em PDF.
 
 Requisitos
 - Docker (build local ou via plataforma: Railway, Render, etc.)
@@ -11,13 +11,13 @@ Passos (local / CI)
 1. Build da imagem localmente:
 
 ```bash
-docker build -t maestrofin:weasy .
+docker build -t contacomigo:weasy .
 ```
 
 2. Rodar localmente (mapeando porta):
 
 ```bash
-docker run --rm -p 8000:8000 maestrofin:weasy
+docker run --rm -p 8000:8000 contacomigo:weasy
 ```
 
 3. Rodar o endpoint e testar `/relatorio` no bot (ou acesso web) — o processo estará escutando em `0.0.0.0:8000`.
@@ -34,5 +34,5 @@ Notas importantes
 - Verificação: após o deploy, gere um `/relatorio` e verifique o PDF. O `pdf_generator.py` tentará usar WeasyPrint quando disponível; os logs indicarão se WeasyPrint foi utilizado.
 
 Dicas de troubleshooting
-- Se WeasyPrint lançar erro relacionado a fontes ou Pango, verifique logs e, localmente, execute `docker run -it maestrofin:weasy /bin/bash` e tente importar `weasyprint` no Python para reproducibilidade.
+- Se WeasyPrint lançar erro relacionado a fontes ou Pango, verifique logs e, localmente, execute `docker run -it contacomigo:weasy /bin/bash` e tente importar `weasyprint` no Python para reproducibilidade.
 - Se o PDF estiver faltando fontes web (google fonts), prefira embutir as fontes no repositório em `static/fonts` e utilizar as fontes locais no CSS do template.

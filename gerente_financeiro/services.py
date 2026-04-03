@@ -348,7 +348,7 @@ def gerar_contexto_relatorio(db: Session, telegram_id: int, mes: int, ano: int):
         tendencia_despesa_percent = 0
 
     # Placeholders para futuras implementações
-    analise_ia = "Análise inteligente do Maestro aparecerá aqui."
+    analise_ia = "Análise inteligente do Alfredo aparecerá aqui."
     metas_com_progresso = []
 
     contexto = {

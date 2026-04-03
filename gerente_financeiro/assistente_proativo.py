@@ -1,5 +1,5 @@
 """
-🤖 Assistente Proativo - MaestroFin
+🤖 Assistente Proativo - ContaComigo
 ===================================
 
 Sistema de alertas inteligentes que analisa padrões financeiros

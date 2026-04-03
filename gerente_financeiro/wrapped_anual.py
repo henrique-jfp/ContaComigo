@@ -1,5 +1,5 @@
 """
-🎊 Wrapped Financeiro Anual - MaestroFin
+🎊 Wrapped Financeiro Anual - ContaComigo
 ========================================
 
 Sistema que gera uma retrospectiva emocionante do ano financeiro do usuário,
@@ -679,7 +679,7 @@ Vamos relembrar tudo que você conquistou?
         # Estatísticas de uso
         mensagem += """
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎮 <b>SUA JORNADA NO MAESTROFIN</b>
+🎮 <b>SUA JORNADA NO CONTACOMIGO</b>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 """
@@ -763,7 +763,7 @@ nessa jornada. 🤝
 
 <b>Feliz Ano Novo!</b> 🎊🎉
 Com carinho e gratidão,
-🎼 Equipe MaestroFin
+🎼 Equipe ContaComigo
 
 ───────────────────────────
 <i>💡 Use /metas para criar seus objetivos de {ano_novo}!</i>

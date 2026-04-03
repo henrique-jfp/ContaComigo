@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-📊 Dashboard Handler - MaestroFin
+📊 Dashboard Handler - ContaComigo
 Handler para integração do dashboard com o bot do Telegram
 """
 

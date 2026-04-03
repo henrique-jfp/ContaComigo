@@ -82,7 +82,7 @@ def send_email(subject: str, body: str, sender_name: str, sender_id: int) -> boo
     # Usamos variáveis distintas para clareza e correção.
     login_user = config.EMAIL_HOST_USER             # Usuário de login da Brevo (ex: 911b48001@smtp-brevo.com)
     login_password = config.EMAIL_HOST_PASSWORD     # Senha/Chave SMTP da Brevo
-    sender_address = config.SENDER_EMAIL            # E-mail do remetente (ex: vdmgerente@gmail.com)
+    sender_address = config.SENDER_EMAIL            # E-mail do remetente (ex: contacomigo@gmail.com)
     receiver_address = config.EMAIL_RECEIVER        # E-mail do destinatário
     
     logger.info(f"📧 Configurações de email carregadas:")
@@ -105,7 +105,7 @@ def send_email(subject: str, body: str, sender_name: str, sender_id: int) -> boo
 
     # Monta o corpo do e-mail com as informações do usuário do Telegram
     full_body = (
-        f"<b>Nova mensagem recebida via Maestro Financeiro</b><br><br>"
+        f"<b>Nova mensagem recebida via ContaComigo</b><br><br>"
         f"<b>De:</b> {sender_name} (ID do Telegram: {sender_id})<br>"
         f"<b>Assunto:</b> {subject}<br>"
         f"--------------------------------------------------<br><br>"
@@ -117,7 +117,7 @@ def send_email(subject: str, body: str, sender_name: str, sender_id: int) -> boo
     
     # Define os cabeçalhos do e-mail
     # O 'From' usa o SENDER_EMAIL, que é o endereço que o destinatário verá
-    msg['From'] = formataddr(('Maestro Financeiro Bot', sender_address))
+    msg['From'] = formataddr(('ContaComigo Bot', sender_address))
     msg['To'] = formataddr(('Desenvolvedor', receiver_address))
     msg['Subject'] = f"Contato via Bot: {subject}"
     
@@ -213,7 +213,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         logger.info("✅ PIX_KEY configurado corretamente, exibindo para usuário")
         text = (
             "❤️ <b>Gratidão pelo seu apoio!</b>\n\n"
-            "Seu cafezinho faz toda a diferença para manter o Maestro ativo e em constante evolução. ☕💡\n\n"
+            "Seu cafezinho faz toda a diferença para manter o ContaComigo ativo e em constante evolução. ☕💡\n\n"
             "👇 <b>Toque na chave abaixo para copiar:</b>\n\n"
             f"<code>{pix_key}</code>"
         )

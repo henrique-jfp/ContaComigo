@@ -1,4 +1,4 @@
-# 🎼 MaestroFin - Dependências Essenciais do Projeto
+# 🎼 ContaComigo - Dependências Essenciais do Projeto
 
 # === CORE FRAMEWORK ===
 Flask==3.1.1

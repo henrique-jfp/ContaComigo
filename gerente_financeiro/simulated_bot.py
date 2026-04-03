@@ -114,7 +114,7 @@ def call_llm_api_and_get_response(prompt: str, intent: str, additional_intent_da
     elif "compare" in prompt.lower():
         return "DEBUG: Analisado pelo LLM: <b>📊 Comparativo de Gastos (Q1 vs Q2)</b>\n• Seus gastos em Alimentação aumentaram <i>15%</i> no Q2, totalizando <code>R$ 1.200,00</code>. \n• <b>💡 Insight:</b> Percebo que seus gastos com refeições fora de casa foram o principal motor. Que tal planejar 2-3 refeições caseiras por semana para economizar? 🍳"
     elif "insight" in prompt.lower():
-        return "DEBUG: Analisado pelo LLM: 💡 <b>Insights do Maestro</b>\nVocê tem uma excelente disciplina! Sua meta de <i>Emergência</i> está quase completa. Foco total na <i>Viagem Europa</i> agora! 🚀"
+        return "DEBUG: Analisado pelo LLM: 💡 <b>Insights do Alfredo</b>\nVocê tem uma excelente disciplina! Sua meta de <i>Emergência</i> está quase completa. Foco total na <i>Viagem Europa</i> agora! 🚀"
     elif "olá" in prompt.lower() or "tudo bem" in prompt.lower():
         return "DEBUG: Analisado pelo LLM: Olá! Que bom ter você por aqui. Estou pronto para te ajudar a conquistar seus objetivos financeiros. Como posso te auxiliar hoje? ✨"
     elif "relatório mensal" in prompt.lower():

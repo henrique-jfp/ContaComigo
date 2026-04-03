@@ -48,7 +48,7 @@ class Prompt1(PromptBase):
         # 3. Adicionar uma dica contextual
         dica = self._gerar_dica(report.top_expense_category)
 
-        return f"💡 **Insight do Maestro**\n{insight}\n\n**Dica Rápida:** {dica}"
+        return f"💡 **Insight do Alfredo**\n{insight}\n\n**Dica Rápida:** {dica}"
 
     def _gerar_dica(self, categoria: str) -> str:
         """Gera uma dica prática baseada na categoria de maior gasto."""

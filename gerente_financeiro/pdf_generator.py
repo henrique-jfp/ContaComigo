@@ -66,7 +66,7 @@ class GradientCover(Flowable):
         # 3. Cabeçalho da Capa
         c.setFillColor(COLOR_WHITE)
         c.setFont(FONT_BOLD, 14)
-        c.drawString(20*mm, self.height - 30*mm, "MAESTROFIN PRIVATE")
+        c.drawString(20*mm, self.height - 30*mm, "CONTACOMIGO PRIVATE")
         
         # 4. Título Gigante
         c.setFont(FONT_BOLD, 42)
@@ -152,7 +152,7 @@ def footer_canvas(canvas, doc):
     canvas.setFillColor(COLOR_TEXT_LIGHT)
     
     # Texto Esquerda
-    canvas.drawString(20*mm, 10*mm, "MaestroFin • Relatório Confidencial")
+    canvas.drawString(20*mm, 10*mm, "ContaComigo • Relatório Confidencial")
     
     # Texto Direita (Número da página)
     canvas.drawRightString(A4[0] - 20*mm, 10*mm, f"Página {doc.page}")

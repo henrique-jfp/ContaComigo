@@ -65,7 +65,7 @@ async def start_delete_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     text = (
         "🚨 <b>ATENÇÃO: AÇÃO IRREVERSÍVEL</b> 🚨\n\n"
         "Você tem <b>CERTEZA ABSOLUTA</b> que deseja apagar "
-        "<u>todos os seus dados financeiros</u> do Maestro?\n\n"
+        "<u>todos os seus dados financeiros</u> do ContaComigo?\n\n"
         "Isso inclui:\n"
         "  - Todos os lançamentos\n"
         "  - Todas as metas\n"
