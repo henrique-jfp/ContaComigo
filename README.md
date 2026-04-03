@@ -34,6 +34,7 @@ Saidas:
 Entrada e lancamentos:
 - **Audio (frictionless):** processa `filters.VOICE` com Gemini 2.5 Flash.
 - **OCR robusto:** Google Vision com fallback para Gemini Vision.
+- **Fatura PDF (Inter):** importacao via comando `/fatura` com confirmacao.
 - **Entrada manual guiada:** conversa passo a passo para registrar gastos.
 - **Edicao de transacoes:** ajuste de valor, categoria, conta e descricao.
 
@@ -69,6 +70,9 @@ Audio:
 
 OCR:
 - Envie foto ou PDF de nota fiscal.
+
+Fatura (Inter):
+- Use `/fatura` e envie o PDF do Banco Inter.
 
 ---
 
