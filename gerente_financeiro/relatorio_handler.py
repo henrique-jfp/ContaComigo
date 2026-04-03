@@ -28,7 +28,12 @@ except ImportError as e:
     generate_financial_pdf = None
 
 from database.database import get_db
-from .services import gerar_contexto_relatorio, gerar_grafico_para_relatorio, limpar_cache_usuario
+from .services import (
+    gerar_contexto_relatorio,
+    gerar_grafico_para_relatorio,
+    gerar_grafico_evolucao_mensal,
+    limpar_cache_usuario,
+)
 from . import services as services_module
 
 logger = logging.getLogger(__name__)
@@ -254,6 +259,18 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
         except Exception as e:
             logger.error(f"Erro ao gerar gráfico: {e}")
             contexto_dados["grafico_pizza_base64"] = None
+
+        # 4.1 Gerar gráfico de evolução mensal (últimos 6 meses)
+        logger.info("Gerando gráfico de evolução mensal...")
+        try:
+            grafico_evolucao = gerar_grafico_evolucao_mensal(contexto_dados.get("lancamentos_historico", []))
+            if grafico_evolucao:
+                contexto_dados["grafico_evolucao_png_bytes"] = grafico_evolucao.getvalue()
+            else:
+                contexto_dados["grafico_evolucao_png_bytes"] = None
+        except Exception as e:
+            logger.error(f"Erro ao gerar gráfico de evolução: {e}")
+            contexto_dados["grafico_evolucao_png_bytes"] = None
         
         # 5. Renderizar o template HTML com os dados
         logger.info("Renderizando template HTML...")
@@ -323,15 +340,26 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
             pdf_context = {
                 'periodo_inicio': data_alvo.strftime('%d/%m/%Y'),
                 'periodo_fim': (data_alvo + relativedelta(day=31)).strftime('%d/%m/%Y'),
+                'usuario_nome': getattr(contexto_dados.get('usuario'), 'nome_completo', None) or 'Você',
+                'periodo_extenso': f"{contexto_dados.get('mes_nome', 'Mês Atual')} de {contexto_dados.get('ano', data_alvo.year)}",
                 'total_receitas': contexto_dados.get('receita_total', 0),
                 'total_gastos': contexto_dados.get('despesa_total', 0),
                 'saldo_periodo': contexto_dados.get('saldo_mes', 0),
-                'gastos_por_categoria': contexto_dados.get('gastos_por_categoria', []),
+                'taxa_poupanca': contexto_dados.get('taxa_poupanca', 0),
+                'gastos_agrupados': contexto_dados.get('gastos_agrupados', []),
                 'grafico_pizza_png': contexto_dados.get('grafico_pizza_png_bytes'),
+                'grafico_evolucao_png': contexto_dados.get('grafico_evolucao_png_bytes'),
                 # Inclui o HTML renderizado opcionalmente para permitir HTML->PDF se disponível
                 'html_renderizado': html_renderizado,
                 'top_gastos': contexto_dados.get('lista_despesas', [])[:10],
-                'insights': contexto_dados.get('insights', [])
+                'insights': contexto_dados.get('insights', []),
+                'analise_ia': contexto_dados.get('analise_ia'),
+                'metas': contexto_dados.get('metas', []),
+                'tendencia_receita_percent': contexto_dados.get('tendencia_receita_percent', 0),
+                'tendencia_despesa_percent': contexto_dados.get('tendencia_despesa_percent', 0),
+                'media_receitas_3m': contexto_dados.get('media_receitas_3m', 0),
+                'media_despesas_3m': contexto_dados.get('media_despesas_3m', 0),
+                'media_saldo_3m': contexto_dados.get('media_saldo_3m', 0),
             }
             
             logger.info(f"Gerando PDF com ReportLab - dados: {len(pdf_context.get('gastos_por_categoria', []))} categorias, {len(pdf_context.get('top_gastos', []))} gastos")
