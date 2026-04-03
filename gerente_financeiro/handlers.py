@@ -20,9 +20,7 @@ from telegram.ext import MessageHandler
 import time
 import functools
 from datetime import datetime, timedelta, timezone
-from dateutil.relativedelta import re
-from telegram.ext import MessageHandler
-lativedelta
+from dateutil.relativedelta import relativedelta
 from typing import List, Tuple, Dict, Any
 from .services import preparar_contexto_financeiro_completo
 import google.generativeai as genai
