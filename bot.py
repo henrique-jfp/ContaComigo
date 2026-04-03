@@ -409,6 +409,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("/ranking", lambda: CommandHandler("ranking", show_rankings)),
         ("/dashboard", lambda: CommandHandler("dashboard", cmd_dashboard)),
         ("invest_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_INVEST}$"), investimentos_command)),
+        ("fatura_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_FATURA}$"), fatura_start)),
         ("agendamentos_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_AGENDAMENTOS}$"), agendamento_start)),
         ("ranking_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_RANKING}$"), show_rankings)),
         ("nivel_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_NIVEL}$"), show_profile)),

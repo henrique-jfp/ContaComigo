@@ -38,6 +38,9 @@ debug_logs/
 .tmp/
 temp/
 
+# 📦 Training data
+data/fatura_training/
+
 # 🧪 Test & Debug Files
 debug_*.py
 investigate_*.py

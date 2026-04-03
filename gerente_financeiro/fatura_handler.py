@@ -1,5 +1,8 @@
+import json
 import logging
+import os
 import re
+import uuid
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 
@@ -17,10 +20,23 @@ from telegram.ext import (
 from database.database import get_db, get_or_create_user
 from models import Conta
 from .services import salvar_transacoes_generica
-from .states import FATURA_AWAIT_FILE, FATURA_ASK_CONTA, FATURA_CONFIRMATION_STATE
+from .states import (
+    FATURA_AWAIT_FILE,
+    FATURA_ASK_CONTA,
+    FATURA_CONFIRMATION_STATE,
+    FATURA_TRAIN_CONSENT,
+    FATURA_TRAIN_BANK,
+)
 from .gamification_utils import give_xp_for_action, touch_user_interaction
 
 logger = logging.getLogger(__name__)
+
+MAX_PDF_SIZE_MB = 20
+MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024
+TRAINING_TEXT_MAX_LINES = 80
+TRAINING_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "data", "fatura_training")
+)
 
 _MONTH_MAP = {
     "jan": 1,
@@ -117,10 +133,57 @@ def io_bytes_to_pdf(file_bytes: bytes):
     return BytesIO(file_bytes)
 
 
+def _safe_slug(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_-]+", "_", value.strip())
+    return cleaned.strip("_") or "desconhecido"
+
+
+def _extract_pdf_text_sample(file_bytes: bytes, max_lines: int = TRAINING_TEXT_MAX_LINES) -> List[str]:
+    lines: List[str] = []
+    try:
+        with pdfplumber.open(io_bytes_to_pdf(file_bytes)) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text() or ""
+                for line in text.splitlines():
+                    if line.strip():
+                        lines.append(line.strip())
+                    if len(lines) >= max_lines:
+                        return lines
+    except Exception:
+        return []
+    return lines
+
+
+def _store_training_sample(file_bytes: bytes, meta: Dict) -> str:
+    os.makedirs(TRAINING_DIR, exist_ok=True)
+    bank_slug = _safe_slug(meta.get("bank_name", "desconhecido"))
+    sample_id = meta.get("sample_id") or str(uuid.uuid4())
+    base_name = f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{bank_slug}_{sample_id}"
+    pdf_path = os.path.join(TRAINING_DIR, f"{base_name}.pdf")
+    meta_path = os.path.join(TRAINING_DIR, f"{base_name}.json")
+
+    with open(pdf_path, "wb") as pdf_file:
+        pdf_file.write(file_bytes)
+
+    with open(meta_path, "w", encoding="utf-8") as meta_file:
+        json.dump(meta, meta_file, ensure_ascii=True, indent=2)
+
+    return base_name
+
+
+def _clear_training_context(context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data.pop("fatura_training_bytes", None)
+    context.user_data.pop("fatura_training_name", None)
+    context.user_data.pop("fatura_training_size", None)
+    context.user_data.pop("fatura_training_pages", None)
+    context.user_data.pop("fatura_training_text", None)
+
+
 async def fatura_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await touch_user_interaction(update.effective_user.id, context)
     await update.message.reply_text(
-        "Envie a fatura do Banco Inter em PDF para importar os lancamentos."
+        "Envie a fatura do Banco Inter em PDF para importar os lancamentos.\n"
+        f"Limite de tamanho: {MAX_PDF_SIZE_MB}MB."
     )
     return FATURA_AWAIT_FILE
 
@@ -131,16 +194,51 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("Envie um arquivo PDF valido.")
         return FATURA_AWAIT_FILE
 
-    file_obj = await document.get_file()
-    file_bytes = await file_obj.download_as_bytearray()
+    if document.file_size and document.file_size > MAX_PDF_SIZE_BYTES:
+        await update.message.reply_text(
+            "❌ Arquivo muito grande para importar aqui.\n"
+            f"Tamanho maximo: {MAX_PDF_SIZE_MB}MB.\n"
+            "Dica: exporte um PDF mais leve ou envie apenas as paginas principais."
+        )
+        return FATURA_AWAIT_FILE
+
+    try:
+        file_obj = await document.get_file()
+        file_bytes = await file_obj.download_as_bytearray()
+    except Exception:
+        await update.message.reply_text(
+            "❌ Nao consegui baixar esse PDF.\n"
+            f"Tente enviar um arquivo menor que {MAX_PDF_SIZE_MB}MB."
+        )
+        return FATURA_AWAIT_FILE
 
     transacoes, ignoradas = parse_inter_pdf_bytes(bytes(file_bytes))
     if not transacoes:
         await update.message.reply_text(
             "Nao consegui localizar as transacoes da fatura. "
-            "Verifique se o PDF e do Banco Inter e tente novamente."
+            "Verifique se o PDF e do Banco Inter e tente novamente.\n\n"
+            "Quer ajudar a ensinar novos bancos? Posso guardar esse PDF "
+            "(somente para treino interno)."
         )
-        return ConversationHandler.END
+        context.user_data["fatura_training_bytes"] = bytes(file_bytes)
+        context.user_data["fatura_training_name"] = document.file_name or "fatura.pdf"
+        context.user_data["fatura_training_size"] = document.file_size or len(file_bytes)
+        try:
+            with pdfplumber.open(io_bytes_to_pdf(bytes(file_bytes))) as pdf:
+                context.user_data["fatura_training_pages"] = len(pdf.pages)
+        except Exception:
+            context.user_data["fatura_training_pages"] = None
+        context.user_data["fatura_training_text"] = _extract_pdf_text_sample(bytes(file_bytes))
+
+        keyboard = [
+            [InlineKeyboardButton("Quero ajudar", callback_data="fatura_treino_sim")],
+            [InlineKeyboardButton("Nao agora", callback_data="fatura_treino_nao")],
+        ]
+        await update.message.reply_text(
+            "Deseja enviar este PDF para treino?",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return FATURA_TRAIN_CONSENT
 
     context.user_data["fatura_transacoes"] = transacoes
     context.user_data["fatura_ignoradas"] = ignoradas
@@ -256,6 +354,61 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         context.user_data.pop("fatura_conta_id", None)
 
 
+async def fatura_training_consent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "fatura_treino_nao":
+        _clear_training_context(context)
+        await query.edit_message_text("Tudo bem. Se quiser ajudar no futuro, me avise.")
+        return ConversationHandler.END
+
+    await query.edit_message_text(
+        "Perfeito! Qual o banco/cartao dessa fatura?\n"
+        "Ex: Nubank, Itau, C6, Bradesco"
+    )
+    return FATURA_TRAIN_BANK
+
+
+async def fatura_training_receive_bank(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    bank_name = (update.message.text or "").strip()
+    if len(bank_name) < 2:
+        await update.message.reply_text("Me diga apenas o nome do banco/cartao, por favor.")
+        return FATURA_TRAIN_BANK
+
+    file_bytes = context.user_data.get("fatura_training_bytes")
+    if not file_bytes:
+        await update.message.reply_text("Nao encontrei o PDF. Tente enviar novamente.")
+        _clear_training_context(context)
+        return ConversationHandler.END
+
+    meta = {
+        "sample_id": str(uuid.uuid4()),
+        "uploaded_at": datetime.utcnow().isoformat() + "Z",
+        "bank_name": bank_name,
+        "user_telegram_id": update.effective_user.id,
+        "original_filename": context.user_data.get("fatura_training_name"),
+        "file_size_bytes": context.user_data.get("fatura_training_size"),
+        "page_count": context.user_data.get("fatura_training_pages"),
+        "text_sample": context.user_data.get("fatura_training_text", []),
+        "source": "fatura_training",
+    }
+
+    try:
+        _store_training_sample(file_bytes, meta)
+        await update.message.reply_text(
+            "Obrigado! Seu PDF foi salvo para treino e vai ajudar a liberar novos bancos."
+        )
+    except Exception:
+        await update.message.reply_text(
+            "Ops, houve um erro ao salvar o treino. Tente novamente depois."
+        )
+    finally:
+        _clear_training_context(context)
+
+    return ConversationHandler.END
+
+
 async def fatura_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.callback_query:
         await update.callback_query.answer()
@@ -264,6 +417,7 @@ async def fatura_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await update.message.reply_text("Importacao cancelada.")
     context.user_data.pop("fatura_transacoes", None)
     context.user_data.pop("fatura_conta_id", None)
+    _clear_training_context(context)
     return ConversationHandler.END
 
 
@@ -278,6 +432,12 @@ fatura_conv = ConversationHandler(
         ],
         FATURA_CONFIRMATION_STATE: [
             CallbackQueryHandler(fatura_confirm, pattern="^fatura_")
+        ],
+        FATURA_TRAIN_CONSENT: [
+            CallbackQueryHandler(fatura_training_consent, pattern="^fatura_treino_")
+        ],
+        FATURA_TRAIN_BANK: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, fatura_training_receive_bank)
         ],
     },
     fallbacks=[

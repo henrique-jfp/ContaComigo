@@ -12,6 +12,7 @@ from telegram.ext import (
 # --- CORREÇÃO: Importamos as funções do ocr_handler, mas não os estados ---
 from .ocr_handler import ocr_action_processor, ocr_iniciar_como_subprocesso
 from .handlers import cancel, criar_teclado_colunas
+from .menu_botoes import BOTAO_FATURA
 from .utils_validation import (
     validar_valor_monetario, validar_descricao,
     ask_valor_generico, ask_descricao_generica
@@ -110,6 +111,12 @@ async def start_manual_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 # Usando funções genéricas do utils_validation para eliminar duplicação
 async def ask_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Processa a descrição e vai direto para o valor"""
+    if update.message.text.strip() == BOTAO_FATURA:
+        await update.message.reply_text(
+            "ℹ️ Você estava em um lançamento. Fluxo encerrado.\n"
+            "Toque em 🧾 Fatura novamente para importar o PDF."
+        )
+        return ConversationHandler.END
     descricao_texto = update.message.text.strip()
     
     # Validação simples de descrição
@@ -143,6 +150,12 @@ async def ask_description(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def ask_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Processa o valor e vai para seleção de conta"""
+    if update.message.text.strip() == BOTAO_FATURA:
+        await update.message.reply_text(
+            "ℹ️ Você estava em um lançamento. Fluxo encerrado.\n"
+            "Toque em 🧾 Fatura novamente para importar o PDF."
+        )
+        return ConversationHandler.END
     # Validação mais robusta do valor
     valor_texto = update.message.text.strip().replace('R$', '').replace(' ', '').replace(',', '.')
     
