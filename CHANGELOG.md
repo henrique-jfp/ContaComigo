@@ -1,5 +1,24 @@
 # Changelog - Maestro Financeiro
 
+## [3.4.0] - 2026-04-03
+
+### 🎯 Metas Financeiras (Nova Experiencia)
+
+#### ✨ Novos Recursos
+- **/metas renovado**: cria metas com fluxo guiado e plano mensal calculado por IA.
+- **Progresso visual**: barra de avance, percentual e valor atualizado por meta.
+- **Check-in mensal**: job automatico pergunta se o usuario conseguiu guardar o valor do mes.
+- **Confirmacao mensal**: atualiza o progresso com um clique.
+
+#### 🔄 Substituicoes
+- ❌ **Removido**: sistema de wishlist.
+- ✅ **Adicionado**: `gerente_financeiro/metas_handler.py` com novo fluxo.
+
+#### 🔧 Modificacoes
+- `bot.py` - registro de handlers atualizado para /metas.
+- `jobs.py` - job mensal para check-in de metas.
+- `models.py` - nova tabela de confirmacoes mensais de metas.
+
 ## [3.3.0] - 2025-11-18
 
 ### 🎯 Wishlist Inteligente - Substituição do Sistema de Metas

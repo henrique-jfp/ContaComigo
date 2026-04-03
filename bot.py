@@ -165,8 +165,8 @@ from gerente_financeiro.handlers import (
 from gerente_financeiro.agendamentos_handler import (
     agendamento_start, agendamento_conv, agendamento_menu_callback, cancelar_agendamento_callback
 )
-from gerente_financeiro.wishlist_handler import (
-    wishlist_conv, listar_wishlist_command, deletar_meta_callback
+from gerente_financeiro.metas_handler import (
+    metas_conv, metas_callbacks, metas_start
 )
 from gerente_financeiro.onboarding_handler import configurar_conv
 from gerente_financeiro.editing_handler import edit_conv
@@ -385,7 +385,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("delete_user_conv", lambda: delete_user_conv),
         ("contact_conv", lambda: contact_conv),
         ("grafico_conv", lambda: grafico_conv),
-        ("wishlist_conv", lambda: wishlist_conv),
+        ("metas_conv", lambda: metas_conv),
         ("agendamento_conv", lambda: agendamento_conv),
         ("edit_conv", lambda: edit_conv),
         ("audio_conv", lambda: audio_conv),
@@ -402,14 +402,12 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("relatorio_handler", lambda: relatorio_handler),
         ("/help", lambda: CommandHandler("help", help_command)),
         ("/alerta", lambda: CommandHandler("alerta", schedule_alerts)),
-        ("/metas", lambda: CommandHandler("metas", listar_wishlist_command)),
         ("/agendar", lambda: CommandHandler("agendar", agendamento_start)),
         ("/notificacoes", lambda: CommandHandler("notificacoes", painel_notificacoes)),
         ("/perfil", lambda: CommandHandler("perfil", show_profile)),
         ("/ranking", lambda: CommandHandler("ranking", show_rankings)),
         ("/dashboard", lambda: CommandHandler("dashboard", cmd_dashboard)),
         ("invest_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_INVEST}$"), investimentos_command)),
-        ("metas_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_METAS}$"), listar_wishlist_command)),
         ("agendamentos_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_AGENDAMENTOS}$"), agendamento_start)),
         ("ranking_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_RANKING}$"), show_rankings)),
         ("nivel_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_NIVEL}$"), show_profile)),
@@ -445,7 +443,8 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
     callback_builders = [
         ("help_callback", lambda: CallbackQueryHandler(help_callback, pattern="^help_")),
         ("analise_callback", lambda: CallbackQueryHandler(handle_action_button_callback, pattern="^analise_")),
-        ("deletar_meta_callback", lambda: CallbackQueryHandler(deletar_meta_callback, pattern="^deletar_meta_")),
+        ("metas_delete_callback", lambda: metas_callbacks[0]),
+        ("metas_confirm_callback", lambda: metas_callbacks[1]),
         ("agendamento_menu_callback", lambda: CallbackQueryHandler(agendamento_menu_callback, pattern="^agendamento_")),
         ("cancelar_agendamento_callback", lambda: CallbackQueryHandler(cancelar_agendamento_callback, pattern="^ag_cancelar_")),
         ("gamificacao_callback", lambda: CallbackQueryHandler(handle_gamification_callback, pattern="^(show_rankings|show_stats|show_rewards)$")),

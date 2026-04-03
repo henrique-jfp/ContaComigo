@@ -65,6 +65,21 @@ class Objetivo(Base):
     criado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     usuario = relationship("Usuario", back_populates="objetivos")
+    confirmacoes = relationship("MetaConfirmacao", back_populates="objetivo", cascade="all, delete-orphan")
+
+
+class MetaConfirmacao(Base):
+    __tablename__ = 'metas_confirmacoes'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id'), nullable=False, index=True)
+    id_objetivo = Column(Integer, ForeignKey('objetivos.id'), nullable=False, index=True)
+    ano = Column(Integer, nullable=False)
+    mes = Column(Integer, nullable=False)
+    valor_confirmado = Column(Numeric(12, 2), nullable=False)
+    criado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    usuario = relationship("Usuario")
+    objetivo = relationship("Objetivo", back_populates="confirmacoes")
 
 # --- TABELA DE CONTAS REFORMULADA ---
 class Conta(Base):

@@ -46,7 +46,7 @@ Analise e IA:
 - **Dados externos:** cotacoes, indicadores, cripto, cambio e noticias.
 
 Planejamento e visao:
-- **Metas financeiras** e **wishlist** com analise de viabilidade.
+- **Metas financeiras** com plano mensal e progresso visual.
 - **Agendamentos recorrentes** com parcelas e frequencia definida.
 - **Investimentos e patrimonio** com dashboards dedicados.
 
@@ -110,7 +110,7 @@ Para detalhes, consulte [ARCHITECTURE.md](ARCHITECTURE.md).
 - [gerente_financeiro/assistente_proativo.py](gerente_financeiro/assistente_proativo.py): alertas inteligentes.
 - [gerente_financeiro/ia_handlers.py](gerente_financeiro/ia_handlers.py): comandos de IA (insights, economia, comparacoes, alertas).
 - [gerente_financeiro/investment_handler.py](gerente_financeiro/investment_handler.py): investimentos e patrimonio.
-- [gerente_financeiro/wishlist_handler.py](gerente_financeiro/wishlist_handler.py): wishlist e metas.
+- [gerente_financeiro/metas_handler.py](gerente_financeiro/metas_handler.py): metas e progresso.
 - [gerente_financeiro/agendamentos_handler.py](gerente_financeiro/agendamentos_handler.py): recorrencias e parcelas.
 - [gerente_financeiro/editing_handler.py](gerente_financeiro/editing_handler.py): edicao de transacoes.
 - [gerente_financeiro/graficos.py](gerente_financeiro/graficos.py): graficos.

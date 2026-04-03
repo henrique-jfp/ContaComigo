@@ -31,9 +31,14 @@ async def checar_objetivos_semanal(context: ContextTypes.DEFAULT_TYPE):
         db: Session = next(get_db())
         
         # Buscar todos os usuários com objetivos ativos
-        usuarios_com_objetivos = db.query(Usuario).join(Objetivo).filter(
-            Objetivo.ativo == True
-        ).distinct().all()
+        hoje = datetime.now().date()
+        usuarios_com_objetivos = (
+            db.query(Usuario)
+            .join(Objetivo)
+            .filter(Objetivo.data_meta >= hoje)
+            .distinct()
+            .all()
+        )
         
         for usuario in usuarios_com_objetivos:
             try:

@@ -8,12 +8,12 @@ old_block = """        ("dashboard_b", lambda: MessageHandler(filters.Regex(f"^{
         ("relatorio_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_RELATORIO}$"), relatorio_handler.callback)),
         ("patrimonio_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_PATRIMONIO}$"), patrimonio_command)),
         ("invest_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_INVEST}$"), investimentos_command)),
-        ("metas_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_METAS}$"), listar_wishlist_command)),
+        ("metas_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_METAS}$"), metas_start)),
         ("help_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_HELP}$"), help_command)),
         ("alerta_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_ALERTA}$"), schedule_alerts)),"""
 
 new_block = """        ("invest_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_INVEST}$"), investimentos_command)),
-        ("metas_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_METAS}$"), listar_wishlist_command)),
+        ("metas_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_METAS}$"), metas_start)),
         ("agendamentos_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_AGENDAMENTOS}$"), agendamento_start)),
         ("ranking_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_RANKING}$"), show_rankings)),
         ("nivel_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_NIVEL}$"), show_profile)),"""

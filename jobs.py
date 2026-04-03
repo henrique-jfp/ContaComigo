@@ -4,10 +4,11 @@ Sistema de Jobs e Tarefas Agendadas - MaestroFin
 import logging
 from datetime import datetime, time
 from telegram.ext import ContextTypes
-from alerts import agendar_notificacoes_diarias, checar_objetivos_semanal
+from alerts import agendar_notificacoes_diarias
 from gerente_financeiro.assistente_proativo import job_assistente_proativo
 from gerente_financeiro.wrapped_anual import job_wrapped_anual
 from gerente_financeiro.ai_memory_service import job_atualizar_perfis_ia
+from gerente_financeiro.metas_handler import job_metas_mensal
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +27,11 @@ def configurar_jobs(job_queue):
             name="agendador_mestre_diario"
         )
         
-        # Job semanal aos sábados às 10:00 - Verificar objetivos
+        # Job diario que roda no dia 1 - Check-in mensal de metas
         job_queue.run_daily(
-            checar_objetivos_semanal,
+            job_metas_mensal,
             time=time(hour=10, minute=0),
-            days=(6,),  # Sábado
-            name="checar_metas_semanalmente"
+            name="metas_checkin_mensal"
         )
         
 
@@ -58,7 +58,7 @@ def configurar_jobs(job_queue):
         
         logger.info("✅ Jobs agendados configurados com sucesso:")
         logger.info("   📅 Notificações diárias: 01:00")
-        logger.info("   🎯 Verificação de metas: Sábado 10:00")
+        logger.info("   🎯 Check-in de metas: dia 1, 10:00")
 
         logger.info("   🤖 Assistente Proativo: 20:00 (alertas inteligentes)")
         logger.info("   🎊 Wrapped Anual: 31/dez 13:00 (retrospectiva do ano)")
