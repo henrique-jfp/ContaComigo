@@ -34,6 +34,9 @@ logger = logging.getLogger(__name__)
 MAX_PDF_SIZE_MB = 20
 MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024
 TRAINING_TEXT_MAX_LINES = 80
+GENERIC_TEXT_MAX_LINES = 2000
+GENERIC_MIN_TRANSACOES = 3
+GENERIC_MIN_SCORE = 0.08
 TRAINING_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "data", "fatura_training")
 )
@@ -154,6 +157,158 @@ def _extract_pdf_text_sample(file_bytes: bytes, max_lines: int = TRAINING_TEXT_M
     return lines
 
 
+def _extract_pdf_text_lines(file_bytes: bytes, max_lines: int = GENERIC_TEXT_MAX_LINES) -> List[str]:
+    lines: List[str] = []
+    try:
+        with pdfplumber.open(io_bytes_to_pdf(file_bytes)) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text() or ""
+                for line in text.splitlines():
+                    if line.strip():
+                        lines.append(line.strip())
+                    if len(lines) >= max_lines:
+                        return lines
+    except Exception:
+        return []
+    return lines
+
+
+def _tokenize_lines(lines: List[str]) -> set[str]:
+    tokens: set[str] = set()
+    for line in lines:
+        normalized = re.sub(r"\d+", " ", line.lower())
+        for token in re.split(r"[^a-z]+", normalized):
+            if len(token) >= 4:
+                tokens.add(token)
+    return tokens
+
+
+def _load_training_samples() -> List[Dict]:
+    samples: List[Dict] = []
+    if not os.path.isdir(TRAINING_DIR):
+        return samples
+
+    for name in os.listdir(TRAINING_DIR):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(TRAINING_DIR, name)
+        try:
+            with open(path, "r", encoding="utf-8") as meta_file:
+                meta = json.load(meta_file)
+        except Exception:
+            continue
+
+        token_sample = meta.get("token_sample")
+        text_sample = meta.get("text_sample", []) or []
+        bank_name = meta.get("bank_name")
+        if not bank_name or not text_sample:
+            continue
+
+        samples.append(
+            {
+                "bank_name": bank_name,
+                "tokens": set(token_sample) if token_sample else _tokenize_lines(text_sample),
+            }
+        )
+    return samples
+
+
+def _match_bank_from_samples(lines: List[str]) -> Tuple[Optional[str], float]:
+    tokens = _tokenize_lines(lines)
+    if not tokens:
+        return None, 0.0
+
+    best_score = 0.0
+    best_bank: Optional[str] = None
+    for sample in _load_training_samples():
+        sample_tokens = sample.get("tokens") or set()
+        if not sample_tokens:
+            continue
+        intersection = tokens.intersection(sample_tokens)
+        score = len(intersection) / max(len(sample_tokens), 1)
+        if score > best_score:
+            best_score = score
+            best_bank = sample.get("bank_name")
+
+    if best_score < GENERIC_MIN_SCORE:
+        return None, best_score
+
+    return best_bank, best_score
+
+
+def _parse_generic_transactions(lines: List[str], bank_name: Optional[str]) -> Tuple[List[Dict], int]:
+    transacoes: List[Dict] = []
+    ignoradas = 0
+    now = datetime.now()
+    origem = f"fatura_pdf_{_safe_slug(bank_name)}" if bank_name else "fatura_pdf_generic"
+
+    for line in lines:
+        lower_line = line.lower()
+        if any(token in lower_line for token in [
+            "pagamento", "estorno", "total", "saldo", "vencimento", "resumo"
+        ]):
+            if "pagamento" in lower_line or "estorno" in lower_line:
+                ignoradas += 1
+            continue
+
+        date_match = re.search(r"(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?", line)
+        if date_match:
+            day = int(date_match.group(1))
+            month = int(date_match.group(2))
+            year_raw = date_match.group(3)
+            if year_raw:
+                year = int(year_raw)
+                if year < 100:
+                    year += 2000
+            else:
+                year = now.year
+        else:
+            alt_match = re.search(r"(\d{1,2})\s+de\s+([A-Za-z]{3})", line, re.IGNORECASE)
+            if not alt_match:
+                continue
+            day = int(alt_match.group(1))
+            month = _MONTH_MAP.get(alt_match.group(2).lower())
+            if not month:
+                continue
+            year = now.year
+
+        value_matches = list(re.finditer(r"R\$\s*([\d\.]+,\d{2})", line))
+        if not value_matches:
+            value_matches = list(re.finditer(r"\b([\d\.]+,\d{2})\b", line))
+        if not value_matches:
+            continue
+
+        value_str = value_matches[-1].group(1)
+        value = float(value_str.replace(".", "").replace(",", "."))
+        sign = -1.0
+        if "credito" in lower_line or "+" in line:
+            sign = 1.0
+
+        desc = line
+        if value_matches:
+            desc = line[: value_matches[-1].start()].strip()
+        desc = desc.strip("-+ ")
+        if not desc:
+            continue
+
+        try:
+            date_obj = datetime(year, month, day)
+        except ValueError:
+            continue
+
+        transacoes.append(
+            {
+                "descricao": desc,
+                "valor": sign * value,
+                "data_transacao": date_obj,
+                "forma_pagamento": "Cartao de Credito",
+                "origem": origem,
+            }
+        )
+
+    return transacoes, ignoradas
+
+
 def _store_training_sample(file_bytes: bytes, meta: Dict) -> str:
     os.makedirs(TRAINING_DIR, exist_ok=True)
     bank_slug = _safe_slug(meta.get("bank_name", "desconhecido"))
@@ -213,6 +368,17 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
         return FATURA_AWAIT_FILE
 
     transacoes, ignoradas = parse_inter_pdf_bytes(bytes(file_bytes))
+    origem_label = "Inter"
+    if not transacoes:
+        text_lines = _extract_pdf_text_lines(bytes(file_bytes))
+        bank_name, _score = _match_bank_from_samples(text_lines)
+        transacoes, ignoradas = _parse_generic_transactions(text_lines, bank_name)
+        if transacoes and len(transacoes) >= GENERIC_MIN_TRANSACOES:
+            origem_label = bank_name or "Outros"
+        else:
+            transacoes = []
+            ignoradas = 0
+
     if not transacoes:
         await update.message.reply_text(
             "Nao consegui localizar as transacoes da fatura. "
@@ -242,6 +408,7 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     context.user_data["fatura_transacoes"] = transacoes
     context.user_data["fatura_ignoradas"] = ignoradas
+    context.user_data["fatura_origem_label"] = origem_label
 
     db = next(get_db())
     try:
@@ -296,8 +463,9 @@ async def fatura_select_conta(update: Update, context: ContextTypes.DEFAULT_TYPE
     preview_text = "\n".join(preview_lines)
     ignored_text = f"\n- Ignoradas (pagamentos/estornos): {ignoradas}" if ignoradas else ""
 
+    origem_label = context.user_data.get("fatura_origem_label", "Inter")
     resumo = (
-        f"<b>Resumo da fatura (Inter)</b>\n"
+        f"<b>Resumo da fatura ({origem_label})</b>\n"
         f"- Transacoes: {total}{ignored_text}\n"
         f"- Total debitos: <b>R$ {total_debito:.2f}</b>\n"
         f"- Total creditos: R$ {total_credito:.2f}\n\n"
@@ -338,8 +506,9 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             item["forma_pagamento"] = conta_nome
 
         usuario_db = get_or_create_user(db, query.from_user.id, query.from_user.full_name)
+        tipo_origem = transacoes[0].get("origem", "fatura_pdf_generic") if transacoes else "fatura_pdf_generic"
         ok, msg, _stats = await salvar_transacoes_generica(
-            db, usuario_db, transacoes, conta_id, tipo_origem="fatura_pdf_inter"
+            db, usuario_db, transacoes, conta_id, tipo_origem=tipo_origem
         )
         if ok:
             try:
@@ -352,6 +521,7 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         db.close()
         context.user_data.pop("fatura_transacoes", None)
         context.user_data.pop("fatura_conta_id", None)
+        context.user_data.pop("fatura_origem_label", None)
 
 
 async def fatura_training_consent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -395,6 +565,7 @@ async def fatura_training_receive_bank(update: Update, context: ContextTypes.DEF
     }
 
     try:
+        meta["token_sample"] = sorted(_tokenize_lines(meta.get("text_sample", [])))
         _store_training_sample(file_bytes, meta)
         await update.message.reply_text(
             "Obrigado! Seu PDF foi salvo para treino e vai ajudar a liberar novos bancos."
@@ -417,6 +588,7 @@ async def fatura_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await update.message.reply_text("Importacao cancelada.")
     context.user_data.pop("fatura_transacoes", None)
     context.user_data.pop("fatura_conta_id", None)
+    context.user_data.pop("fatura_origem_label", None)
     _clear_training_context(context)
     return ConversationHandler.END
 
