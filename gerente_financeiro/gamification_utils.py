@@ -8,6 +8,10 @@ from database.database import get_db
 from .gamification_service import award_xp, check_and_update_streak
 import asyncio
 from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
+
+_LAST_INTERACTION_XP: dict[int, datetime] = {}
+_INTERACTION_COOLDOWN = timedelta(minutes=10)
 
 async def give_xp_for_action(user_id: int, action: str, context, custom_amount: int = None):
     """
@@ -71,6 +75,23 @@ async def check_daily_streak(user_id: int, context):
     db: Session = next(get_db())
     try:
         await check_and_update_streak(db, user_id, context)
+    finally:
+        db.close()
+
+
+async def touch_user_interaction(user_id: int, context) -> None:
+    """Atualiza streak e concede XP leve por interacao com cooldown."""
+    db: Session = next(get_db())
+    try:
+        await check_and_update_streak(db, user_id, context)
+
+        now = datetime.utcnow()
+        last = _LAST_INTERACTION_XP.get(user_id)
+        if last and (now - last) < _INTERACTION_COOLDOWN:
+            return
+
+        await award_xp(db, user_id, "INTERACAO_BOT", context)
+        _LAST_INTERACTION_XP[user_id] = now
     finally:
         db.close()
 

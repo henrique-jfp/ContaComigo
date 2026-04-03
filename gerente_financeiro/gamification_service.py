@@ -29,6 +29,7 @@ XP_ACTIONS = {
     
     # 🎯 PLANEJAMENTO E METAS
     "META_CRIADA": 20,                # Criar nova meta financeira
+    "META_APORTE_CONFIRMADO": 25,     # Confirmar aporte mensal da meta
     "META_ATINGIDA": 100,             # Atingir uma meta
     "META_SUPERADA": 150,             # Superar meta em mais de 10%
     "AGENDAMENTO_CRIADO": 15,         # Criar novo agendamento
@@ -43,6 +44,7 @@ XP_ACTIONS = {
     
     # 🎮 SISTEMA SOCIAL E GAMIFICAÇÃO
     "RANKING_VISUALIZADO": 3,         # Ver ranking global
+    "INTERACAO_BOT": 2,               # Interacao geral com o bot (com cooldown)
     "PERFIL_COMPARTILHADO": 10,       # Compartilhar perfil (futuro)
     "CONQUISTA_DESBLOQUEADA": 25,     # Desbloquear nova conquista
     "PRIMEIRA_INTERACAO_DIA": 15,     # Primeira interação do dia (streak)

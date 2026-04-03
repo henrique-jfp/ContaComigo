@@ -6,6 +6,8 @@ Fluxo de metas com plano mensal, acompanhamento visual e lembretes mensais.
 """
 
 import logging
+import re
+from html import escape as html_escape
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
@@ -30,6 +32,7 @@ from database.database import (
     listar_objetivos_usuario,
 )
 from gerente_financeiro.menu_botoes import BOTAO_METAS
+from gerente_financeiro.gamification_utils import give_xp_for_action
 from gerente_financeiro.states import (
     ASK_OBJETIVO_DESCRICAO,
     ASK_OBJETIVO_MENU,
@@ -57,6 +60,27 @@ def _progress_bar(percentual: float) -> str:
     filled = int(percent // (100 / PROGRESS_STEPS))
     empty = PROGRESS_STEPS - filled
     return "▓" * filled + "░" * empty
+
+
+_ALLOWED_TAGS = {"b", "i", "u", "s", "code", "pre", "a"}
+
+
+def _sanitize_html(texto: str) -> str:
+    if not texto:
+        return ""
+
+    tokens = re.split(r"(<[^>]+>)", texto)
+    partes = []
+    for token in tokens:
+        if token.startswith("<") and token.endswith(">"):
+            tag = re.sub(r"[</> ]", "", token.split(" ", 1)[0]).lower()
+            if tag in _ALLOWED_TAGS:
+                partes.append(token)
+            else:
+                partes.append(html_escape(token))
+        else:
+            partes.append(token)
+    return "".join(partes)
 
 
 def _meses_entre_datas(inicio: datetime.date, fim: datetime.date) -> int:
@@ -330,7 +354,7 @@ async def metas_criar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
             return ConversationHandler.END
 
         plano = gerar_plano_base(usuario_db.id, valor_meta, prazo_meses)
-        plano_texto = gerar_plano_ia(descricao, valor_meta, prazo_meses, plano)
+        plano_texto = _sanitize_html(gerar_plano_ia(descricao, valor_meta, prazo_meses, plano))
 
         necessario_mes = plano["necessario_mes"]
 
@@ -352,6 +376,8 @@ async def metas_criar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         mensagem += "\n\n📌 Use /metas para acompanhar o progresso."
 
         await update.message.reply_html(mensagem)
+
+        await give_xp_for_action(user.id, "META_CRIADA", context)
     except ValueError:
         await update.message.reply_text("❌ Prazo invalido. Digite apenas o numero de meses.")
         return ASK_OBJETIVO_PRAZO
@@ -597,6 +623,11 @@ async def metas_confirmacao_callback(update: Update, context: ContextTypes.DEFAU
             f"💰 {_format_currency(float(objetivo.valor_atual))} / {_format_currency(float(objetivo.valor_meta))}"
         )
         await query.edit_message_text(mensagem, parse_mode="HTML")
+
+        if acao == "confirm":
+            await give_xp_for_action(query.from_user.id, "META_APORTE_CONFIRMADO", context)
+            if float(objetivo.valor_atual or 0) >= float(objetivo.valor_meta):
+                await give_xp_for_action(query.from_user.id, "META_ATINGIDA", context)
     finally:
         db.close()
 

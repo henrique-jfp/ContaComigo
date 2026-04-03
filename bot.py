@@ -181,6 +181,7 @@ from gerente_financeiro.dashboard_handler import (
     cmd_dashboard, cmd_dashstatus, dashboard_callback_handler
 )
 from gerente_financeiro.gamification_handler import show_profile, show_rankings, handle_gamification_callback
+from gerente_financeiro.gamification_utils import touch_user_interaction
 
 # 📈 INVESTMENT HANDLER
 from gerente_financeiro.investment_handler import get_investment_handlers
@@ -455,6 +456,24 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
 
     for name, builder in callback_builders:
         build_and_add(name, builder)
+
+    async def touch_interaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user = update.effective_user
+        if not user:
+            return
+        try:
+            await touch_user_interaction(user.id, context)
+        except Exception:
+            pass
+
+    application.add_handler(
+        MessageHandler(filters.ALL, touch_interaction_handler),
+        group=99,
+    )
+    application.add_handler(
+        CallbackQueryHandler(touch_interaction_handler, pattern=r".*"),
+        group=99,
+    )
 
 # --- FUNÇÕES PRINCIPAIS DO BOT ---
 
