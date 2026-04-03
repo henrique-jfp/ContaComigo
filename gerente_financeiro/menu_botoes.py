@@ -14,23 +14,24 @@ BOTAO_METAS = "🎯 Metas"
 
 BOTAO_RANKING = "🏆 Ranking"
 BOTAO_NIVEL = "⭐ Seu Nível"
-BOTAO_INVEST = "💰 Investimentos"
+BOTAO_CANCELAR = "❌ Cancelar"
 BOTAO_CONTATO = "💬 Fale com o Dev"
 
 def obter_teclado_painel():
     """
-    Gera um painel de controle (Menu Rápido) para ficar sempre ativo no lugar do teclado text.
+    Gera um painel de controle (Menu Rápido) vertical com 4 linhas e 3 colunas.
     """
     botoes = [
-        [BOTAO_LANCAMENTO, BOTAO_GERENTE, BOTAO_EDITAR, BOTAO_CONFIG],
-        [BOTAO_FATURA, BOTAO_GRAFICOS, BOTAO_AGENDAMENTOS, BOTAO_METAS],
-        [BOTAO_RANKING, BOTAO_NIVEL, BOTAO_INVEST, BOTAO_CONTATO]
+        [BOTAO_LANCAMENTO, BOTAO_GERENTE, BOTAO_EDITAR],
+        [BOTAO_CONFIG, BOTAO_FATURA, BOTAO_GRAFICOS],
+        [BOTAO_AGENDAMENTOS, BOTAO_METAS, BOTAO_RANKING],
+        [BOTAO_NIVEL, BOTAO_CANCELAR, BOTAO_CONTATO]
     ]
     return ReplyKeyboardMarkup(
         botoes, 
         resize_keyboard=True, 
         is_persistent=True, 
-        input_field_placeholder="🎹 Escolha um Painel de Controle..."
+        input_field_placeholder="🎹 Escolha um Atalho..."
     )
 
 async def toggle_painel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
