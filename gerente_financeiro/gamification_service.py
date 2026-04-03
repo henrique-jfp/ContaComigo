@@ -1,5 +1,6 @@
 # gerente_financeiro/gamification_service.py
 import logging
+import asyncio
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
 from models import Usuario
@@ -169,15 +170,31 @@ async def award_xp(db: Session, user_id: int, action: str, context, custom_amoun
     if streak_bonus > 0:
         notification += f"\n🔥 +{streak_bonus} XP bonus de streak ({usuario.streak_dias} dias)!"
     
-    # Enviar notificação de XP (silenciosa)
+    async def _send_temp_message(text: str, parse_mode: str | None = None) -> None:
+        try:
+            msg = await context.bot.send_message(
+                chat_id=user_id,
+                text=text,
+                parse_mode=parse_mode,
+                disable_notification=True
+            )
+        except Exception:
+            return
+
+        async def _delete_later():
+            try:
+                await asyncio.sleep(2)
+                await context.bot.delete_message(chat_id=user_id, message_id=msg.message_id)
+            except Exception:
+                return
+
+        asyncio.create_task(_delete_later())
+
+    # Enviar notificação de XP (silenciosa e temporária)
     try:
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=notification,
-            disable_notification=True  # Notificação silenciosa
-        )
-    except:
-        pass  # Falha silenciosa se não conseguir enviar
+        await _send_temp_message(notification)
+    except Exception:
+        pass
     
     # 🎉 NOTIFICAÇÃO DE LEVEL UP (com som)
     if level_up:
@@ -193,12 +210,8 @@ async def award_xp(db: Session, user_id: int, action: str, context, custom_amoun
         )
         
         try:
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=mensagem_levelup,
-                parse_mode='Markdown'
-            )
-        except:
+            await _send_temp_message(mensagem_levelup, parse_mode='Markdown')
+        except Exception:
             pass
     
     logger.info(f"XP concedido: Usuário {user_id} | Ação: {action} | XP: +{final_xp} | Level: {old_level}->{new_level}")

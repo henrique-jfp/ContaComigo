@@ -7,12 +7,89 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from sqlalchemy.orm import Session
 from database.database import get_db, get_or_create_user
-from models import Lancamento
+from models import Lancamento, Conta
 from .gamification_utils import give_xp_for_action, touch_user_interaction
 import config
-from .states import AUDIO_CONFIRMATION_STATE
+from .states import AUDIO_ACCOUNT_STATE, AUDIO_CONFIRMATION_STATE
 
 logger = logging.getLogger(__name__)
+
+
+def _audio_payload_valido(dados_ia: dict) -> bool:
+    try:
+        valor = float(dados_ia.get('valor_total', 0) or 0)
+    except (ValueError, TypeError):
+        valor = 0
+    nome = str(dados_ia.get('nome_estabelecimento', '') or '').strip()
+    data_str = str(dados_ia.get('data', '') or '').strip()
+
+    if valor <= 0 and (not nome or nome.upper() == 'N/A'):
+        if not data_str or data_str.upper() == 'N/A':
+            return False
+    return True
+
+
+def _normalizar_tipo(tipo: str) -> str:
+    return 'Entrada' if str(tipo).strip().lower() == 'entrada' else 'Saída'
+
+
+def _build_conta_keyboard(contas: list[Conta]) -> InlineKeyboardMarkup:
+    botoes = []
+    for conta in contas:
+        emoji = "🏦" if conta.tipo == "Conta" else "💳"
+        botoes.append(InlineKeyboardButton(f"{emoji} {conta.nome}", callback_data=f"audio_conta_{conta.id}"))
+    return InlineKeyboardMarkup([botoes[i:i + 2] for i in range(0, len(botoes), 2)])
+
+
+async def _ensure_audio_account(update_or_query, context: ContextTypes.DEFAULT_TYPE) -> int:
+    dados_ia = context.user_data.get('dados_audio')
+    if not dados_ia:
+        return ConversationHandler.END
+
+    tipo_atual = _normalizar_tipo(dados_ia.get('tipo_transacao', 'Saída'))
+    dados_ia['tipo_transacao'] = tipo_atual
+
+    user_obj = update_or_query.from_user if hasattr(update_or_query, 'from_user') else update_or_query.effective_user
+    db: Session = next(get_db())
+    try:
+        usuario_db = get_or_create_user(db, user_obj.id, user_obj.full_name)
+        if tipo_atual == 'Entrada':
+            contas = db.query(Conta).filter(Conta.id_usuario == usuario_db.id, Conta.tipo == "Conta").all()
+            titulo = "🏦 <b>Escolha a conta bancaria</b>"
+        else:
+            contas = db.query(Conta).filter(Conta.id_usuario == usuario_db.id).all()
+            titulo = "💳 <b>Escolha a conta ou cartao</b>"
+
+        if not contas:
+            if hasattr(update_or_query, 'message') and update_or_query.message:
+                await update_or_query.message.reply_text("❌ Nenhuma conta cadastrada. Use /configurar para adicionar.")
+            else:
+                await update_or_query.edit_message_text("❌ Nenhuma conta cadastrada. Use /configurar para adicionar.")
+            context.user_data.pop('dados_audio', None)
+            return ConversationHandler.END
+
+        if len(contas) == 1:
+            conta = contas[0]
+            dados_ia['id_conta'] = conta.id
+            dados_ia['forma_pagamento'] = conta.nome
+            context.user_data['dados_audio'] = dados_ia
+            await _reply_with_audio_summary(update_or_query, context)
+            return AUDIO_CONFIRMATION_STATE
+
+        teclado = _build_conta_keyboard(contas)
+        texto = (
+            f"{titulo}\n\n"
+            "Selecione de onde veio/saiu o dinheiro para continuar."
+        )
+
+        if hasattr(update_or_query, 'message') and update_or_query.message:
+            await update_or_query.message.reply_text(texto, parse_mode='HTML', reply_markup=teclado)
+        else:
+            await update_or_query.edit_message_text(texto, parse_mode='HTML', reply_markup=teclado)
+
+        return AUDIO_ACCOUNT_STATE
+    finally:
+        db.close()
 
 async def _reply_with_audio_summary(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     """Envia o resumo da transação extraída do áudio com botões inline."""
@@ -29,12 +106,13 @@ async def _reply_with_audio_summary(update_or_query, context: ContextTypes.DEFAU
     except (ValueError, TypeError):
         valor_float = 0.0
     
+    forma_pagamento = dados_ia.get('forma_pagamento') or 'Conta não definida'
     msg_texto = (
         f"🎙️ <b>Lançamentos via Áudio Identificado</b>\n\n"
         f"📍 <b>Descrição:</b> {dados_ia.get('nome_estabelecimento', 'N/A')}\n"
         f"{tipo_emoji} <b>Valor:</b> R$ {valor_float:.2f} ({tipo_atual})\n"
         f"📅 <b>Data:</b> {dados_ia.get('data', 'N/A')}\n"
-        f"💳 <b>Forma de Pagto:</b> {dados_ia.get('forma_pagamento', 'N/A')}\n"
+        f"💳 <b>Conta/Cartão:</b> {forma_pagamento}\n"
         f"🏷️ <b>Sugestões (Baseadas em IA):</b>\n"
         f"  • Categoria: {dados_ia.get('categoria_sugerida', 'N/A')}\n"
         f"\nConfirma o salvamento?"
@@ -118,16 +196,21 @@ async def handle_audio_expense(update: Update, context: ContextTypes.DEFAULT_TYP
         
         if not isinstance(dados_ia, dict) or "valor_total" not in dados_ia:
             raise ValueError("O formato JSON extraído é inválido ou faltando chaves.")
+
+        if not _audio_payload_valido(dados_ia):
+            await message_wait.edit_text("❌ Audio inaudivel, enviar outro audio.")
+            return ConversationHandler.END
+
+        dados_ia['tipo_transacao'] = _normalizar_tipo(dados_ia.get('tipo_transacao', 'Saída'))
             
         context.user_data['dados_audio'] = dados_ia
         
         await message_wait.delete()
-        await _reply_with_audio_summary(update, context)
-        return AUDIO_CONFIRMATION_STATE
+        return await _ensure_audio_account(update, context)
         
     except Exception as e:
         logger.error(f"❌ Erro ao processar áudio no Gemini: {e}", exc_info=True)
-        await message_wait.edit_text("❌ Falha ao processar o áudio. O modelo pode não ter entendido seu áudio ou ocorreu um problema na rede.")
+        await message_wait.edit_text("❌ Audio inaudivel, enviar outro audio.")
         return ConversationHandler.END
 
 
@@ -142,10 +225,27 @@ async def audio_action_processor(update: Update, context: ContextTypes.DEFAULT_T
         return ConversationHandler.END
 
     if action == "audio_toggle_type":
-        dados['tipo_transacao'] = 'Entrada' if dados.get('tipo_transacao') == 'Saída' else 'Saída'
+        dados['tipo_transacao'] = _normalizar_tipo('Entrada' if dados.get('tipo_transacao') == 'Saída' else 'Saída')
+        dados.pop('id_conta', None)
+        dados.pop('forma_pagamento', None)
         context.user_data['dados_audio'] = dados
-        await _reply_with_audio_summary(query, context)
-        return AUDIO_CONFIRMATION_STATE
+        return await _ensure_audio_account(query, context)
+
+    if action.startswith("audio_conta_"):
+        conta_id = int(action.split('_')[-1])
+        db: Session = next(get_db())
+        try:
+            conta = db.query(Conta).filter(Conta.id == conta_id).first()
+            if conta:
+                dados['id_conta'] = conta.id
+                dados['forma_pagamento'] = conta.nome
+                context.user_data['dados_audio'] = dados
+                await _reply_with_audio_summary(query, context)
+                return AUDIO_CONFIRMATION_STATE
+        finally:
+            db.close()
+        await query.edit_message_text("❌ Conta inválida. Tente novamente.")
+        return AUDIO_ACCOUNT_STATE
 
     if action == "audio_cancelar":
         await query.edit_message_text("❌ Lançamento via áudio cancelado.")
@@ -153,6 +253,8 @@ async def audio_action_processor(update: Update, context: ContextTypes.DEFAULT_T
         return ConversationHandler.END
 
     if action == "audio_salvar":
+        if not dados.get('id_conta') or not dados.get('forma_pagamento'):
+            return await _ensure_audio_account(query, context)
         await query.edit_message_text("💾 Registrando no banco de dados...")
         
         try:
@@ -176,7 +278,8 @@ async def audio_action_processor(update: Update, context: ContextTypes.DEFAULT_T
                 valor=valor_float,
                 tipo=dados.get('tipo_transacao', 'Saída'),
                 data_transacao=data_obj,
-                forma_pagamento=dados.get('forma_pagamento', 'N/A')
+                forma_pagamento=dados.get('forma_pagamento'),
+                id_conta=dados.get('id_conta')
             )
             
             db.add(novo_lancamento)
@@ -205,6 +308,9 @@ audio_conv = ConversationHandler(
         MessageHandler(filters.VOICE | filters.AUDIO, handle_audio_expense)
     ],
     states={
+        AUDIO_ACCOUNT_STATE: [
+            CallbackQueryHandler(audio_action_processor, pattern='^audio_')
+        ],
         AUDIO_CONFIRMATION_STATE: [
             CallbackQueryHandler(audio_action_processor, pattern='^audio_')
         ]
