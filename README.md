@@ -46,12 +46,12 @@ Analise e IA:
 - **Dados externos:** cotacoes, indicadores, cripto, cambio e noticias.
 
 Planejamento e visao:
-- **Metas financeiras** com plano mensal e progresso visual.
+- **Metas financeiras** com plano mensal, progresso visual e check-in mensal.
 - **Agendamentos recorrentes** com parcelas e frequencia definida.
 - **Investimentos e patrimonio** com dashboards dedicados.
 
 Engajamento e relatatorios:
-- **Gamificacao:** XP, niveis, rankings e streaks.
+- **Gamificacao:** XP, niveis, ranking em tempo real e streaks.
 - **Graficos avancados** (pizza, barras, linha, area e composicoes).
 - **Relatorios PDF** e **dashboard web**.
 - **Wrapped anual** (retrospectiva financeira automatica).
