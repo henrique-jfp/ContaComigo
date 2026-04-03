@@ -53,6 +53,7 @@ except Exception as e:
     ANALYTICS_ENABLED = False
 
 from .analytics_utils import track_analytics
+from .gamification_utils import give_xp_for_action, touch_user_interaction
 
 # --- IMPORTS RESTANTES DO PROJETO ---
 
@@ -606,9 +607,9 @@ HELP_TEXTS = {
         "⭐  <b>Como ganhar XP:</b>\n"
         "   • 📝 Registrar transação: +10 XP\n"
         "   • 💬 Usar IA do Gerente: +5 XP\n"
-        "   • 🎯 Criar/confirmar metas: XP extra\n"
-        "   • 📊 Gerar gráfico: +8 XP\n"
-        "   • 📄 Gerar relatório: +15 XP\n"
+        "   • 🎯 Check-in de meta: +35 XP\n"
+        "   • 📊 Gerar gráfico: +15 XP\n"
+        "   • 📄 Gerar relatório: +30 XP\n"
         "   • 🔥 Streak diario: XP extra e multiplicadores\n\n"
         "🎯  <b>Funcionalidades exclusivas:</b>\n"
         "   • 🏅 Sistema de conquistas personalizadas\n"
@@ -752,6 +753,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 @track_analytics("gerente")
 async def start_gerente(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await touch_user_interaction(update.effective_user.id, context)
     db = next(get_db())
     try:
         user = get_or_create_user(db, update.effective_user.id, update.effective_user.full_name)
@@ -838,6 +840,8 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
         )
         logger.warning(f"⏱️ Rate limit ativado para user {user_id} (faltam {tempo_restante:.1f}s)")
         return AWAIT_GERENTE_QUESTION
+
+    await touch_user_interaction(user_id, context)
     
     await context.bot.send_chat_action(chat_id=chat_id, action='typing')
 
@@ -847,6 +851,10 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
         logger.info(f"Intenção de dado externo detectada: {topico_dado_externo}")
         dados = await obter_dados_externos(flag_dado_externo)
         await enviar_texto_em_blocos(context.bot, chat_id, dados.get("texto_html", "Não encontrei a informação."))
+        try:
+            await give_xp_for_action(user_id, "PERGUNTA_IA_SIMPLES", context)
+        except Exception:
+            logger.debug("Falha ao conceder XP de IA simples (nao critico).")
         return AWAIT_GERENTE_QUESTION
 
     # --- Se não for cotação, continua com a IA financeira ---
@@ -949,6 +957,10 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
                 else:
                     logger.warning(f"IA tentou chamar uma função desconhecida: {nome_funcao}")
                     await context.bot.send_message(chat_id, "A IA tentou uma ação que não conheço.")
+                try:
+                    await give_xp_for_action(user_id, "PERGUNTA_IA_SIMPLES", context)
+                except Exception:
+                    logger.debug("Falha ao conceder XP de IA simples (nao critico).")
             else:
                 # Se não for um JSON de função, trata como texto normal.
                 raise json.JSONDecodeError("Não é um JSON de função", resposta_ia, 0)
@@ -958,6 +970,10 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
             resposta_texto, reply_markup = parse_action_buttons(resposta_ia)
             await enviar_texto_em_blocos(context.bot, chat_id, resposta_texto, reply_markup=reply_markup)
             contexto_conversa.adicionar_interacao(user_question, resposta_texto, tipo="alfredo_analise")
+            try:
+                await give_xp_for_action(user_id, "PERGUNTA_IA_COMPLEXA", context)
+            except Exception:
+                logger.debug("Falha ao conceder XP de IA complexa (nao critico).")
 
     except Exception as e:
         erro_detalhado = f"Erro CRÍTICO em handle_natural_language (V4): {str(e)}"

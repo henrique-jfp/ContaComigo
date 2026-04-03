@@ -35,6 +35,7 @@ from .services import (
     limpar_cache_usuario,
 )
 from . import services as services_module
+from .gamification_utils import give_xp_for_action, touch_user_interaction
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +188,7 @@ def debug_contexto(contexto_dados):
 async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Gera e envia um relatório financeiro detalhado em PDF."""
     
+    await touch_user_interaction(update.effective_user.id, context)
     hoje = datetime.now()
     
     # Determina o período do relatório (mês atual ou passado)
@@ -383,6 +385,11 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
                 read_timeout=120,
                 write_timeout=120
             )
+
+            try:
+                await give_xp_for_action(update.effective_user.id, "RELATORIO_MENSAL", context)
+            except Exception:
+                logger.debug("Falha ao conceder XP do relatorio (nao critico).")
             
             logger.info("✅ Relatório PDF enviado com sucesso!")
             return

@@ -19,6 +19,7 @@ from sqlalchemy import and_, func
 import config
 from database.database import get_or_create_user, get_db
 from models import Lancamento, ItemLancamento, Categoria, Subcategoria, Usuario
+from .gamification_utils import give_xp_for_action
 from .states import OCR_CONFIRMATION_STATE
 
 # Configurar logging específico para OCR com arquivo dedicado
@@ -812,6 +813,10 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
 
             db.add(novo_lancamento)
             db.commit()
+            try:
+                await give_xp_for_action(query.from_user.id, "LANCAMENTO_OCR", context)
+            except Exception:
+                logger.debug("Falha ao conceder XP do OCR (nao critico).")
 
             # Mensagem de sucesso será enviada pelo handler principal
         except Exception as e:

@@ -18,6 +18,7 @@ from database.database import get_db, get_or_create_user
 from models import Conta
 from .services import salvar_transacoes_generica
 from .states import FATURA_AWAIT_FILE, FATURA_ASK_CONTA, FATURA_CONFIRMATION_STATE
+from .gamification_utils import give_xp_for_action, touch_user_interaction
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +118,7 @@ def io_bytes_to_pdf(file_bytes: bytes):
 
 
 async def fatura_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await touch_user_interaction(update.effective_user.id, context)
     await update.message.reply_text(
         "Envie a fatura do Banco Inter em PDF para importar os lancamentos."
     )
@@ -241,6 +243,11 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         ok, msg, _stats = await salvar_transacoes_generica(
             db, usuario_db, transacoes, conta_id, tipo_origem="fatura_pdf_inter"
         )
+        if ok:
+            try:
+                await give_xp_for_action(query.from_user.id, "FATURA_PROCESSADA", context)
+            except Exception:
+                logger.debug("Falha ao conceder XP da fatura (nao critico).")
         await query.edit_message_text(msg, parse_mode="HTML")
         return ConversationHandler.END
     finally:

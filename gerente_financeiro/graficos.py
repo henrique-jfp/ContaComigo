@@ -46,6 +46,7 @@ from telegram.error import TelegramError
 from database.database import get_db, DatabaseError, ServiceError  # Agora importando do database.py
 from . import services
 from .handlers import cancel  # Importa função de cancelamento genérica
+from .gamification_utils import give_xp_for_action, touch_user_interaction
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +146,8 @@ def get_cache_key(user_id: int) -> str:
 
 async def show_chart_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Exibe o menu de gráficos com layout otimizado."""
+    if update.effective_user:
+        await touch_user_interaction(update.effective_user.id, context)
     keyboard = [
         [
             InlineKeyboardButton("🍕 Desp. por Categoria", callback_data="grafico_categoria_pizza"),
@@ -267,6 +270,10 @@ async def chart_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 caption=f"📊 <b>{nome_exibicao}</b>\n<i>Gerado em {datetime.now().strftime('%d/%m/%Y às %H:%M')}</i>",
                 parse_mode='HTML'
             )
+            try:
+                await give_xp_for_action(user_id, "GRAFICO_GERADO", context)
+            except Exception:
+                logger.debug("Falha ao conceder XP do grafico (nao critico).")
             
             # Retorna ao menu
             return await show_chart_menu(update, context)

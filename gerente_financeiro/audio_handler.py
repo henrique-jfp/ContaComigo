@@ -8,6 +8,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 from sqlalchemy.orm import Session
 from database.database import get_db, get_or_create_user
 from models import Lancamento
+from .gamification_utils import give_xp_for_action, touch_user_interaction
 import config
 from .states import AUDIO_CONFIRMATION_STATE
 
@@ -55,6 +56,7 @@ async def _reply_with_audio_summary(update_or_query, context: ContextTypes.DEFAU
 async def handle_audio_expense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Recebe o áudio (VOICE), envia para o Gemini 2.5 Flash, e processa."""
     logger.info("🎙️ Iniciando processamento de áudio para lançamento...")
+    await touch_user_interaction(update.effective_user.id, context)
     
     if not config.GEMINI_API_KEY:
         await update.message.reply_text("❌ A Chave do Gemini não está configurada.")
@@ -179,6 +181,10 @@ async def audio_action_processor(update: Update, context: ContextTypes.DEFAULT_T
             
             db.add(novo_lancamento)
             db.commit()
+            try:
+                await give_xp_for_action(query.from_user.id, "LANCAMENTO_AUDIO", context)
+            except Exception:
+                logger.debug("Falha ao conceder XP do lancamento por audio (nao critico).")
             
             await query.edit_message_text(f"✅ Sucesso!\nLançamento **'{novo_lancamento.descricao}'** de R$ {novo_lancamento.valor:.2f} foi salvo.", parse_mode='Markdown')
         except Exception as e:

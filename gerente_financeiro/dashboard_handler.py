@@ -24,6 +24,7 @@ import traceback
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
+from .gamification_utils import give_xp_for_action, touch_user_interaction
 
 # Configurar logging detalhado
 logging.basicConfig(
@@ -89,6 +90,7 @@ async def cmd_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"Comando /dashboard iniciado para usuário {update.effective_user.id}")
         user_id = update.effective_user.id
         chat_id = update.effective_chat.id
+        await touch_user_interaction(user_id, context)
         
         # Enviar mensagem de carregamento - usar effective_message para compatibilidade
         try:
@@ -186,6 +188,10 @@ async def cmd_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='HTML',
             reply_markup=reply_markup
         )
+        try:
+            await give_xp_for_action(user_id, "DASHBOARD_ACESSADO", context)
+        except Exception:
+            logger.debug("Falha ao conceder XP do dashboard (nao critico).")
         logger.info("Comando /dashboard executado com sucesso")
         
     except Exception as e:

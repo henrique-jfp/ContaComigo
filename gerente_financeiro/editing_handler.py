@@ -46,6 +46,7 @@ from database.database import (
 )
 from models import Categoria, Subcategoria
 from .handlers import cancel, criar_teclado_colunas
+from .gamification_utils import give_xp_for_action, touch_user_interaction
 from .states import (
     CHOOSE_METHOD, AWAIT_SEARCH_QUERY, CHOOSE_LANCAMENTO,
     CHOOSE_FIELD_TO_EDIT, AWAIT_NEW_VALUE,
@@ -60,6 +61,7 @@ logger = logging.getLogger(__name__)
 
 async def start_editing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Inicia o fluxo de edição de lançamento."""
+    await touch_user_interaction(update.effective_user.id, context)
     # Remover apenas as chaves do próprio editing_handler em vez de .clear() total
     context.user_data.pop('edit_method', None)
     context.user_data.pop('edit_lancamento_id', None)
@@ -219,12 +221,22 @@ async def choose_field_to_edit(update: Update, context: ContextTypes.DEFAULT_TYP
         
         atualizado = atualizar_lancamento_por_id(lanc_id, query.from_user.id, data_to_update)
         msg = "✅ Lançamento atualizado com sucesso!" if atualizado else "❌ Erro ao salvar."
+        if atualizado:
+            try:
+                await give_xp_for_action(query.from_user.id, "EDICAO_LANCAMENTO", context)
+            except Exception:
+                logger.debug("Falha ao conceder XP de edicao (nao critico).")
         await query.edit_message_text(msg)
         return ConversationHandler.END
 
     if field == "delete":
         deletado = deletar_lancamento_por_id(context.user_data['edit_data']['id'], query.from_user.id)
         msg = "🗑️ Lançamento apagado com sucesso!" if deletado else "❌ Erro ao apagar."
+        if deletado:
+            try:
+                await give_xp_for_action(query.from_user.id, "EXCLUSAO_LANCAMENTO", context)
+            except Exception:
+                logger.debug("Falha ao conceder XP de exclusao (nao critico).")
         await query.edit_message_text(msg)
         return ConversationHandler.END
     

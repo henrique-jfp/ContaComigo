@@ -11,9 +11,11 @@ logger = logging.getLogger(__name__)
 XP_ACTIONS = {
     # 📝 LANÇAMENTOS E REGISTROS
     "LANCAMENTO_MANUAL": 10,           # Registrar transação manualmente
+    "LANCAMENTO_AUDIO": 15,            # Registrar transacao por audio
     "LANCAMENTO_OCR": 25,             # Usar OCR para extrair dados de cupom
     "FATURA_PROCESSADA": 50,          # Processar PDF de fatura completa
     "EDICAO_LANCAMENTO": 5,           # Editar/corrigir uma transação
+    "EXCLUSAO_LANCAMENTO": 2,         # Excluir transacao
     "ITEM_LANCAMENTO": 3,             # Adicionar item específico
     
     # 💬 INTELIGÊNCIA E ANÁLISE  
@@ -29,8 +31,10 @@ XP_ACTIONS = {
     
     # 🎯 PLANEJAMENTO E METAS
     "META_CRIADA": 20,                # Criar nova meta financeira
+    "META_CHECKIN_MENSAL": 35,        # Check-in mensal da meta
     "META_APORTE_CONFIRMADO": 25,     # Confirmar aporte mensal da meta
-    "META_ATINGIDA": 100,             # Atingir uma meta
+    "META_ATINGIDA": 200,             # Atingir uma meta
+    "META_CONCLUIDA_100": 100,        # Bonus ao completar 100%
     "META_SUPERADA": 150,             # Superar meta em mais de 10%
     "AGENDAMENTO_CRIADO": 15,         # Criar novo agendamento
     "AGENDAMENTO_EXECUTADO": 10,      # Agendamento executado com sucesso
@@ -44,6 +48,7 @@ XP_ACTIONS = {
     
     # 🎮 SISTEMA SOCIAL E GAMIFICAÇÃO
     "RANKING_VISUALIZADO": 3,         # Ver ranking global
+    "PERFIL_VISUALIZADO": 3,          # Ver perfil gamer
     "INTERACAO_BOT": 2,               # Interacao geral com o bot (com cooldown)
     "PERFIL_COMPARTILHADO": 10,       # Compartilhar perfil (futuro)
     "CONQUISTA_DESBLOQUEADA": 25,     # Desbloquear nova conquista
@@ -134,6 +139,7 @@ async def award_xp(db: Session, user_id: int, action: str, context, custom_amoun
     # 📢 NOTIFICAÇÃO DE XP
     action_names = {
         "LANCAMENTO_MANUAL": "registrar transação",
+        "LANCAMENTO_AUDIO": "registrar por áudio",
         "LANCAMENTO_OCR": "usar OCR automático",
         "FATURA_PROCESSADA": "processar fatura completa",
         "PERGUNTA_IA_SIMPLES": "usar IA do Gerente",
@@ -141,10 +147,15 @@ async def award_xp(db: Session, user_id: int, action: str, context, custom_amoun
         "GRAFICO_GERADO": "gerar gráfico",
         "RELATORIO_MENSAL": "gerar relatório",
         "META_CRIADA": "criar meta financeira",
+        "META_CHECKIN_MENSAL": "confirmar check-in da meta",
         "META_ATINGIDA": "atingir sua meta",
+        "META_CONCLUIDA_100": "concluir meta 100%",
         "AGENDAMENTO_CRIADO": "criar agendamento",
         "DASHBOARD_ACESSADO": "acessar dashboard",
-        "PRIMEIRA_INTERACAO_DIA": "manter sequência diária"
+        "PRIMEIRA_INTERACAO_DIA": "manter sequência diária",
+        "RANKING_VISUALIZADO": "ver ranking",
+        "PERFIL_VISUALIZADO": "ver perfil",
+        "EXCLUSAO_LANCAMENTO": "apagar transação"
     }
     
     action_display = action_names.get(action, action.lower().replace("_", " "))

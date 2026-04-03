@@ -6,6 +6,7 @@ from telegram.ext import ContextTypes
 from database.database import get_db
 from models import Usuario, Lancamento
 from .gamification_service import LEVELS, award_xp
+from .gamification_utils import give_xp_for_action, touch_user_interaction
 from datetime import datetime, timedelta
 from sqlalchemy import func
 import random
@@ -16,7 +17,8 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """🎮 PERFIL GAMER ULTRA PERSONALIZADO - Sistema viciante!"""
     user_id = update.effective_user.id
     db: Session = next(get_db())
-    try:        
+    try:
+        await touch_user_interaction(user_id, context)
         usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
         if not usuario:
             await update.message.reply_text("❌ Usuário não encontrado. Use /start para começar sua jornada!")
@@ -183,6 +185,10 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_html(mensagem, reply_markup=reply_markup)
+        try:
+            await give_xp_for_action(user_id, "PERFIL_VISUALIZADO", context)
+        except Exception:
+            logger.debug("Falha ao conceder XP de perfil (nao critico).")
 
     finally:
         db.close()
@@ -192,6 +198,7 @@ async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     db: Session = next(get_db())
     try:
+        await touch_user_interaction(user_id, context)
         # Ranking de XP Global
         top_10_xp = db.query(Usuario).order_by(Usuario.xp.desc()).limit(10).all()
         
@@ -249,6 +256,10 @@ async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ranking_str += "💡 <i>Dica: Use /perfil para ver seu progresso detalhado!</i>"
 
         await update.message.reply_html(ranking_str)
+        try:
+            await give_xp_for_action(user_id, "RANKING_VISUALIZADO", context)
+        except Exception:
+            logger.debug("Falha ao conceder XP de ranking (nao critico).")
 
     finally:
         db.close()
@@ -339,9 +350,11 @@ async def handle_gamification_callback(update: Update, context: ContextTypes.DEF
                 
                 f"📝 <b>LANÇAMENTOS & REGISTROS:</b>\n"
                 f"• Registrar transação: <b>+10 XP</b>\n"
+                f"• Registrar por áudio: <b>+15 XP</b>\n"
                 f"• Usar OCR (foto/cupom): <b>+25 XP</b>\n"
                 f"• Processar fatura PDF: <b>+50 XP</b>\n"
-                f"• Editar transação: <b>+5 XP</b>\n\n"
+                f"• Editar transação: <b>+5 XP</b>\n"
+                f"• Excluir transação: <b>+2 XP</b>\n\n"
                 
                 f"🤖 <b>INTELIGÊNCIA ARTIFICIAL:</b>\n"
                 f"• Pergunta simples para IA: <b>+5 XP</b>\n"
@@ -356,7 +369,9 @@ async def handle_gamification_callback(update: Update, context: ContextTypes.DEF
                 
                 f"🎯 <b>METAS & PLANEJAMENTO:</b>\n"
                 f"• Criar meta: <b>+20 XP</b>\n"
-                f"• Atingir meta: <b>+100 XP</b>\n"
+                f"• Check-in mensal: <b>+35 XP</b>\n"
+                f"• Atingir meta: <b>+200 XP</b>\n"
+                f"• Bonus 100%: <b>+100 XP</b>\n"
                 f"• Superar meta (10%+): <b>+150 XP</b>\n"
                 f"• Criar agendamento: <b>+15 XP</b>\n\n"
                 

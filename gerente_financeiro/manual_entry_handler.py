@@ -19,6 +19,7 @@ from .utils_validation import (
 
 from database.database import get_db, get_or_create_user
 from models import Categoria, Subcategoria, Lancamento, Conta, Usuario
+from .gamification_utils import give_xp_for_action, touch_user_interaction
 from .states import (
     AWAITING_LAUNCH_ACTION, ASK_DESCRIPTION, ASK_VALUE, ASK_CONTA,
     ASK_CATEGORY, ASK_SUBCATEGORY, ASK_DATA, OCR_CONFIRMATION_STATE
@@ -76,6 +77,7 @@ async def manual_entry_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """Inicia o fluxo de lançamento unificado."""
     # Limpa dados de lançamentos anteriores para começar uma nova "sessão"
     context.user_data.clear()
+    await touch_user_interaction(update.effective_user.id, context)
     
     await show_launch_menu(update, context)
     return AWAITING_LAUNCH_ACTION
@@ -432,6 +434,10 @@ async def save_manual_lancamento_and_return(update: Update, context: ContextType
         novo_lancamento = Lancamento(id_usuario=usuario_db.id, **dados)
         db.add(novo_lancamento)
         db.commit()
+        try:
+            await give_xp_for_action(update.effective_user.id, "LANCAMENTO_MANUAL", context)
+        except Exception:
+            logger.debug("Falha ao conceder XP do lancamento manual (nao critico).")
         
         # Confirmação elegante
         tipo = dados['tipo']
