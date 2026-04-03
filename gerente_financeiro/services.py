@@ -551,8 +551,8 @@ def analisar_comportamento_financeiro(lancamentos: List[Lancamento]) -> Dict[str
     df = pd.DataFrame(dados_lancamentos)
     df['data_transacao'] = pd.to_datetime(df['data_transacao']).dt.tz_localize(None)
     
-    despesas_df = df[df['tipo'] == 'Despesa'].copy()
-    receitas_df = df[df['tipo'] == 'Receita'].copy()
+    despesas_df = df[df['tipo'].isin(['Despesa', 'despesa', 'Saída', 'saída', 'Saida', 'saida'])].copy()
+    receitas_df = df[df['tipo'].isin(['Receita', 'receita', 'Entrada', 'entrada'])].copy()
     
     if despesas_df.empty:
         return {"has_data": False, "total_receitas_90d": float(receitas_df['valor'].sum())}
@@ -1674,9 +1674,10 @@ async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -
         mes_ano = l.data_transacao.strftime('%Y-%m')
         if mes_ano not in resumo_mensal:
             resumo_mensal[mes_ano] = {'receitas': 0.0, 'despesas': 0.0}
-        if l.tipo == 'Receita':
+        tipo_min = (l.tipo or '').lower()
+        if tipo_min in ['receita', 'entrada']:
             resumo_mensal[mes_ano]['receitas'] += float(l.valor)
-        else:
+        elif tipo_min in ['despesa', 'saída', 'saida']:
             resumo_mensal[mes_ano]['despesas'] += float(l.valor)
     for mes, valores in resumo_mensal.items():
         valores['receitas'] = f"R$ {valores['receitas']:.2f}"
