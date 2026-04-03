@@ -242,7 +242,7 @@ Contato para licenca comercial: **henriquejfp.dev@gmail.com**
 
 ## Contato
 
-- Telegram: [@ContaComigoBot](https://t.me/ContaComigoBot)
+- Telegram: [@ContaComigo](https://t.me/maestrofin_bot)
 - LinkedIn: [henrique-jfp](https://linkedin.com/in/henrique-jfp)
 
 ---
