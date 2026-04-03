@@ -232,6 +232,11 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     db = next(get_db())
     try:
+        conta_obj = db.query(Conta).filter(Conta.id == conta_id).first()
+        conta_nome = conta_obj.nome if conta_obj else "Cartao de Credito"
+        for item in transacoes:
+            item["forma_pagamento"] = conta_nome
+
         usuario_db = get_or_create_user(db, query.from_user.id, query.from_user.full_name)
         ok, msg, _stats = await salvar_transacoes_generica(
             db, usuario_db, transacoes, conta_id, tipo_origem="fatura_pdf_inter"
