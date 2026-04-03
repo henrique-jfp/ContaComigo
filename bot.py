@@ -401,6 +401,8 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("/perfil", lambda: CommandHandler("perfil", show_profile)),
         ("/ranking", lambda: CommandHandler("ranking", show_rankings)),
         ("/dashboard", lambda: CommandHandler("dashboard", cmd_dashboard)),
+        ("/painel", lambda: CommandHandler("painel", toggle_painel_command)),
+        ("/painel", lambda: CommandHandler("painel", toggle_painel_command)),
         ("/dashstatus", lambda: CommandHandler("dashstatus", cmd_dashstatus)),
         ("/dashboarddebug", lambda: CommandHandler("dashboarddebug", debug_dashboard)),
         ("/debugocr", lambda: CommandHandler("debugocr", debug_ocr_command)),

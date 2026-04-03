@@ -1,3 +1,4 @@
+from gerente_financeiro.menu_botoes import obter_teclado_painel
 # gerente_financeiro/onboarding_handler.py
 import logging
 from datetime import time
@@ -89,7 +90,7 @@ async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             "Se quiser explorar tudo que posso fazer, digite /help. 🚀"
         )
         
-        await update.message.reply_html(welcome_text)
+        await update.message.reply_html(welcome_text, reply_markup=obter_teclado_painel())
         
         # Vai direto para o menu principal
         return await show_main_menu(update, context)
