@@ -882,7 +882,8 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
                 user_name=usuario_db.nome_completo.split(' ')[0] if usuario_db.nome_completo else "você",
                 pergunta_usuario=user_question,
                 contexto_financeiro_completo=contexto_financeiro_str,
-                contexto_conversa=historico_conversa_str
+                contexto_conversa=historico_conversa_str,
+                perfil_ia=f"\n\n# 🧠 PERFIL COMPORTAMENTAL IA\n{usuario_db.perfil_ia}" if usuario_db.perfil_ia else ""
             )
             
             # Tentar com o modelo configurado, se falhar usar fallback
@@ -1248,7 +1249,8 @@ async def handle_analise_geral(update, context, user_question, usuario_db, conte
         contexto_json=contexto_json,
         analise_comportamental_json=analise_json,
         periodo_analise=periodo_analise_str,
-        valor_total_pre_calculado=valor_total_calculado 
+        valor_total_pre_calculado=valor_total_calculado,
+        perfil_ia=f"\n\n# 🧠 PERFIL COMPORTAMENTAL IA\n{usuario_db.perfil_ia}" if usuario_db.perfil_ia else ""
     )
     
     await gerar_resposta_ia(update, context, prompt_usado, user_question, usuario_db, contexto, "analise_geral")

@@ -7,6 +7,7 @@ from telegram.ext import ContextTypes
 from alerts import agendar_notificacoes_diarias, checar_objetivos_semanal
 from gerente_financeiro.assistente_proativo import job_assistente_proativo
 from gerente_financeiro.wrapped_anual import job_wrapped_anual
+from gerente_financeiro.ai_memory_service import job_atualizar_perfis_ia
 
 logger = logging.getLogger(__name__)
 
@@ -64,3 +65,10 @@ def configurar_jobs(job_queue):
         
     except Exception as e:
         logger.error(f"❌ Erro ao configurar jobs: {e}")
+
+        job_queue.run_daily(
+            job_atualizar_perfis_ia,
+            time=time(hour=4, minute=0),
+            days=(0,),  # Domingo de madrugada
+            name="job_atualizar_perfis_ia_semanal"
+        )

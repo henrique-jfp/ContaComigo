@@ -20,6 +20,8 @@ class Usuario(Base):
     criado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # --- CAMPOS DE GAMIFICAÇÃO ---
+    perfil_ia = Column(String, nullable=True)
+    data_ultima_analise_perfil = Column(DateTime, nullable=True)
     xp = Column(Integer, default=0, nullable=False)
     level = Column(Integer, default=1, nullable=False)
     streak_dias = Column(Integer, default=0, nullable=False)
