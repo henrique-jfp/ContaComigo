@@ -1,7 +1,7 @@
 import logging
 import re
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 import pdfplumber
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
@@ -72,6 +72,12 @@ def _parse_inter_transaction_line(line: str) -> Optional[Dict]:
     desc_part = rest[: last_match.start()].strip()
     desc = desc_part.strip(" -+")
 
+    if not desc:
+        return None
+
+    if "pagamento" in desc.lower() or "estorno" in desc.lower():
+        return None
+
     try:
         date_obj = datetime(year, month, day)
     except ValueError:
@@ -86,8 +92,9 @@ def _parse_inter_transaction_line(line: str) -> Optional[Dict]:
     }
 
 
-def parse_inter_pdf_bytes(file_bytes: bytes) -> List[Dict]:
+def parse_inter_pdf_bytes(file_bytes: bytes) -> Tuple[List[Dict], int]:
     transacoes: List[Dict] = []
+    ignoradas = 0
     with pdfplumber.open(io_bytes_to_pdf(file_bytes)) as pdf:
         for page in pdf.pages:
             text = page.extract_text() or ""
@@ -98,7 +105,9 @@ def parse_inter_pdf_bytes(file_bytes: bytes) -> List[Dict]:
                 item = _parse_inter_transaction_line(line)
                 if item:
                     transacoes.append(item)
-    return transacoes
+                elif "pagamento" in lower_line or "estorno" in lower_line:
+                    ignoradas += 1
+    return transacoes, ignoradas
 
 
 def io_bytes_to_pdf(file_bytes: bytes):
@@ -123,7 +132,7 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
     file_obj = await document.get_file()
     file_bytes = await file_obj.download_as_bytearray()
 
-    transacoes = parse_inter_pdf_bytes(bytes(file_bytes))
+    transacoes, ignoradas = parse_inter_pdf_bytes(bytes(file_bytes))
     if not transacoes:
         await update.message.reply_text(
             "Nao consegui localizar as transacoes da fatura. "
@@ -132,6 +141,7 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
         return ConversationHandler.END
 
     context.user_data["fatura_transacoes"] = transacoes
+    context.user_data["fatura_ignoradas"] = ignoradas
 
     db = next(get_db())
     try:
@@ -172,15 +182,26 @@ async def fatura_select_conta(update: Update, context: ContextTypes.DEFAULT_TYPE
     context.user_data["fatura_conta_id"] = conta_id
 
     transacoes = context.user_data.get("fatura_transacoes", [])
+    ignoradas = context.user_data.get("fatura_ignoradas", 0)
     total = len(transacoes)
     total_debito = sum(-t["valor"] for t in transacoes if t["valor"] < 0)
     total_credito = sum(t["valor"] for t in transacoes if t["valor"] > 0)
 
+    preview_lines = []
+    for item in transacoes[:30]:
+        data = item["data_transacao"].strftime("%d/%m")
+        valor = abs(item["valor"])
+        preview_lines.append(f"• {data} {item['descricao']} - R$ {valor:.2f}")
+
+    preview_text = "\n".join(preview_lines)
+    ignored_text = f"\n- Ignoradas (pagamentos/estornos): {ignoradas}" if ignoradas else ""
+
     resumo = (
-        f"Resumo da fatura:\n"
-        f"- Transacoes: {total}\n"
-        f"- Total debitos: R$ {total_debito:.2f}\n"
+        f"<b>Resumo da fatura (Inter)</b>\n"
+        f"- Transacoes: {total}{ignored_text}\n"
+        f"- Total debitos: <b>R$ {total_debito:.2f}</b>\n"
         f"- Total creditos: R$ {total_credito:.2f}\n\n"
+        f"<b>Exemplos:</b>\n{preview_text}\n\n"
         "Deseja salvar esses lancamentos?"
     )
 
@@ -188,7 +209,7 @@ async def fatura_select_conta(update: Update, context: ContextTypes.DEFAULT_TYPE
         [InlineKeyboardButton("Confirmar", callback_data="fatura_salvar")],
         [InlineKeyboardButton("Cancelar", callback_data="fatura_cancelar")],
     ]
-    await query.edit_message_text(resumo, reply_markup=InlineKeyboardMarkup(keyboard))
+    await query.edit_message_text(resumo, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
     return FATURA_CONFIRMATION_STATE
 
 
