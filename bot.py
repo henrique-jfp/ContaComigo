@@ -170,6 +170,7 @@ from gerente_financeiro.editing_handler import edit_conv
 from gerente_financeiro.graficos import grafico_conv
 from gerente_financeiro.relatorio_handler import relatorio_handler
 from gerente_financeiro.manual_entry_handler import manual_entry_conv
+from gerente_financeiro.audio_handler import audio_conv
 from gerente_financeiro.contact_handler import contact_conv
 from gerente_financeiro.delete_user_handler import delete_user_conv
 from gerente_financeiro.dashboard_handler import (
@@ -383,6 +384,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("wishlist_conv", lambda: wishlist_conv),
         ("agendamento_conv", lambda: agendamento_conv),
         ("edit_conv", lambda: edit_conv),
+        ("audio_conv", lambda: audio_conv),
     ]
     
 
