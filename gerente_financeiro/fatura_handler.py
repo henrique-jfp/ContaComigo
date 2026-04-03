@@ -173,6 +173,111 @@ def _extract_pdf_text_lines(file_bytes: bytes, max_lines: int = GENERIC_TEXT_MAX
     return lines
 
 
+def _extract_reference_year(lines: List[str]) -> int:
+    for line in lines:
+        match = re.search(r"\b(20\d{2})\b", line)
+        if match:
+            return int(match.group(1))
+    return datetime.now().year
+
+
+def _is_bradesco_pdf(lines: List[str]) -> bool:
+    for line in lines[:120]:
+        if "bradesco" in line.lower():
+            return True
+    return False
+
+
+def _parse_bradesco_pdf_lines(lines: List[str]) -> Tuple[List[Dict], int]:
+    transacoes: List[Dict] = []
+    ignoradas = 0
+    in_section = False
+    year_ref = _extract_reference_year(lines)
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        lower_line = line.lower()
+
+        if "historico de lancamentos" in lower_line or "histórico de lançamentos" in lower_line:
+            in_section = True
+            continue
+
+        if not in_section:
+            continue
+
+        if not re.match(r"^\d{2}/\d{2}\b", line):
+            continue
+
+        if "iof" not in lower_line:
+            if any(token in lower_line for token in [
+                "total utilizado",
+                "disponivel",
+                "limites",
+                "compras r$",
+                "saque r$",
+                "taxa",
+                "rotativo",
+            ]):
+                continue
+
+        date_match = re.match(r"^(\d{2})/(\d{2})\s+(.*)$", line)
+        if not date_match:
+            continue
+
+        day = int(date_match.group(1))
+        month = int(date_match.group(2))
+        rest = date_match.group(3).strip()
+
+        value_matches = list(re.finditer(r"(\d{1,3}(?:\.\d{3})*,\d{2})(-?)", rest))
+        value_match = None
+        for match in reversed(value_matches):
+            end_index = match.end()
+            if end_index < len(rest) and rest[end_index] == "%":
+                continue
+            value_match = match
+            break
+
+        if not value_match:
+            continue
+
+        value_str = value_match.group(1)
+        value = float(value_str.replace(".", "").replace(",", "."))
+        sign = -1.0
+        if value_match.group(2) == "-":
+            sign = -1.0
+        elif "credito" in lower_line or "estorno" in lower_line:
+            sign = 1.0
+
+        desc = rest[: value_match.start()].strip()
+        desc = re.sub(r"\b\d{2}/\d{2}(?:/\d{2,4})?\b", "", desc).strip()
+        desc = desc.strip("- ")
+
+        if not desc:
+            continue
+
+        try:
+            date_obj = datetime(year_ref, month, day)
+        except ValueError:
+            continue
+
+        transacoes.append(
+            {
+                "descricao": desc,
+                "valor": sign * value,
+                "data_transacao": date_obj,
+                "forma_pagamento": "Cartao de Credito",
+                "origem": "fatura_pdf_bradesco",
+            }
+        )
+
+    unique: Dict[Tuple[str, str, float], Dict] = {}
+    for item in transacoes:
+        key = (item["descricao"], item["data_transacao"].strftime("%Y-%m-%d"), item["valor"])
+        unique[key] = item
+
+    return list(unique.values()), ignoradas
+
+
 def _tokenize_lines(lines: List[str]) -> set[str]:
     tokens: set[str] = set()
     for line in lines:
@@ -371,13 +476,19 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
     origem_label = "Inter"
     if not transacoes:
         text_lines = _extract_pdf_text_lines(bytes(file_bytes))
-        bank_name, _score = _match_bank_from_samples(text_lines)
-        transacoes, ignoradas = _parse_generic_transactions(text_lines, bank_name)
-        if transacoes and len(transacoes) >= GENERIC_MIN_TRANSACOES:
-            origem_label = bank_name or "Outros"
-        else:
-            transacoes = []
-            ignoradas = 0
+        if _is_bradesco_pdf(text_lines):
+            transacoes, ignoradas = _parse_bradesco_pdf_lines(text_lines)
+            if transacoes:
+                origem_label = "Bradesco"
+
+        if not transacoes:
+            bank_name, _score = _match_bank_from_samples(text_lines)
+            transacoes, ignoradas = _parse_generic_transactions(text_lines, bank_name)
+            if transacoes and len(transacoes) >= GENERIC_MIN_TRANSACOES:
+                origem_label = bank_name or "Outros"
+            else:
+                transacoes = []
+                ignoradas = 0
 
     if not transacoes:
         await update.message.reply_text(
