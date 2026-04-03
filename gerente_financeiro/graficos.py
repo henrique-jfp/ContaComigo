@@ -370,7 +370,7 @@ def get_cache_stats() -> Dict[str, Any]:
 
 # ConversationHandler para os gráficos
 grafico_conv = ConversationHandler(
-    entry_points=[CommandHandler('grafico', show_chart_menu)],
+    entry_points=[CommandHandler('grafico', show_chart_menu), MessageHandler(filters.Regex("^📊 Gráficos$"), show_chart_menu)],
     states={
         ChartStates.CHART_MENU: [
             CallbackQueryHandler(chart_callback_handler, pattern='^grafico_')

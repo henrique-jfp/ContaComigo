@@ -272,7 +272,7 @@ async def receive_body_and_send(update: Update, context: ContextTypes.DEFAULT_TY
 
 # Cria o ConversationHandler com o fluxo aprimorado
 contact_conv = ConversationHandler(
-    entry_points=[CommandHandler('contato', contact_start)],
+    entry_points=[CommandHandler('contato', contact_start), MessageHandler(filters.Regex("^💬 Fale com o Dev$"), contact_start)],
     states={
         MENU_CONTATO: [CallbackQueryHandler(menu_callback, pattern='^contact_')],
         AWAIT_SUBJECT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_subject)],

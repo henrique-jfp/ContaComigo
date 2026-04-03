@@ -261,7 +261,7 @@ async def fatura_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 
 fatura_conv = ConversationHandler(
-    entry_points=[CommandHandler("fatura", fatura_start)],
+    entry_points=[CommandHandler("fatura", fatura_start), MessageHandler(filters.Regex(r"^🧾 Fatura$"), fatura_start)],
     states={
         FATURA_AWAIT_FILE: [
             MessageHandler(filters.Document.MimeType("application/pdf"), fatura_receive_file)

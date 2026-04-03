@@ -148,9 +148,12 @@ from database.database import get_db, popular_dados_iniciais, criar_tabelas
 from models import *
 from alerts import schedule_alerts
 from jobs import configurar_jobs
+from gerente_financeiro.menu_botoes import BOTAO_LANCAMENTO, BOTAO_GERENTE, BOTAO_EDITAR, BOTAO_CONFIG, BOTAO_FATURA, BOTAO_GRAFICOS, BOTAO_AGENDAMENTOS, BOTAO_METAS, BOTAO_RANKING, BOTAO_NIVEL, BOTAO_INVEST, BOTAO_CONTATO
+from gerente_financeiro.menu_botoes import BOTAO_LANCAMENTO, BOTAO_GERENTE, BOTAO_EDITAR, BOTAO_CONFIG, BOTAO_FATURA, BOTAO_GRAFICOS, BOTAO_AGENDAMENTOS, BOTAO_METAS, BOTAO_RANKING, BOTAO_NIVEL, BOTAO_INVEST, BOTAO_CONTATO
 
 # --- IMPORTS DOS HANDLERS (AGORA ORGANIZADOS) ---
 from gerente_financeiro.handlers import (
+
     create_gerente_conversation_handler, 
     create_cadastro_email_conversation_handler,
     handle_action_button_callback,
@@ -405,14 +408,11 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("/perfil", lambda: CommandHandler("perfil", show_profile)),
         ("/ranking", lambda: CommandHandler("ranking", show_rankings)),
         ("/dashboard", lambda: CommandHandler("dashboard", cmd_dashboard)),
-        ("dashboard_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_DASHBOARD}$"), cmd_dashboard)),
-        ("dashstatus_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_DASHSTATUS}$"), cmd_dashstatus)),
-        ("relatorio_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_RELATORIO}$"), relatorio_handler.callback)),
-        ("patrimonio_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_PATRIMONIO}$"), patrimonio_command)),
         ("invest_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_INVEST}$"), investimentos_command)),
         ("metas_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_METAS}$"), listar_wishlist_command)),
-        ("help_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_HELP}$"), help_command)),
-        ("alerta_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_ALERTA}$"), schedule_alerts)),
+        ("agendamentos_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_AGENDAMENTOS}$"), agendamento_start)),
+        ("ranking_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_RANKING}$"), show_rankings)),
+        ("nivel_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_NIVEL}$"), show_profile)),
         ("/painel", lambda: CommandHandler("painel", toggle_painel_command)),
         ("/painel", lambda: CommandHandler("painel", toggle_painel_command)),
         ("/dashstatus", lambda: CommandHandler("dashstatus", cmd_dashstatus)),

@@ -1374,7 +1374,7 @@ def create_gerente_conversation_handler():
     from telegram.ext import ConversationHandler, CommandHandler, MessageHandler, filters
     return ConversationHandler(
         entry_points=[CommandHandler("gerente", start_gerente)
-, MessageHandler(filters.Regex(r"^🤖 Maestro$"), start_gerente)],
+, MessageHandler(filters.Regex(r"^🤖 Gerente$"), start_gerente)],
         states={
             AWAIT_GERENTE_QUESTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_natural_language)],
         },
