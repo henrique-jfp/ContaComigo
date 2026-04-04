@@ -13,6 +13,7 @@ import hashlib
 import uuid
 import asyncio
 import re
+import requests
 from urllib.parse import parse_qsl
 from functools import wraps
 from sqlalchemy import and_
@@ -234,6 +235,45 @@ def _sanitize_response(text: str) -> str:
     cleaned = re.sub(r'<body[^>]*>|</body>', '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
     return cleaned.strip()
+
+
+def _groq_generate_content(prompt: str) -> str:
+    if not config.GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY nao configurada")
+
+    payload = {
+        "model": config.GROQ_MODEL_NAME,
+        "messages": [
+            {"role": "system", "content": "Você é Alfredo, gerente financeiro do ContaComigo. Responda em português do Brasil, com foco em finanças pessoais, de forma objetiva e simpática."},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.4,
+        "max_tokens": 1200,
+    }
+    headers = {
+        "Authorization": f"Bearer {config.GROQ_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    response = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers=headers,
+        json=payload,
+        timeout=45,
+    )
+    response.raise_for_status()
+    data = response.json()
+    return data["choices"][0]["message"]["content"]
+
+
+async def _generate_with_groq(prompt: str) -> str | None:
+    if not config.GROQ_API_KEY:
+        return None
+    loop = asyncio.get_running_loop()
+    try:
+        return await loop.run_in_executor(None, _groq_generate_content, prompt)
+    except Exception as exc:
+        logger.error("Falha ao processar chat do MiniApp com Groq: %s", exc, exc_info=True)
+        return None
 
 
 def _format_lancamentos_for_chat(lancamentos: list) -> str:
@@ -626,9 +666,22 @@ def miniapp_gerente():
             perfil_ia=f"\n\n# 🧠 PERFIL COMPORTAMENTAL IA\n{usuario.perfil_ia}" if usuario.perfil_ia else ""
         )
 
-        model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
-        response = model.generate_content(prompt_final)
-        resposta = _sanitize_response(response.text or "")
+        resposta = ""
+        try:
+            model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
+            response = model.generate_content(prompt_final)
+            resposta = _sanitize_response(response.text or "")
+        except Exception as gemini_error:
+            logger.warning("Gemini falhou no chat do MiniApp: %s", gemini_error, exc_info=True)
+            resposta_groq = await _generate_with_groq(prompt_final)
+            if resposta_groq:
+                resposta = _sanitize_response(resposta_groq)
+            else:
+                return jsonify({
+                    "ok": False,
+                    "error": "ai_unavailable",
+                    "message": "Alfredo está temporariamente indisponível. Tente novamente em instantes.",
+                }), 503
 
         json_match = re.search(r'(\{[\s\S]*?"funcao"[\s\S]*?\})', resposta)
         if json_match:
@@ -651,6 +704,13 @@ def miniapp_gerente():
             "ok": True,
             "answer": resposta
         })
+    except Exception as exc:
+        logger.error("Erro inesperado no chat do MiniApp: %s", exc, exc_info=True)
+        return jsonify({
+            "ok": False,
+            "error": "internal_error",
+            "message": "Falha ao conversar com Alfredo no momento.",
+        }), 500
     finally:
         db.close()
 

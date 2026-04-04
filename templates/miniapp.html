@@ -331,11 +331,14 @@
           headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
           body: JSON.stringify({ prompt: message })
         });
-        const data = await response.json();
-        if (!data.ok) addChatMessage('Falha temporária, Alfredo descansando.', 'bot');
-        else addChatMessage(data.answer, 'bot');
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) {
+          addChatMessage(data.message || data.error || 'Falha temporária, Alfredo descansando.', 'bot');
+        } else {
+          addChatMessage(data.answer, 'bot');
+        }
       } catch(e){
-        addChatMessage('Erro de rede!', 'bot');
+        addChatMessage('Erro de conexão com o servidor. Tente novamente.', 'bot');
       }
       gerenteSend.disabled = false;
       gerenteSend.classList.remove('opacity-50');
