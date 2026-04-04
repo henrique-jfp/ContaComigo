@@ -2,9 +2,11 @@ import json
 import logging
 import os
 import re
+import asyncio
 from datetime import datetime
 
 import google.generativeai as genai
+import requests
 try:
     from google.api_core.exceptions import ResourceExhausted
 except Exception:  # pragma: no cover - fallback em ambientes sem api_core
@@ -116,6 +118,47 @@ def _build_categoria_contexto(db: Session) -> str:
     return "\n".join(linhas)
 
 
+def _groq_generate_content(prompt: str) -> str:
+    if not config.GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY nao configurada")
+
+    payload = {
+        "model": config.GROQ_MODEL_NAME,
+        "temperature": 0.2,
+        "messages": [
+            {
+                "role": "system",
+                "content": "Responda apenas com um JSON valido, sem markdown.",
+            },
+            {"role": "user", "content": prompt},
+        ],
+    }
+    headers = {
+        "Authorization": f"Bearer {config.GROQ_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    response = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        json=payload,
+        headers=headers,
+        timeout=30,
+    )
+    response.raise_for_status()
+    data = response.json()
+    return data["choices"][0]["message"]["content"]
+
+
+async def _generate_with_groq(prompt: str) -> str | None:
+    if not config.GROQ_API_KEY:
+        return None
+    try:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _groq_generate_content, prompt)
+    except Exception as exc:
+        logger.error("Falha ao processar frase com Groq: %s", exc, exc_info=True)
+        return None
+
+
 def _resolve_categoria_ids(db: Session, dados: dict) -> tuple[int | None, int | None]:
     id_categoria = None
     id_subcategoria = None
@@ -215,8 +258,8 @@ async def handle_quick_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     await touch_user_interaction(update.effective_user.id, context)
 
-    if not config.GEMINI_API_KEY:
-        await update.message.reply_text("❌ A chave do Gemini nao esta configurada.")
+    if not config.GEMINI_API_KEY and not config.GROQ_API_KEY:
+        await update.message.reply_text("❌ Nenhuma IA configurada (Gemini/Groq).")
         return
 
     status = await update.message.reply_text("🤖 Entendi. Estou montando seu lançamento...")
@@ -252,22 +295,34 @@ Frase do usuario:
 "{text}"
 """
 
+    response_text = None
     try:
-        raw_key = config.GEMINI_API_KEY
-        genai.configure(api_key=raw_key.strip().strip("'\"").strip())
-        model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
-        response = model.generate_content(prompt)
+        if config.GEMINI_API_KEY:
+            raw_key = config.GEMINI_API_KEY
+            genai.configure(api_key=raw_key.strip().strip("'\"").strip())
+            model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
+            response = model.generate_content(prompt)
+            response_text = response.text if response else None
     except Exception as e:
         logger.error("Falha ao processar frase com Gemini: %s", e, exc_info=True)
-        if _is_quota_error(e):
-            await status.edit_text(
-                "⚠️ Limite diario da IA atingido. Tente novamente em alguns minutos ou use /lancamento."
-            )
-        else:
-            await status.edit_text("❌ Nao consegui interpretar sua frase. Tente novamente.")
-        return
+        if _is_quota_error(e) or config.GROQ_API_KEY:
+            response_text = await _generate_with_groq(prompt)
+        if not response_text:
+            if _is_quota_error(e):
+                await status.edit_text(
+                    "⚠️ Limite diario da IA atingido. Tente novamente em alguns minutos ou use /lancamento."
+                )
+            else:
+                await status.edit_text("❌ Nao consegui interpretar sua frase. Tente novamente.")
+            return
 
-    dados_ia = _parse_json_response(response.text if response else "")
+    if not response_text:
+        response_text = await _generate_with_groq(prompt)
+        if not response_text:
+            await status.edit_text("❌ Nao consegui interpretar sua frase. Tente novamente.")
+            return
+
+    dados_ia = _parse_json_response(response_text)
     if not dados_ia or not _quick_payload_valido(dados_ia):
         await status.edit_text("❌ Nao consegui entender. Tente algo como: 'Gastei 34,90 no iFood ontem'.")
         return

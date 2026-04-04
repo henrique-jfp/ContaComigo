@@ -2,6 +2,7 @@ import os
 import logging
 import json
 import re
+import asyncio
 from datetime import datetime, timedelta
 import io
 import traceback
@@ -11,6 +12,7 @@ from pdf2image import convert_from_bytes
 from PIL import Image
 import google.generativeai as genai
 from google.cloud import vision
+import requests
 try:
     from google.api_core.exceptions import ResourceExhausted
 except Exception:  # pragma: no cover - fallback em ambientes sem api_core
@@ -63,6 +65,47 @@ def _is_quota_error(err: Exception) -> bool:
         return True
     msg = str(err).lower()
     return "quota" in msg or "resource_exhausted" in msg or "429" in msg
+
+
+def _groq_generate_content(prompt: str) -> str:
+    if not config.GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY nao configurada")
+
+    payload = {
+        "model": config.GROQ_MODEL_NAME,
+        "temperature": 0.2,
+        "messages": [
+            {
+                "role": "system",
+                "content": "Responda apenas com um JSON valido, sem markdown.",
+            },
+            {"role": "user", "content": prompt},
+        ],
+    }
+    headers = {
+        "Authorization": f"Bearer {config.GROQ_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    response = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        json=payload,
+        headers=headers,
+        timeout=30,
+    )
+    response.raise_for_status()
+    data = response.json()
+    return data["choices"][0]["message"]["content"]
+
+
+async def _generate_with_groq(prompt: str) -> str | None:
+    if not config.GROQ_API_KEY:
+        return None
+    try:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _groq_generate_content, prompt)
+    except Exception as exc:
+        logger.error("Falha ao processar OCR com Groq: %s", exc, exc_info=True)
+        return None
 
 
 def _get_webapp_url(tab: str | None = None) -> str:
@@ -669,15 +712,18 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
             response_text = ia_response.text
         except Exception as ia_error:
             logger.error(f"❌ IA (Gemini) falhou ao analisar OCR: {ia_error}")
-            if _is_quota_error(ia_error):
-                await message.edit_text(
-                    "⚠️ Limite diario da IA atingido para analise do OCR."
-                    " Tente novamente em alguns minutos ou lance manualmente.",
-                    parse_mode="HTML",
-                )
-            else:
-                await message.edit_text("❌ IA não conseguiu processar os dados. Tente novamente.")
-            return ConversationHandler.END
+            if _is_quota_error(ia_error) or config.GROQ_API_KEY:
+                response_text = await _generate_with_groq(prompt)
+            if not response_text:
+                if _is_quota_error(ia_error):
+                    await message.edit_text(
+                        "⚠️ Limite diario da IA atingido para analise do OCR."
+                        " Tente novamente em alguns minutos ou lance manualmente.",
+                        parse_mode="HTML",
+                    )
+                else:
+                    await message.edit_text("❌ IA não conseguiu processar os dados. Tente novamente.")
+                return ConversationHandler.END
         
         # Extrair JSON
         json_match = re.search(r'\{.*\}', response_text, re.DOTALL)

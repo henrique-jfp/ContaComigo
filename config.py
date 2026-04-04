@@ -36,6 +36,8 @@ else:
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_MODEL_NAME = os.getenv("GROQ_MODEL_NAME", "llama-3.1-8b-instant")
 
 # GEMINI MODEL NAME com validação e fallback automático
 _model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
