@@ -8,7 +8,14 @@ import os
 import sys
 import logging
 import json
+import hmac
+import hashlib
+import uuid
+import asyncio
+import re
+from urllib.parse import parse_qsl
 from functools import wraps
+from sqlalchemy import and_
 from flask import Flask, render_template, jsonify, request, g
 from datetime import datetime, timedelta
 
@@ -19,6 +26,8 @@ logger = logging.getLogger(__name__)
 # Cache simples em memória (para substituir Redis em ambiente local)
 _cache = {}
 CACHE_TTL = 300  # 5 minutos
+_miniapp_sessions = {}
+MINIAPP_SESSION_TTL = 60 * 60
 
 def cache_key(*args):
     """Gera chave de cache baseada nos argumentos"""
@@ -53,6 +62,12 @@ parent_dir = os.path.dirname(current_dir)
 template_dir = os.path.join(parent_dir, 'templates')
 static_dir = os.path.join(parent_dir, 'static')
 sys.path.insert(0, parent_dir)
+import config
+from database.database import get_db, buscar_lancamentos_usuario
+from models import Usuario, Lancamento, Agendamento, Objetivo
+from gerente_financeiro.prompts import PROMPT_ALFREDO
+from gerente_financeiro.services import preparar_contexto_financeiro_completo
+import google.generativeai as genai
 
 # Criar app Flask
 app = Flask(__name__, 
@@ -103,6 +118,115 @@ def execute_with_retry(func, max_retries=3):
                 raise
     return None
 
+
+def _validate_telegram_init_data(init_data: str) -> dict | None:
+    if not init_data or not config.TELEGRAM_TOKEN:
+        return None
+
+    parsed = dict(parse_qsl(init_data, keep_blank_values=True))
+    received_hash = parsed.pop("hash", None)
+    if not received_hash:
+        return None
+
+    data_check = "\n".join(f"{k}={parsed[k]}" for k in sorted(parsed.keys()))
+    secret_key = hashlib.sha256(config.TELEGRAM_TOKEN.encode()).digest()
+    calculated_hash = hmac.new(secret_key, data_check.encode(), hashlib.sha256).hexdigest()
+
+    if not hmac.compare_digest(received_hash, calculated_hash):
+        return None
+
+    try:
+        auth_date = int(parsed.get("auth_date", "0"))
+        if auth_date and (datetime.utcnow() - datetime.utcfromtimestamp(auth_date)).total_seconds() > 24 * 3600:
+            return None
+    except Exception:
+        return None
+
+    user_data = parsed.get("user")
+    if not user_data:
+        return None
+
+    try:
+        return json.loads(user_data)
+    except json.JSONDecodeError:
+        return None
+
+
+def _create_miniapp_session(user_id: int) -> dict:
+    session_id = str(uuid.uuid4())
+    _miniapp_sessions[session_id] = {
+        "user_id": user_id,
+        "expires_at": datetime.utcnow() + timedelta(seconds=MINIAPP_SESSION_TTL),
+    }
+    return {
+        "session_id": session_id,
+        "expires_in": MINIAPP_SESSION_TTL,
+    }
+
+
+def _get_session(session_id: str) -> dict | None:
+    if not session_id:
+        return None
+    session = _miniapp_sessions.get(session_id)
+    if not session:
+        return None
+    if session["expires_at"] < datetime.utcnow():
+        _miniapp_sessions.pop(session_id, None)
+        return None
+    return session
+
+
+def _require_session() -> dict | None:
+    session_id = request.headers.get("X-Session-Id")
+    return _get_session(session_id)
+
+
+def _parse_date(value: str) -> datetime.date | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value).date()
+    except ValueError:
+        return None
+
+
+def _run_async(coro):
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        return asyncio.run_coroutine_threadsafe(coro, loop).result()
+    return asyncio.run(coro)
+
+
+def _sanitize_response(text: str) -> str:
+    if not text:
+        return ""
+    cleaned = re.sub(r'^```(html|json)?\n', '', text, flags=re.MULTILINE)
+    cleaned = re.sub(r'```$', '', cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r'<!DOCTYPE[^>]*>', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'<html[^>]*>|</html>', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'<head[^>]*>.*?</head>', '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = re.sub(r'<body[^>]*>|</body>', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+    return cleaned.strip()
+
+
+def _format_lancamentos_for_chat(lancamentos: list) -> str:
+    if not lancamentos:
+        return "Nao encontrei lancamentos com esses criterios."
+    lines = ["<b>Seus lancamentos</b>"]
+    for lanc in lancamentos:
+        data = lanc.data_transacao.strftime('%d/%m/%Y')
+        valor = float(lanc.valor)
+        prefix = '-' if lanc.tipo == 'Saída' else '+'
+        lines.append(
+            f"• {lanc.descricao} ({data}) <code>{prefix}R$ {abs(valor):.2f}</code>"
+        )
+    return "\n".join(lines)
+
 # Middleware para timing de requisições
 @app.before_request
 def before_request():
@@ -128,6 +252,385 @@ def dashboard():
         <p>Erro: {str(e)}</p>
         <p>Template: {os.path.exists(os.path.join(template_dir, 'dashboard_analytics_clean.html'))}</p>
         """
+
+
+@app.route('/webapp')
+def miniapp_shell():
+    """Shell do miniapp Telegram"""
+    return render_template('miniapp.html')
+
+
+@app.route('/api/telegram/auth', methods=['POST'])
+def telegram_auth():
+    """Valida initData do Telegram Web App e cria uma sessao"""
+    payload = request.get_json(silent=True) or {}
+    init_data = payload.get("init_data") or ""
+    user = _validate_telegram_init_data(init_data)
+    if not user:
+        return jsonify({"ok": False, "error": "invalid_init_data"}), 401
+
+    session_data = _create_miniapp_session(user.get("id"))
+    return jsonify({
+        "ok": True,
+        "user": {
+            "id": user.get("id"),
+            "first_name": user.get("first_name"),
+            "username": user.get("username"),
+        },
+        **session_data,
+    })
+
+
+@app.route('/api/miniapp/history')
+def miniapp_history():
+    """Lista os ultimos lancamentos para o miniapp"""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    limit = min(int(request.args.get("limit", 20)), 200)
+    offset = max(int(request.args.get("offset", 0)), 0)
+    query = (request.args.get("query") or "").strip()
+    tipo = (request.args.get("tipo") or "").strip()
+    start_date = _parse_date(request.args.get("start_date"))
+    end_date = _parse_date(request.args.get("end_date"))
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        base_query = db.query(Lancamento).filter(Lancamento.id_usuario == usuario.id)
+        if query:
+            base_query = base_query.filter(Lancamento.descricao.ilike(f"%{query}%"))
+        if tipo:
+            base_query = base_query.filter(Lancamento.tipo == tipo)
+        if start_date:
+            base_query = base_query.filter(Lancamento.data_transacao >= datetime.combine(start_date, datetime.min.time()))
+        if end_date:
+            base_query = base_query.filter(Lancamento.data_transacao <= datetime.combine(end_date, datetime.max.time()))
+
+        total = base_query.count()
+        lancamentos = (
+            base_query.order_by(Lancamento.data_transacao.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+        itens = [
+            {
+                "id": lanc.id,
+                "descricao": lanc.descricao,
+                "valor": float(lanc.valor),
+                "tipo": lanc.tipo,
+                "data": lanc.data_transacao.isoformat(),
+                "forma_pagamento": lanc.forma_pagamento,
+            }
+            for lanc in lancamentos
+        ]
+
+        return jsonify({"ok": True, "items": itens, "total": total, "offset": offset})
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/lancamentos/<int:lancamento_id>', methods=['PATCH', 'DELETE'])
+def miniapp_lancamento_update(lancamento_id: int):
+    """Atualiza ou remove lancamento pelo miniapp"""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        lancamento = (
+            db.query(Lancamento)
+            .filter(Lancamento.id == lancamento_id, Lancamento.id_usuario == usuario.id)
+            .first()
+        )
+        if not lancamento:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+
+        if request.method == 'DELETE':
+            db.delete(lancamento)
+            db.commit()
+            return jsonify({"ok": True})
+
+        payload = request.get_json(silent=True) or {}
+        allowed_fields = {
+            "descricao",
+            "valor",
+            "tipo",
+            "forma_pagamento",
+            "id_categoria",
+            "id_subcategoria",
+            "data_transacao",
+        }
+        for key, value in payload.items():
+            if key not in allowed_fields:
+                continue
+            if key == "data_transacao":
+                parsed_date = _parse_date(value)
+                if parsed_date:
+                    lancamento.data_transacao = datetime.combine(parsed_date, datetime.min.time())
+                continue
+            setattr(lancamento, key, value)
+
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/agendamentos', methods=['GET', 'POST'])
+def miniapp_agendamentos():
+    """Lista ou cria agendamentos"""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        if request.method == 'GET':
+            items = (
+                db.query(Agendamento)
+                .filter(Agendamento.id_usuario == usuario.id)
+                .order_by(Agendamento.proxima_data_execucao.asc())
+                .all()
+            )
+            payload = [
+                {
+                    "id": item.id,
+                    "descricao": item.descricao,
+                    "valor": float(item.valor),
+                    "tipo": item.tipo,
+                    "frequencia": item.frequencia,
+                    "proxima_data_execucao": item.proxima_data_execucao.isoformat(),
+                    "ativo": item.ativo,
+                }
+                for item in items
+            ]
+            return jsonify({"ok": True, "items": payload})
+
+        data = request.get_json(silent=True) or {}
+        data_primeiro = _parse_date(data.get("data_primeiro_evento"))
+        if not data_primeiro:
+            return jsonify({"ok": False, "error": "invalid_date"}), 400
+
+        agendamento = Agendamento(
+            id_usuario=usuario.id,
+            descricao=data.get("descricao", ""),
+            valor=float(data.get("valor", 0)),
+            tipo=data.get("tipo", "Saída"),
+            id_categoria=data.get("id_categoria"),
+            id_subcategoria=data.get("id_subcategoria"),
+            data_primeiro_evento=data_primeiro,
+            frequencia=data.get("frequencia", "mensal"),
+            total_parcelas=data.get("total_parcelas"),
+            parcela_atual=data.get("parcela_atual", 0),
+            proxima_data_execucao=data_primeiro,
+            ativo=True,
+        )
+        db.add(agendamento)
+        db.commit()
+        db.refresh(agendamento)
+        return jsonify({"ok": True, "id": agendamento.id})
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/agendamentos/<int:agendamento_id>', methods=['PATCH', 'DELETE'])
+def miniapp_agendamentos_update(agendamento_id: int):
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        agendamento = (
+            db.query(Agendamento)
+            .filter(Agendamento.id == agendamento_id, Agendamento.id_usuario == usuario.id)
+            .first()
+        )
+        if not agendamento:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+
+        if request.method == 'DELETE':
+            db.delete(agendamento)
+            db.commit()
+            return jsonify({"ok": True})
+
+        data = request.get_json(silent=True) or {}
+        for key in ["descricao", "valor", "tipo", "frequencia", "ativo"]:
+            if key in data:
+                setattr(agendamento, key, data[key])
+        if "proxima_data_execucao" in data:
+            parsed = _parse_date(data.get("proxima_data_execucao"))
+            if parsed:
+                agendamento.proxima_data_execucao = parsed
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/metas', methods=['GET', 'POST'])
+def miniapp_metas():
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        if request.method == 'GET':
+            metas = (
+                db.query(Objetivo)
+                .filter(Objetivo.id_usuario == usuario.id)
+                .order_by(Objetivo.data_meta.asc())
+                .all()
+            )
+            payload = [
+                {
+                    "id": meta.id,
+                    "descricao": meta.descricao,
+                    "valor_meta": float(meta.valor_meta),
+                    "valor_atual": float(meta.valor_atual or 0),
+                    "data_meta": meta.data_meta.isoformat() if meta.data_meta else None,
+                }
+                for meta in metas
+            ]
+            return jsonify({"ok": True, "items": payload})
+
+        data = request.get_json(silent=True) or {}
+        data_meta = _parse_date(data.get("data_meta"))
+        if not data_meta:
+            return jsonify({"ok": False, "error": "invalid_date"}), 400
+
+        meta = Objetivo(
+            id_usuario=usuario.id,
+            descricao=data.get("descricao", ""),
+            valor_meta=float(data.get("valor_meta", 0)),
+            valor_atual=float(data.get("valor_atual", 0)),
+            data_meta=data_meta,
+        )
+        db.add(meta)
+        db.commit()
+        db.refresh(meta)
+        return jsonify({"ok": True, "id": meta.id})
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/metas/<int:meta_id>', methods=['PATCH', 'DELETE'])
+def miniapp_metas_update(meta_id: int):
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        meta = (
+            db.query(Objetivo)
+            .filter(Objetivo.id == meta_id, Objetivo.id_usuario == usuario.id)
+            .first()
+        )
+        if not meta:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+
+        if request.method == 'DELETE':
+            db.delete(meta)
+            db.commit()
+            return jsonify({"ok": True})
+
+        data = request.get_json(silent=True) or {}
+        for key in ["descricao", "valor_meta", "valor_atual"]:
+            if key in data:
+                setattr(meta, key, data[key])
+        if "data_meta" in data:
+            parsed = _parse_date(data.get("data_meta"))
+            if parsed:
+                meta.data_meta = parsed
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/gerente', methods=['POST'])
+def miniapp_gerente():
+    """Stub do chat do gerente para o miniapp"""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    prompt = (data.get("prompt") or "").strip()
+    if not prompt:
+        return jsonify({"ok": False, "error": "empty_prompt"}), 400
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        contexto_financeiro = _run_async(preparar_contexto_financeiro_completo(db, usuario))
+        prompt_final = PROMPT_ALFREDO.format(
+            user_name=usuario.nome_completo.split(' ')[0] if usuario.nome_completo else "voce",
+            pergunta_usuario=prompt,
+            contexto_financeiro_completo=contexto_financeiro,
+            contexto_conversa="",
+            perfil_ia=f"\n\n# 🧠 PERFIL COMPORTAMENTAL IA\n{usuario.perfil_ia}" if usuario.perfil_ia else ""
+        )
+
+        model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
+        response = model.generate_content(prompt_final)
+        resposta = _sanitize_response(response.text or "")
+
+        json_match = re.search(r'(\{[\s\S]*?"funcao"[\s\S]*?\})', resposta)
+        if json_match:
+            try:
+                dados_funcao = json.loads(json_match.group(1))
+            except json.JSONDecodeError:
+                dados_funcao = None
+            if isinstance(dados_funcao, dict) and dados_funcao.get("funcao") == "listar_lancamentos":
+                parametros = dados_funcao.get("parametros", {})
+                lancamentos = buscar_lancamentos_usuario(
+                    telegram_user_id=session["user_id"],
+                    **parametros
+                )
+                resposta = _format_lancamentos_for_chat(lancamentos)
+
+        if not resposta:
+            resposta = "Nao consegui gerar uma resposta agora. Tente novamente."
+
+        return jsonify({
+            "ok": True,
+            "answer": resposta
+        })
+    finally:
+        db.close()
 
 @app.route('/api/status')
 def api_status():

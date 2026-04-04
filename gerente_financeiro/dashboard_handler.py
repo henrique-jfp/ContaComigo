@@ -22,7 +22,7 @@ import logging
 import requests
 import traceback
 from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ContextTypes
 from .gamification_utils import give_xp_for_action, touch_user_interaction
 
@@ -127,64 +127,18 @@ async def cmd_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         
-        # Gerar link personalizado
-        logger.info(f"Gerando link personalizado para usuário {user_id}")
-        link_data = await dashboard_handler.gerar_link_dashboard(user_id)
-        logger.info(f"Link data recebido: {link_data}")
-        
-        if not link_data:
-            logger.warning("Falha ao gerar link personalizado - usando fallback")
-            # Fallback: fornecer link direto sem token
-            keyboard = [
-                [InlineKeyboardButton("🌐 Acessar Dashboard", url=dashboard_handler.dashboard_url)],
-                [InlineKeyboardButton("📱 Ver Demo", url=f"{dashboard_handler.dashboard_url}/dashboard/demo")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await loading_msg.edit_text(
-                "⚠️ <b>Link Temporário Indisponível</b>\n\n"
-                "Não foi possível gerar um link personalizado,\n"
-                "mas você pode acessar o dashboard diretamente.\n\n"
-                f"🌐 <b>Dashboard:</b> {dashboard_handler.dashboard_url}\n"
-                f"📱 <b>Demo:</b> {dashboard_handler.dashboard_url}/dashboard/demo\n\n"
-                "💡 <i>Use seu ID de usuário para filtrar seus dados.</i>",
-                parse_mode='HTML',
-                reply_markup=reply_markup
-            )
-            return
-        
-        # Criar mensagem com link
-        logger.info("Criando mensagem com link personalizado")
-        token = link_data['token']
-        url = link_data['url']
-        expires_hours = link_data.get('expires', 24)
-        
-        # Construir URL completa
-        full_url = f"{dashboard_handler.dashboard_url}{url}"
-        logger.info(f"URL completa gerada: {full_url}")
-        
-        # Botões sem URLs localhost (Telegram rejeita localhost em botões inline)
+        webapp_url = f"{dashboard_handler.dashboard_url}/webapp"
         keyboard = [
-            [InlineKeyboardButton("🔄 Gerar Novo Link", callback_data="dashboard_new_link")],
+            [InlineKeyboardButton("🧩 Abrir Miniapp", web_app=WebAppInfo(url=webapp_url))],
             [InlineKeyboardButton("❌ Fechar", callback_data="delete_message")]
         ]
-        
         reply_markup = InlineKeyboardMarkup(keyboard)
-        
+
         await loading_msg.edit_text(
-            f"🌐 <b>Dashboard Personalizado</b>\n\n"
-            f"✅ Link gerado com sucesso!\n\n"
-            f"🔗 <b>Acesse seu dashboard:</b>\n"
-            f"<code>{full_url}</code>\n\n"
-            f"🆔 <b>Token:</b> <code>{token}</code>\n"
-            f"⏰ <b>Válido por:</b> {expires_hours} horas\n\n"
-            f"📊 <b>O que você encontrará:</b>\n"
-            f"• 📈 Gráficos interativos\n"
-            f"• 💰 Análise de gastos\n"
-            f"• 🎯 Progresso de metas\n"
-            f"• 📋 Relatórios detalhados\n\n"
-            f"⚡ O link expira automaticamente por segurança.\n\n"
-            f"💡 <b>Dica:</b> Toque no link acima para copiar e abrir no navegador.",
+            "🧩 <b>Miniapp ContaComigo</b>\n\n"
+            "Tudo rapido continua no chat. O resto agora fica no miniapp.\n\n"
+            "Abra para acessar: Historico, Editar, Agendamentos, Metas e Gerente IA.\n\n"
+            "⚡ Atualizacao automatica a cada 7s.",
             parse_mode='HTML',
             reply_markup=reply_markup
         )

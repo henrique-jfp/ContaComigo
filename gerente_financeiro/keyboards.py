@@ -2,7 +2,7 @@ from telegram import ReplyKeyboardMarkup, KeyboardButton
 
 def get_main_menu_keyboard():
     keyboard = [
-        ["🤖 /gerente", "📊 /dashboard"],
+        ["🤖 /gerente", "🧩 /dashboard"],
         ["📝 /lancamento", "🎯 /metas"],
         ["📈 /relatorio", "✍️ /editar"],
         ["⚙️ /configurar", "ℹ️ /help"]
