@@ -1,662 +1,127 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br" class="dark">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ContaComigo Miniapp</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Fraunces:wght@600;700&display=swap" rel="stylesheet" />
-  <style>
-    :root {
-      --bg: #f6f2ea;
-      --ink: #1f1b18;
-      --muted: #6d635a;
-      --brand: #ff7a50;
-      --brand-2: #3a7bd5;
-      --card: #ffffff;
-      --accent: #1d1b1a;
-      --stroke: rgba(31, 27, 24, 0.12);
-      --shadow: 0 20px 40px rgba(31, 27, 24, 0.12);
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ContaComigo Premium</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Outfit', 'sans-serif'] },
+        colors: { 
+          'glass': 'rgba(15, 23, 42, 0.45)', flex: { '2': '2 2 0%' },
+          'neon-purple': '#8b5cf6', 'emerald': '#10b981', 'carmine': '#e11d48'
+        },
+        boxShadow: { 'glow': '0 0 40px -10px rgba(139, 92, 246, 0.5)' }
+      }
     }
-
-    * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      font-family: "Space Grotesk", system-ui, -apple-system, sans-serif;
-      color: var(--ink);
-      background: radial-gradient(circle at top, #ffe7d6, transparent 55%),
-                  radial-gradient(circle at 85% 30%, #d7ecff, transparent 45%),
-                  var(--bg);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .hero {
-      padding: 28px 20px 16px;
-    }
-
-    .hero-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      border-radius: 999px;
-      background: rgba(31, 27, 24, 0.08);
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.2em;
-      color: var(--muted);
-      margin-bottom: 10px;
-    }
-
-    .title {
-      font-family: "Fraunces", serif;
-      font-size: 28px;
-      line-height: 1.1;
-      margin: 0 0 6px;
-    }
-
-    .subtitle {
-      margin: 0;
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    .shell {
-      margin: 0 16px 18px;
-      background: var(--card);
-      border-radius: 20px;
-      box-shadow: var(--shadow);
-      padding: 16px;
-      border: 1px solid var(--stroke);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .shell::after {
-      content: "";
-      position: absolute;
-      right: -40px;
-      top: -60px;
-      width: 160px;
-      height: 160px;
-      background: linear-gradient(130deg, rgba(255, 122, 80, 0.25), rgba(58, 123, 213, 0.15));
-      border-radius: 50%;
-      filter: blur(1px);
-      z-index: 0;
-    }
-
-    .shell::before {
-      content: "";
-      position: absolute;
-      left: -50px;
-      bottom: -70px;
-      width: 180px;
-      height: 180px;
-      background: linear-gradient(140deg, rgba(58, 123, 213, 0.2), rgba(255, 122, 80, 0.12));
-      border-radius: 50%;
-      z-index: 0;
-    }
-
-    .tabs {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 6px;
-      margin-bottom: 12px;
-      position: relative;
-      z-index: 1;
-    }
-
-    .tab-btn {
-      border: 1px solid var(--stroke);
-      background: #fdf9f4;
-      padding: 10px 6px;
-      border-radius: 12px;
-      font-size: 11px;
-      letter-spacing: 0.3px;
-      text-transform: uppercase;
-      color: var(--muted);
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .tab-btn.active {
-      background: var(--accent);
-      color: #ffffff;
-      border-color: var(--accent);
-      transform: translateY(-1px);
-    }
-
-    .panel {
-      display: none;
-      position: relative;
-      z-index: 1;
-    }
-
-    .panel.active {
-      display: block;
-      animation: fadeIn 0.35s ease;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .card {
-      border: 1px solid var(--stroke);
-      border-radius: 14px;
-      padding: 14px;
-      background: #fffdfb;
-      margin-bottom: 12px;
-    }
-
-    .chat-window {
-      display: grid;
-      gap: 10px;
-      max-height: 320px;
-      overflow-y: auto;
-      padding: 6px 2px;
-    }
-
-    .chat-bubble {
-      padding: 12px;
-      border-radius: 14px;
-      max-width: 90%;
-      font-size: 13px;
-      line-height: 1.4;
-    }
-
-    .chat-bubble.user {
-      background: rgba(58, 123, 213, 0.15);
-      color: #1b3b6f;
-      margin-left: auto;
-    }
-
-    .chat-bubble.bot {
-      background: #fff;
-      border: 1px solid var(--stroke);
-    }
-
-    .chat-input {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 8px;
-      margin-top: 12px;
-    }
-
-    .chat-input input {
-      border: 1px solid var(--stroke);
-      border-radius: 12px;
-      padding: 10px 12px;
-      font-size: 13px;
-    }
-
-    .card-title {
-      font-size: 14px;
-      margin: 0 0 6px;
-    }
-
-    .filter-row {
-      display: grid;
-      grid-template-columns: 1.4fr 0.9fr 0.7fr;
-      gap: 8px;
-      margin-top: 10px;
-    }
-
-    .filter-row input,
-    .filter-row select {
-      border: 1px solid var(--stroke);
-      border-radius: 10px;
-      padding: 8px 10px;
-      font-size: 12px;
-      font-family: inherit;
-      background: #fff;
-    }
-
-    .btn {
-      border: none;
-      border-radius: 12px;
-      padding: 8px 12px;
-      background: var(--accent);
-      color: #fff;
-      font-weight: 600;
-      cursor: pointer;
-      font-size: 12px;
-    }
-
-    .btn.secondary {
-      background: #f3ebe2;
-      color: var(--ink);
-      border: 1px solid var(--stroke);
-    }
-
-    .history-list {
-      display: grid;
-      gap: 10px;
-    }
-
-    .history-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      padding: 12px;
-      border-radius: 12px;
-      border: 1px solid var(--stroke);
-      background: #fff;
-    }
-
-    .history-actions {
-      display: grid;
-      gap: 6px;
-    }
-
-    .history-item small {
-      color: var(--muted);
-      display: block;
-    }
-
-    .pill {
-      padding: 4px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-      background: rgba(255, 122, 80, 0.15);
-      color: #d94a1a;
-      font-weight: 600;
-      white-space: nowrap;
-    }
-
-    .empty {
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .footer {
-      margin: auto 20px 24px;
-      color: var(--muted);
-      font-size: 12px;
-    }
-  </style>
+  }
+</script>
+<style>
+  body { background: radial-gradient(circle at top right, #1e1b4b, #0f172a 60%); }
+  .glass-card { 
+    background: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01));
+    backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); 
+  }
+  .hide-scroll::-webkit-scrollbar { display: none; }
+  .chat-bubble::after { content: ''; position: absolute; bottom: 0; width: 12px; height: 12px; }
+  .chat-user::after { right: -6px; background: inherit; border-bottom-left-radius: 100%; }
+  .chat-alfredo::after { left: -6px; background: inherit; border-bottom-right-radius: 100%; }
+  .tab-active { color: #8b5cf6; filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.8)); transform: translateY(-4px); }
+</style>
 </head>
-<body>
-  <section class="hero">
-    <div class="hero-badge">Miniapp</div>
-    <h1 class="title">ContaComigo Miniapp</h1>
-    <p class="subtitle">Tudo pesado no miniapp. Tudo rapido no chat.</p>
-  </section>
+<body class="text-white h-screen w-screen overflow-hidden flex flex-col font-sans antialiased selection:bg-neon-purple selection:text-white">
 
-  <main class="shell">
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="gerente">Gerente</button>
-      <button class="tab-btn" data-tab="historico">Historico</button>
-      <button class="tab-btn" data-tab="editar">Editar</button>
-      <button class="tab-btn" data-tab="agendamentos">Agendamentos</button>
-      <button class="tab-btn" data-tab="metas">Metas</button>
+  <- Pagamentos de fatura: continuam sendo ignorados Header Mágico -->
+  <header class="p-6 pb-2 pt-10 flex justify-between items-center relative z-10 glass-card mx-4 mt-4 rounded-3xl shadow-glow">
+    <div>
+      <h1 class="text-xs tracking-widest uppercase text-gray-400 font-semibold mb-1">Saldo Total</h1>
+      <p class="text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">R$ 14.230<span class="text-xl text-gray-500">,00</span></p>
     </div>
+    <div class="h-12 w-12 rounded-full bg-gradient-to-br from-neon-purple to-indigo-900 border-2 border-white/20 flex items-center justify-center shadow-lg transform transition active:scale-90">
+      <i data-lucide="scan-face" class="text-white"></i>
+    </div>
+  </header>
 
-    <section class="panel active" id="gerente">
-      <div class="card">
-        <h3 class="card-title">Gerente IA</h3>
-        <div class="chat-window" id="gerenteChat"></div>
-        <div class="chat-input">
-          <input id="gerenteInput" type="text" placeholder="Pergunte algo ao Alfredo..." />
-          <button class="btn" id="gerenteSend">Enviar</button>
+  <- Pagamentos de fatura: continuam sendo ignorados Main Viewport Dinâmico -->
+  <main id="app-content" class="flex-1 overflow-y-auto hide-scroll p-4 space-y-6 pb-28 relative z-0">
+    
+    <- Pagamentos de fatura: continuam sendo ignorados Metas Circulares (CSS Grid flex) -->
+    <section class="glass-card rounded-[24px] p-5">
+      <h2 class="text-sm font-semibold text-gray-300 mb-4 flex transform"><i data-lucide="target" class="w-4 h-4 mr-2 text-neon-purple"></i> Metas Ativas</h2>
+      <div class="flex gap-4">
+        <div class="flex-1 bg-black/20 rounded-2xl p-4 border border-white/5 relative overflow-hidden group">
+          <div class="absolute inset-0 bg-gradient-to-r from-emerald/20 to-transparent w-[70%] opacity-50 group-hover:w-[75%] transition-all duration-500"></div>
+          <p class="text-xs text-gray-400 relative z-10">Porsche 911</p>
+          <p class="text-lg font-bold mt-1 relative z-10">70%</p>
         </div>
       </div>
     </section>
 
-    <section class="panel" id="historico">
-      <div class="card">
-        <h3 class="card-title">Historico recente</h3>
-        <p class="empty" id="historyStatus">Sincronizando...</p>
-        <div class="filter-row">
-          <input id="historyQuery" type="text" placeholder="Buscar descricao" />
-          <select id="historyTipo">
-            <option value="">Todos</option>
-            <option value="Entrada">Entradas</option>
-            <option value="Saída">Saidas</option>
-          </select>
-          <button class="btn secondary" id="historyRefresh">Filtrar</button>
+    <- Pagamentos de fatura: continuam sendo ignorados Transações c/ Ícones -->
+    <section class="glass-card rounded-[24px] p-5">
+      <h2 class="text-sm font-semibold text-gray-300 mb-4">Últimas Transações</h2>
+      <div class="space-y-4">
+        <- Pagamentos de fatura: continuam sendo ignorados Ítem (Despesa) -->
+        <div class="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition cursor-pointer">
+          <div class="flex items-center gap-4">
+            <div class="w-10 h-10 rounded-full bg-carmine/20 text-carmine flex items-center justify-center"><i data-lucide="utensils" class="w-5 h-5"></i></div>
+            <div><p class="font-semibold text-sm">Fogo de Chão</p><p class="text-xs text-gray-500">Alimentação</p></div>
+          </div>
+          <span class="font-bold text-carmine text-sm">-R$ 350,00</span>
+        </div>
+        <- Pagamentos de fatura: continuam sendo ignorados Ítem (Receita) -->
+        <div class="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition cursor-pointer">
+          <div class="flex items-center gap-4">
+            <div class="w-10 h-10 rounded-full bg-emerald/20 text-emerald flex items-center justify-center"><i data-lucide="briefcase" class="w-5 h-5"></i></div>
+            <div><p class="font-semibold text-sm">Freela Apple</p><p class="text-xs text-gray-500">Receita</p></div>
+          </div>
+          <span class="font-bold text-emerald text-sm">+R$ 5.000,00</span>
         </div>
       </div>
-      <div class="history-list" id="historyList"></div>
-      <button class="btn secondary" id="historyLoadMore" style="width: 100%;">Carregar mais</button>
     </section>
 
-    <section class="panel" id="editar">
-      <div class="card">
-        <h3 class="card-title">Editar lancamentos</h3>
-        <p class="empty">Toque em um item do Historico para editar rapidamente.</p>
+    <- Pagamentos de fatura: continuam sendo ignorados Chat Alfredo (IA Gerente) -->
+    <section class="glass-card rounded-[24px] p-5 flex flex-col h-64 relative border-neon-purple/30 shadow-glow">
+      <h2 class="text-sm font-semibold text-gray-300 mb-2 flex items-center"><i data-lucide="bot" class="w-4 h-4 mr-2 text-neon-purple"></i> Alfredo AI</h2>
+      <div class="flex-1 overflow-y-auto hide-scroll space-y-3 pb-2 text-sm flex flex-col justify-end">
+        <div class="self-start glass-card p-3 rounded-2xl rounded-bl-none chat-bubble chat-alfredo text-gray-200 max-w-[85%] relative border border-white/10">
+          Chefe, você gastou 30% a mais em restaurantes essa semana. Devo investir os R$ 5k do freela ou segurar pro fim de ano? 🧐
+        </div>
+        <div class="self-end bg-neon-purple text-white p-3 rounded-2xl rounded-br-none chat-bubble chat-user max-w-[85%] relative shadow-lg">
+          Investe R$ 4k em VOO, deixa R$ 1k livre.
+        </div>
       </div>
-    </section>
-
-    <section class="panel" id="agendamentos">
-      <div class="card">
-        <h3 class="card-title">Agendamentos</h3>
-        <div id="agendamentoStatus" class="empty">Carregando...</div>
-        <button class="btn secondary" id="agendamentoRefresh">Atualizar</button>
+      <div class="mt-3 relative">
+        <input type="text" placeholder="Fale com Alfredo..." class="w-full bg-black/30 border border-white/10 rounded-xl py-3 pl-4 pr-12 text-sm text-white focus:outline-none focus:border-neon-purple/50 transition duration-300">
+        <button class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-neon-purple rounded-lg text-white hover:bg-purple-500 transition active:scale-90"><i data-lucide="send" class="w-4 h-4"></i></button>
       </div>
-      <div class="history-list" id="agendamentoList"></div>
-    </section>
-
-    <section class="panel" id="metas">
-      <div class="card">
-        <h3 class="card-title">Metas</h3>
-        <div id="metaStatus" class="empty">Carregando...</div>
-        <button class="btn secondary" id="metaRefresh">Atualizar</button>
-      </div>
-      <div class="history-list" id="metaList"></div>
     </section>
   </main>
 
-  <p class="footer">Atualiza automaticamente a cada 7s. Gratis para todos.</p>
+  <- Pagamentos de fatura: continuam sendo ignorados Bottom Tab Bar Premium -->
+  <nav class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] glass-card rounded-full px-6 py-4 flex justify-between items-center z-50 shadow-2xl backdrop-blur-3xl border border-white/20">
+    <button class="nav-btn text-gray-500 transition-all duration-300 hover:text-white" onclick="switchTab(this)"><i data-lucide="home"></i></button>
+    <button class="nav-btn text-gray-500 transition-all duration-300 hover:text-white" onclick="switchTab(this)"><i data-lucide="pie-chart"></i></button>
+    <- Pagamentos de fatura: continuam sendo ignorados Botão Central Flutuante FAB -->
+    <button class="bg-gradient-to-r from-neon-purple to-blue-600 w-14 h-14 rounded-full flex items-center justify-center shadow-glow transform -translate-y-6 border-4 border-[#0f172a] hover:rotate-90 transition-all duration-300 active:scale-75 cursor-pointer">
+      <i data-lucide="plus" class="text-white w-6 h-6"></i>
+    </button>
+    <button class="nav-btn tab-active" onclick="switchTab(this)"><i data-lucide="message-square-dashed"></i></button>
+    <button class="nav-btn text-gray-500 transition-all duration-300 hover:text-white" onclick="switchTab(this)"><i data-lucide="user"></i></button>
+  </nav>
 
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
-    const tabs = document.querySelectorAll('.tab-btn');
-    const panels = document.querySelectorAll('.panel');
-    const historyList = document.getElementById('historyList');
-    const historyStatus = document.getElementById('historyStatus');
-    const historyQuery = document.getElementById('historyQuery');
-    const historyTipo = document.getElementById('historyTipo');
-    const historyRefresh = document.getElementById('historyRefresh');
-    const historyLoadMore = document.getElementById('historyLoadMore');
-    const gerenteChat = document.getElementById('gerenteChat');
-    const gerenteInput = document.getElementById('gerenteInput');
-    const gerenteSend = document.getElementById('gerenteSend');
-    const agendamentoList = document.getElementById('agendamentoList');
-    const agendamentoStatus = document.getElementById('agendamentoStatus');
-    const agendamentoRefresh = document.getElementById('agendamentoRefresh');
-    const metaList = document.getElementById('metaList');
-    const metaStatus = document.getElementById('metaStatus');
-    const metaRefresh = document.getElementById('metaRefresh');
-    let sessionId = null;
-    let historyOffset = 0;
-    const historyLimit = 20;
-
-    tabs.forEach(btn => {
-      btn.addEventListener('click', () => {
-        tabs.forEach(b => b.classList.remove('active'));
-        panels.forEach(p => p.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById(btn.dataset.tab).classList.add('active');
-      });
-    });
-
-    const requestedTab = new URLSearchParams(window.location.search).get('tab');
-    if (requestedTab && document.getElementById(requestedTab)) {
-      tabs.forEach(b => b.classList.remove('active'));
-      panels.forEach(p => p.classList.remove('active'));
-      const targetBtn = document.querySelector(`.tab-btn[data-tab="${requestedTab}"]`);
-      if (targetBtn) {
-        targetBtn.classList.add('active');
-      }
-      document.getElementById(requestedTab).classList.add('active');
+    lucide.createIcons();
+    const switchTab = (el) => {
+      document.querySelectorAll('.nav-btn').forEach(b => { b.classList.remove('tab-active'); b.classList.add('text-gray-500'); });
+      el.classList.add('tab-active'); el.classList.remove('text-gray-500');
     }
-
-    function setHistoryStatus(text) {
-      historyStatus.textContent = text;
-    }
-
-    function addChatMessage(text, role) {
-      const div = document.createElement('div');
-      div.className = `chat-bubble ${role}`;
-      div.innerHTML = text;
-      gerenteChat.appendChild(div);
-      gerenteChat.scrollTop = gerenteChat.scrollHeight;
-    }
-
-    function setAgendamentoStatus(text) {
-      agendamentoStatus.textContent = text;
-    }
-
-    function setMetaStatus(text) {
-      metaStatus.textContent = text;
-    }
-
-    async function authTelegram() {
-      if (!window.Telegram || !Telegram.WebApp) {
-        setHistoryStatus('Abra pelo Telegram para autenticar.');
-        return;
-      }
-      Telegram.WebApp.ready();
-      Telegram.WebApp.expand();
-
-      const initData = Telegram.WebApp.initData;
-      if (!initData) {
-        setHistoryStatus('initData ausente.');
-        return;
-      }
-
-      const response = await fetch('/api/telegram/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ init_data: initData })
-      });
-      const data = await response.json();
-      if (!data.ok) {
-        setHistoryStatus('Falha na autenticacao.');
-        return;
-      }
-      sessionId = data.session_id;
-      setHistoryStatus('Conectado.');
-      await loadHistory(true);
-      await loadAgendamentos();
-      await loadMetas();
-      addChatMessage('Ola! Sou o Alfredo. Como posso ajudar hoje?', 'bot');
-      setInterval(loadHistory, 7000);
-    }
-
-    function formatMoney(value, tipo) {
-      const abs = Math.abs(value).toFixed(2).replace('.', ',');
-      const prefix = value < 0 || tipo === 'Despesa' ? '-' : '+';
-      return `${prefix} R$ ${abs}`;
-    }
-
-    async function loadHistory(reset = false) {
-      if (!sessionId) {
-        return;
-      }
-      if (reset) {
-        historyOffset = 0;
-        historyList.innerHTML = '';
-      }
-      const params = new URLSearchParams({
-        limit: historyLimit,
-        offset: historyOffset,
-        query: historyQuery.value || '',
-        tipo: historyTipo.value || ''
-      });
-      const response = await fetch(`/api/miniapp/history?${params.toString()}`, {
-        headers: { 'X-Session-Id': sessionId }
-      });
-      const data = await response.json();
-      if (!data.ok) {
-        setHistoryStatus('Falha ao carregar historico.');
-        return;
-      }
-      if (!data.items.length && historyOffset === 0) {
-        setHistoryStatus('Nenhum lancamento ainda.');
-        return;
-      }
-      setHistoryStatus('');
-      data.items.forEach(item => {
-        const div = document.createElement('div');
-        div.className = 'history-item';
-        const valueText = formatMoney(item.valor, item.tipo);
-        div.innerHTML = `
-          <div>
-            <strong>${item.descricao || 'Lancamento'}</strong>
-            <small>${new Date(item.data).toLocaleDateString('pt-BR')} • ${item.forma_pagamento || 'Conta'}</small>
-          </div>
-          <div class="history-actions">
-            <span class="pill">${valueText}</span>
-            <button class="btn secondary" data-action="edit" data-id="${item.id}">Editar</button>
-            <button class="btn secondary" data-action="delete" data-id="${item.id}">Excluir</button>
-          </div>
-        `;
-        historyList.appendChild(div);
-      });
-      historyOffset += data.items.length;
-    }
-
-    async function updateLancamento(id, payload) {
-      await fetch(`/api/miniapp/lancamentos/${id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Session-Id': sessionId
-        },
-        body: JSON.stringify(payload)
-      });
-      await loadHistory(true);
-    }
-
-    async function deleteLancamento(id) {
-      await fetch(`/api/miniapp/lancamentos/${id}`, {
-        method: 'DELETE',
-        headers: { 'X-Session-Id': sessionId }
-      });
-      await loadHistory(true);
-    }
-
-    async function loadAgendamentos() {
-      if (!sessionId) {
-        return;
-      }
-      setAgendamentoStatus('Carregando...');
-      const response = await fetch('/api/miniapp/agendamentos', {
-        headers: { 'X-Session-Id': sessionId }
-      });
-      const data = await response.json();
-      if (!data.ok) {
-        setAgendamentoStatus('Falha ao carregar.');
-        return;
-      }
-      agendamentoList.innerHTML = '';
-      if (!data.items.length) {
-        setAgendamentoStatus('Nenhum agendamento.');
-        return;
-      }
-      setAgendamentoStatus('');
-      data.items.forEach(item => {
-        const div = document.createElement('div');
-        div.className = 'history-item';
-        div.innerHTML = `
-          <div>
-            <strong>${item.descricao}</strong>
-            <small>${item.frequencia} • ${new Date(item.proxima_data_execucao).toLocaleDateString('pt-BR')}</small>
-          </div>
-          <span class="pill">${formatMoney(item.valor, item.tipo)}</span>
-        `;
-        agendamentoList.appendChild(div);
-      });
-    }
-
-    async function loadMetas() {
-      if (!sessionId) {
-        return;
-      }
-      setMetaStatus('Carregando...');
-      const response = await fetch('/api/miniapp/metas', {
-        headers: { 'X-Session-Id': sessionId }
-      });
-      const data = await response.json();
-      if (!data.ok) {
-        setMetaStatus('Falha ao carregar.');
-        return;
-      }
-      metaList.innerHTML = '';
-      if (!data.items.length) {
-        setMetaStatus('Nenhuma meta cadastrada.');
-        return;
-      }
-      setMetaStatus('');
-      data.items.forEach(item => {
-        const div = document.createElement('div');
-        div.className = 'history-item';
-        const progress = item.valor_meta ? Math.round((item.valor_atual / item.valor_meta) * 100) : 0;
-        div.innerHTML = `
-          <div>
-            <strong>${item.descricao}</strong>
-            <small>Meta: R$ ${item.valor_meta.toFixed(2)} • ${progress}%</small>
-          </div>
-          <span class="pill">R$ ${item.valor_atual.toFixed(2)}</span>
-        `;
-        metaList.appendChild(div);
-      });
-    }
-
-    historyRefresh.addEventListener('click', () => loadHistory(true));
-    historyLoadMore.addEventListener('click', () => loadHistory(false));
-    agendamentoRefresh.addEventListener('click', loadAgendamentos);
-    metaRefresh.addEventListener('click', loadMetas);
-
-    historyList.addEventListener('click', async (event) => {
-      const target = event.target;
-      if (!target.dataset || !target.dataset.action) {
-        return;
-      }
-      const id = target.dataset.id;
-      if (target.dataset.action === 'delete') {
-        await deleteLancamento(id);
-        return;
-      }
-      if (target.dataset.action === 'edit') {
-        const newDesc = window.prompt('Nova descricao (deixe vazio para manter):');
-        const newValue = window.prompt('Novo valor (ex: 120.50) ou vazio:');
-        const payload = {};
-        if (newDesc) {
-          payload.descricao = newDesc;
-        }
-        if (newValue) {
-          const parsed = parseFloat(newValue.replace(',', '.'));
-          if (!Number.isNaN(parsed)) {
-            payload.valor = parsed;
-          }
-        }
-        if (Object.keys(payload).length) {
-          await updateLancamento(id, payload);
-        }
-      }
-    });
-
-    async function sendGerenteMessage() {
-      const message = gerenteInput.value.trim();
-      if (!message || !sessionId) {
-        return;
-      }
-      addChatMessage(message, 'user');
-      gerenteInput.value = '';
-
-      const response = await fetch('/api/miniapp/gerente', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Session-Id': sessionId
-        },
-        body: JSON.stringify({ prompt: message })
-      });
-      const data = await response.json();
-      if (!data.ok) {
-        addChatMessage('Nao consegui responder agora. Tente novamente.', 'bot');
-        return;
-      }
-      addChatMessage(data.answer, 'bot');
-    }
-
-    gerenteSend.addEventListener('click', sendGerenteMessage);
-    gerenteInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        sendGerenteMessage();
-      }
-    });
-
-    authTelegram();
   </script>
 </body>
 </html>

@@ -15,6 +15,8 @@ import json
 import logging
 import random
 import re
+import asyncio
+import requests
 from telegram.ext import MessageHandler
 
 import time
@@ -211,6 +213,47 @@ from . import services
 
 
 logger = logging.getLogger(__name__)
+
+
+def _groq_generate_content(prompt: str) -> str:
+    if not config.GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY nao configurada")
+
+    payload = {
+        "model": config.GROQ_MODEL_NAME,
+        "temperature": 0.2,
+        "messages": [
+            {
+                "role": "system",
+                "content": "Responda apenas com o conteudo final, sem markdown.",
+            },
+            {"role": "user", "content": prompt},
+        ],
+    }
+    headers = {
+        "Authorization": f"Bearer {config.GROQ_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    response = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        json=payload,
+        headers=headers,
+        timeout=40,
+    )
+    response.raise_for_status()
+    data = response.json()
+    return data["choices"][0]["message"]["content"]
+
+
+async def _generate_with_groq(prompt: str) -> str | None:
+    if not config.GROQ_API_KEY:
+        return None
+    try:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _groq_generate_content, prompt)
+    except Exception as exc:
+        logger.error("Falha ao processar gerente com Groq: %s", exc, exc_info=True)
+        return None
 
 # --- CONSTANTES PARA DETECÇÃO DE INTENÇÕES ---
 PALAVRAS_LISTA = {
@@ -897,6 +940,9 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
             
             # Tentar com o modelo configurado, se falhar usar fallback
             try:
+                if not config.GEMINI_API_KEY:
+                    raise RuntimeError("GEMINI_API_KEY nao configurada")
+
                 # Re-configura a API key logo antes da chamada para ter 100% de certeza que não se perdeu e limpando aspas
                 raw_key = config.GEMINI_API_KEY
                 genai.configure(api_key=raw_key.strip().strip("'\"").strip().strip())
@@ -905,8 +951,7 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
                 resposta_ia = _limpar_resposta_ia(response.text)
             except Exception as model_error:
                 logger.error(f"⚠️ Erro com modelo '{config.GEMINI_MODEL_NAME}': {model_error}")
-                logger.info("🔄 Tentando fallback para 'gemini-flash-latest'...")
-                
+
                 # Atualizar mensagem de progresso
                 await context.bot.edit_message_text(
                     chat_id=chat_id,
@@ -914,13 +959,27 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
                     text="🔄 <b>Tentando método alternativo...</b>",
                     parse_mode='HTML'
                 )
-                
-                # Fallback para modelo mais estável (alias oficial)
-                raw_key = config.GEMINI_API_KEY
-                genai.configure(api_key=raw_key.strip().strip("'\"").strip().strip())
-                model = genai.GenerativeModel('gemini-flash-latest')
-                response = await model.generate_content_async(prompt_final)
-                resposta_ia = _limpar_resposta_ia(response.text)
+
+                # Primeiro tenta o fallback Gemini
+                resposta_ia = None
+                if config.GEMINI_API_KEY:
+                    try:
+                        raw_key = config.GEMINI_API_KEY
+                        genai.configure(api_key=raw_key.strip().strip("'\"").strip().strip())
+                        model = genai.GenerativeModel('gemini-flash-latest')
+                        response = await model.generate_content_async(prompt_final)
+                        resposta_ia = _limpar_resposta_ia(response.text)
+                    except Exception as fallback_error:
+                        logger.error(f"⚠️ Erro no fallback Gemini: {fallback_error}")
+
+                # Se Gemini falhar por qualquer motivo, tenta Groq
+                if not resposta_ia:
+                    resposta_groq = await _generate_with_groq(prompt_final)
+                    if resposta_groq:
+                        resposta_ia = _limpar_resposta_ia(resposta_groq)
+
+                if not resposta_ia:
+                    raise RuntimeError("Nenhuma IA disponivel (Gemini/Groq)")
             
             # --- 🔄 INDICADOR DE PROGRESSO: Remove mensagem inicial ---
             try:
