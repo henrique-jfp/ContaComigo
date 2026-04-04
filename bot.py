@@ -175,6 +175,8 @@ from gerente_financeiro.relatorio_handler import relatorio_handler
 from gerente_financeiro.manual_entry_handler import manual_entry_conv
 from gerente_financeiro.fatura_handler import fatura_conv
 from gerente_financeiro.audio_handler import audio_conv
+from gerente_financeiro.ocr_handler import ocr_action_processor, ocr_iniciar_como_subprocesso
+from gerente_financeiro.quick_entry_handler import handle_quick_text, quick_action_handler
 from gerente_financeiro.contact_handler import contact_conv
 from gerente_financeiro.delete_user_handler import delete_user_conv
 from gerente_financeiro.dashboard_handler import (
@@ -422,6 +424,15 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("/teste_assistente", lambda: teste_assistente_handler),
         ("/meu_wrapped", lambda: meu_wrapped_handler),
         ("/importar", lambda: CommandHandler("importar", importar_of)),
+        ("quick_text_handler", lambda: MessageHandler(filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND, handle_quick_text)),
+        (
+            "ocr_auto",
+            lambda: MessageHandler(
+                filters.ChatType.PRIVATE
+                & (filters.PHOTO | filters.Document.IMAGE | filters.Document.MimeType("application/pdf")),
+                ocr_iniciar_como_subprocesso,
+            ),
+        ),
         # ("confirmar_importacao_callback", lambda: CallbackQueryHandler(confirmar_callback, pattern="^confirmar_importacao$")),  # Removido: confirmar_callback não existe mais
         # ("cancelar_importacao_callback", lambda: CallbackQueryHandler(cancelar_callback, pattern="^cancelar_importacao$")),  # Removido: cancelar_callback não existe mais
     ]
@@ -451,6 +462,8 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("cancelar_agendamento_callback", lambda: CallbackQueryHandler(cancelar_agendamento_callback, pattern="^ag_cancelar_")),
         ("gamificacao_callback", lambda: CallbackQueryHandler(handle_gamification_callback, pattern="^(show_rankings|show_stats|show_rewards)$")),
         ("dashboard_callback", lambda: CallbackQueryHandler(dashboard_callback_handler, pattern="^dashboard_")),
+        ("quick_callback", lambda: CallbackQueryHandler(quick_action_handler, pattern="^quick_")),
+        ("ocr_callback", lambda: CallbackQueryHandler(ocr_action_processor, pattern="^ocr_")),
     ]
     
 

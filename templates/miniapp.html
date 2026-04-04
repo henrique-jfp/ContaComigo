@@ -387,6 +387,17 @@
       });
     });
 
+    const requestedTab = new URLSearchParams(window.location.search).get('tab');
+    if (requestedTab && document.getElementById(requestedTab)) {
+      tabs.forEach(b => b.classList.remove('active'));
+      panels.forEach(p => p.classList.remove('active'));
+      const targetBtn = document.querySelector(`.tab-btn[data-tab="${requestedTab}"]`);
+      if (targetBtn) {
+        targetBtn.classList.add('active');
+      }
+      document.getElementById(requestedTab).classList.add('active');
+    }
+
     function setHistoryStatus(text) {
       historyStatus.textContent = text;
     }

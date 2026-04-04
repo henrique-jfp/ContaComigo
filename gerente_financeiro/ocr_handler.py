@@ -11,7 +11,7 @@ from pdf2image import convert_from_bytes
 from PIL import Image
 import google.generativeai as genai
 from google.cloud import vision
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ContextTypes, ConversationHandler
 from sqlalchemy.orm import Session, joinedload 
 from sqlalchemy import and_, func 
@@ -52,6 +52,14 @@ def setup_ocr_logging():
 # Logger principal e detalhado
 logger = logging.getLogger(__name__)
 ocr_detailed_logger, current_ocr_log = setup_ocr_logging()
+
+
+def _get_webapp_url(tab: str | None = None) -> str:
+    base_url = os.getenv("DASHBOARD_BASE_URL", "http://localhost:5000").rstrip("/")
+    url = f"{base_url}/webapp"
+    if tab:
+        url = f"{url}?tab={tab}"
+    return url
 
 # Decorator para logging EXTREMAMENTE detalhado de funções OCR
 def debug_ocr_function(func):
@@ -281,7 +289,6 @@ async def _reply_with_summary(update_or_query, context: ContextTypes.DEFAULT_TYP
     # ... (O código desta função permanece exatamente o mesmo que o seu original) ...
     tipo_atual = dados_ia.get('tipo_transacao', 'Saída')
     tipo_emoji = "🔴" if tipo_atual == 'Saída' else "🟢"
-    novo_tipo_texto = "Marcar como Entrada" if tipo_atual == 'Saída' else "Marcar como Saída"
     doc = dados_ia.get('documento_fiscal') or "N/A"
     tipo_doc = "CNPJ" if len(str(doc)) == 14 else "CPF"
     categoria_sugerida = dados_ia.get('categoria_sugerida', 'N/A')
@@ -316,8 +323,8 @@ async def _reply_with_summary(update_or_query, context: ContextTypes.DEFAULT_TYP
 
     keyboard = [
         [InlineKeyboardButton("✅ Confirmar e Salvar", callback_data="ocr_salvar")],
-        [InlineKeyboardButton(f"🔄 {novo_tipo_texto}", callback_data="ocr_toggle_type")],
-        [InlineKeyboardButton("❌ Cancelar", callback_data="ocr_cancelar")]
+        [InlineKeyboardButton("❌ Cancelar", callback_data="ocr_cancelar")],
+        [InlineKeyboardButton("✍️ Editar no Miniapp", web_app=WebAppInfo(url=_get_webapp_url("editar")))]
     ]
 
     if hasattr(update_or_query, 'edit_message_text'):

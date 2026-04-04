@@ -1,13 +1,15 @@
 import logging
 import json
+import os
 from datetime import datetime, timezone
 from telegram.ext import filters, CommandHandler, MessageHandler, CallbackQueryHandler
 import google.generativeai as genai
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ContextTypes, ConversationHandler
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 from database.database import get_db, get_or_create_user
-from models import Lancamento, Conta
+from models import Categoria, Lancamento, Conta, Subcategoria
 from .gamification_utils import give_xp_for_action, touch_user_interaction
 import config
 from .states import AUDIO_ACCOUNT_STATE, AUDIO_CONFIRMATION_STATE
@@ -31,6 +33,36 @@ def _audio_payload_valido(dados_ia: dict) -> bool:
 
 def _normalizar_tipo(tipo: str) -> str:
     return 'Entrada' if str(tipo).strip().lower() == 'entrada' else 'Saída'
+
+
+def _get_webapp_url(tab: str | None = None) -> str:
+    base_url = os.getenv("DASHBOARD_BASE_URL", "http://localhost:5000").rstrip("/")
+    url = f"{base_url}/webapp"
+    if tab:
+        url = f"{url}?tab={tab}"
+    return url
+
+
+def _resolve_categoria_ids(db: Session, dados: dict) -> tuple[int | None, int | None]:
+    id_categoria = None
+    id_subcategoria = None
+
+    cat_sugerida = dados.get('categoria_sugerida')
+    sub_sugerida = dados.get('subcategoria_sugerida')
+
+    if cat_sugerida:
+        categoria_obj = db.query(Categoria).filter(func.lower(Categoria.nome) == func.lower(cat_sugerida)).first()
+        if categoria_obj:
+            id_categoria = categoria_obj.id
+
+    if sub_sugerida and id_categoria:
+        subcategoria_obj = db.query(Subcategoria).filter(
+            and_(Subcategoria.id_categoria == id_categoria, func.lower(Subcategoria.nome) == func.lower(sub_sugerida))
+        ).first()
+        if subcategoria_obj:
+            id_subcategoria = subcategoria_obj.id
+
+    return id_categoria, id_subcategoria
 
 
 def _build_conta_keyboard(contas: list[Conta]) -> InlineKeyboardMarkup:
@@ -99,7 +131,6 @@ async def _reply_with_audio_summary(update_or_query, context: ContextTypes.DEFAU
 
     tipo_atual = dados_ia.get('tipo_transacao', 'Saída')
     tipo_emoji = "🔴" if tipo_atual == 'Saída' else "🟢"
-    novo_tipo_texto = "Marcar como Entrada" if tipo_atual == 'Saída' else "Marcar como Saída"
     
     try:
         valor_float = float(dados_ia.get('valor_total', 0.0))
@@ -107,21 +138,23 @@ async def _reply_with_audio_summary(update_or_query, context: ContextTypes.DEFAU
         valor_float = 0.0
     
     forma_pagamento = dados_ia.get('forma_pagamento') or 'Conta não definida'
+    categoria_sugerida = dados_ia.get('categoria_sugerida', 'N/A')
+    subcategoria_sugerida = dados_ia.get('subcategoria_sugerida', 'N/A')
+    categoria_str = f"{categoria_sugerida} / {subcategoria_sugerida}" if subcategoria_sugerida != 'N/A' else categoria_sugerida
     msg_texto = (
-        f"🎙️ <b>Lançamentos via Áudio Identificado</b>\n\n"
+        f"🧾 <b>Resumo do Lançamento</b>\n\n"
         f"📍 <b>Descrição:</b> {dados_ia.get('nome_estabelecimento', 'N/A')}\n"
-        f"{tipo_emoji} <b>Valor:</b> R$ {valor_float:.2f} ({tipo_atual})\n"
+        f"{tipo_emoji} <b>Valor:</b> <code>R$ {valor_float:.2f}</code> ({tipo_atual})\n"
         f"📅 <b>Data:</b> {dados_ia.get('data', 'N/A')}\n"
         f"💳 <b>Conta/Cartão:</b> {forma_pagamento}\n"
-        f"🏷️ <b>Sugestões (Baseadas em IA):</b>\n"
-        f"  • Categoria: {dados_ia.get('categoria_sugerida', 'N/A')}\n"
-        f"\nConfirma o salvamento?"
+        f"🏷️ <b>Categoria:</b> {categoria_str}\n\n"
+        f"Confirma o salvamento?"
     )
 
     keyboard = [
-        [InlineKeyboardButton("✅ Confirmar Lançamento", callback_data="audio_salvar")],
-        [InlineKeyboardButton(f"🔄 {novo_tipo_texto}", callback_data="audio_toggle_type")],
-        [InlineKeyboardButton("❌ Descartar", callback_data="audio_cancelar")]
+        [InlineKeyboardButton("✅ Confirmar e Salvar", callback_data="audio_salvar")],
+        [InlineKeyboardButton("❌ Cancelar", callback_data="audio_cancelar")],
+        [InlineKeyboardButton("✍️ Editar no Miniapp", web_app=WebAppInfo(url=_get_webapp_url("editar")))]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -173,7 +206,8 @@ async def handle_audio_expense(update: Update, context: ContextTypes.DEFAULT_TYP
             "tipo_transacao": "Saída" ou "Entrada",
             "forma_pagamento": "string (ex: Pix, Cartão de Crédito, Dinheiro, N/A)",
             "data": "DD/MM/YYYY (infira baseando-se no {hoje_str})",
-            "categoria_sugerida": "string (ex: Alimentação, Transporte, Moradia, N/A)"
+            "categoria_sugerida": "string (ex: Alimentação, Transporte, Moradia, N/A)",
+            "subcategoria_sugerida": "string (ex: Restaurantes, Mercado, Combustível, N/A)"
         }}
         """
         
@@ -272,6 +306,7 @@ async def audio_action_processor(update: Update, context: ContextTypes.DEFAULT_T
             except (ValueError, TypeError):
                 valor_float = 0.0
                 
+            id_categoria, id_subcategoria = _resolve_categoria_ids(db, dados)
             novo_lancamento = Lancamento(
                 id_usuario=usuario_db.id,
                 descricao=dados.get('nome_estabelecimento', 'Lançamento via Áudio'),
@@ -279,7 +314,9 @@ async def audio_action_processor(update: Update, context: ContextTypes.DEFAULT_T
                 tipo=dados.get('tipo_transacao', 'Saída'),
                 data_transacao=data_obj,
                 forma_pagamento=dados.get('forma_pagamento'),
-                id_conta=dados.get('id_conta')
+                id_conta=dados.get('id_conta'),
+                id_categoria=id_categoria,
+                id_subcategoria=id_subcategoria
             )
             
             db.add(novo_lancamento)

@@ -1,8 +1,8 @@
-from gerente_financeiro.menu_botoes import obter_teclado_painel
+import os
 # gerente_financeiro/onboarding_handler.py
 import logging
 from datetime import time
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
     ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 )
@@ -80,20 +80,23 @@ async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         user = get_or_create_user(db, update.effective_user.id, update.effective_user.full_name)
         user_name = user.nome_completo.split(' ')[0] if user.nome_completo else update.effective_user.first_name
         
-        # Saudação especial para /start
+        base_url = os.getenv('DASHBOARD_BASE_URL', 'http://localhost:5000').rstrip('/')
+        webapp_url = f"{base_url}/webapp"
+
         welcome_text = (
             f"👋 <b>Olá, {user_name}!</b>\n\n"
-            "Para que eu possa ser seu melhor assistente financeiro, "
-            "precisamos configurar seu ecossistema.\n\n"
-            "📋 <b>Esta etapa é rápida e vai me ajudar a personalizar sua "
-            "experiência do seu jeito.</b>\n\n"
-            "Se quiser explorar tudo que posso fazer, digite /help. 🚀"
+            "O miniapp é seu painel completo: histórico, edição, metas e gerente IA.\n\n"
+            "No chat, tudo é rápido e direto:\n"
+            "• Envie <b>áudio</b> ou <b>foto</b> e eu lanço automaticamente.\n"
+            "• Escreva uma frase como: <i>\"Gastei 34,90 no iFood ontem\"</i>.\n\n"
+            "✅ Vou categorizar, subcategorizar e te mostrar um resumo para confirmar.\n\n"
+            "Para configurar contas e cartões, use /configurar."
         )
-        
-        await update.message.reply_html(welcome_text, reply_markup=obter_teclado_painel())
-        
-        # Vai direto para o menu principal
-        return await show_main_menu(update, context)
+
+        keyboard = [[InlineKeyboardButton("🧩 Acessar Miniapp", web_app=WebAppInfo(url=webapp_url))]]
+        await update.message.reply_html(welcome_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+        return ConversationHandler.END
         
     finally:
         db.close()
