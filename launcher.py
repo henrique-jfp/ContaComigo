@@ -43,11 +43,14 @@ def get_settings() -> AppSettings:
     if mode_str == 'dashboard':
         logger.info("🔍 Modo detectado: DASHBOARD (via CONTACOMIGO_MODE)")
         return AppSettings(mode=ExecutionMode.DASHBOARD)
+    if mode_str in {'local', 'local_dev', 'both', 'all'}:
+        logger.info("🔍 Modo detectado: LOCAL_DEV (via CONTACOMIGO_MODE)")
+        return AppSettings(mode=ExecutionMode.LOCAL_DEV)
 
     # 2. Detecção automática de ambiente de produção
     if os.getenv('RAILWAY_ENVIRONMENT'):
-        logger.info("🔍 Modo detectado: BOT (ambiente Railway)")
-        return AppSettings(mode=ExecutionMode.BOT)
+        logger.info("🔍 Modo detectado: LOCAL_DEV (ambiente Railway, serviço único)")
+        return AppSettings(mode=ExecutionMode.LOCAL_DEV)
     
     # Exemplo para Render (mais robusto que checar a variável 'RENDER')
     if os.getenv('RENDER_INSTANCE_ID'):
@@ -116,7 +119,7 @@ def start_health_check_server():
     
     health_app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
-def start_telegram_bot():
+def start_telegram_bot(enable_health_server: bool = True):
     """Inicia o bot do Telegram"""
     try:
         logger.info("🤖 Iniciando bot do Telegram...")
@@ -126,7 +129,7 @@ def start_telegram_bot():
         
         # 🏥 INICIAR HEALTH CHECK SERVER EM THREAD SEPARADA
         # (Para Koyeb/Render que precisam de health checks HTTP)
-        if os.getenv('PORT'):
+        if enable_health_server and os.getenv('PORT'):
             health_thread = Thread(target=start_health_check_server, daemon=True)
             health_thread.start()
             logger.info("✅ Health check server iniciado em thread separada")
@@ -246,7 +249,7 @@ def main() -> None:
         start_dashboard()
     elif settings.mode == ExecutionMode.LOCAL_DEV:
         logger.info("🔄 Modo LOCAL: Iniciando bot em uma thread e dashboard no processo principal.")
-        bot_thread = Thread(target=start_telegram_bot, daemon=True)
+        bot_thread = Thread(target=start_telegram_bot, kwargs={"enable_health_server": False}, daemon=True)
         bot_thread.start()
         start_dashboard()
     else:
