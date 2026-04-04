@@ -26,14 +26,14 @@ def obter_teclado_painel():
     webapp_url = f"{url_base}/webapp"
 
     botoes = [
-        [KeyboardButton("🧩 Abrir o App", web_app=WebAppInfo(url=webapp_url)), KeyboardButton(BOTAO_CONTATO)]
+        [KeyboardButton("🚀 Abrir o App", web_app=WebAppInfo(url=webapp_url)), KeyboardButton(BOTAO_CONTATO)]
     ]
     
     return ReplyKeyboardMarkup(
         botoes, 
         resize_keyboard=True, 
         is_persistent=True, 
-        input_field_placeholder="Acesse o Miniapp..."
+        input_field_placeholder="Escolha: abrir o app ou falar com o dev"
     )
 
 async def toggle_painel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

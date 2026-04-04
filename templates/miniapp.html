@@ -15,39 +15,40 @@
       extend: {
         fontFamily: { sans: ['Outfit', 'sans-serif'] },
         colors: { 
-          'glass': 'rgba(15, 23, 42, 0.45)', flex: { '2': '2 2 0%' },
-          'neon-purple': '#8b5cf6', 'emerald': '#10b981', 'carmine': '#e11d48'
+          'glass': 'rgba(255, 255, 255, 0.72)', flex: { '2': '2 2 0%' },
+          'neon-purple': '#7b1e2d', 'emerald': '#7b1e2d', 'carmine': '#7b1e2d'
         },
-        boxShadow: { 'glow': '0 0 40px -10px rgba(139, 92, 246, 0.5)' }
+        boxShadow: { 'glow': '0 0 30px -10px rgba(123, 30, 45, 0.35)' }
       }
     }
   }
 </script>
 <style>
-  body { background: radial-gradient(circle at top right, #1e1b4b, #0f172a 60%); }
+  body { background: radial-gradient(circle at top, #ffffff 0%, #f7f1f3 38%, #f1e8ea 100%); color: #1f2937; }
   .glass-card { 
-    background: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01));
-    backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); 
+    background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.72));
+    backdrop-filter: blur(18px); border: 1px solid rgba(123, 30, 45, 0.12); 
+    box-shadow: 0 16px 40px rgba(123, 30, 45, 0.08);
   }
   .hide-scroll::-webkit-scrollbar { display: none; }
   .chat-bubble::after { content: ''; position: absolute; bottom: 0; width: 12px; height: 12px; }
   .user::after { right: -6px; background: inherit; border-bottom-left-radius: 100%; }
   .bot::after { left: -6px; background: inherit; border-bottom-right-radius: 100%; }
-  .tab-active { color: #8b5cf6; filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.8)); transform: translateY(-4px); }
+  .tab-active { color: #7b1e2d; filter: drop-shadow(0 0 6px rgba(123, 30, 45, 0.22)); transform: translateY(-4px); }
   .panel { display: none; }
   .panel.active { display: block; animation: fadeIn 0.3s ease; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
-<body class="text-white h-screen w-screen overflow-hidden flex flex-col font-sans antialiased selection:bg-neon-purple selection:text-white">
+<body class="text-slate-900 h-screen w-screen overflow-hidden flex flex-col font-sans antialiased selection:bg-neon-purple selection:text-white">
 
   <!-- Header -->
   <header class="p-6 pb-2 pt-10 flex justify-between items-center relative z-10 glass-card mx-4 mt-4 rounded-3xl shadow-glow">
     <div>
-      <h1 class="text-xs tracking-widest uppercase text-gray-400 font-semibold mb-1">Status Webapp</h1>
-      <p id="mainStatus" class="font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald to-green-300">Conectando...</p>
+      <h1 class="text-xs tracking-widest uppercase text-gray-500 font-semibold mb-1">Status do App</h1>
+      <p id="mainStatus" class="font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#7b1e2d] to-[#a44a5a]">Conectando...</p>
     </div>
-    <div class="h-12 w-12 rounded-full bg-gradient-to-br from-neon-purple to-indigo-900 border-2 border-white/20 flex items-center justify-center shadow-lg">
+    <div class="h-12 w-12 rounded-full bg-gradient-to-br from-[#7b1e2d] to-[#b85d6e] border-2 border-white/70 flex items-center justify-center shadow-lg">
       <i data-lucide="zap" class="text-white"></i>
     </div>
   </header>
@@ -58,43 +59,43 @@
     <!-- Tela 1: HISTORICO (Home) -->
     <section class="panel active" id="historico">
       <div class="glass-card rounded-[24px] p-5">
-        <h2 class="text-sm font-semibold text-gray-300 mb-4 flex items-center justify-between">
-          <span>Últimas Transações</span>
-          <button id="historyRefresh" class="text-neon-purple hover:text-white transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+        <h2 class="text-sm font-semibold text-slate-700 mb-4 flex items-center justify-between">
+          <span>Histórico de Movimentações</span>
+          <button id="historyRefresh" class="text-[#7b1e2d] hover:text-[#b85d6e] transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
         </h2>
         
         <!-- Filtros invisiveis para manter compativel com API original -->
         <input id="historyQuery" type="hidden" value="" />
         <input id="historyTipo" type="hidden" value="" />
 
-        <p id="historyStatus" class="text-xs text-gray-500 mb-3"></p>
+        <p id="historyStatus" class="text-xs text-slate-500 mb-3"></p>
         <div id="historyList" class="space-y-3"></div>
-        <button id="historyLoadMore" class="w-full mt-4 py-2 border border-white/10 rounded-xl text-xs text-gray-400 hover:bg-white/5 transition">Carregar mais</button>
+        <button id="historyLoadMore" class="w-full mt-4 py-2 border border-[#7b1e2d]/15 rounded-xl text-xs text-slate-600 hover:bg-[#7b1e2d]/5 transition">Carregar mais</button>
       </div>
     </section>
 
     <!-- Tela 2: METAS -->
     <section class="panel" id="metas">
       <div class="glass-card rounded-[24px] p-5">
-        <h2 class="text-sm font-semibold text-gray-300 mb-4 flex items-center justify-between">
-          <span class="flex"><i data-lucide="target" class="w-4 h-4 mr-2 text-neon-purple"></i> Metas Ativas</span>
-          <button id="metaRefresh" class="text-neon-purple hover:text-white transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+        <h2 class="text-sm font-semibold text-slate-700 mb-4 flex items-center justify-between">
+          <span class="flex items-center"><i data-lucide="target" class="w-4 h-4 mr-2 text-[#7b1e2d]"></i> Metas em andamento</span>
+          <button id="metaRefresh" class="text-[#7b1e2d] hover:text-[#b85d6e] transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
         </h2>
-        <p id="metaStatus" class="text-xs text-gray-500 mb-3"></p>
+        <p id="metaStatus" class="text-xs text-slate-500 mb-3"></p>
         <div id="metaList" class="space-y-4"></div>
       </div>
     </section>
 
     <!-- Tela 3: GERENTE (Chat AI) -->
     <section class="panel h-full" id="gerente">
-      <div class="glass-card rounded-[24px] p-5 flex flex-col h-[65vh] relative border-neon-purple/30 shadow-glow">
-        <h2 class="text-sm font-semibold text-gray-300 mb-2 flex items-center justify-between">
-          <span class="flex items-center"><i data-lucide="bot" class="w-4 h-4 mr-2 text-neon-purple"></i> Alfredo AI</span>
+      <div class="glass-card rounded-[24px] p-5 flex flex-col h-[65vh] relative border-[#7b1e2d]/20 shadow-glow">
+        <h2 class="text-sm font-semibold text-slate-700 mb-2 flex items-center justify-between">
+          <span class="flex items-center"><i data-lucide="bot" class="w-4 h-4 mr-2 text-[#7b1e2d]"></i> Alfredo — Gerente</span>
         </h2>
         <div id="gerenteChat" class="flex-1 overflow-y-auto hide-scroll space-y-3 pb-2 text-sm flex flex-col pt-4"></div>
         <div class="mt-3 relative shrink-0">
-          <input id="gerenteInput" type="text" placeholder="Fale com Alfredo..." class="w-full bg-black/30 border border-white/10 rounded-xl py-3 pl-4 pr-12 text-sm text-white focus:outline-none focus:border-neon-purple/50 transition duration-300">
-          <button id="gerenteSend" class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-neon-purple rounded-lg text-white hover:bg-purple-500 transition active:scale-90"><i data-lucide="send" class="w-4 h-4"></i></button>
+          <input id="gerenteInput" type="text" placeholder="Pergunte algo ao Alfredo..." class="w-full bg-white/90 border border-[#7b1e2d]/15 rounded-xl py-3 pl-4 pr-12 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50 transition duration-300">
+          <button id="gerenteSend" class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-[#7b1e2d] rounded-lg text-white hover:bg-[#9a3243] transition active:scale-90"><i data-lucide="send" class="w-4 h-4"></i></button>
         </div>
       </div>
     </section>
@@ -102,11 +103,11 @@
     <!-- Tela 4: AGENDAMENTOS -->
     <section class="panel" id="agendamentos">
       <div class="glass-card rounded-[24px] p-5">
-        <h2 class="text-sm font-semibold text-gray-300 mb-4 flex items-center justify-between">
-          <span class="flex"><i data-lucide="calendar-clock" class="w-4 h-4 mr-2 text-neon-purple"></i> Agendamentos</span>
-          <button id="agendamentoRefresh" class="text-neon-purple hover:text-white transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+        <h2 class="text-sm font-semibold text-slate-700 mb-4 flex items-center justify-between">
+          <span class="flex items-center"><i data-lucide="calendar-clock" class="w-4 h-4 mr-2 text-[#7b1e2d]"></i> Agendamentos futuros</span>
+          <button id="agendamentoRefresh" class="text-[#7b1e2d] hover:text-[#b85d6e] transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
         </h2>
-        <p id="agendamentoStatus" class="text-xs text-gray-500 mb-3"></p>
+        <p id="agendamentoStatus" class="text-xs text-slate-500 mb-3"></p>
         <div id="agendamentoList" class="space-y-3"></div>
       </div>
     </section>
@@ -114,13 +115,13 @@
   </main>
 
   <!-- Bottom Tab Bar Premium -->
-  <nav class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] glass-card rounded-full px-6 py-4 flex justify-between items-center z-50 shadow-2xl backdrop-blur-3xl border border-white/20">
-    <button class="nav-btn tab-active text-white" data-tab="historico" onclick="switchTab(this)"><i data-lucide="home"></i></button>
-    <button class="nav-btn text-gray-500 hover:text-white transition" data-tab="metas" onclick="switchTab(this)"><i data-lucide="target"></i></button>
-    <button class="bg-gradient-to-r from-neon-purple to-blue-600 w-14 h-14 rounded-full flex items-center justify-center shadow-glow transform -translate-y-6 border-4 border-[#0f172a] hover:rotate-90 transition active:scale-75" data-tab="gerente" onclick="switchTab(this)">
+  <nav class="fixed bottom-5 left-1/2 -translate-x-1/2 w-[92%] glass-card rounded-[28px] px-4 py-3 flex justify-between items-center z-50 shadow-2xl backdrop-blur-3xl border border-[#7b1e2d]/15">
+    <button class="nav-btn tab-active text-[#7b1e2d] flex flex-col items-center gap-1 text-[11px] font-semibold" data-tab="historico" onclick="switchTab(this)"><i data-lucide="home" class="w-5 h-5"></i><span>Histórico</span></button>
+    <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[11px] font-semibold" data-tab="metas" onclick="switchTab(this)"><i data-lucide="target" class="w-5 h-5"></i><span>Metas</span></button>
+    <button class="bg-gradient-to-r from-[#7b1e2d] to-[#b85d6e] w-14 h-14 rounded-full flex items-center justify-center shadow-glow transform -translate-y-6 border-4 border-white hover:scale-105 transition active:scale-90" data-tab="gerente" onclick="switchTab(this)">
       <i data-lucide="bot" class="text-white w-6 h-6"></i>
     </button>
-    <button class="nav-btn text-gray-500 hover:text-white transition" data-tab="agendamentos" onclick="switchTab(this)"><i data-lucide="calendar"></i></button>
+    <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[11px] font-semibold" data-tab="agendamentos" onclick="switchTab(this)"><i data-lucide="calendar" class="w-5 h-5"></i><span>Agenda</span></button>
   </nav>
 
   <script>
@@ -156,12 +157,12 @@
     const switchTab = (el) => {
       if(!el.dataset.tab) return;
       document.querySelectorAll('.nav-btn').forEach(b => { 
-        b.classList.remove('tab-active', 'text-white'); 
-        b.classList.add('text-gray-500'); 
+        b.classList.remove('tab-active', 'text-[#7b1e2d]'); 
+        b.classList.add('text-slate-500'); 
       });
       if(el.classList.contains('nav-btn')) {
-        el.classList.add('tab-active', 'text-white'); 
-        el.classList.remove('text-gray-500');
+        el.classList.add('tab-active', 'text-[#7b1e2d]'); 
+        el.classList.remove('text-slate-500');
       }
       panels.forEach(p => p.classList.remove('active'));
       document.getElementById(el.dataset.tab).classList.add('active');
@@ -171,7 +172,7 @@
     function addChatMessage(text, role) {
       const div = document.createElement('div');
       const isUser = role === 'user';
-      div.className = `self-${isUser ? 'end' : 'start'} ${isUser ? 'bg-neon-purple text-white shadow-lg' : 'glass-card text-gray-200 border border-white/10'} p-3 rounded-2xl rounded-b${isUser? 'r' : 'l'}-none chat-bubble ${role} max-w-[85%] relative text-sm`;
+      div.className = `self-${isUser ? 'end' : 'start'} ${isUser ? 'bg-[#7b1e2d] text-white shadow-lg' : 'glass-card text-slate-800 border border-[#7b1e2d]/10'} p-3 rounded-2xl rounded-b${isUser? 'r' : 'l'}-none chat-bubble ${role} max-w-[85%] relative text-sm`;
       div.innerHTML = text;
       gerenteChat.appendChild(div);
       gerenteChat.scrollTop = gerenteChat.scrollHeight;
@@ -272,15 +273,15 @@
           const progress = item.valor_meta ? Math.round((item.valor_atual / item.valor_meta) * 100) : 0;
           const progNorm = Math.min(progress, 100);
           const div = document.createElement('div');
-          div.className = 'flex-1 bg-black/20 rounded-2xl p-4 border border-white/5 relative overflow-hidden group mb-2';
+          div.className = 'flex-1 bg-white rounded-2xl p-4 border border-[#7b1e2d]/10 relative overflow-hidden group mb-2';
           div.innerHTML = `
-            <div class="absolute inset-0 bg-gradient-to-r from-neon-purple/30 to-transparent opacity-50 transition-all duration-500" style="width: ${progNorm}%"></div>
+            <div class="absolute inset-0 bg-gradient-to-r from-[#7b1e2d]/20 to-transparent opacity-50 transition-all duration-500" style="width: ${progNorm}%"></div>
             <div class="relative z-10 flex justify-between items-end">
               <div>
-                <p class="text-xs text-gray-400">${item.descricao}</p>
-                <p class="text-lg font-bold mt-1">${progNorm}% <span class="text-xs text-gray-500 font-normal ml-1">de R$ ${item.valor_meta.toFixed(2)}</span></p>
+                <p class="text-xs text-slate-500">${item.descricao}</p>
+                <p class="text-lg font-bold mt-1 text-slate-900">${progNorm}% <span class="text-xs text-slate-500 font-normal ml-1">de R$ ${item.valor_meta.toFixed(2)}</span></p>
               </div>
-              <span class="text-sm font-semibold text-emerald">R$ ${item.valor_atual.toFixed(2)}</span>
+              <span class="text-sm font-semibold text-[#7b1e2d]">R$ ${item.valor_atual.toFixed(2)}</span>
             </div>
           `;
           metaList.appendChild(div);
@@ -301,13 +302,13 @@
           const isReceita = formatMoney(item.valor, item.tipo).startsWith('+');
           const valueText = formatMoney(item.valor, item.tipo);
           const div = document.createElement('div');
-          div.className = 'flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/5 mb-2';
+          div.className = 'flex items-center justify-between p-2 rounded-xl bg-white border border-[#7b1e2d]/10 mb-2';
           div.innerHTML = `
             <div>
-              <p class="font-semibold text-sm text-gray-100">${item.descricao}</p>
-              <p class="text-xs text-gray-400 mt-0.5"><i data-lucide="clock" class="inline w-3 h-3 mr-1"></i>${item.frequencia} • ${new Date(item.proxima_data_execucao).toLocaleDateString('pt-BR')}</p>
+              <p class="font-semibold text-sm text-slate-900">${item.descricao}</p>
+              <p class="text-xs text-slate-500 mt-0.5"><i data-lucide="clock" class="inline w-3 h-3 mr-1"></i>${item.frequencia} • ${new Date(item.proxima_data_execucao).toLocaleDateString('pt-BR')}</p>
             </div>
-            <span class="font-bold ${isReceita ? 'text-emerald' : 'text-carmine'} text-sm">${valueText}</span>
+            <span class="font-bold text-[#7b1e2d] text-sm">${valueText}</span>
           `;
           agendamentoList.appendChild(div);
         });
