@@ -4,6 +4,7 @@ import google.generativeai as genai
 import os
 import functools
 from datetime import time, datetime
+from telegram import Update
 from telegram.warnings import PTBUserWarning
 import threading
 from flask import Flask, jsonify
@@ -148,8 +149,7 @@ from database.database import get_db, popular_dados_iniciais, criar_tabelas
 from models import *
 from alerts import schedule_alerts
 from jobs import configurar_jobs
-from gerente_financeiro.menu_botoes import BOTAO_LANCAMENTO, BOTAO_GERENTE, BOTAO_EDITAR, BOTAO_CONFIG, BOTAO_FATURA, BOTAO_GRAFICOS, BOTAO_AGENDAMENTOS, BOTAO_METAS, BOTAO_RANKING, BOTAO_NIVEL, BOTAO_CANCELAR, BOTAO_CONTATO
-from gerente_financeiro.menu_botoes import BOTAO_LANCAMENTO, BOTAO_GERENTE, BOTAO_EDITAR, BOTAO_CONFIG, BOTAO_FATURA, BOTAO_GRAFICOS, BOTAO_AGENDAMENTOS, BOTAO_METAS, BOTAO_RANKING, BOTAO_NIVEL, BOTAO_CANCELAR, BOTAO_CONTATO
+from gerente_financeiro.menu_botoes import BOTAO_LANCAMENTO, BOTAO_GERENTE, BOTAO_EDITAR, BOTAO_CONFIG, BOTAO_FATURA, BOTAO_GRAFICOS, BOTAO_AGENDAMENTOS, BOTAO_METAS, BOTAO_RANKING, BOTAO_NIVEL, BOTAO_CANCELAR, BOTAO_CONTATO, toggle_painel_command
 
 # --- IMPORTS DOS HANDLERS (AGORA ORGANIZADOS) ---
 from gerente_financeiro.handlers import (
@@ -173,7 +173,7 @@ from gerente_financeiro.editing_handler import edit_conv
 from gerente_financeiro.graficos import grafico_conv
 from gerente_financeiro.relatorio_handler import relatorio_handler
 from gerente_financeiro.manual_entry_handler import manual_entry_conv
-from gerente_financeiro.fatura_handler import fatura_conv
+from gerente_financeiro.fatura_handler import fatura_conv, fatura_start
 from gerente_financeiro.audio_handler import audio_conv
 from gerente_financeiro.ocr_handler import ocr_action_processor, ocr_iniciar_como_subprocesso
 from gerente_financeiro.quick_entry_handler import handle_quick_text, quick_action_handler
