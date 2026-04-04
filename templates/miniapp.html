@@ -7,6 +7,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
   tailwind.config = {
     darkMode: 'class',
@@ -30,98 +31,326 @@
   }
   .hide-scroll::-webkit-scrollbar { display: none; }
   .chat-bubble::after { content: ''; position: absolute; bottom: 0; width: 12px; height: 12px; }
-  .chat-user::after { right: -6px; background: inherit; border-bottom-left-radius: 100%; }
-  .chat-alfredo::after { left: -6px; background: inherit; border-bottom-right-radius: 100%; }
+  .user::after { right: -6px; background: inherit; border-bottom-left-radius: 100%; }
+  .bot::after { left: -6px; background: inherit; border-bottom-right-radius: 100%; }
   .tab-active { color: #8b5cf6; filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.8)); transform: translateY(-4px); }
+  .panel { display: none; }
+  .panel.active { display: block; animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body class="text-white h-screen w-screen overflow-hidden flex flex-col font-sans antialiased selection:bg-neon-purple selection:text-white">
 
-  <- Pagamentos de fatura: continuam sendo ignorados Header Mágico -->
+  <- Pagamentos de fatura: continuam sendo ignorados Header -->
   <header class="p-6 pb-2 pt-10 flex justify-between items-center relative z-10 glass-card mx-4 mt-4 rounded-3xl shadow-glow">
     <div>
-      <h1 class="text-xs tracking-widest uppercase text-gray-400 font-semibold mb-1">Saldo Total</h1>
-      <p class="text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">R$ 14.230<span class="text-xl text-gray-500">,00</span></p>
+      <h1 class="text-xs tracking-widest uppercase text-gray-400 font-semibold mb-1">Status Webapp</h1>
+      <p id="mainStatus" class="font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald to-green-300">Conectando...</p>
     </div>
-    <div class="h-12 w-12 rounded-full bg-gradient-to-br from-neon-purple to-indigo-900 border-2 border-white/20 flex items-center justify-center shadow-lg transform transition active:scale-90">
-      <i data-lucide="scan-face" class="text-white"></i>
+    <div class="h-12 w-12 rounded-full bg-gradient-to-br from-neon-purple to-indigo-900 border-2 border-white/20 flex items-center justify-center shadow-lg">
+      <i data-lucide="zap" class="text-white"></i>
     </div>
   </header>
 
-  <- Pagamentos de fatura: continuam sendo ignorados Main Viewport Dinâmico -->
-  <main id="app-content" class="flex-1 overflow-y-auto hide-scroll p-4 space-y-6 pb-28 relative z-0">
+  <- Pagamentos de fatura: continuam sendo ignorados Viewport -->
+  <main id="app-content" class="flex-1 overflow-y-auto hide-scroll p-4 pb-28 relative z-0">
     
-    <- Pagamentos de fatura: continuam sendo ignorados Metas Circulares (CSS Grid flex) -->
-    <section class="glass-card rounded-[24px] p-5">
-      <h2 class="text-sm font-semibold text-gray-300 mb-4 flex transform"><i data-lucide="target" class="w-4 h-4 mr-2 text-neon-purple"></i> Metas Ativas</h2>
-      <div class="flex gap-4">
-        <div class="flex-1 bg-black/20 rounded-2xl p-4 border border-white/5 relative overflow-hidden group">
-          <div class="absolute inset-0 bg-gradient-to-r from-emerald/20 to-transparent w-[70%] opacity-50 group-hover:w-[75%] transition-all duration-500"></div>
-          <p class="text-xs text-gray-400 relative z-10">Porsche 911</p>
-          <p class="text-lg font-bold mt-1 relative z-10">70%</p>
+    <- Pagamentos de fatura: continuam sendo ignorados Tela 1: HISTÓRICO (Home) -->
+    <section class="panel active" id="historico">
+      <div class="glass-card rounded-[24px] p-5">
+        <h2 class="text-sm font-semibold text-gray-300 mb-4 flex items-center justify-between">
+          <span>Últimas Transações</span>
+          <button id="historyRefresh" class="text-neon-purple hover:text-white transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+        </h2>
+        
+        <- Pagamentos de fatura: continuam sendo ignorados Filtros invisiveis para manter compativel c/ api original -->
+        <input id="historyQuery" type="hidden" value="" />
+        <input id="historyTipo" type="hidden" value="" />
+
+        <p id="historyStatus" class="text-xs text-gray-500 mb-3"></p>
+        <div id="historyList" class="space-y-3"></div>
+        <button id="historyLoadMore" class="w-full mt-4 py-2 border border-white/10 rounded-xl text-xs text-gray-400 hover:bg-white/5 transition">Carregar mais</button>
+      </div>
+    </section>
+
+    <- Pagamentos de fatura: continuam sendo ignorados Tela 2: METAS -->
+    <section class="panel" id="metas">
+      <div class="glass-card rounded-[24px] p-5">
+        <h2 class="text-sm font-semibold text-gray-300 mb-4 flex items-center justify-between">
+          <span class="flex"><i data-lucide="target" class="w-4 h-4 mr-2 text-neon-purple"></i> Metas Ativas</span>
+          <button id="metaRefresh" class="text-neon-purple hover:text-white transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+        </h2>
+        <p id="metaStatus" class="text-xs text-gray-500 mb-3"></p>
+        <div id="metaList" class="space-y-4"></div>
+      </div>
+    </section>
+
+    <- Pagamentos de fatura: continuam sendo ignorados Tela 3: GERENTE (Chat AI) -->
+    <section class="panel h-full" id="gerente">
+      <div class="glass-card rounded-[24px] p-5 flex flex-col h-[65vh] relative border-neon-purple/30 shadow-glow">
+        <h2 class="text-sm font-semibold text-gray-300 mb-2 flex items-center justify-between">
+          <span class="flex items-center"><i data-lucide="bot" class="w-4 h-4 mr-2 text-neon-purple"></i> Alfredo AI</span>
+        </h2>
+        <div id="gerenteChat" class="flex-1 overflow-y-auto hide-scroll space-y-3 pb-2 text-sm flex flex-col pt-4"></div>
+        <div class="mt-3 relative shrink-0">
+          <input id="gerenteInput" type="text" placeholder="Fale com Alfredo..." class="w-full bg-black/30 border border-white/10 rounded-xl py-3 pl-4 pr-12 text-sm text-white focus:outline-none focus:border-neon-purple/50 transition duration-300">
+          <button id="gerenteSend" class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-neon-purple rounded-lg text-white hover:bg-purple-500 transition active:scale-90"><i data-lucide="send" class="w-4 h-4"></i></button>
         </div>
       </div>
     </section>
 
-    <- Pagamentos de fatura: continuam sendo ignorados Transações c/ Ícones -->
-    <section class="glass-card rounded-[24px] p-5">
-      <h2 class="text-sm font-semibold text-gray-300 mb-4">Últimas Transações</h2>
-      <div class="space-y-4">
-        <- Pagamentos de fatura: continuam sendo ignorados Ítem (Despesa) -->
-        <div class="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition cursor-pointer">
-          <div class="flex items-center gap-4">
-            <div class="w-10 h-10 rounded-full bg-carmine/20 text-carmine flex items-center justify-center"><i data-lucide="utensils" class="w-5 h-5"></i></div>
-            <div><p class="font-semibold text-sm">Fogo de Chão</p><p class="text-xs text-gray-500">Alimentação</p></div>
-          </div>
-          <span class="font-bold text-carmine text-sm">-R$ 350,00</span>
-        </div>
-        <- Pagamentos de fatura: continuam sendo ignorados Ítem (Receita) -->
-        <div class="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition cursor-pointer">
-          <div class="flex items-center gap-4">
-            <div class="w-10 h-10 rounded-full bg-emerald/20 text-emerald flex items-center justify-center"><i data-lucide="briefcase" class="w-5 h-5"></i></div>
-            <div><p class="font-semibold text-sm">Freela Apple</p><p class="text-xs text-gray-500">Receita</p></div>
-          </div>
-          <span class="font-bold text-emerald text-sm">+R$ 5.000,00</span>
-        </div>
+    <- Pagamentos de fatura: continuam sendo ignorados Tela 4: AGENDAMENTOS -->
+    <section class="panel" id="agendamentos">
+      <div class="glass-card rounded-[24px] p-5">
+        <h2 class="text-sm font-semibold text-gray-300 mb-4 flex items-center justify-between">
+          <span class="flex"><i data-lucide="calendar-clock" class="w-4 h-4 mr-2 text-neon-purple"></i> Agendamentos</span>
+          <button id="agendamentoRefresh" class="text-neon-purple hover:text-white transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+        </h2>
+        <p id="agendamentoStatus" class="text-xs text-gray-500 mb-3"></p>
+        <div id="agendamentoList" class="space-y-3"></div>
       </div>
     </section>
 
-    <- Pagamentos de fatura: continuam sendo ignorados Chat Alfredo (IA Gerente) -->
-    <section class="glass-card rounded-[24px] p-5 flex flex-col h-64 relative border-neon-purple/30 shadow-glow">
-      <h2 class="text-sm font-semibold text-gray-300 mb-2 flex items-center"><i data-lucide="bot" class="w-4 h-4 mr-2 text-neon-purple"></i> Alfredo AI</h2>
-      <div class="flex-1 overflow-y-auto hide-scroll space-y-3 pb-2 text-sm flex flex-col justify-end">
-        <div class="self-start glass-card p-3 rounded-2xl rounded-bl-none chat-bubble chat-alfredo text-gray-200 max-w-[85%] relative border border-white/10">
-          Chefe, você gastou 30% a mais em restaurantes essa semana. Devo investir os R$ 5k do freela ou segurar pro fim de ano? 🧐
-        </div>
-        <div class="self-end bg-neon-purple text-white p-3 rounded-2xl rounded-br-none chat-bubble chat-user max-w-[85%] relative shadow-lg">
-          Investe R$ 4k em VOO, deixa R$ 1k livre.
-        </div>
-      </div>
-      <div class="mt-3 relative">
-        <input type="text" placeholder="Fale com Alfredo..." class="w-full bg-black/30 border border-white/10 rounded-xl py-3 pl-4 pr-12 text-sm text-white focus:outline-none focus:border-neon-purple/50 transition duration-300">
-        <button class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-neon-purple rounded-lg text-white hover:bg-purple-500 transition active:scale-90"><i data-lucide="send" class="w-4 h-4"></i></button>
-      </div>
-    </section>
   </main>
 
   <- Pagamentos de fatura: continuam sendo ignorados Bottom Tab Bar Premium -->
   <nav class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] glass-card rounded-full px-6 py-4 flex justify-between items-center z-50 shadow-2xl backdrop-blur-3xl border border-white/20">
-    <button class="nav-btn text-gray-500 transition-all duration-300 hover:text-white" onclick="switchTab(this)"><i data-lucide="home"></i></button>
-    <button class="nav-btn text-gray-500 transition-all duration-300 hover:text-white" onclick="switchTab(this)"><i data-lucide="pie-chart"></i></button>
-    <- Pagamentos de fatura: continuam sendo ignorados Botão Central Flutuante FAB -->
-    <button class="bg-gradient-to-r from-neon-purple to-blue-600 w-14 h-14 rounded-full flex items-center justify-center shadow-glow transform -translate-y-6 border-4 border-[#0f172a] hover:rotate-90 transition-all duration-300 active:scale-75 cursor-pointer">
-      <i data-lucide="plus" class="text-white w-6 h-6"></i>
+    <button class="nav-btn tab-active text-white" data-tab="historico" onclick="switchTab(this)"><i data-lucide="home"></i></button>
+    <button class="nav-btn text-gray-500 hover:text-white transition" data-tab="metas" onclick="switchTab(this)"><i data-lucide="target"></i></button>
+    <button class="bg-gradient-to-r from-neon-purple to-blue-600 w-14 h-14 rounded-full flex items-center justify-center shadow-glow transform -translate-y-6 border-4 border-[#0f172a] hover:rotate-90 transition active:scale-75" data-tab="gerente" onclick="switchTab(this)">
+      <i data-lucide="bot" class="text-white w-6 h-6"></i>
     </button>
-    <button class="nav-btn tab-active" onclick="switchTab(this)"><i data-lucide="message-square-dashed"></i></button>
-    <button class="nav-btn text-gray-500 transition-all duration-300 hover:text-white" onclick="switchTab(this)"><i data-lucide="user"></i></button>
+    <button class="nav-btn text-gray-500 hover:text-white transition" data-tab="agendamentos" onclick="switchTab(this)"><i data-lucide="calendar"></i></button>
   </nav>
 
   <script>
     lucide.createIcons();
+
+    // DOM Elements
+    const panels = document.querySelectorAll('.panel');
+    const mainStatus = document.getElementById('mainStatus');
+    const historyList = document.getElementById('historyList');
+    const historyStatus = document.getElementById('historyStatus');
+    const historyQuery = document.getElementById('historyQuery');
+    const historyTipo = document.getElementById('historyTipo');
+    const historyRefresh = document.getElementById('historyRefresh');
+    const historyLoadMore = document.getElementById('historyLoadMore');
+    
+    const gerenteChat = document.getElementById('gerenteChat');
+    const gerenteInput = document.getElementById('gerenteInput');
+    const gerenteSend = document.getElementById('gerenteSend');
+    
+    const agendamentoList = document.getElementById('agendamentoList');
+    const agendamentoStatus = document.getElementById('agendamentoStatus');
+    const agendamentoRefresh = document.getElementById('agendamentoRefresh');
+    
+    const metaList = document.getElementById('metaList');
+    const metaStatus = document.getElementById('metaStatus');
+    const metaRefresh = document.getElementById('metaRefresh');
+
+    let sessionId = null;
+    let historyOffset = 0;
+    const historyLimit = 20;
+
+    // Navigation
     const switchTab = (el) => {
-      document.querySelectorAll('.nav-btn').forEach(b => { b.classList.remove('tab-active'); b.classList.add('text-gray-500'); });
-      el.classList.add('tab-active'); el.classList.remove('text-gray-500');
+      if(!el.dataset.tab) return;
+      document.querySelectorAll('.nav-btn').forEach(b => { 
+        b.classList.remove('tab-active', 'text-white'); 
+        b.classList.add('text-gray-500'); 
+      });
+      if(el.classList.contains('nav-btn')) {
+        el.classList.add('tab-active', 'text-white'); 
+        el.classList.remove('text-gray-500');
+      }
+      panels.forEach(p => p.classList.remove('active'));
+      document.getElementById(el.dataset.tab).classList.add('active');
+    };
+
+    // Chat Helpers
+    function addChatMessage(text, role) {
+      const div = document.createElement('div');
+      const isUser = role === 'user';
+      div.className = `self-${isUser ? 'end' : 'start'} ${isUser ? 'bg-neon-purple text-white shadow-lg' : 'glass-card text-gray-200 border border-white/10'} p-3 rounded-2xl rounded-b${isUser? 'r' : 'l'}-none chat-bubble ${role} max-w-[85%] relative text-sm`;
+      div.innerHTML = text;
+      gerenteChat.appendChild(div);
+      gerenteChat.scrollTop = gerenteChat.scrollHeight;
     }
+
+    function formatMoney(value, tipo) {
+      const abs = Math.abs(value).toFixed(2).replace('.', ',');
+      const prefix = value < 0 || tipo === 'Despesa' ? '-' : '+';
+      return `${prefix} R$ ${abs}`;
+    }
+
+    // Logic
+    async function authTelegram() {
+      if (!window.Telegram || !Telegram.WebApp) {
+        mainStatus.textContent = 'Erro TG';
+        mainStatus.className = "text-carmine font-bold";
+        return;
+      }
+      Telegram.WebApp.ready();
+      Telegram.WebApp.expand();
+
+      const initData = Telegram.WebApp.initData;
+      if (!initData) {
+        mainStatus.textContent = 'Ambiente Local (Sem TG)';
+        mainStatus.className = "text-gray-400 font-bold";
+        // Local mode block can go here if needed.
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/telegram/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ init_data: initData })
+        });
+        const data = await response.json();
+        if (!data.ok) {
+          mainStatus.textContent = 'Falha Auth';
+          mainStatus.className = "text-carmine font-bold";
+          return;
+        }
+        sessionId = data.session_id;
+        mainStatus.textContent = 'Sincronizado';
+        await loadHistory(true);
+        await loadAgendamentos();
+        await loadMetas();
+        addChatMessage('Olá! Sou o Alfredo. Seu saldo sincronizou, como ajudo hoje?', 'bot');
+        setInterval(() => loadHistory(true), 25000); // Polling slower 25s
+      } catch(e) {
+        mainStatus.textContent = 'Erro Conexão';
+      }
+    }
+
+    async function loadHistory(reset = false) {
+      if (!sessionId) return;
+      if (reset) { historyOffset = 0; historyList.innerHTML = ''; }
+      const params = new URLSearchParams({ limit: historyLimit, offset: historyOffset, query: historyQuery.value || '', tipo: historyTipo.value || '' });
+      try {
+        const response = await fetch(`/api/miniapp/history?${params.toString()}`, { headers: { 'X-Session-Id': sessionId }});
+        const data = await response.json();
+        if (!data.ok) return;
+        historyStatus.textContent = '';
+        data.items.forEach(item => {
+          const isReceita = formatMoney(item.valor, item.tipo).startsWith('+');
+          const valueText = formatMoney(item.valor, item.tipo);
+          
+          const div = document.createElement('div');
+          div.className = 'flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition';
+          div.innerHTML = `
+            <div class="flex items-center gap-4">
+              <div class="w-10 h-10 rounded-full ${isReceita ? 'bg-emerald/20 text-emerald' : 'bg-carmine/20 text-carmine'} flex items-center justify-center shrink-0">
+                <i data-lucide="${isReceita ? 'briefcase' : 'credit-card'}" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <p class="font-semibold text-sm max-w-[150px] truncate text-gray-100">${item.descricao || 'Lançamento'}</p>
+                <p class="text-xs text-gray-500">${new Date(item.data).toLocaleDateString('pt-BR')} • ${item.forma_pagamento || '-'}</p>
+              </div>
+            </div>
+            <span class="font-bold ${isReceita ? 'text-emerald' : 'text-carmine'} text-sm shrink-0 whitespace-nowrap">${valueText}</span>
+          `;
+          historyList.insertBefore(div, reset ? historyList.firstChild : null);
+        });
+        if(reset) {} else { historyOffset += data.items.length; }
+        lucide.createIcons();
+      } catch(e){}
+    }
+
+    async function loadMetas() {
+      if (!sessionId) return;
+      metaStatus.textContent = 'Carregando...';
+      try {
+        const response = await fetch('/api/miniapp/metas', { headers: { 'X-Session-Id': sessionId }});
+        const data = await response.json();
+        if (!data.ok || !data.items.length) { metaStatus.textContent = 'Nenhuma meta.'; return; }
+        metaStatus.textContent = '';
+        metaList.innerHTML = '';
+        data.items.forEach(item => {
+          const progress = item.valor_meta ? Math.round((item.valor_atual / item.valor_meta) * 100) : 0;
+          const progNorm = Math.min(progress, 100);
+          const div = document.createElement('div');
+          div.className = 'flex-1 bg-black/20 rounded-2xl p-4 border border-white/5 relative overflow-hidden group mb-2';
+          div.innerHTML = `
+            <div class="absolute inset-0 bg-gradient-to-r from-neon-purple/30 to-transparent opacity-50 transition-all duration-500" style="width: ${progNorm}%"></div>
+            <div class="relative z-10 flex justify-between items-end">
+              <div>
+                <p class="text-xs text-gray-400">${item.descricao}</p>
+                <p class="text-lg font-bold mt-1">${progNorm}% <span class="text-xs text-gray-500 font-normal ml-1">de R$ ${item.valor_meta.toFixed(2)}</span></p>
+              </div>
+              <span class="text-sm font-semibold text-emerald">R$ ${item.valor_atual.toFixed(2)}</span>
+            </div>
+          `;
+          metaList.appendChild(div);
+        });
+      } catch(e){}
+    }
+
+    async function loadAgendamentos() {
+      if (!sessionId) return;
+      agendamentoStatus.textContent = 'Carregando...';
+      try {
+        const response = await fetch('/api/miniapp/agendamentos', { headers: { 'X-Session-Id': sessionId }});
+        const data = await response.json();
+        if (!data.ok || !data.items.length) { agendamentoStatus.textContent = 'Nenhum agendamento.'; return; }
+        agendamentoStatus.textContent = '';
+        agendamentoList.innerHTML = '';
+        data.items.forEach(item => {
+          const isReceita = formatMoney(item.valor, item.tipo).startsWith('+');
+          const valueText = formatMoney(item.valor, item.tipo);
+          const div = document.createElement('div');
+          div.className = 'flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/5 mb-2';
+          div.innerHTML = `
+            <div>
+              <p class="font-semibold text-sm text-gray-100">${item.descricao}</p>
+              <p class="text-xs text-gray-400 mt-0.5"><i data-lucide="clock" class="inline w-3 h-3 mr-1"></i>${item.frequencia} • ${new Date(item.proxima_data_execucao).toLocaleDateString('pt-BR')}</p>
+            </div>
+            <span class="font-bold ${isReceita ? 'text-emerald' : 'text-carmine'} text-sm">${valueText}</span>
+          `;
+          agendamentoList.appendChild(div);
+        });
+        lucide.createIcons();
+      } catch(e){}
+    }
+
+    // Chat Events
+    async function sendGerenteMessage() {
+      const message = gerenteInput.value.trim();
+      if (!message || !sessionId) return;
+      addChatMessage(message, 'user');
+      gerenteInput.value = '';
+
+      gerenteSend.disabled = true;
+      gerenteSend.classList.add('opacity-50');
+      try {
+        const response = await fetch('/api/miniapp/gerente', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
+          body: JSON.stringify({ prompt: message })
+        });
+        const data = await response.json();
+        if (!data.ok) addChatMessage('Falha temporária, Alfredo descansando.', 'bot');
+        else addChatMessage(data.answer, 'bot');
+      } catch(e){
+        addChatMessage('Erro de rede!', 'bot');
+      }
+      gerenteSend.disabled = false;
+      gerenteSend.classList.remove('opacity-50');
+    }
+
+    gerenteSend.addEventListener('click', sendGerenteMessage);
+    gerenteInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendGerenteMessage(); });
+
+    // Refresh binds
+    historyRefresh.addEventListener('click', () => loadHistory(true));
+    historyLoadMore.addEventListener('click', () => loadHistory(false));
+    agendamentoRefresh.addEventListener('click', loadAgendamentos);
+    metaRefresh.addEventListener('click', loadMetas);
+
+    // Boot
+    authTelegram();
   </script>
 </body>
 </html>
