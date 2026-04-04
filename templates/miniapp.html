@@ -41,7 +41,7 @@
 </head>
 <body class="text-white h-screen w-screen overflow-hidden flex flex-col font-sans antialiased selection:bg-neon-purple selection:text-white">
 
-  <- Pagamentos de fatura: continuam sendo ignorados Header -->
+  <!-- Header -->
   <header class="p-6 pb-2 pt-10 flex justify-between items-center relative z-10 glass-card mx-4 mt-4 rounded-3xl shadow-glow">
     <div>
       <h1 class="text-xs tracking-widest uppercase text-gray-400 font-semibold mb-1">Status Webapp</h1>
@@ -52,10 +52,10 @@
     </div>
   </header>
 
-  <- Pagamentos de fatura: continuam sendo ignorados Viewport -->
+  <!-- Viewport -->
   <main id="app-content" class="flex-1 overflow-y-auto hide-scroll p-4 pb-28 relative z-0">
     
-    <- Pagamentos de fatura: continuam sendo ignorados Tela 1: HISTÓRICO (Home) -->
+    <!-- Tela 1: HISTORICO (Home) -->
     <section class="panel active" id="historico">
       <div class="glass-card rounded-[24px] p-5">
         <h2 class="text-sm font-semibold text-gray-300 mb-4 flex items-center justify-between">
@@ -63,7 +63,7 @@
           <button id="historyRefresh" class="text-neon-purple hover:text-white transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
         </h2>
         
-        <- Pagamentos de fatura: continuam sendo ignorados Filtros invisiveis para manter compativel c/ api original -->
+        <!-- Filtros invisiveis para manter compativel com API original -->
         <input id="historyQuery" type="hidden" value="" />
         <input id="historyTipo" type="hidden" value="" />
 
@@ -73,7 +73,7 @@
       </div>
     </section>
 
-    <- Pagamentos de fatura: continuam sendo ignorados Tela 2: METAS -->
+    <!-- Tela 2: METAS -->
     <section class="panel" id="metas">
       <div class="glass-card rounded-[24px] p-5">
         <h2 class="text-sm font-semibold text-gray-300 mb-4 flex items-center justify-between">
@@ -85,7 +85,7 @@
       </div>
     </section>
 
-    <- Pagamentos de fatura: continuam sendo ignorados Tela 3: GERENTE (Chat AI) -->
+    <!-- Tela 3: GERENTE (Chat AI) -->
     <section class="panel h-full" id="gerente">
       <div class="glass-card rounded-[24px] p-5 flex flex-col h-[65vh] relative border-neon-purple/30 shadow-glow">
         <h2 class="text-sm font-semibold text-gray-300 mb-2 flex items-center justify-between">
@@ -99,7 +99,7 @@
       </div>
     </section>
 
-    <- Pagamentos de fatura: continuam sendo ignorados Tela 4: AGENDAMENTOS -->
+    <!-- Tela 4: AGENDAMENTOS -->
     <section class="panel" id="agendamentos">
       <div class="glass-card rounded-[24px] p-5">
         <h2 class="text-sm font-semibold text-gray-300 mb-4 flex items-center justify-between">
@@ -113,7 +113,7 @@
 
   </main>
 
-  <- Pagamentos de fatura: continuam sendo ignorados Bottom Tab Bar Premium -->
+  <!-- Bottom Tab Bar Premium -->
   <nav class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] glass-card rounded-full px-6 py-4 flex justify-between items-center z-50 shadow-2xl backdrop-blur-3xl border border-white/20">
     <button class="nav-btn tab-active text-white" data-tab="historico" onclick="switchTab(this)"><i data-lucide="home"></i></button>
     <button class="nav-btn text-gray-500 hover:text-white transition" data-tab="metas" onclick="switchTab(this)"><i data-lucide="target"></i></button>
