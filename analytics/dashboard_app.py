@@ -17,7 +17,7 @@ from urllib.parse import parse_qsl
 from functools import wraps
 from sqlalchemy import and_
 from flask import Flask, render_template, jsonify, request, g
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -181,7 +181,7 @@ def _require_session() -> dict | None:
     return _get_session(session_id)
 
 
-def _parse_date(value: str) -> datetime.date | None:
+def _parse_date(value: str) -> date | None:
     if not value:
         return None
     try:
