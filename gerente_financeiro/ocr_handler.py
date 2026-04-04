@@ -11,6 +11,10 @@ from pdf2image import convert_from_bytes
 from PIL import Image
 import google.generativeai as genai
 from google.cloud import vision
+try:
+    from google.api_core.exceptions import ResourceExhausted
+except Exception:  # pragma: no cover - fallback em ambientes sem api_core
+    ResourceExhausted = None
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ContextTypes, ConversationHandler
 from sqlalchemy.orm import Session, joinedload 
@@ -52,6 +56,13 @@ def setup_ocr_logging():
 # Logger principal e detalhado
 logger = logging.getLogger(__name__)
 ocr_detailed_logger, current_ocr_log = setup_ocr_logging()
+
+
+def _is_quota_error(err: Exception) -> bool:
+    if ResourceExhausted and isinstance(err, ResourceExhausted):
+        return True
+    msg = str(err).lower()
+    return "quota" in msg or "resource_exhausted" in msg or "429" in msg
 
 
 def _get_webapp_url(tab: str | None = None) -> str:
@@ -348,7 +359,19 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
     logger.info(f"🔧 [LANCAMENTO-DEBUG] Google Vision Creds: {'✅' if os.getenv('GOOGLE_APPLICATION_CREDENTIALS') else '❌'}")
     logger.info(f"🔧 [LANCAMENTO-DEBUG] Gemini API: {'✅' if config.GEMINI_API_KEY else '❌'}")
     
-    message = await update.message.reply_text("📸 Iniciando processamento OCR...")
+    if update.message and update.message.document and update.message.document.mime_type == "application/pdf":
+        await update.message.reply_text(
+            "📄 PDF detectado! Vou tratar como <b>fatura</b> e importar os lancamentos em lote.",
+            parse_mode="HTML",
+        )
+        from .fatura_handler import fatura_receive_file
+
+        return await fatura_receive_file(update, context)
+
+    message = await update.message.reply_text(
+        "📸 Imagem recebida! Vou tratar como <b>lancamento</b> (PDF vira fatura).",
+        parse_mode="HTML",
+    )
     
     try:
         # ===== FASE 1: CAPTURA DO ARQUIVO =====
@@ -462,6 +485,7 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
         
         texto_ocr = ""
         ocr_method_used = "Nenhum"
+        gemini_quota_error = False
         
         # 🥇 MÉTODO 1: Google Vision (Primário)
         logger.info("🔍 Tentativa 1: Google Vision API")
@@ -589,6 +613,8 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
                     logger.warning(f"⚠️ Gemini Vision retornou: '{texto_gemini[:50]}...'")
                     
             except Exception as gemini_error:
+                if _is_quota_error(gemini_error):
+                    gemini_quota_error = True
                 logger.error(f"❌ Gemini Vision falhou: {gemini_error}")
         
         # ===== VERIFICAÇÃO FINAL DO TEXTO =====
@@ -598,10 +624,12 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
             logger.error(f"❌ OCR FALHOU: Texto insuficiente (tamanho: {len(texto_ocr)})")
             logger.error(f"Texto extraído: '{texto_ocr[:100] if texto_ocr else 'VAZIO'}'")
             
+            quota_note = "\n🧠 <b>IA indisponivel:</b> limite diario atingido." if gemini_quota_error else ""
             await message.edit_text(
                 "❌ <b>Falha na Leitura do OCR</b>\n\n"
                 f"🔧 <b>Método testado:</b> {ocr_method_used}\n"
-                f"� <b>Caracteres extraídos:</b> {len(texto_ocr)}\n\n"
+                f"� <b>Caracteres extraídos:</b> {len(texto_ocr)}\n"
+                f"{quota_note}\n\n"
                 "💡 <b>Soluções:</b>\n"
                 "📸 Foto mais clara e bem iluminada\n"
                 "� Zoom na parte importante da nota\n"
@@ -636,8 +664,20 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
         model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
         prompt = PROMPT_IA_OCR.format(texto_ocr=texto_ocr, categorias_disponiveis=categorias_contexto)
         
-        ia_response = await model.generate_content_async(prompt)
-        response_text = ia_response.text
+        try:
+            ia_response = await model.generate_content_async(prompt)
+            response_text = ia_response.text
+        except Exception as ia_error:
+            logger.error(f"❌ IA (Gemini) falhou ao analisar OCR: {ia_error}")
+            if _is_quota_error(ia_error):
+                await message.edit_text(
+                    "⚠️ Limite diario da IA atingido para analise do OCR."
+                    " Tente novamente em alguns minutos ou lance manualmente.",
+                    parse_mode="HTML",
+                )
+            else:
+                await message.edit_text("❌ IA não conseguiu processar os dados. Tente novamente.")
+            return ConversationHandler.END
         
         # Extrair JSON
         json_match = re.search(r'\{.*\}', response_text, re.DOTALL)

@@ -88,6 +88,7 @@ async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             "O miniapp é seu painel completo: histórico, edição, metas e gerente IA.\n\n"
             "No chat, tudo é rápido e direto:\n"
             "• Envie <b>áudio</b> ou <b>foto</b> e eu lanço automaticamente.\n"
+            "• Se enviar <b>PDF</b>, trato como <b>fatura</b> e importo em lote.\n"
             "• Escreva uma frase como: <i>\"Gastei 34,90 no iFood ontem\"</i>.\n\n"
             "✅ Vou categorizar, subcategorizar e te mostrar um resumo para confirmar.\n\n"
             "Para configurar contas e cartões, use /configurar."

@@ -5,6 +5,10 @@ import re
 from datetime import datetime
 
 import google.generativeai as genai
+try:
+    from google.api_core.exceptions import ResourceExhausted
+except Exception:  # pragma: no cover - fallback em ambientes sem api_core
+    ResourceExhausted = None
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
@@ -94,6 +98,13 @@ def _quick_payload_valido(dados: dict) -> bool:
     if valor <= 0 and not descricao:
         return False
     return True
+
+
+def _is_quota_error(err: Exception) -> bool:
+    if ResourceExhausted and isinstance(err, ResourceExhausted):
+        return True
+    msg = str(err).lower()
+    return "quota" in msg or "resource_exhausted" in msg or "429" in msg
 
 
 def _build_categoria_contexto(db: Session) -> str:
@@ -248,7 +259,12 @@ Frase do usuario:
         response = model.generate_content(prompt)
     except Exception as e:
         logger.error("Falha ao processar frase com Gemini: %s", e, exc_info=True)
-        await status.edit_text("❌ Nao consegui interpretar sua frase. Tente novamente.")
+        if _is_quota_error(e):
+            await status.edit_text(
+                "⚠️ Limite diario da IA atingido. Tente novamente em alguns minutos ou use /lancamento."
+            )
+        else:
+            await status.edit_text("❌ Nao consegui interpretar sua frase. Tente novamente.")
         return
 
     dados_ia = _parse_json_response(response.text if response else "")
