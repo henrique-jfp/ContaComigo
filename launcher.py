@@ -248,10 +248,10 @@ def main() -> None:
     elif settings.mode == ExecutionMode.DASHBOARD:
         start_dashboard()
     elif settings.mode == ExecutionMode.LOCAL_DEV:
-        logger.info("🔄 Modo LOCAL: Iniciando bot em uma thread e dashboard no processo principal.")
-        bot_thread = Thread(target=start_telegram_bot, kwargs={"enable_health_server": False}, daemon=True)
-        bot_thread.start()
-        start_dashboard()
+        logger.info("🔄 Modo LOCAL: Iniciando dashboard em thread e bot no processo principal.")
+        dashboard_thread = Thread(target=start_dashboard, daemon=True)
+        dashboard_thread.start()
+        start_telegram_bot(enable_health_server=False)
     else:
         logger.error(f"❌ Modo de execução desconhecido: {settings.mode}. Encerrando.")
         sys.exit(1)
