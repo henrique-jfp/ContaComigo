@@ -86,7 +86,122 @@
       </div>
     </section>
 
-    <!-- Tela 3: GERENTE (Chat AI) -->
+    <!-- Tela 3: EDITAR LANCAMENTOS -->
+    <section class="panel" id="editar">
+      <div class="glass-card rounded-[24px] p-5 space-y-4">
+        <h2 class="text-sm font-semibold text-slate-700 flex items-center justify-between">
+          <span class="flex items-center"><i data-lucide="pencil-line" class="w-4 h-4 mr-2 text-[#7b1e2d]"></i> Edição visual de lançamentos</span>
+          <button id="editRefresh" class="text-[#7b1e2d] hover:text-[#b85d6e] transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+        </h2>
+        <p class="text-xs text-slate-500">Toque em um item do histórico para abrir a edição no cartão abaixo.</p>
+
+        <div id="editSelectedBadge" class="hidden rounded-full bg-[#7b1e2d]/10 text-[#7b1e2d] px-3 py-1 text-xs font-semibold w-fit">Nenhum lançamento selecionado</div>
+
+        <div class="grid gap-3">
+          <label class="text-xs font-semibold text-slate-600">Descrição</label>
+          <input id="editDescricao" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900" placeholder="Descrição do lançamento">
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-semibold text-slate-600">Valor</label>
+              <input id="editValor" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900" placeholder="0,00">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-slate-600">Tipo</label>
+              <select id="editTipo" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900">
+                <option value="Saída">Saída</option>
+                <option value="Entrada">Entrada</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-semibold text-slate-600">Data</label>
+              <input id="editData" type="date" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-slate-600">Conta</label>
+              <select id="editConta" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900"></select>
+            </div>
+          </div>
+
+          <label class="text-xs font-semibold text-slate-600">Forma de pagamento</label>
+          <input id="editForma" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900" placeholder="Pix, Crédito, Débito, Dinheiro...">
+
+          <div class="flex gap-3 pt-2">
+            <button id="editSave" class="flex-1 rounded-xl bg-[#7b1e2d] py-3 text-sm font-semibold text-white active:scale-95 transition">Salvar alteração</button>
+            <button id="editCancel" class="flex-1 rounded-xl border border-[#7b1e2d]/15 bg-white py-3 text-sm font-semibold text-slate-700 active:scale-95 transition">Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tela 4: CONFIGURAÇÕES / ONBOARDING -->
+    <section class="panel" id="configuracoes">
+      <div class="glass-card rounded-[24px] p-5 space-y-4">
+        <h2 class="text-sm font-semibold text-slate-700 flex items-center justify-between">
+          <span class="flex items-center"><i data-lucide="sliders-horizontal" class="w-4 h-4 mr-2 text-[#7b1e2d]"></i> Configurações e onboarding</span>
+          <button id="configRefresh" class="text-[#7b1e2d] hover:text-[#b85d6e] transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+        </h2>
+
+        <div class="grid gap-3">
+          <div>
+            <label class="text-xs font-semibold text-slate-600">Perfil de investidor</label>
+            <select id="perfilInvestidor" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900">
+              <option value="">Selecione</option>
+              <option value="Conservador">Conservador</option>
+              <option value="Moderado">Moderado</option>
+              <option value="Arrojado">Arrojado</option>
+              <option value="Iniciante">Iniciante</option>
+            </select>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-semibold text-slate-600">Horário de lembretes</label>
+              <input id="horarioNotificacao" type="time" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900">
+            </div>
+            <div class="flex items-end gap-2">
+              <input id="alertaGastosAtivo" type="checkbox" class="h-5 w-5 accent-[#7b1e2d]">
+              <label for="alertaGastosAtivo" class="text-xs font-semibold text-slate-600">Alertas de gastos ativos</label>
+            </div>
+          </div>
+
+          <div class="flex gap-3 pt-2">
+            <button id="configSave" class="flex-1 rounded-xl bg-[#7b1e2d] py-3 text-sm font-semibold text-white active:scale-95 transition">Salvar onboarding</button>
+            <button id="configFinish" class="flex-1 rounded-xl border border-[#7b1e2d]/15 bg-white py-3 text-sm font-semibold text-slate-700 active:scale-95 transition">Finalizar cadastro</button>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-sm font-semibold text-slate-700 mb-3">Contas e cartões</h3>
+          <div id="contasList" class="space-y-3"></div>
+        </div>
+
+        <div class="border-t border-[#7b1e2d]/10 pt-4 space-y-3">
+          <h3 class="text-sm font-semibold text-slate-700">Adicionar conta/cartão</h3>
+          <div class="grid gap-3">
+            <input id="novaContaNome" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900" placeholder="Nome da conta ou cartão">
+            <select id="novaContaTipo" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900">
+              <option value="Conta Corrente">Conta Corrente</option>
+              <option value="Cartão de Crédito">Cartão de Crédito</option>
+              <option value="Carteira Digital">Carteira Digital</option>
+              <option value="Outro">Outro</option>
+            </select>
+            <div class="grid grid-cols-3 gap-3">
+              <input id="novaContaFechamento" type="number" min="1" max="31" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900" placeholder="Fech.">
+              <input id="novaContaVencimento" type="number" min="1" max="31" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900" placeholder="Venc.">
+              <input id="novaContaLimite" type="text" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900" placeholder="Limite">
+            </div>
+            <input id="novaContaEmail" type="email" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900" placeholder="E-mail de notificação (opcional)">
+            <button id="novaContaSalvar" class="rounded-xl bg-[#7b1e2d] py-3 text-sm font-semibold text-white active:scale-95 transition">Adicionar conta/cartão</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tela 5: GERENTE (Chat AI) -->
     <section class="panel h-full" id="gerente">
       <div class="glass-card rounded-[24px] p-5 flex flex-col h-[65vh] relative border-[#7b1e2d]/20 shadow-glow">
         <h2 class="text-sm font-semibold text-slate-700 mb-2 flex items-center justify-between">
@@ -100,7 +215,7 @@
       </div>
     </section>
 
-    <!-- Tela 4: AGENDAMENTOS -->
+    <!-- Tela 6: AGENDAMENTOS -->
     <section class="panel" id="agendamentos">
       <div class="glass-card rounded-[24px] p-5">
         <h2 class="text-sm font-semibold text-slate-700 mb-4 flex items-center justify-between">
@@ -115,13 +230,13 @@
   </main>
 
   <!-- Bottom Tab Bar Premium -->
-  <nav class="fixed bottom-5 left-1/2 -translate-x-1/2 w-[92%] glass-card rounded-[28px] px-4 py-3 flex justify-between items-center z-50 shadow-2xl backdrop-blur-3xl border border-[#7b1e2d]/15">
-    <button class="nav-btn tab-active text-[#7b1e2d] flex flex-col items-center gap-1 text-[11px] font-semibold" data-tab="historico" onclick="switchTab(this)"><i data-lucide="home" class="w-5 h-5"></i><span>Histórico</span></button>
-    <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[11px] font-semibold" data-tab="metas" onclick="switchTab(this)"><i data-lucide="target" class="w-5 h-5"></i><span>Metas</span></button>
-    <button class="bg-gradient-to-r from-[#7b1e2d] to-[#b85d6e] w-14 h-14 rounded-full flex items-center justify-center shadow-glow transform -translate-y-6 border-4 border-white hover:scale-105 transition active:scale-90" data-tab="gerente" onclick="switchTab(this)">
-      <i data-lucide="bot" class="text-white w-6 h-6"></i>
-    </button>
-    <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[11px] font-semibold" data-tab="agendamentos" onclick="switchTab(this)"><i data-lucide="calendar" class="w-5 h-5"></i><span>Agenda</span></button>
+  <nav class="fixed bottom-5 left-1/2 -translate-x-1/2 w-[94%] glass-card rounded-[28px] px-3 py-2 grid grid-cols-6 gap-1 z-50 shadow-2xl backdrop-blur-3xl border border-[#7b1e2d]/15">
+    <button class="nav-btn tab-active text-[#7b1e2d] flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="historico" onclick="switchTab(this)"><i data-lucide="home" class="w-5 h-5"></i><span>Histórico</span></button>
+    <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="metas" onclick="switchTab(this)"><i data-lucide="target" class="w-5 h-5"></i><span>Metas</span></button>
+    <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="editar" onclick="switchTab(this)"><i data-lucide="pencil-line" class="w-5 h-5"></i><span>Editar</span></button>
+    <button class="nav-btn text-white bg-gradient-to-r from-[#7b1e2d] to-[#b85d6e] rounded-2xl flex flex-col items-center justify-center gap-1 text-[10px] font-semibold py-2 shadow-lg" data-tab="gerente" onclick="switchTab(this)"><i data-lucide="bot" class="w-5 h-5"></i><span>Alfredo</span></button>
+    <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="configuracoes" onclick="switchTab(this)"><i data-lucide="sliders-horizontal" class="w-5 h-5"></i><span>Config</span></button>
+    <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="agendamentos" onclick="switchTab(this)"><i data-lucide="calendar" class="w-5 h-5"></i><span>Agenda</span></button>
   </nav>
 
   <script>
@@ -149,9 +264,38 @@
     const metaStatus = document.getElementById('metaStatus');
     const metaRefresh = document.getElementById('metaRefresh');
 
+    const editRefresh = document.getElementById('editRefresh');
+    const editSelectedBadge = document.getElementById('editSelectedBadge');
+    const editDescricao = document.getElementById('editDescricao');
+    const editValor = document.getElementById('editValor');
+    const editTipo = document.getElementById('editTipo');
+    const editData = document.getElementById('editData');
+    const editConta = document.getElementById('editConta');
+    const editForma = document.getElementById('editForma');
+    const editSave = document.getElementById('editSave');
+    const editCancel = document.getElementById('editCancel');
+
+    const configRefresh = document.getElementById('configRefresh');
+    const perfilInvestidor = document.getElementById('perfilInvestidor');
+    const horarioNotificacao = document.getElementById('horarioNotificacao');
+    const alertaGastosAtivo = document.getElementById('alertaGastosAtivo');
+    const configSave = document.getElementById('configSave');
+    const configFinish = document.getElementById('configFinish');
+    const contasList = document.getElementById('contasList');
+    const novaContaNome = document.getElementById('novaContaNome');
+    const novaContaTipo = document.getElementById('novaContaTipo');
+    const novaContaFechamento = document.getElementById('novaContaFechamento');
+    const novaContaVencimento = document.getElementById('novaContaVencimento');
+    const novaContaLimite = document.getElementById('novaContaLimite');
+    const novaContaEmail = document.getElementById('novaContaEmail');
+    const novaContaSalvar = document.getElementById('novaContaSalvar');
+
     let sessionId = null;
     let historyOffset = 0;
     const historyLimit = 20;
+    let historyCache = [];
+    let selectedLancamento = null;
+    let contasCache = [];
 
     // Navigation
     const switchTab = (el) => {
@@ -182,6 +326,179 @@
       const abs = Math.abs(value).toFixed(2).replace('.', ',');
       const prefix = value < 0 || tipo === 'Despesa' ? '-' : '+';
       return `${prefix} R$ ${abs}`;
+    }
+
+    function formatDateForInput(value) {
+      if (!value) return '';
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return '';
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    function parseMoneyInput(value) {
+      const raw = String(value || '').replace(/\./g, '').replace(',', '.').trim();
+      const parsed = parseFloat(raw);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    }
+
+    function setSelectedLancamento(item) {
+      selectedLancamento = item;
+      if (!item) {
+        editSelectedBadge.textContent = 'Nenhum lançamento selecionado';
+        editSelectedBadge.classList.add('hidden');
+        editDescricao.value = '';
+        editValor.value = '';
+        editTipo.value = 'Saída';
+        editData.value = '';
+        editForma.value = '';
+        editConta.value = '';
+        return;
+      }
+      editSelectedBadge.textContent = `Editando: ${item.descricao || 'Lançamento'}`;
+      editSelectedBadge.classList.remove('hidden');
+      editDescricao.value = item.descricao || '';
+      editValor.value = item.valor != null ? String(item.valor).replace('.', ',') : '';
+      editTipo.value = item.tipo || 'Saída';
+      editData.value = formatDateForInput(item.data);
+      editForma.value = item.forma_pagamento || '';
+      editConta.value = item.id_conta ? String(item.id_conta) : '';
+    }
+
+    function renderContaOptions() {
+      const options = ['<option value="">Selecione uma conta</option>'];
+      for (const conta of contasCache) {
+        options.push(`<option value="${conta.id}">${conta.nome} • ${conta.tipo}</option>`);
+      }
+      editConta.innerHTML = options.join('');
+    }
+
+    function renderContasList() {
+      if (!contasCache.length) {
+        contasList.innerHTML = '<div class="text-sm text-slate-500">Nenhuma conta ou cartão cadastrado.</div>';
+        return;
+      }
+      contasList.innerHTML = contasCache.map((conta) => `
+        <div class="rounded-2xl border border-[#7b1e2d]/10 bg-white p-4">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="font-semibold text-slate-900">${conta.nome}</p>
+              <p class="text-xs text-slate-500">${conta.tipo}</p>
+              <p class="text-xs text-slate-500 mt-1">Fechamento: ${conta.dia_fechamento ?? '-'} • Vencimento: ${conta.dia_vencimento ?? '-'}</p>
+            </div>
+            <span class="text-xs font-semibold text-[#7b1e2d]">${conta.limite_cartao != null ? `R$ ${Number(conta.limite_cartao).toFixed(2)}` : 'Sem limite'}</span>
+          </div>
+        </div>
+      `).join('');
+      renderContaOptions();
+    }
+
+    async function loadConfiguracoes() {
+      if (!sessionId) return;
+      try {
+        const response = await fetch('/api/miniapp/configuracoes', { headers: { 'X-Session-Id': sessionId } });
+        const data = await response.json();
+        if (!data.ok) return;
+        perfilInvestidor.value = data.usuario?.perfil_investidor || '';
+        horarioNotificacao.value = data.usuario?.horario_notificacao || '09:00';
+        alertaGastosAtivo.checked = Boolean(data.usuario?.alerta_gastos_ativo);
+        contasCache = data.contas || [];
+        renderContasList();
+      } catch (e) {}
+    }
+
+    async function saveConfiguracoes() {
+      if (!sessionId) return;
+      try {
+        const response = await fetch('/api/miniapp/configuracoes', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
+          body: JSON.stringify({
+            perfil_investidor: perfilInvestidor.value,
+            horario_notificacao: horarioNotificacao.value,
+            alerta_gastos_ativo: alertaGastosAtivo.checked,
+          }),
+        });
+        const data = await response.json();
+        if (data.ok) {
+          mainStatus.textContent = 'Configurações salvas';
+          mainStatus.className = 'font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#7b1e2d] to-[#a44a5a]';
+          await loadConfiguracoes();
+        }
+      } catch (e) {}
+    }
+
+    async function createConta() {
+      if (!sessionId) return;
+      const payload = {
+        nome: novaContaNome.value.trim(),
+        tipo: novaContaTipo.value,
+        dia_fechamento: novaContaFechamento.value,
+        dia_vencimento: novaContaVencimento.value,
+        limite_cartao: novaContaLimite.value,
+        email_notificacao: novaContaEmail.value.trim(),
+      };
+      try {
+        const response = await fetch('/api/miniapp/contas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (data.ok) {
+          novaContaNome.value = '';
+          novaContaFechamento.value = '';
+          novaContaVencimento.value = '';
+          novaContaLimite.value = '';
+          novaContaEmail.value = '';
+          await loadConfiguracoes();
+        }
+      } catch (e) {}
+    }
+
+    async function saveLancamentoEdit() {
+      if (!sessionId || !selectedLancamento) return;
+      const payload = {
+        descricao: editDescricao.value.trim(),
+        valor: parseMoneyInput(editValor.value),
+        tipo: editTipo.value,
+        data_transacao: editData.value,
+        forma_pagamento: editForma.value.trim(),
+        id_conta: editConta.value ? Number(editConta.value) : null,
+      };
+      try {
+        const response = await fetch(`/api/miniapp/lancamentos/${selectedLancamento.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (data.ok) {
+          await loadHistory(true);
+          setSelectedLancamento(null);
+          mainStatus.textContent = 'Lançamento atualizado';
+        }
+      } catch (e) {}
+    }
+
+    async function deleteLancamentoById(id) {
+      if (!sessionId) return;
+      if (!confirm('Excluir este lançamento?')) return;
+      try {
+        const response = await fetch(`/api/miniapp/lancamentos/${id}`, {
+          method: 'DELETE',
+          headers: { 'X-Session-Id': sessionId },
+        });
+        const data = await response.json();
+        if (data.ok) {
+          await loadHistory(true);
+          if (selectedLancamento && selectedLancamento.id === id) {
+            setSelectedLancamento(null);
+          }
+        }
+      } catch (e) {}
     }
 
     // Logic
@@ -217,6 +534,7 @@
         sessionId = data.session_id;
         mainStatus.textContent = 'Sincronizado';
         await loadHistory(true);
+        await loadConfiguracoes();
         await loadAgendamentos();
         await loadMetas();
         addChatMessage('Olá! Sou o Alfredo. Seu saldo sincronizou, como ajudo hoje?', 'bot');
@@ -235,12 +553,14 @@
         const data = await response.json();
         if (!data.ok) return;
         historyStatus.textContent = '';
+        if (reset) historyCache = [];
         data.items.forEach(item => {
+          historyCache.push(item);
           const isReceita = formatMoney(item.valor, item.tipo).startsWith('+');
           const valueText = formatMoney(item.valor, item.tipo);
           
           const div = document.createElement('div');
-          div.className = 'flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition';
+          div.className = 'flex items-center justify-between gap-3 p-3 rounded-xl hover:bg-[#7b1e2d]/5 transition border border-transparent';
           div.innerHTML = `
             <div class="flex items-center gap-4">
               <div class="w-10 h-10 rounded-full ${isReceita ? 'bg-emerald/20 text-emerald' : 'bg-carmine/20 text-carmine'} flex items-center justify-center shrink-0">
@@ -251,7 +571,11 @@
                 <p class="text-xs text-gray-500">${new Date(item.data).toLocaleDateString('pt-BR')} • ${item.forma_pagamento || '-'}</p>
               </div>
             </div>
-            <span class="font-bold ${isReceita ? 'text-emerald' : 'text-carmine'} text-sm shrink-0 whitespace-nowrap">${valueText}</span>
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="font-bold ${isReceita ? 'text-emerald' : 'text-carmine'} text-sm whitespace-nowrap">${valueText}</span>
+              <button class="history-edit-btn rounded-lg border border-[#7b1e2d]/10 px-3 py-1 text-xs font-semibold text-slate-600" data-action="edit" data-id="${item.id}">Editar</button>
+              <button class="history-delete-btn rounded-lg border border-[#7b1e2d]/10 px-3 py-1 text-xs font-semibold text-carmine" data-action="delete" data-id="${item.id}">Excluir</button>
+            </div>
           `;
           historyList.insertBefore(div, reset ? historyList.firstChild : null);
         });
@@ -352,8 +676,29 @@
     historyLoadMore.addEventListener('click', () => loadHistory(false));
     agendamentoRefresh.addEventListener('click', loadAgendamentos);
     metaRefresh.addEventListener('click', loadMetas);
+    editRefresh.addEventListener('click', () => loadHistory(true));
+    configRefresh.addEventListener('click', loadConfiguracoes);
+    editSave.addEventListener('click', saveLancamentoEdit);
+    editCancel.addEventListener('click', () => setSelectedLancamento(null));
+    configSave.addEventListener('click', saveConfiguracoes);
+    configFinish.addEventListener('click', saveConfiguracoes);
+    novaContaSalvar.addEventListener('click', createConta);
 
     // Boot
+    historyList.addEventListener('click', (event) => {
+      const target = event.target;
+      const id = target?.dataset?.id;
+      if (!id || !target.dataset.action) return;
+      const item = historyCache.find((lanc) => String(lanc.id) === String(id));
+      if (target.dataset.action === 'edit' && item) {
+        setSelectedLancamento(item);
+        switchTab(document.querySelector('[data-tab="editar"]'));
+      }
+      if (target.dataset.action === 'delete') {
+        deleteLancamentoById(Number(id));
+      }
+    });
+
     authTelegram();
   </script>
 </body>

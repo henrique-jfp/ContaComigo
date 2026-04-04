@@ -65,7 +65,7 @@ static_dir = os.path.join(parent_dir, 'static')
 sys.path.insert(0, parent_dir)
 import config
 from database.database import get_db, buscar_lancamentos_usuario
-from models import Usuario, Lancamento, Agendamento, Objetivo
+from models import Usuario, Lancamento, Agendamento, Objetivo, Conta
 from gerente_financeiro.prompts import PROMPT_ALFREDO
 from gerente_financeiro.services import preparar_contexto_financeiro_completo
 import google.generativeai as genai
@@ -429,6 +429,7 @@ def miniapp_lancamento_update(lancamento_id: int):
             "valor",
             "tipo",
             "forma_pagamento",
+            "id_conta",
             "id_categoria",
             "id_subcategoria",
             "data_transacao",
@@ -442,6 +443,161 @@ def miniapp_lancamento_update(lancamento_id: int):
                     lancamento.data_transacao = datetime.combine(parsed_date, datetime.min.time())
                 continue
             setattr(lancamento, key, value)
+
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/configuracoes', methods=['GET', 'PUT'])
+def miniapp_configuracoes():
+    """Lê e atualiza dados de onboarding do MiniApp."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        if request.method == 'GET':
+            contas = (
+                db.query(Conta)
+                .filter(Conta.id_usuario == usuario.id)
+                .order_by(Conta.tipo.asc(), Conta.nome.asc())
+                .all()
+            )
+            return jsonify({
+                "ok": True,
+                "usuario": {
+                    "nome_completo": usuario.nome_completo,
+                    "perfil_investidor": usuario.perfil_investidor,
+                    "horario_notificacao": usuario.horario_notificacao.strftime('%H:%M') if usuario.horario_notificacao else "09:00",
+                    "alerta_gastos_ativo": bool(usuario.alerta_gastos_ativo),
+                },
+                "contas": [
+                    {
+                        "id": conta.id,
+                        "nome": conta.nome,
+                        "tipo": conta.tipo,
+                        "dia_fechamento": conta.dia_fechamento,
+                        "dia_vencimento": conta.dia_vencimento,
+                        "limite_cartao": float(conta.limite_cartao) if conta.limite_cartao is not None else None,
+                        "email_notificacao": conta.email_notificacao,
+                    }
+                    for conta in contas
+                ],
+            })
+
+        payload = request.get_json(silent=True) or {}
+        if "perfil_investidor" in payload:
+            usuario.perfil_investidor = (payload.get("perfil_investidor") or "").strip() or None
+        if "horario_notificacao" in payload:
+            horario_raw = str(payload.get("horario_notificacao") or "").strip()
+            if horario_raw:
+                try:
+                    usuario.horario_notificacao = datetime.strptime(horario_raw, "%H:%M").time()
+                except ValueError:
+                    return jsonify({"ok": False, "error": "invalid_time"}), 400
+        if "alerta_gastos_ativo" in payload:
+            usuario.alerta_gastos_ativo = bool(payload.get("alerta_gastos_ativo"))
+
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/contas', methods=['GET', 'POST'])
+def miniapp_contas():
+    """Lista ou cria contas/cartões do usuário."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        if request.method == 'GET':
+            contas = db.query(Conta).filter(Conta.id_usuario == usuario.id).order_by(Conta.tipo.asc(), Conta.nome.asc()).all()
+            return jsonify({
+                "ok": True,
+                "items": [
+                    {
+                        "id": conta.id,
+                        "nome": conta.nome,
+                        "tipo": conta.tipo,
+                        "dia_fechamento": conta.dia_fechamento,
+                        "dia_vencimento": conta.dia_vencimento,
+                        "limite_cartao": float(conta.limite_cartao) if conta.limite_cartao is not None else None,
+                        "email_notificacao": conta.email_notificacao,
+                    }
+                    for conta in contas
+                ],
+            })
+
+        payload = request.get_json(silent=True) or {}
+        nome = (payload.get("nome") or "").strip()
+        tipo = (payload.get("tipo") or "").strip()
+        if not nome or not tipo:
+            return jsonify({"ok": False, "error": "missing_fields"}), 400
+
+        conta = Conta(
+            id_usuario=usuario.id,
+            nome=nome,
+            tipo=tipo,
+            dia_fechamento=int(payload["dia_fechamento"]) if payload.get("dia_fechamento") not in (None, "") else None,
+            dia_vencimento=int(payload["dia_vencimento"]) if payload.get("dia_vencimento") not in (None, "") else None,
+            limite_cartao=float(str(payload["limite_cartao"]).replace(",", ".")) if payload.get("limite_cartao") not in (None, "") else None,
+            email_notificacao=(payload.get("email_notificacao") or "").strip() or None,
+        )
+        db.add(conta)
+        db.commit()
+        return jsonify({"ok": True, "id": conta.id})
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/contas/<int:conta_id>', methods=['PATCH', 'DELETE'])
+def miniapp_conta_update(conta_id: int):
+    """Atualiza ou remove uma conta/cartão do usuário."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        conta = db.query(Conta).filter(Conta.id == conta_id, Conta.id_usuario == usuario.id).first()
+        if not conta:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+
+        if request.method == 'DELETE':
+            db.delete(conta)
+            db.commit()
+            return jsonify({"ok": True})
+
+        payload = request.get_json(silent=True) or {}
+        for field in ("nome", "tipo", "email_notificacao"):
+            if field in payload:
+                value = (payload.get(field) or "").strip()
+                setattr(conta, field, value or None)
+        for field in ("dia_fechamento", "dia_vencimento"):
+            if field in payload:
+                value = payload.get(field)
+                setattr(conta, field, int(value) if value not in (None, "") else None)
+        if "limite_cartao" in payload:
+            value = payload.get("limite_cartao")
+            conta.limite_cartao = float(str(value).replace(",", ".")) if value not in (None, "") else None
 
         db.commit()
         return jsonify({"ok": True})
