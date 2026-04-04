@@ -22,6 +22,7 @@ from .analytics_utils import track_analytics
 from database.database import get_db, get_or_create_user # <-- Importação adicionada
 from models import Usuario, Conta
 from .handlers import cancel
+from .menu_botoes import obter_teclado_painel
 from .states import (
     MENU_PRINCIPAL, ADD_CONTA_NOME, ASK_ADD_ANOTHER_CONTA,  
     ADD_CARTAO_NOME, ADD_CARTAO_FECHAMENTO, ADD_CARTAO_VENCIMENTO, ADD_CARTAO_LIMITE, ASK_ADD_ANOTHER_CARTAO, 
@@ -96,6 +97,12 @@ async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
         keyboard = [[InlineKeyboardButton("🧩 Acessar Miniapp", web_app=WebAppInfo(url=webapp_url))]]
         await update.message.reply_html(welcome_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+        # Atualiza o teclado persistente para a versão enxuta (2 botões).
+        await update.message.reply_text(
+            "Atalhos rápidos atualizados.",
+            reply_markup=obter_teclado_painel(),
+        )
 
         return ConversationHandler.END
         
