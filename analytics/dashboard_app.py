@@ -129,10 +129,32 @@ def _validate_telegram_init_data(init_data: str) -> dict | None:
         return None
 
     data_check = "\n".join(f"{k}={parsed[k]}" for k in sorted(parsed.keys()))
-    secret_key = hashlib.sha256(config.TELEGRAM_TOKEN.encode()).digest()
-    calculated_hash = hmac.new(secret_key, data_check.encode(), hashlib.sha256).hexdigest()
 
-    if not hmac.compare_digest(received_hash, calculated_hash):
+    # Telegram WebApp (Mini App) validation per official docs:
+    # secret_key = HMAC_SHA256(key="WebAppData", msg=bot_token)
+    webapp_secret_key = hmac.new(
+        b"WebAppData",
+        config.TELEGRAM_TOKEN.encode(),
+        hashlib.sha256,
+    ).digest()
+    webapp_hash = hmac.new(
+        webapp_secret_key,
+        data_check.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+    # Legacy fallback kept for compatibility with older flows.
+    legacy_secret_key = hashlib.sha256(config.TELEGRAM_TOKEN.encode()).digest()
+    legacy_hash = hmac.new(
+        legacy_secret_key,
+        data_check.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+    if not (
+        hmac.compare_digest(received_hash, webapp_hash)
+        or hmac.compare_digest(received_hash, legacy_hash)
+    ):
         return None
 
     try:
