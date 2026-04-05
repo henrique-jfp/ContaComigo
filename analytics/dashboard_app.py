@@ -829,7 +829,7 @@ def miniapp_gerente():
             resposta = _sanitize_response(response.text or "")
         except Exception as gemini_error:
             logger.warning("Gemini falhou no chat do MiniApp: %s", gemini_error, exc_info=True)
-            resposta_groq = await _generate_with_groq(prompt_final)
+            resposta_groq = _run_async(_generate_with_groq(prompt_final))
             if resposta_groq:
                 resposta = _sanitize_response(resposta_groq)
             else:
