@@ -12,8 +12,10 @@ import logging
 import json
 import asyncio
 import re
+import unicodedata
 from html import escape
 import requests
+from collections import defaultdict
 from datetime import datetime, timedelta
 from telegram import Update
 from telegram.ext import ContextTypes, CommandHandler, ConversationHandler
@@ -438,6 +440,285 @@ def _intencao_saldo(texto: str) -> bool:
     return any(p in texto for p in ["saldo", "quanto tenho", "meu saldo", "saldo total", "quanto sobrou"])
 
 
+def _normalizar_texto_busca(texto: str) -> str:
+    base = unicodedata.normalize("NFKD", str(texto or "").lower())
+    sem_acentos = "".join(c for c in base if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", sem_acentos).strip()
+
+
+def _contains_any(texto: str, termos: list[str]) -> bool:
+    return any(termo in texto for termo in termos)
+
+
+def _resposta_deterministica_financeira(db, usuario_db: Usuario, texto_usuario: str, saldo: float) -> str | None:
+    t = _normalizar_texto_busca(texto_usuario)
+    hoje = datetime.utcnow().date()
+
+    # 1) Quanto gastei essa semana?
+    if _contains_any(t, ["gastei essa semana", "gastos essa semana", "quanto eu gastei essa semana"]):
+        inicio_semana = hoje - timedelta(days=hoje.weekday())
+        lancs = db.query(Lancamento).filter(
+            Lancamento.id_usuario == usuario_db.id,
+            Lancamento.data_transacao >= datetime.combine(inicio_semana, datetime.min.time()),
+            Lancamento.data_transacao <= datetime.combine(hoje, datetime.max.time()),
+        ).all()
+        saida = sum(abs(float(l.valor or 0)) for l in lancs if not str(l.tipo).lower().startswith("entr"))
+        entrada = sum(float(l.valor or 0) for l in lancs if str(l.tipo).lower().startswith("entr"))
+        return (
+            "📅 <b>Semana atual</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            f"<b>Saídas:</b> <code>{_formatar_valor_brasileiro(saida)}</code>\n"
+            f"<b>Entradas:</b> <code>{_formatar_valor_brasileiro(entrada)}</code>\n"
+            f"<b>Resultado da semana:</b> <code>{_formatar_valor_brasileiro(entrada - saida)}</code>"
+        )
+
+    # 2) Maior gasto recente
+    if _contains_any(t, ["maior gasto recente", "maior gasto", "gasto mais alto"]):
+        corte = datetime.combine(hoje - timedelta(days=45), datetime.min.time())
+        maior = db.query(Lancamento).filter(
+            Lancamento.id_usuario == usuario_db.id,
+            Lancamento.data_transacao >= corte,
+        ).order_by(Lancamento.valor.desc()).first()
+        if not maior or str(maior.tipo).lower().startswith("entr"):
+            saidas = db.query(Lancamento).filter(
+                Lancamento.id_usuario == usuario_db.id,
+                Lancamento.data_transacao >= corte,
+            ).all()
+            saidas = [l for l in saidas if not str(l.tipo).lower().startswith("entr")]
+            maior = max(saidas, key=lambda x: abs(float(x.valor or 0)), default=None)
+
+        if not maior:
+            return "🔎 Não encontrei gastos recentes para analisar."
+
+        return (
+            "💥 <b>Maior gasto recente</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            f"<b>Descrição:</b> {escape(maior.descricao or 'Sem descrição')}\n"
+            f"<b>Valor:</b> <code>{_formatar_valor_brasileiro(abs(float(maior.valor or 0)))}</code>\n"
+            f"<b>Data:</b> {maior.data_transacao.strftime('%d/%m/%Y')}"
+        )
+
+    # 3) Dias em que mais gasta
+    if _contains_any(t, ["dias eu mais gasto", "quais dias eu mais gasto", "dia da semana"]):
+        corte = datetime.combine(hoje - timedelta(days=90), datetime.min.time())
+        lancs = db.query(Lancamento).filter(
+            Lancamento.id_usuario == usuario_db.id,
+            Lancamento.data_transacao >= corte,
+        ).all()
+        saidas = [l for l in lancs if not str(l.tipo).lower().startswith("entr")]
+        if not saidas:
+            return "📉 Ainda não há gastos suficientes para identificar seus dias de maior consumo."
+
+        dias = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"]
+        total_por_dia = defaultdict(float)
+        for l in saidas:
+            total_por_dia[l.data_transacao.weekday()] += abs(float(l.valor or 0))
+
+        ranking = sorted(total_por_dia.items(), key=lambda x: x[1], reverse=True)[:3]
+        linhas = [f"• {dias[idx]}: <code>{_formatar_valor_brasileiro(v)}</code>" for idx, v in ranking]
+        return "🗓️ <b>Dias com maior gasto</b>\n━━━━━━━━━━━━━━━━━━\n\n" + "\n".join(linhas)
+
+    # 4) Contas e compromissos de agendamento
+    if _contains_any(t, ["conta vencendo hoje", "vencendo hoje", "pagar hoje", "contas tenho pra pagar hoje"]):
+        ags = db.query(Agendamento).filter(
+            Agendamento.id_usuario == usuario_db.id,
+            Agendamento.ativo == True,
+            Agendamento.proxima_data_execucao == hoje,
+        ).all()
+        if not ags:
+            return "✅ Hoje não encontrei compromissos agendados para vencimento."
+        linhas = [f"• {escape(a.descricao)} — <code>{_formatar_valor_brasileiro(float(a.valor or 0))}</code>" for a in ags]
+        total = sum(float(a.valor or 0) for a in ags)
+        return "⏰ <b>Vence hoje</b>\n━━━━━━━━━━━━━━━━━━\n\n" + "\n".join(linhas) + f"\n\n<b>Total:</b> <code>{_formatar_valor_brasileiro(total)}</code>"
+
+    if _contains_any(t, ["vence essa semana", "pagar essa semana", "falta pagar essa semana", "ainda preciso pagar essa semana"]):
+        fim = hoje + timedelta(days=7)
+        ags = db.query(Agendamento).filter(
+            Agendamento.id_usuario == usuario_db.id,
+            Agendamento.ativo == True,
+            Agendamento.proxima_data_execucao >= hoje,
+            Agendamento.proxima_data_execucao <= fim,
+        ).order_by(Agendamento.proxima_data_execucao.asc()).all()
+        if not ags:
+            return "✅ Não há compromissos agendados para os próximos 7 dias."
+        linhas = [
+            f"• {a.proxima_data_execucao.strftime('%d/%m')} — {escape(a.descricao)} — <code>{_formatar_valor_brasileiro(float(a.valor or 0))}</code>"
+            for a in ags
+        ]
+        total = sum(float(a.valor or 0) for a in ags)
+        return "📌 <b>Compromissos da semana</b>\n━━━━━━━━━━━━━━━━━━\n\n" + "\n".join(linhas) + f"\n\n<b>Total:</b> <code>{_formatar_valor_brasileiro(total)}</code>"
+
+    if _contains_any(t, ["contas atrasadas", "conta que esqueci", "esqueci"]) and "meta" not in t:
+        atrasadas = db.query(Agendamento).filter(
+            Agendamento.id_usuario == usuario_db.id,
+            Agendamento.ativo == True,
+            Agendamento.proxima_data_execucao < hoje,
+        ).order_by(Agendamento.proxima_data_execucao.asc()).all()
+        if not atrasadas:
+            return "✅ Não encontrei compromissos atrasados no seu agendamento."
+        linhas = [
+            f"• {a.proxima_data_execucao.strftime('%d/%m')} — {escape(a.descricao)} — <code>{_formatar_valor_brasileiro(float(a.valor or 0))}</code>"
+            for a in atrasadas
+        ]
+        total = sum(float(a.valor or 0) for a in atrasadas)
+        return "🚨 <b>Compromissos atrasados</b>\n━━━━━━━━━━━━━━━━━━\n\n" + "\n".join(linhas) + f"\n\n<b>Total em atraso:</b> <code>{_formatar_valor_brasileiro(total)}</code>"
+
+    if _contains_any(t, ["contas fixas", "total de contas desse mes", "comprometido", "sobra depois das contas", "o que ainda falta pagar"]):
+        fim_mes = datetime(hoje.year + (1 if hoje.month == 12 else 0), 1 if hoje.month == 12 else hoje.month + 1, 1).date() - timedelta(days=1)
+        ags_mes = db.query(Agendamento).filter(
+            Agendamento.id_usuario == usuario_db.id,
+            Agendamento.ativo == True,
+            Agendamento.proxima_data_execucao >= hoje,
+            Agendamento.proxima_data_execucao <= fim_mes,
+        ).all()
+        total_comprometido = sum(float(a.valor or 0) for a in ags_mes)
+        fixas = [a for a in ags_mes if (a.frequencia or "").lower() in {"mensal", "semanal"}]
+        sobra = saldo - total_comprometido
+        return (
+            "🧾 <b>Compromissos até o fim do mês</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            f"<b>Total agendado:</b> <code>{_formatar_valor_brasileiro(total_comprometido)}</code>\n"
+            f"<b>Contas fixas (recorrentes):</b> <code>{len(fixas)}</code>\n"
+            f"<b>Sobra estimada após compromissos:</b> <code>{_formatar_valor_brasileiro(sobra)}</code>"
+        )
+
+    if _contains_any(t, ["ja paguei aluguel", "ja paguei luz", "ja paguei internet"]):
+        inicio_mes = datetime(hoje.year, hoje.month, 1)
+        lancs_mes = db.query(Lancamento).filter(
+            Lancamento.id_usuario == usuario_db.id,
+            Lancamento.data_transacao >= inicio_mes,
+        ).all()
+        descs = [str(l.descricao or "").lower() for l in lancs_mes]
+        checks = {
+            "aluguel": any("aluguel" in d for d in descs),
+            "luz": any("luz" in d or "energia" in d for d in descs),
+            "internet": any("internet" in d or "wifi" in d or "wi-fi" in d for d in descs),
+        }
+        linhas = [f"• {k.title()}: {'✅ Pago' if v else '⚠️ Não encontrado'}" for k, v in checks.items()]
+        return "🏠 <b>Status de contas básicas no mês</b>\n━━━━━━━━━━━━━━━━━━\n\n" + "\n".join(linhas)
+
+    # 5) Gastos por comportamento
+    if _contains_any(t, ["ifood", "lanche", "besteira"]):
+        inicio_mes = datetime(hoje.year, hoje.month, 1)
+        lancs = db.query(Lancamento).filter(
+            Lancamento.id_usuario == usuario_db.id,
+            Lancamento.data_transacao >= inicio_mes,
+        ).all()
+        gastos = [
+            l for l in lancs
+            if not str(l.tipo).lower().startswith("entr")
+            and any(k in str(l.descricao or "").lower() for k in ["ifood", "lanche", "snack", "delivery", "burg", "pizza"])
+        ]
+        total = sum(abs(float(l.valor or 0)) for l in gastos)
+        return (
+            "🍔 <b>Gastos com iFood/lanche no mês</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            f"<b>Transações:</b> <code>{len(gastos)}</code>\n"
+            f"<b>Total:</b> <code>{_formatar_valor_brasileiro(total)}</code>"
+        )
+
+    if _contains_any(t, ["gastos invisiveis", "pequenos e recorrentes"]):
+        corte = datetime.combine(hoje - timedelta(days=60), datetime.min.time())
+        lancs = db.query(Lancamento).filter(
+            Lancamento.id_usuario == usuario_db.id,
+            Lancamento.data_transacao >= corte,
+        ).all()
+        saidas = [l for l in lancs if not str(l.tipo).lower().startswith("entr") and abs(float(l.valor or 0)) <= 60]
+        by_desc = defaultdict(lambda: {"count": 0, "total": 0.0})
+        for l in saidas:
+            desc = (l.descricao or "sem descricao").strip().lower()
+            by_desc[desc]["count"] += 1
+            by_desc[desc]["total"] += abs(float(l.valor or 0))
+
+        recorrentes = [(d, v) for d, v in by_desc.items() if v["count"] >= 2]
+        recorrentes = sorted(recorrentes, key=lambda x: x[1]["total"], reverse=True)[:5]
+        if not recorrentes:
+            return "🔎 Não encontrei microgastos recorrentes relevantes nos últimos 60 dias."
+
+        linhas = [
+            f"• {escape(desc[:30])} — {dados['count']}x — <code>{_formatar_valor_brasileiro(dados['total'])}</code>"
+            for desc, dados in recorrentes
+        ]
+        return "🕵️ <b>Gastos invisíveis (pequenos e recorrentes)</b>\n━━━━━━━━━━━━━━━━━━\n\n" + "\n".join(linhas)
+
+    return None
+
+
+def _montar_contexto_financeiro_detalhado(db, usuario_db: Usuario, saldo: float, entradas: float, saidas: float) -> str:
+    hoje = datetime.utcnow().date()
+    inicio_mes = datetime(hoje.year, hoje.month, 1)
+    inicio_mes_passado = (inicio_mes - timedelta(days=1)).replace(day=1)
+    fim_mes_passado = inicio_mes - timedelta(seconds=1)
+
+    lancs_mes = db.query(Lancamento).filter(
+        Lancamento.id_usuario == usuario_db.id,
+        Lancamento.data_transacao >= inicio_mes,
+    ).all()
+    lancs_mes_passado = db.query(Lancamento).filter(
+        Lancamento.id_usuario == usuario_db.id,
+        Lancamento.data_transacao >= inicio_mes_passado,
+        Lancamento.data_transacao <= fim_mes_passado,
+    ).all()
+
+    despesa_mes = sum(abs(float(l.valor or 0)) for l in lancs_mes if not str(l.tipo).lower().startswith("entr"))
+    receita_mes = sum(float(l.valor or 0) for l in lancs_mes if str(l.tipo).lower().startswith("entr"))
+    despesa_mes_passado = sum(abs(float(l.valor or 0)) for l in lancs_mes_passado if not str(l.tipo).lower().startswith("entr"))
+
+    top_categoria = defaultdict(float)
+    pagamento_count = defaultdict(int)
+    for l in lancs_mes:
+        if not str(l.tipo).lower().startswith("entr"):
+            nome_cat = (l.categoria.nome if l.categoria and l.categoria.nome else "Sem categoria")
+            top_categoria[nome_cat] += abs(float(l.valor or 0))
+        pagamento_count[_normalizar_forma_pagamento(l.forma_pagamento)] += 1
+
+    top_categoria_ordenada = sorted(top_categoria.items(), key=lambda x: x[1], reverse=True)[:4]
+    top_pagamentos = sorted(pagamento_count.items(), key=lambda x: x[1], reverse=True)[:3]
+
+    inicio_semana = hoje - timedelta(days=hoje.weekday())
+    gastos_semana = sum(
+        abs(float(l.valor or 0)) for l in lancs_mes
+        if not str(l.tipo).lower().startswith("entr") and l.data_transacao.date() >= inicio_semana
+    )
+
+    fim_7_dias = hoje + timedelta(days=7)
+    ags_prox_7 = db.query(Agendamento).filter(
+        Agendamento.id_usuario == usuario_db.id,
+        Agendamento.ativo == True,
+        Agendamento.proxima_data_execucao >= hoje,
+        Agendamento.proxima_data_execucao <= fim_7_dias,
+    ).all()
+    ags_atrasados = db.query(Agendamento).filter(
+        Agendamento.id_usuario == usuario_db.id,
+        Agendamento.ativo == True,
+        Agendamento.proxima_data_execucao < hoje,
+    ).all()
+
+    metas = db.query(Objetivo).filter(Objetivo.id_usuario == usuario_db.id).all()
+    metas_resumo = [
+        f"{m.descricao}: atual R$ {float(m.valor_atual or 0):.2f} / meta R$ {float(m.valor_meta or 0):.2f}"
+        for m in metas[:3]
+    ]
+
+    top_categoria_txt = ", ".join(f"{nome} (R$ {valor:.2f})" for nome, valor in top_categoria_ordenada) or "Sem dados"
+    top_pagamento_txt = ", ".join(f"{nome} ({q}x)" for nome, q in top_pagamentos) or "Sem dados"
+
+    return (
+        f"Saldo acumulado: R$ {saldo:.2f}\n"
+        f"Entradas acumuladas: R$ {entradas:.2f}\n"
+        f"Saídas acumuladas: R$ {saidas:.2f}\n"
+        f"Receita no mês atual: R$ {receita_mes:.2f}\n"
+        f"Despesa no mês atual: R$ {despesa_mes:.2f}\n"
+        f"Despesa no mês passado: R$ {despesa_mes_passado:.2f}\n"
+        f"Gasto na semana atual: R$ {gastos_semana:.2f}\n"
+        f"Top categorias do mês: {top_categoria_txt}\n"
+        f"Formas de pagamento mais usadas: {top_pagamento_txt}\n"
+        f"Agendamentos vencendo em 7 dias: {len(ags_prox_7)}\n"
+        f"Agendamentos atrasados: {len(ags_atrasados)}\n"
+        f"Resumo de metas: {', '.join(metas_resumo) if metas_resumo else 'Sem metas cadastradas'}"
+    )
+
+
 async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Roteador sempre ativo: texto/voz -> Groq tools -> execução local."""
     if not update.message or not update.effective_user:
@@ -500,6 +781,11 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 f"<b>Saídas acumuladas:</b> <code>{_formatar_valor_brasileiro(saidas)}</code>"
             )
             await update.message.reply_html(saldo_msg)
+            return ConversationHandler.END
+
+        resposta_deterministica = _resposta_deterministica_financeira(db, usuario_db, texto_usuario, saldo)
+        if resposta_deterministica:
+            await update.message.reply_html(_formatar_resposta_html(resposta_deterministica))
             return ConversationHandler.END
 
         system_prompt = (
@@ -659,6 +945,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
 
         if fn_name == "responder_duvida_financeira":
             pergunta = str(args.get("pergunta") or texto_usuario)
+            contexto_detalhado = _montar_contexto_financeiro_detalhado(db, usuario_db, saldo, entradas, saidas)
             contextual_messages = [
                 {
                     "role": "system",
@@ -667,7 +954,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                         "Use apenas os dados informados no contexto financeiro. "
                         "Não invente números, contas ou transações. "
                         "Se um dado não estiver disponível, diga que não encontrou no banco. "
-                        "Use formatação curta amigável para Telegram em HTML simples."
+                        "Use formatação curta amigável para Telegram em HTML simples. "
+                        "Sempre priorize conclusões quantitativas quando houver dados no contexto."
                     ),
                 },
                 {
@@ -678,6 +966,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                         f"- Saldo: R$ {saldo:.2f}\n"
                         f"- Entradas acumuladas: R$ {entradas:.2f}\n"
                         f"- Saídas acumuladas: R$ {saidas:.2f}\n"
+                        f"- Contexto detalhado:\n{contexto_detalhado}\n"
                     ),
                 },
             ]
