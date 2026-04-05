@@ -174,10 +174,10 @@ from gerente_financeiro.editing_handler import edit_conv
 from gerente_financeiro.graficos import grafico_conv
 from gerente_financeiro.relatorio_handler import relatorio_handler
 from gerente_financeiro.manual_entry_handler import manual_entry_conv, manual_entry_start
-from gerente_financeiro.fatura_handler import fatura_conv, fatura_start
-from gerente_financeiro.audio_handler import audio_conv
+from gerente_financeiro.fatura_handler import fatura_conv, fatura_start, fatura_receive_file
 from gerente_financeiro.ocr_handler import ocr_action_processor, ocr_iniciar_como_subprocesso
-from gerente_financeiro.quick_entry_handler import handle_quick_text, quick_action_handler
+from gerente_financeiro.quick_entry_handler import quick_action_handler
+from gerente_financeiro.ia_handlers import processar_mensagem_com_alfredo
 from gerente_financeiro.contact_handler import contact_conv, contact_start
 from gerente_financeiro.delete_user_handler import delete_user_conv
 from gerente_financeiro.dashboard_handler import (
@@ -384,8 +384,31 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
     # Handlers críticos em grupo prioritário para não serem engolidos por outros catch-alls.
     application.add_handler(CommandHandler("start", start_onboarding), group=-1)
     application.add_handler(CommandHandler("configurar", configurar_start), group=-1)
-    application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BOTAO_LANCAMENTO)}$"), manual_entry_start), group=-1)
-    application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BOTAO_CONTATO)}$"), contact_start), group=-1)
+    application.add_handler(
+        MessageHandler(
+            filters.ChatType.PRIVATE & filters.Document.MimeType("application/pdf"),
+            fatura_receive_file,
+        ),
+        group=-1,
+    )
+    application.add_handler(
+        MessageHandler(
+            filters.ChatType.PRIVATE & (filters.PHOTO | filters.Document.IMAGE),
+            ocr_iniciar_como_subprocesso,
+        ),
+        group=-1,
+    )
+    application.add_handler(
+        MessageHandler(
+            filters.ChatType.PRIVATE & (filters.TEXT & ~filters.COMMAND),
+            processar_mensagem_com_alfredo,
+        ),
+        group=-1,
+    )
+    application.add_handler(
+        MessageHandler(filters.ChatType.PRIVATE & filters.VOICE, processar_mensagem_com_alfredo),
+        group=-1,
+    )
 
     conversation_builders = [
         ("configurar_conv", lambda: configurar_conv),
@@ -398,7 +421,6 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("metas_conv", lambda: metas_conv),
         ("agendamento_conv", lambda: agendamento_conv),
         ("edit_conv", lambda: edit_conv),
-        ("audio_conv", lambda: audio_conv),
         ("fatura_conv", lambda: fatura_conv),
     ]
     
@@ -435,26 +457,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("/teste_assistente", lambda: teste_assistente_handler),
         ("/meu_wrapped", lambda: meu_wrapped_handler),
         ("/importar", lambda: CommandHandler("importar", importar_of)),
-        (
-            "quick_text_handler",
-            lambda: MessageHandler(
-                filters.ChatType.PRIVATE
-                & filters.TEXT
-                & ~filters.COMMAND
-                & ~filters.Regex(
-                    rf"^(?:{re.escape(BOTAO_LANCAMENTO)}|{re.escape(BOTAO_GERENTE)}|{re.escape(BOTAO_EDITAR)}|{re.escape(BOTAO_CONFIG)}|{re.escape(BOTAO_FATURA)}|{re.escape(BOTAO_GRAFICOS)}|{re.escape(BOTAO_AGENDAMENTOS)}|{re.escape(BOTAO_METAS)}|{re.escape(BOTAO_RANKING)}|{re.escape(BOTAO_NIVEL)}|{re.escape(BOTAO_CANCELAR)}|{re.escape(BOTAO_CONTATO)})$"
-                ),
-                handle_quick_text,
-            ),
-        ),
-        (
-            "ocr_auto",
-            lambda: MessageHandler(
-                filters.ChatType.PRIVATE
-                & (filters.PHOTO | filters.Document.IMAGE | filters.Document.MimeType("application/pdf")),
-                ocr_iniciar_como_subprocesso,
-            ),
-        ),
+        # Texto/voz/PDF/foto agora são roteados no grupo -1 para evitar conflito com fluxos legados.
         # ("confirmar_importacao_callback", lambda: CallbackQueryHandler(confirmar_callback, pattern="^confirmar_importacao$")),  # Removido: confirmar_callback não existe mais
         # ("cancelar_importacao_callback", lambda: CallbackQueryHandler(cancelar_callback, pattern="^cancelar_importacao$")),  # Removido: cancelar_callback não existe mais
     ]

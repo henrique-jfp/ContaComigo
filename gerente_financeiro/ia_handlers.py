@@ -9,15 +9,369 @@ Data: 17/11/2025
 """
 
 import logging
+import json
+import asyncio
+from html import escape
+import requests
 from datetime import datetime, timedelta
 from telegram import Update
-from telegram.ext import ContextTypes, CommandHandler
+from telegram.ext import ContextTypes, CommandHandler, ConversationHandler
 from sqlalchemy import and_, extract
 from database.database import get_db, get_or_create_user
-from models import Lancamento, Usuario
+from models import Lancamento, Usuario, Categoria, Agendamento, Objetivo
+import config
 from .analises_ia import get_analisador
 
 logger = logging.getLogger(__name__)
+
+
+_ALFREDO_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "registrar_lancamento",
+            "description": "Registra um lançamento financeiro de entrada ou saída.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "descricao": {"type": "string"},
+                    "valor": {"type": "number"},
+                    "categoria": {"type": "string"},
+                },
+                "required": ["descricao", "valor", "categoria"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "agendar_despesa",
+            "description": "Agenda uma despesa futura com frequência.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "descricao": {"type": "string"},
+                    "valor": {"type": "number"},
+                    "data": {"type": "string", "description": "Data no formato YYYY-MM-DD."},
+                    "frequencia": {"type": "string", "description": "unico, semanal, mensal"},
+                },
+                "required": ["descricao", "valor", "data", "frequencia"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "criar_meta",
+            "description": "Cria uma meta financeira para o usuário.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "descricao": {"type": "string"},
+                    "valor_alvo": {"type": "number"},
+                },
+                "required": ["descricao", "valor_alvo"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "responder_duvida_financeira",
+            "description": "Responde dúvidas financeiras gerais e sobre os dados do usuário.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pergunta": {"type": "string"},
+                },
+                "required": ["pergunta"],
+            },
+        },
+    },
+]
+
+
+def _clear_pending_context(context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Limpa estados pendentes de fluxos antigos para evitar conflito de botões/menu.
+    keys = [
+        "novo_lancamento",
+        "dados_audio",
+        "dados_ocr",
+        "fatura_transacoes",
+        "fatura_conta_id",
+        "fatura_origem_label",
+        "fatura_training_bytes",
+        "fatura_training_name",
+        "fatura_training_size",
+        "fatura_training_pages",
+        "fatura_training_text",
+        "dados_quick",
+    ]
+    for key in keys:
+        context.user_data.pop(key, None)
+
+
+def _groq_chat_completion(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> dict:
+    if not config.GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY nao configurada")
+
+    payload = {
+        "model": config.GROQ_MODEL_NAME,
+        "messages": messages,
+        "temperature": 0.2,
+    }
+    if tools:
+        payload["tools"] = tools
+        if tool_choice:
+            payload["tool_choice"] = tool_choice
+
+    response = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {config.GROQ_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=45,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+async def _groq_chat_completion_async(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> dict:
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _groq_chat_completion, messages, tools, tool_choice)
+
+
+def _groq_transcribe_voice(voice_bytes: bytes, mime_type: str = "audio/ogg") -> str:
+    if not config.GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY nao configurada")
+
+    files = {
+        "file": ("voice.ogg", voice_bytes, mime_type),
+    }
+    data = {
+        "model": "whisper-large-v3-turbo",
+        "response_format": "json",
+        "language": "pt",
+    }
+    response = requests.post(
+        "https://api.groq.com/openai/v1/audio/transcriptions",
+        headers={"Authorization": f"Bearer {config.GROQ_API_KEY}"},
+        files=files,
+        data=data,
+        timeout=60,
+    )
+    response.raise_for_status()
+    return (response.json() or {}).get("text", "").strip()
+
+
+async def _groq_transcribe_voice_async(voice_bytes: bytes, mime_type: str = "audio/ogg") -> str:
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _groq_transcribe_voice, voice_bytes, mime_type)
+
+
+def _resolve_categoria_id(db, categoria_nome: str) -> int | None:
+    if not categoria_nome:
+        return None
+    categoria = db.query(Categoria).filter(Categoria.nome.ilike(categoria_nome.strip())).first()
+    return categoria.id if categoria else None
+
+
+def _usuario_e_saldo(db, telegram_user) -> tuple[Usuario, float, float, float]:
+    usuario_db = get_or_create_user(db, telegram_user.id, telegram_user.full_name)
+    lancamentos = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id).all()
+    entradas = sum(float(l.valor or 0) for l in lancamentos if str(l.tipo).lower().startswith("entr"))
+    saidas = sum(abs(float(l.valor or 0)) for l in lancamentos if not str(l.tipo).lower().startswith("entr"))
+    saldo = entradas - saidas
+    return usuario_db, saldo, entradas, saidas
+
+
+async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Roteador sempre ativo: texto/voz -> Groq tools -> execução local."""
+    if not update.message or not update.effective_user:
+        return ConversationHandler.END
+
+    if not config.GROQ_API_KEY:
+        await update.message.reply_text("❌ GROQ_API_KEY não configurada no servidor.")
+        return ConversationHandler.END
+
+    _clear_pending_context(context)
+
+    texto_usuario = ""
+    if update.message.voice:
+        wait_msg = await update.message.reply_text("🎙️ Entendi seu áudio, processando com o Alfredo...")
+        try:
+            voice = update.message.voice
+            tg_file = await voice.get_file()
+            voice_bytes = bytes(await tg_file.download_as_bytearray())
+            texto_usuario = await _groq_transcribe_voice_async(voice_bytes, voice.mime_type or "audio/ogg")
+        except Exception as exc:
+            logger.error("Falha ao transcrever áudio com Groq: %s", exc, exc_info=True)
+            await wait_msg.edit_text("❌ Não consegui transcrever seu áudio. Tente novamente.")
+            return ConversationHandler.END
+        finally:
+            try:
+                await wait_msg.delete()
+            except Exception:
+                pass
+    else:
+        texto_usuario = (update.message.text or "").strip()
+
+    if not texto_usuario:
+        await update.message.reply_text("Não consegui entender sua mensagem. Pode tentar de novo?")
+        return ConversationHandler.END
+
+    db = next(get_db())
+    try:
+        usuario_db, saldo, entradas, saidas = _usuario_e_saldo(db, update.effective_user)
+
+        system_prompt = (
+            "Você é Alfredo, um Despachante Financeiro. "
+            "Sempre escolha UMA tool quando houver intenção acionável. "
+            "Use responder_duvida_financeira para perguntas gerais. "
+            "Não invente valores ausentes: se faltar dado essencial, peça na resposta final."
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": texto_usuario},
+        ]
+
+        completion = await _groq_chat_completion_async(messages, tools=_ALFREDO_TOOLS, tool_choice="auto")
+        choice = ((completion or {}).get("choices") or [{}])[0]
+        message = choice.get("message") or {}
+        tool_calls = message.get("tool_calls") or []
+
+        if not tool_calls:
+            resposta_direta = (message.get("content") or "Não consegui processar agora. Tente novamente.").strip()
+            await update.message.reply_text(resposta_direta)
+            return ConversationHandler.END
+
+        tool_call = tool_calls[0]
+        fn = (tool_call.get("function") or {})
+        fn_name = fn.get("name")
+        raw_args = fn.get("arguments") or "{}"
+        try:
+            args = json.loads(raw_args)
+        except json.JSONDecodeError:
+            args = {}
+
+        if fn_name == "registrar_lancamento":
+            descricao = str(args.get("descricao") or "Lançamento")
+            valor = float(args.get("valor") or 0)
+            categoria = str(args.get("categoria") or "Outros")
+            if valor <= 0:
+                await update.message.reply_text("❌ Preciso de um valor maior que zero para registrar o lançamento.")
+                return ConversationHandler.END
+
+            tipo = "Saída"
+            if valor < 0:
+                tipo = "Entrada"
+                valor = abs(valor)
+
+            id_categoria = _resolve_categoria_id(db, categoria)
+            lanc = Lancamento(
+                id_usuario=usuario_db.id,
+                descricao=descricao,
+                valor=valor,
+                tipo=tipo,
+                data_transacao=datetime.utcnow(),
+                id_categoria=id_categoria,
+                origem="alfredo",
+            )
+            db.add(lanc)
+            db.commit()
+            await update.message.reply_text(f"✅ Lançamento de R$ {valor:.2f} em {escape(categoria)} registrado!")
+            return ConversationHandler.END
+
+        if fn_name == "agendar_despesa":
+            descricao = str(args.get("descricao") or "Despesa agendada")
+            valor = float(args.get("valor") or 0)
+            data_str = str(args.get("data") or "").strip()
+            frequencia = str(args.get("frequencia") or "mensal").strip().lower()
+
+            if valor <= 0 or not data_str:
+                await update.message.reply_text("❌ Para agendar, preciso de descrição, valor e data (YYYY-MM-DD).")
+                return ConversationHandler.END
+
+            try:
+                data_primeiro = datetime.fromisoformat(data_str).date()
+            except ValueError:
+                await update.message.reply_text("❌ Data inválida. Use o formato YYYY-MM-DD.")
+                return ConversationHandler.END
+
+            ag = Agendamento(
+                id_usuario=usuario_db.id,
+                descricao=descricao,
+                valor=valor,
+                tipo="Saída",
+                frequencia=frequencia if frequencia in {"unico", "semanal", "mensal"} else "mensal",
+                data_primeiro_evento=data_primeiro,
+                proxima_data_execucao=data_primeiro,
+                ativo=True,
+                parcela_atual=0,
+            )
+            db.add(ag)
+            db.commit()
+            await update.message.reply_text(f"✅ Despesa '{escape(descricao)}' agendada para {data_primeiro.strftime('%d/%m/%Y')} ({ag.frequencia}).")
+            return ConversationHandler.END
+
+        if fn_name == "criar_meta":
+            descricao = str(args.get("descricao") or "Meta")
+            valor_alvo = float(args.get("valor_alvo") or 0)
+            if valor_alvo <= 0:
+                await update.message.reply_text("❌ Preciso de um valor alvo maior que zero para criar a meta.")
+                return ConversationHandler.END
+
+            hoje = datetime.utcnow().date()
+            meta = Objetivo(
+                id_usuario=usuario_db.id,
+                descricao=descricao,
+                valor_meta=valor_alvo,
+                valor_atual=0,
+                data_meta=datetime(hoje.year, 12, 31).date(),
+            )
+            db.add(meta)
+            db.commit()
+            await update.message.reply_text(f"🎯 Meta '{escape(descricao)}' criada com alvo de R$ {valor_alvo:.2f}.")
+            return ConversationHandler.END
+
+        if fn_name == "responder_duvida_financeira":
+            pergunta = str(args.get("pergunta") or texto_usuario)
+            contextual_messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "Responda em português do Brasil, objetivo e útil. "
+                        "Use formatação curta amigável para Telegram (HTML simples sem exagero)."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Pergunta: {pergunta}\n"
+                        f"Contexto financeiro atual do usuário:\n"
+                        f"- Saldo: R$ {saldo:.2f}\n"
+                        f"- Entradas acumuladas: R$ {entradas:.2f}\n"
+                        f"- Saídas acumuladas: R$ {saidas:.2f}\n"
+                    ),
+                },
+            ]
+            answer_completion = await _groq_chat_completion_async(contextual_messages)
+            answer = (((answer_completion or {}).get("choices") or [{}])[0].get("message") or {}).get("content")
+            answer = (answer or "Não consegui responder agora, tente novamente.").strip()
+            await update.message.reply_html(answer)
+            return ConversationHandler.END
+
+        await update.message.reply_text("Não consegui entender essa ação ainda. Tente reformular a mensagem.")
+        return ConversationHandler.END
+    except Exception as exc:
+        logger.error("Erro no roteador Alfredo: %s", exc, exc_info=True)
+        await update.message.reply_text("❌ Tive um problema ao processar sua mensagem. Tente novamente em instantes.")
+        return ConversationHandler.END
+    finally:
+        db.close()
 
 
 async def comando_insights(update: Update, context: ContextTypes.DEFAULT_TYPE):
