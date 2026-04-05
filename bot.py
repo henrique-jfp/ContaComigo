@@ -2,6 +2,7 @@ import logging
 import warnings
 import google.generativeai as genai
 import os
+import re
 import functools
 from datetime import time, datetime
 from telegram import Update
@@ -168,16 +169,16 @@ from gerente_financeiro.agendamentos_handler import (
 from gerente_financeiro.metas_handler import (
     metas_conv, metas_callbacks, metas_start
 )
-from gerente_financeiro.onboarding_handler import configurar_conv
+from gerente_financeiro.onboarding_handler import configurar_conv, start_onboarding, configurar_start
 from gerente_financeiro.editing_handler import edit_conv
 from gerente_financeiro.graficos import grafico_conv
 from gerente_financeiro.relatorio_handler import relatorio_handler
-from gerente_financeiro.manual_entry_handler import manual_entry_conv
+from gerente_financeiro.manual_entry_handler import manual_entry_conv, manual_entry_start
 from gerente_financeiro.fatura_handler import fatura_conv, fatura_start
 from gerente_financeiro.audio_handler import audio_conv
 from gerente_financeiro.ocr_handler import ocr_action_processor, ocr_iniciar_como_subprocesso
 from gerente_financeiro.quick_entry_handler import handle_quick_text, quick_action_handler
-from gerente_financeiro.contact_handler import contact_conv
+from gerente_financeiro.contact_handler import contact_conv, contact_start
 from gerente_financeiro.delete_user_handler import delete_user_conv
 from gerente_financeiro.dashboard_handler import (
     cmd_dashboard, cmd_dashstatus, dashboard_callback_handler
@@ -380,6 +381,12 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
 
     logger.info("🔧 Registrando handlers padrão do bot...")
 
+    # Handlers críticos em grupo prioritário para não serem engolidos por outros catch-alls.
+    application.add_handler(CommandHandler("start", start_onboarding), group=-1)
+    application.add_handler(CommandHandler("configurar", configurar_start), group=-1)
+    application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BOTAO_LANCAMENTO)}$"), manual_entry_start), group=-1)
+    application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BOTAO_CONTATO)}$"), contact_start), group=-1)
+
     conversation_builders = [
         ("configurar_conv", lambda: configurar_conv),
         ("gerente_conv", create_gerente_conversation_handler),
@@ -403,6 +410,8 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
     print("DEBUG: Criando lista command_builders")
     command_builders = [
         ("relatorio_handler", lambda: relatorio_handler),
+        ("/start", lambda: CommandHandler("start", start_onboarding)),
+        ("/configurar", lambda: CommandHandler("configurar", configurar_start)),
         ("/help", lambda: CommandHandler("help", help_command)),
         ("/alerta", lambda: CommandHandler("alerta", schedule_alerts)),
         ("/agendar", lambda: CommandHandler("agendar", agendamento_start)),
@@ -411,10 +420,12 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("/ranking", lambda: CommandHandler("ranking", show_rankings)),
         ("/dashboard", lambda: CommandHandler("dashboard", cmd_dashboard)),
         ("cancelar_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_CANCELAR}$"), cancel)),
+        ("lancamento_b", lambda: MessageHandler(filters.Regex(f"^{re.escape(BOTAO_LANCAMENTO)}$"), manual_entry_start)),
         ("fatura_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_FATURA}$"), fatura_start)),
         ("agendamentos_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_AGENDAMENTOS}$"), agendamento_start)),
         ("ranking_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_RANKING}$"), show_rankings)),
         ("nivel_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_NIVEL}$"), show_profile)),
+        ("contato_b", lambda: MessageHandler(filters.Regex(f"^{re.escape(BOTAO_CONTATO)}$"), contact_start)),
         ("/painel", lambda: CommandHandler("painel", toggle_painel_command)),
         ("/painel", lambda: CommandHandler("painel", toggle_painel_command)),
         ("/dashstatus", lambda: CommandHandler("dashstatus", cmd_dashstatus)),
@@ -424,7 +435,18 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("/teste_assistente", lambda: teste_assistente_handler),
         ("/meu_wrapped", lambda: meu_wrapped_handler),
         ("/importar", lambda: CommandHandler("importar", importar_of)),
-        ("quick_text_handler", lambda: MessageHandler(filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND, handle_quick_text)),
+        (
+            "quick_text_handler",
+            lambda: MessageHandler(
+                filters.ChatType.PRIVATE
+                & filters.TEXT
+                & ~filters.COMMAND
+                & ~filters.Regex(
+                    rf"^(?:{re.escape(BOTAO_LANCAMENTO)}|{re.escape(BOTAO_GERENTE)}|{re.escape(BOTAO_EDITAR)}|{re.escape(BOTAO_CONFIG)}|{re.escape(BOTAO_FATURA)}|{re.escape(BOTAO_GRAFICOS)}|{re.escape(BOTAO_AGENDAMENTOS)}|{re.escape(BOTAO_METAS)}|{re.escape(BOTAO_RANKING)}|{re.escape(BOTAO_NIVEL)}|{re.escape(BOTAO_CANCELAR)}|{re.escape(BOTAO_CONTATO)})$"
+                ),
+                handle_quick_text,
+            ),
+        ),
         (
             "ocr_auto",
             lambda: MessageHandler(
