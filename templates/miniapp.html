@@ -465,6 +465,13 @@
       gerenteChat.scrollTop = gerenteChat.scrollHeight;
     }
 
+    function isEntradaTipo(tipo, value) {
+      const tipoNorm = String(tipo || '').toLowerCase();
+      if (tipoNorm.includes('entrada') || tipoNorm.includes('receita')) return true;
+      if (tipoNorm.includes('saída') || tipoNorm.includes('saida') || tipoNorm.includes('despesa')) return false;
+      return Number(value) >= 0;
+    }
+
     function formatMoney(value, tipo) {
       const numeric = Number(value) || 0;
       const abs = Math.abs(numeric)
@@ -473,7 +480,7 @@
         .replace(/,0$/, ',0')
         .replace(/,([1-9])0$/, ',$1')
         .replace(/,00$/, '');
-      const prefix = numeric >= 0 ? '+' : '-';
+      const prefix = isEntradaTipo(tipo, numeric) ? '+' : '-';
       return `${prefix} R$${abs}`;
     }
 
@@ -851,7 +858,7 @@
         data.items.forEach(item => {
           historyCache.push(item);
           const numericValue = Number(item.valor) || 0;
-          const isReceita = numericValue >= 0;
+          const isReceita = isEntradaTipo(item.tipo, numericValue);
           const valueText = formatMoney(item.valor, item.tipo);
           
           const div = document.createElement('div');
