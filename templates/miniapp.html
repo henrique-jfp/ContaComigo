@@ -38,6 +38,22 @@
   .panel { display: none; }
   .panel.active { display: block; animation: fadeIn 0.3s ease; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; animation: fadeIn 0.2s ease; }
+  .modal-overlay.active { display: flex; align-items: flex-end; }
+  .modal-content { background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.88)); backdrop-filter: blur(18px); border: 1px solid rgba(123, 30, 45, 0.12); border-radius: 28px 28px 0 0; width: 100%; max-height: 90vh; overflow-y-auto; animation: slideUp 0.3s ease; box-shadow: 0 -16px 40px rgba(123, 30, 45, 0.08); }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .modal-header { position: sticky; top: 0; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.88)); padding: 16px 20px; border-bottom: 1px solid rgba(123, 30, 45, 0.1); display: flex; justify-content: space-between; align-items: center; }
+  .modal-close-btn { background: none; border: none; cursor: pointer; color: #7b1e2d; font-size: 24px; padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+  .modal-body { padding: 20px; }
+  #toastContainer { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; width: 90%; max-width: 400px; pointer-events: none; }
+  .toast { background: white; border-radius: 12px; padding: 14px 16px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); animation: toastSlideIn 0.3s ease, toastSlideOut 0.3s ease 2.7s forwards; pointer-events: auto; }
+  .toast.success { color: #059669; border-left: 4px solid #059669; background: #ecfdf5; }
+  .toast.error { color: #dc2626; border-left: 4px solid #dc2626; background: #fef2f2; }
+  .toast.warning { color: #f59e0b; border-left: 4px solid #f59e0b; background: #fffbeb; }
+  @keyframes toastSlideIn { from { opacity: 0; transform: translateX(50%); } to { opacity: 1; transform: translateX(0); } }
+  @keyframes toastSlideOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(50%); } }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(123, 30, 45, 0.2); border-top-color: #7b1e2d; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body class="text-slate-900 h-screen w-screen overflow-hidden flex flex-col font-sans antialiased selection:bg-neon-purple selection:text-white">
@@ -229,11 +245,68 @@
 
   </main>
 
+  <!-- Toast Notifications Container -->
+  <div id="toastContainer"></div>
+
+  <!-- Modal de Edição de Lançamentos -->
+  <div class="modal-overlay" id="editModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="pencil-line" class="w-5 h-5 text-[#7b1e2d]"></i> Editar Lançamento
+        </h2>
+        <button class="modal-close-btn" onclick="closeEditModal()"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+      <div class="modal-body space-y-4">
+        <div id="editModalBadge" class="rounded-full bg-[#7b1e2d]/10 text-[#7b1e2d] px-3 py-2 text-xs font-semibold w-fit"></div>
+
+        <div>
+          <label class="text-xs font-semibold text-slate-600 block mb-2">Descrição</label>
+          <input id="editDescricao" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50" placeholder="Descrição do lançamento">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-semibold text-slate-600 block mb-2">Valor</label>
+            <input id="editValor" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50" placeholder="0,00">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-600 block mb-2">Tipo</label>
+            <select id="editTipo" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50">
+              <option value="Saída">Saída</option>
+              <option value="Entrada">Entrada</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-semibold text-slate-600 block mb-2">Data</label>
+            <input id="editData" type="date" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-600 block mb-2">Conta</label>
+            <select id="editConta" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50"></select>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs font-semibold text-slate-600 block mb-2">Forma de pagamento</label>
+          <input id="editForma" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50" placeholder="Pix, Crédito, Débito, Dinheiro...">
+        </div>
+
+        <div class="flex gap-3 pt-4">
+          <button id="editSave" class="flex-1 rounded-xl bg-[#7b1e2d] py-3 text-sm font-semibold text-white hover:bg-[#9a3243] active:scale-95 transition flex items-center justify-center gap-2"><span class="save-text">Salvar alteração</span></button>
+          <button id="editCancel" class="flex-1 rounded-xl border border-[#7b1e2d]/15 bg-white py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 active:scale-95 transition" onclick="closeEditModal()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Bottom Tab Bar Premium -->
   <nav class="fixed bottom-5 left-1/2 -translate-x-1/2 w-[94%] glass-card rounded-[28px] px-3 py-2 grid grid-cols-6 gap-1 z-50 shadow-2xl backdrop-blur-3xl border border-[#7b1e2d]/15">
     <button class="nav-btn tab-active text-[#7b1e2d] flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="historico" onclick="switchTab(this)"><i data-lucide="home" class="w-5 h-5"></i><span>Histórico</span></button>
     <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="metas" onclick="switchTab(this)"><i data-lucide="target" class="w-5 h-5"></i><span>Metas</span></button>
-    <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="editar" onclick="switchTab(this)"><i data-lucide="pencil-line" class="w-5 h-5"></i><span>Editar</span></button>
     <button class="nav-btn text-white bg-gradient-to-r from-[#7b1e2d] to-[#b85d6e] rounded-2xl flex flex-col items-center justify-center gap-1 text-[10px] font-semibold py-2 shadow-lg" data-tab="gerente" onclick="switchTab(this)"><i data-lucide="bot" class="w-5 h-5"></i><span>Alfredo</span></button>
     <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="configuracoes" onclick="switchTab(this)"><i data-lucide="sliders-horizontal" class="w-5 h-5"></i><span>Config</span></button>
     <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="agendamentos" onclick="switchTab(this)"><i data-lucide="calendar" class="w-5 h-5"></i><span>Agenda</span></button>
@@ -264,8 +337,8 @@
     const metaStatus = document.getElementById('metaStatus');
     const metaRefresh = document.getElementById('metaRefresh');
 
-    const editRefresh = document.getElementById('editRefresh');
-    const editSelectedBadge = document.getElementById('editSelectedBadge');
+    const editModal = document.getElementById('editModal');
+    const editModalBadge = document.getElementById('editModalBadge');
     const editDescricao = document.getElementById('editDescricao');
     const editValor = document.getElementById('editValor');
     const editTipo = document.getElementById('editTipo');
@@ -347,8 +420,7 @@
     function setSelectedLancamento(item) {
       selectedLancamento = item;
       if (!item) {
-        editSelectedBadge.textContent = 'Nenhum lançamento selecionado';
-        editSelectedBadge.classList.add('hidden');
+        editModalBadge.textContent = 'Nenhum lançamento selecionado';
         editDescricao.value = '';
         editValor.value = '';
         editTipo.value = 'Saída';
@@ -357,14 +429,35 @@
         editConta.value = '';
         return;
       }
-      editSelectedBadge.textContent = `Editando: ${item.descricao || 'Lançamento'}`;
-      editSelectedBadge.classList.remove('hidden');
+      editModalBadge.textContent = `Editando: ${item.descricao || 'Lançamento'}`;
       editDescricao.value = item.descricao || '';
       editValor.value = item.valor != null ? String(item.valor).replace('.', ',') : '';
       editTipo.value = item.tipo || 'Saída';
       editData.value = formatDateForInput(item.data);
       editForma.value = item.forma_pagamento || '';
       editConta.value = item.id_conta ? String(item.id_conta) : '';
+    }
+
+    function openEditModal(item) {
+      setSelectedLancamento(item);
+      editModal.classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeEditModal() {
+      editModal.classList.remove('active');
+      document.body.style.overflow = 'auto';
+      setSelectedLancamento(null);
+    }
+
+    function showToast(message, type = 'success') {
+      const toastContainer = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      const icon = type === 'success' ? '✓' : type === 'error' ? '✕' : '!';
+      toast.innerHTML = `<span>${icon}</span><span>${message}</span>`;
+      toastContainer.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
     }
 
     function renderContaOptions() {
@@ -460,6 +553,15 @@
 
     async function saveLancamentoEdit() {
       if (!sessionId || !selectedLancamento) return;
+      
+      const saveBtn = editSave;
+      const originalText = saveBtn.querySelector('.save-text').textContent;
+      saveBtn.disabled = true;
+      saveBtn.querySelector('.save-text').textContent = '';
+      const spinner = document.createElement('div');
+      spinner.className = 'spinner';
+      saveBtn.appendChild(spinner);
+      
       const payload = {
         descricao: editDescricao.value.trim(),
         valor: parseMoneyInput(editValor.value),
@@ -476,16 +578,24 @@
         });
         const data = await response.json();
         if (data.ok) {
+          showToast(`✓ ${selectedLancamento.descricao} atualizado com sucesso!`, 'success');
           await loadHistory(true);
-          setSelectedLancamento(null);
-          mainStatus.textContent = 'Lançamento atualizado';
+          closeEditModal();
+        } else {
+          showToast(`Erro ao atualizar: ${data.message || 'Tente novamente'}`, 'error');
         }
-      } catch (e) {}
+      } catch (e) {
+        showToast('Erro de conexão ao salvar', 'error');
+      } finally {
+        spinner.remove();
+        saveBtn.querySelector('.save-text').textContent = originalText;
+        saveBtn.disabled = false;
+      }
     }
 
     async function deleteLancamentoById(id) {
       if (!sessionId) return;
-      if (!confirm('Excluir este lançamento?')) return;
+      if (!confirm('Tem certeza que deseja excluir este lançamento?')) return;
       try {
         const response = await fetch(`/api/miniapp/lancamentos/${id}`, {
           method: 'DELETE',
@@ -493,12 +603,17 @@
         });
         const data = await response.json();
         if (data.ok) {
+          showToast('✓ Lançamento excluído com sucesso!', 'success');
           await loadHistory(true);
           if (selectedLancamento && selectedLancamento.id === id) {
-            setSelectedLancamento(null);
+            closeEditModal();
           }
+        } else {
+          showToast('Erro ao excluir lançamento', 'error');
         }
-      } catch (e) {}
+      } catch (e) {
+        showToast('Erro de conexão ao excluir', 'error');
+      }
     }
 
     // Logic
@@ -671,18 +786,19 @@
     gerenteSend.addEventListener('click', sendGerenteMessage);
     gerenteInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendGerenteMessage(); });
 
-    // Refresh binds
+    // Refresh and Modal binds
     historyRefresh.addEventListener('click', () => loadHistory(true));
     historyLoadMore.addEventListener('click', () => loadHistory(false));
     agendamentoRefresh.addEventListener('click', loadAgendamentos);
     metaRefresh.addEventListener('click', loadMetas);
-    editRefresh.addEventListener('click', () => loadHistory(true));
     configRefresh.addEventListener('click', loadConfiguracoes);
     editSave.addEventListener('click', saveLancamentoEdit);
-    editCancel.addEventListener('click', () => setSelectedLancamento(null));
     configSave.addEventListener('click', saveConfiguracoes);
     configFinish.addEventListener('click', saveConfiguracoes);
     novaContaSalvar.addEventListener('click', createConta);
+    editModal.addEventListener('click', (e) => {
+      if (e.target === editModal) closeEditModal();
+    });
 
     // Boot
     historyList.addEventListener('click', (event) => {
@@ -691,8 +807,7 @@
       if (!id || !target.dataset.action) return;
       const item = historyCache.find((lanc) => String(lanc.id) === String(id));
       if (target.dataset.action === 'edit' && item) {
-        setSelectedLancamento(item);
-        switchTab(document.querySelector('[data-tab="editar"]'));
+        openEditModal(item);
       }
       if (target.dataset.action === 'delete') {
         deleteLancamentoById(Number(id));
