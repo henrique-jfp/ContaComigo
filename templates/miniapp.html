@@ -1395,7 +1395,7 @@
         mainStatus.textContent = 'Sincronizado';
 
         // Abre a interface imediatamente e carrega dados em segundo plano.
-        switchTabByName(initialTabFromUrl || (pendingDraftLaunch ? 'editar' : 'inicio'));
+        switchTabByName(pendingDraftLaunch ? 'inicio' : (initialTabFromUrl || 'inicio'));
         if (pendingDraftLaunch) {
           const draft = normalizeDraftLancamento(pendingDraftLaunch);
           if (draft) {
