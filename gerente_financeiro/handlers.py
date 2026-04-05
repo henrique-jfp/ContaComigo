@@ -259,7 +259,9 @@ async def _generate_with_groq(prompt: str) -> str | None:
 PALAVRAS_LISTA = {
     'lançamentos', 'lancamentos', 'lançamento', 'lancamento', 'transações', 'transacoes', 
     'transacao', 'transação', 'gastos', 'receitas', 'entradas', 'saidas', 'saídas',
-    'despesas', 'historico', 'histórico', 'movimentação', 'movimentacao', 'extrato'
+    'despesas', 'historico', 'histórico', 'movimentação', 'movimentacao', 'extrato',
+    'último lançamento', 'ultimo lançamento', 'ultimo lancamento', 'última transação',
+    'ultima transacao', 'última compra', 'ultima compra', 'mais recente', 'recentes'
 }
 
 PALAVRAS_RESUMO = {
@@ -496,7 +498,7 @@ def formatar_lancamento_detalhado(lanc: Lancamento) -> str:
     Formata um lançamento no modelo de card limpo e profissional - VERSÃO 2.0
     """
     # Emojis por tipo
-    tipo_emoji = "�" if lanc.tipo == 'Entrada' else "�"
+    tipo_emoji = "🟢" if lanc.tipo == 'Entrada' else "🔴"
     tipo_cor = "🟢" if lanc.tipo == 'Entrada' else "🔴"
     
     # Formatação da data
@@ -1134,6 +1136,12 @@ def _limpar_resposta_ia(texto: str) -> str:
     # Remove ```html, ```json, ```
     texto_limpo = re.sub(r'^```(html|json)?\n', '', texto, flags=re.MULTILINE)
     texto_limpo = re.sub(r'```$', '', texto_limpo, flags=re.MULTILINE)
+
+    # Converte markdown comum em HTML simples para o Telegram
+    texto_limpo = re.sub(r'^#{1,6}\s*(.+)$', r'<b>\1</b>', texto_limpo, flags=re.MULTILINE)
+    texto_limpo = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', texto_limpo)
+    texto_limpo = re.sub(r'(?<!\w)_(.+?)_(?!\w)', r'<i>\1</i>', texto_limpo)
+    texto_limpo = re.sub(r'^\s*[-*]\s+', '• ', texto_limpo, flags=re.MULTILINE)
     
     # Remove DOCTYPE e outras tags HTML problemáticas
     texto_limpo = re.sub(r'<!DOCTYPE[^>]*>', '', texto_limpo, flags=re.IGNORECASE)

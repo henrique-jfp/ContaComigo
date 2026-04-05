@@ -11,13 +11,14 @@ Data: 17/11/2025
 import logging
 import json
 import asyncio
+import re
 from html import escape
 import requests
 from datetime import datetime, timedelta
 from telegram import Update
 from telegram.ext import ContextTypes, CommandHandler, ConversationHandler
 from sqlalchemy import and_, extract
-from database.database import get_db, get_or_create_user
+from database.database import get_db, get_or_create_user, buscar_lancamentos_usuario
 from models import Lancamento, Usuario, Categoria, Agendamento, Objetivo
 import config
 
@@ -192,6 +193,69 @@ def _usuario_e_saldo(db, telegram_user) -> tuple[Usuario, float, float, float]:
     return usuario_db, saldo, entradas, saidas
 
 
+def _formatar_valor_brasileiro(valor: float) -> str:
+    return f"R$ {float(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _formatar_resposta_html(texto: str) -> str:
+    texto = (texto or "").strip().replace("\r\n", "\n")
+    texto = re.sub(r"```(?:html|json|markdown|md)?\s*", "", texto, flags=re.IGNORECASE)
+    texto = texto.replace("```", "")
+    texto = re.sub(r"^#{1,6}\s*(.+)$", r"<b>\1</b>", texto, flags=re.MULTILINE)
+    texto = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", texto)
+    texto = re.sub(r"(?<!\w)_(.+?)_(?!\w)", r"<i>\1</i>", texto)
+    texto = re.sub(r"^\s*[-*]\s+", "• ", texto, flags=re.MULTILINE)
+    texto = re.sub(r"\n{3,}", "\n\n", texto)
+    return texto.strip()
+
+
+def _formatar_lancamento_card(lanc: Lancamento) -> str:
+    descricao = escape(lanc.descricao or "Lançamento")
+    categoria = escape(lanc.categoria.nome if lanc.categoria else "Sem categoria")
+    pagamento = escape(lanc.forma_pagamento or "Não informado")
+    tipo = escape(lanc.tipo or "Não informado")
+    data_formatada = lanc.data_transacao.strftime("%d/%m/%Y")
+    hora_formatada = lanc.data_transacao.strftime("%H:%M")
+    valor = _formatar_valor_brasileiro(abs(float(lanc.valor or 0)))
+    tipo_emoji = "🟢" if str(lanc.tipo).lower().startswith("entr") else "🔴"
+
+    return (
+        f"📌 <b>Seu último lançamento</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"{tipo_emoji} <b>{descricao}</b>\n\n"
+        f"<b>💰 Valor:</b> <code>{valor}</code>\n"
+        f"<b>📅 Data:</b> {data_formatada} às {hora_formatada}\n"
+        f"<b>📂 Categoria:</b> {categoria}\n"
+        f"<b>💳 Pagamento:</b> {pagamento}\n"
+        f"<b>🏷️ Tipo:</b> {tipo}"
+    )
+
+
+def _intencao_ultimo_lancamento(texto: str) -> bool:
+    texto = (texto or "").lower()
+    return any(
+        frase in texto
+        for frase in [
+            "último lançamento",
+            "ultimo lançamento",
+            "ultimo lancamento",
+            "última transação",
+            "ultima transacao",
+            "última compra",
+            "ultima compra",
+            "lançamento mais recente",
+            "lancamento mais recente",
+            "último gasto",
+            "ultimo gasto",
+        ]
+    )
+
+
+def _intencao_saldo(texto: str) -> bool:
+    texto = (texto or "").lower()
+    return any(p in texto for p in ["saldo", "quanto tenho", "meu saldo", "saldo total", "quanto sobrou"])
+
+
 async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Roteador sempre ativo: texto/voz -> Groq tools -> execução local."""
     if not update.message or not update.effective_user:
@@ -231,11 +295,39 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
     try:
         usuario_db, saldo, entradas, saidas = _usuario_e_saldo(db, update.effective_user)
 
+        texto_normalizado = texto_usuario.strip().lower()
+
+        if _intencao_ultimo_lancamento(texto_normalizado):
+            ultimos = buscar_lancamentos_usuario(telegram_user_id=update.effective_user.id, limit=1)
+            if not ultimos:
+                await update.message.reply_html(
+                    "🔎 <b>Nenhum lançamento encontrado</b>\n\n"
+                    "Você ainda não tem lançamentos registrados no seu banco."
+                )
+                return ConversationHandler.END
+
+            await update.message.reply_html(_formatar_lancamento_card(ultimos[0]))
+            return ConversationHandler.END
+
+        if _intencao_saldo(texto_normalizado):
+            saldo_msg = (
+                "💰 <b>Seu saldo atual</b>\n"
+                "━━━━━━━━━━━━━━━━━━\n\n"
+                f"<b>Saldo:</b> <code>{_formatar_valor_brasileiro(saldo)}</code>\n"
+                f"<b>Entradas acumuladas:</b> <code>{_formatar_valor_brasileiro(entradas)}</code>\n"
+                f"<b>Saídas acumuladas:</b> <code>{_formatar_valor_brasileiro(saidas)}</code>"
+            )
+            await update.message.reply_html(saldo_msg)
+            return ConversationHandler.END
+
         system_prompt = (
             "Você é Alfredo, um Despachante Financeiro. "
             "Sempre escolha UMA tool quando houver intenção acionável. "
             "Use responder_duvida_financeira para perguntas gerais. "
-            "Não invente valores ausentes: se faltar dado essencial, peça na resposta final."
+            "Responda em português do Brasil usando HTML simples para Telegram. "
+            "Nunca use markdown com asteriscos. "
+            "Não invente valores, datas, categorias ou lançamentos ausentes. "
+            "Se faltar dado no contexto ou no banco, diga claramente que não encontrou a informação."
         )
 
         messages = [
@@ -250,7 +342,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
 
         if not tool_calls:
             resposta_direta = (message.get("content") or "Não consegui processar agora. Tente novamente.").strip()
-            await update.message.reply_text(resposta_direta)
+            await update.message.reply_html(_formatar_resposta_html(resposta_direta))
             return ConversationHandler.END
 
         tool_call = tool_calls[0]
@@ -349,7 +441,10 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                     "role": "system",
                     "content": (
                         "Responda em português do Brasil, objetivo e útil. "
-                        "Use formatação curta amigável para Telegram (HTML simples sem exagero)."
+                        "Use apenas os dados informados no contexto financeiro. "
+                        "Não invente números, contas ou transações. "
+                        "Se um dado não estiver disponível, diga que não encontrou no banco. "
+                        "Use formatação curta amigável para Telegram em HTML simples."
                     ),
                 },
                 {
@@ -366,7 +461,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             answer_completion = await _groq_chat_completion_async(contextual_messages)
             answer = (((answer_completion or {}).get("choices") or [{}])[0].get("message") or {}).get("content")
             answer = (answer or "Não consegui responder agora, tente novamente.").strip()
-            await update.message.reply_html(answer)
+            await update.message.reply_html(_formatar_resposta_html(answer))
             return ConversationHandler.END
 
         await update.message.reply_text("Não consegui entender essa ação ainda. Tente reformular a mensagem.")
