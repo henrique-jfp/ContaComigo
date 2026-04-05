@@ -175,7 +175,7 @@
             </div>
           </div>
 
-          <div class="grid gap-4 md:grid-cols-2">
+          <div class="grid gap-4 md:grid-cols-3">
             <div class="glass-card home-reveal rounded-[28px] p-5 border border-[#7b1e2d]/15 bg-gradient-to-br from-[#7b1e2d] via-[#9a3243] to-[#c66b7a] text-white shadow-glow" style="--delay: 145ms">
               <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-white/80 mb-3">
                 <i data-lucide="sparkles" class="w-4 h-4"></i>
@@ -200,6 +200,24 @@
                     <div id="homeCategoryValue" class="mt-1 text-xl font-extrabold text-[#7b1e2d]">R$ 0,00</div>
                     <div id="homeCategoryLabel" class="text-xs font-semibold text-slate-500">Nenhuma fatia</div>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="glass-card home-reveal rounded-[28px] p-5 relative overflow-hidden" style="--delay: 200ms">
+              <div class="flex items-center justify-between mb-2">
+                <div>
+                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-[#7b1e2d]/70">Meios mais usados</p>
+                  <h3 class="text-lg font-extrabold text-slate-900">Formas de pagamento</h3>
+                </div>
+                <i data-lucide="credit-card" class="w-5 h-5 text-[#7b1e2d]"></i>
+              </div>
+              <div class="relative h-[250px]">
+                <canvas id="homePaymentChart"></canvas>
+                <div class="absolute right-2 top-2 rounded-xl bg-white/90 border border-[#7b1e2d]/10 px-3 py-2 text-right shadow-sm pointer-events-none">
+                  <div class="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500">Top</div>
+                  <div id="homePaymentValue" class="mt-1 text-lg font-extrabold text-[#7b1e2d]">0x</div>
+                  <div id="homePaymentLabel" class="text-xs font-semibold text-slate-500">Sem dados</div>
                 </div>
               </div>
             </div>
@@ -259,70 +277,6 @@
         </h2>
         <p class="text-sm text-slate-600">Abra um lançamento no <b>Histórico</b> ou em <b>Últimas movimentações</b> para editar no modal com os campos preenchidos.</p>
         <button class="rounded-xl bg-[#7b1e2d] py-3 px-4 text-sm font-semibold text-white w-full" onclick="switchTabByName('historico')">Ir para Histórico</button>
-      </div>
-    </section>
-
-    <!-- Tela 4: CONFIGURAÇÕES / ONBOARDING -->
-    <section class="panel" id="configuracoes">
-      <div class="glass-card rounded-[24px] p-5 space-y-4">
-        <h2 class="text-sm font-semibold text-slate-700 flex items-center justify-between">
-          <span class="flex items-center"><i data-lucide="sliders-horizontal" class="w-4 h-4 mr-2 text-[#7b1e2d]"></i> Configurações e onboarding</span>
-          <button id="configRefresh" class="text-[#7b1e2d] hover:text-[#b85d6e] transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
-        </h2>
-
-        <div class="grid gap-3">
-          <div>
-            <label class="text-xs font-semibold text-slate-600">Perfil de investidor</label>
-            <select id="perfilInvestidor" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900">
-              <option value="">Selecione</option>
-              <option value="Conservador">Conservador</option>
-              <option value="Moderado">Moderado</option>
-              <option value="Arrojado">Arrojado</option>
-              <option value="Iniciante">Iniciante</option>
-            </select>
-          </div>
-
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-xs font-semibold text-slate-600">Horário de lembretes</label>
-              <input id="horarioNotificacao" type="time" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900">
-            </div>
-            <div class="flex items-end gap-2">
-              <input id="alertaGastosAtivo" type="checkbox" class="h-5 w-5 accent-[#7b1e2d]">
-              <label for="alertaGastosAtivo" class="text-xs font-semibold text-slate-600">Alertas de gastos ativos</label>
-            </div>
-          </div>
-
-          <div class="flex gap-3 pt-2">
-            <button id="configSave" class="flex-1 rounded-xl bg-[#7b1e2d] py-3 text-sm font-semibold text-white active:scale-95 transition">Salvar onboarding</button>
-            <button id="configFinish" class="flex-1 rounded-xl border border-[#7b1e2d]/15 bg-white py-3 text-sm font-semibold text-slate-700 active:scale-95 transition">Finalizar cadastro</button>
-          </div>
-        </div>
-
-        <div>
-          <h3 class="text-sm font-semibold text-slate-700 mb-3">Contas e cartões</h3>
-          <div id="contasList" class="space-y-3"></div>
-        </div>
-
-        <div class="border-t border-[#7b1e2d]/10 pt-4 space-y-3">
-          <h3 class="text-sm font-semibold text-slate-700">Adicionar conta/cartão</h3>
-          <div class="grid gap-3">
-            <input id="novaContaNome" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900" placeholder="Nome da conta ou cartão">
-            <select id="novaContaTipo" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900">
-              <option value="Conta Corrente">Conta Corrente</option>
-              <option value="Cartão de Crédito">Cartão de Crédito</option>
-              <option value="Carteira Digital">Carteira Digital</option>
-              <option value="Outro">Outro</option>
-            </select>
-            <div class="grid grid-cols-3 gap-3">
-              <input id="novaContaFechamento" type="number" min="1" max="31" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900" placeholder="Fech.">
-              <input id="novaContaVencimento" type="number" min="1" max="31" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900" placeholder="Venc.">
-              <input id="novaContaLimite" type="text" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900" placeholder="Limite">
-            </div>
-            <input id="novaContaEmail" type="email" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900" placeholder="E-mail de notificação (opcional)">
-            <button id="novaContaSalvar" class="rounded-xl bg-[#7b1e2d] py-3 text-sm font-semibold text-white active:scale-95 transition">Adicionar conta/cartão</button>
-          </div>
-        </div>
       </div>
     </section>
 
@@ -485,15 +439,18 @@
             <label class="text-xs font-semibold text-slate-600 block mb-2">Data</label>
             <input id="editData" type="date" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50">
           </div>
-          <div>
-            <label class="text-xs font-semibold text-slate-600 block mb-2">Conta</label>
-            <select id="editConta" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50"></select>
-          </div>
         </div>
 
         <div>
           <label class="text-xs font-semibold text-slate-600 block mb-2">Forma de pagamento</label>
-          <input id="editForma" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50" placeholder="Pix, Crédito, Débito, Dinheiro...">
+          <select id="editForma" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50">
+            <option value="Nao_informado">Não informado</option>
+            <option value="Pix">Pix</option>
+            <option value="Crédito">Crédito</option>
+            <option value="Débito">Débito</option>
+            <option value="Boleto">Boleto</option>
+            <option value="Dinheiro">Dinheiro</option>
+          </select>
         </div>
 
         <div class="flex gap-3 pt-4">
@@ -505,10 +462,9 @@
   </div>
 
   <!-- Bottom Tab Bar Premium -->
-  <nav class="fixed bottom-5 left-1/2 -translate-x-1/2 w-[94%] glass-card rounded-[28px] px-3 py-2 grid grid-cols-5 gap-1 z-50 shadow-2xl backdrop-blur-3xl border border-[#7b1e2d]/15">
+  <nav class="fixed bottom-5 left-1/2 -translate-x-1/2 w-[94%] glass-card rounded-[28px] px-3 py-2 grid grid-cols-4 gap-1 z-50 shadow-2xl backdrop-blur-3xl border border-[#7b1e2d]/15">
     <button class="nav-btn tab-active text-[#7b1e2d] flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="inicio" onclick="switchTab(this)"><i data-lucide="sparkles" class="w-5 h-5"></i><span>Início</span></button>
     <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="metas" onclick="switchTab(this)"><i data-lucide="target" class="w-5 h-5"></i><span>Metas</span></button>
-    <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="configuracoes" onclick="switchTab(this)"><i data-lucide="sliders-horizontal" class="w-5 h-5"></i><span>Config</span></button>
     <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="agendamentos" onclick="switchTab(this)"><i data-lucide="calendar" class="w-5 h-5"></i><span>Agendamento</span></button>
     <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="historico" onclick="switchTab(this)"><i data-lucide="history" class="w-5 h-5"></i><span>Histórico</span></button>
   </nav>
@@ -534,8 +490,11 @@
     const homeRecentRefresh = document.getElementById('homeRecentRefresh');
     const homeCashflowChartEl = document.getElementById('homeCashflowChart');
     const homeCategoryChartEl = document.getElementById('homeCategoryChart');
+    const homePaymentChartEl = document.getElementById('homePaymentChart');
     const homeCategoryValue = document.getElementById('homeCategoryValue');
     const homeCategoryLabel = document.getElementById('homeCategoryLabel');
+    const homePaymentValue = document.getElementById('homePaymentValue');
+    const homePaymentLabel = document.getElementById('homePaymentLabel');
     const historyList = document.getElementById('historyList');
     const historyStatus = document.getElementById('historyStatus');
     const historyQuery = document.getElementById('historyQuery');
@@ -577,25 +536,9 @@
     const editValor = document.getElementById('editValor');
     const editTipo = document.getElementById('editTipo');
     const editData = document.getElementById('editData');
-    const editConta = document.getElementById('editConta');
     const editForma = document.getElementById('editForma');
     const editSave = document.getElementById('editSave');
     const editCancel = document.getElementById('editCancel');
-
-    const configRefresh = document.getElementById('configRefresh');
-    const perfilInvestidor = document.getElementById('perfilInvestidor');
-    const horarioNotificacao = document.getElementById('horarioNotificacao');
-    const alertaGastosAtivo = document.getElementById('alertaGastosAtivo');
-    const configSave = document.getElementById('configSave');
-    const configFinish = document.getElementById('configFinish');
-    const contasList = document.getElementById('contasList');
-    const novaContaNome = document.getElementById('novaContaNome');
-    const novaContaTipo = document.getElementById('novaContaTipo');
-    const novaContaFechamento = document.getElementById('novaContaFechamento');
-    const novaContaVencimento = document.getElementById('novaContaVencimento');
-    const novaContaLimite = document.getElementById('novaContaLimite');
-    const novaContaEmail = document.getElementById('novaContaEmail');
-    const novaContaSalvar = document.getElementById('novaContaSalvar');
 
     let sessionId = null;
     let telegramInitData = null;
@@ -606,11 +549,11 @@
     let metasCache = [];
     let selectedLancamento = null;
     let selectedMeta = null;
-    let contasCache = [];
     let selectedLancamentoIsDraft = false;
     let pendingDraftLaunch = null;
     let homeCashflowChart = null;
     let homeCategoryChart = null;
+    let homePaymentChart = null;
     let homeRecentCache = [];
     const urlParams = new URLSearchParams(window.location.search);
     const initialTabFromUrl = urlParams.get('tab') || '';
@@ -628,7 +571,8 @@
         el.classList.remove('text-slate-500');
       }
       panels.forEach(p => p.classList.remove('active'));
-      document.getElementById(el.dataset.tab).classList.add('active');
+      const targetPanel = document.getElementById(el.dataset.tab);
+      if (targetPanel) targetPanel.classList.add('active');
     };
 
     const switchTabByName = (tabName) => {
@@ -711,10 +655,10 @@
     function applyDraftDetails(item) {
       if (!item) return;
       const categoria = [item.categoria_sugerida, item.subcategoria_sugerida].filter(Boolean).join(' / ');
-      const contaLabel = item.conta_nome || item.forma_pagamento || 'Conta não definida';
+      const contaLabel = item.conta_nome || item.forma_pagamento || 'Pagamento não definido';
       editDraftInfo.innerHTML = `
         <div><b>Pré-preenchido:</b> ${item.descricao || 'Lançamento'}</div>
-        <div><b>Conta:</b> ${contaLabel}</div>
+        <div><b>Pagamento:</b> ${contaLabel}</div>
         <div><b>Categoria:</b> ${categoria || 'N/A'}</div>
       `;
       editDraftInfo.classList.remove('hidden');
@@ -739,8 +683,7 @@
         editValor.value = '';
         editTipo.value = 'Saída';
         editData.value = '';
-        editForma.value = '';
-        editConta.value = '';
+        editForma.value = 'Nao_informado';
         return;
       }
       editModalBadge.textContent = item.id ? `Editando: ${item.descricao || 'Lançamento'}` : `Pré-edição: ${item.descricao || 'Lançamento'}`;
@@ -748,8 +691,7 @@
       editValor.value = item.valor != null ? String(item.valor).replace('.', ',') : '';
       editTipo.value = item.tipo || 'Saída';
       editData.value = formatDateForInput(item.data);
-      editForma.value = item.forma_pagamento || '';
-      editConta.value = item.id_conta ? String(item.id_conta) : '';
+      editForma.value = item.forma_pagamento || 'Nao_informado';
       if (item.id) {
         editDraftInfo.classList.add('hidden');
         editDraftInfo.innerHTML = '';
@@ -831,6 +773,10 @@
       if (homeCategoryChart) {
         homeCategoryChart.destroy();
         homeCategoryChart = null;
+      }
+      if (homePaymentChart) {
+        homePaymentChart.destroy();
+        homePaymentChart = null;
       }
     }
 
@@ -931,6 +877,7 @@
 
       const cashflow = Array.isArray(summary?.cashflow) ? summary.cashflow : [];
       const categories = Array.isArray(summary?.categories) ? summary.categories : [];
+      const paymentMethods = Array.isArray(summary?.payment_methods) ? summary.payment_methods : [];
       homeRecentCache = Array.isArray(summary?.recent) ? summary.recent : [];
       const chartRuntime = getChartRuntime();
       const cashflowDisplay = compactCashflow(cashflow, chartRuntime.isMobile ? 12 : 31);
@@ -1061,6 +1008,59 @@
         }
       }
 
+      if (homePaymentChartEl) {
+        const hasPaymentMethods = paymentMethods.length > 0;
+        homePaymentChart = new Chart(homePaymentChartEl, {
+          type: 'bar',
+          data: {
+            labels: hasPaymentMethods ? paymentMethods.map((item) => item.label) : ['Sem dados'],
+            datasets: [{
+              label: 'Usos no mês',
+              data: hasPaymentMethods ? paymentMethods.map((item) => item.count || 0) : [0],
+              backgroundColor: hasPaymentMethods ? paymentMethods.map((item) => item.color || '#7b1e2d') : ['#e2e8f0'],
+              borderRadius: 10,
+              borderSkipped: false,
+              barThickness: chartRuntime.isMobile ? 16 : 20,
+              maxBarThickness: chartRuntime.isMobile ? 20 : 24,
+            }],
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            normalized: true,
+            animation: chartRuntime.enableMotion ? { duration: 420, easing: 'easeOutQuad' } : false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => `${ctx.raw} uso(s)`,
+                },
+              },
+            },
+            scales: {
+              x: {
+                beginAtZero: true,
+                grid: { color: 'rgba(123, 30, 45, 0.08)' },
+                ticks: { color: '#64748b', precision: 0 },
+              },
+              y: {
+                grid: { display: false },
+                ticks: { color: '#334155', font: { size: chartRuntime.legendFont } },
+              },
+            },
+          },
+        });
+
+        if (hasPaymentMethods) {
+          homePaymentValue.textContent = `${paymentMethods[0].count || 0}x`;
+          homePaymentLabel.textContent = paymentMethods[0].label || 'Sem dados';
+        } else {
+          homePaymentValue.textContent = '0x';
+          homePaymentLabel.textContent = 'Sem dados';
+        }
+      }
+
       renderHomeRecent(summary?.recent || []);
       lucide.createIcons();
     }
@@ -1163,100 +1163,6 @@
       }
     }
 
-    function renderContaOptions() {
-      const options = ['<option value="">Selecione uma conta</option>'];
-      for (const conta of contasCache) {
-        options.push(`<option value="${conta.id}">${conta.nome} • ${conta.tipo}</option>`);
-      }
-      editConta.innerHTML = options.join('');
-      if (selectedLancamento?.id_conta) {
-        editConta.value = String(selectedLancamento.id_conta);
-      }
-    }
-
-    function renderContasList() {
-      if (!contasCache.length) {
-        contasList.innerHTML = '<div class="text-sm text-slate-500">Nenhuma conta ou cartão cadastrado.</div>';
-        return;
-      }
-      contasList.innerHTML = contasCache.map((conta) => `
-        <div class="rounded-2xl border border-[#7b1e2d]/10 bg-white p-4">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <p class="font-semibold text-slate-900">${conta.nome}</p>
-              <p class="text-xs text-slate-500">${conta.tipo}</p>
-              <p class="text-xs text-slate-500 mt-1">Fechamento: ${conta.dia_fechamento ?? '-'} • Vencimento: ${conta.dia_vencimento ?? '-'}</p>
-            </div>
-            <span class="text-xs font-semibold text-[#7b1e2d]">${conta.limite_cartao != null ? `R$ ${Number(conta.limite_cartao).toFixed(2)}` : 'Sem limite'}</span>
-          </div>
-        </div>
-      `).join('');
-      renderContaOptions();
-    }
-
-    async function loadConfiguracoes() {
-      if (!sessionId) return;
-      try {
-        const response = await fetchWithSession('/api/miniapp/configuracoes');
-        const data = await response.json();
-        if (!data.ok) return;
-        perfilInvestidor.value = data.usuario?.perfil_investidor || '';
-        horarioNotificacao.value = data.usuario?.horario_notificacao || '09:00';
-        alertaGastosAtivo.checked = Boolean(data.usuario?.alerta_gastos_ativo);
-        contasCache = data.contas || [];
-        renderContasList();
-      } catch (e) {}
-    }
-
-    async function saveConfiguracoes() {
-      if (!sessionId) return;
-      try {
-        const response = await fetch('/api/miniapp/configuracoes', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
-          body: JSON.stringify({
-            perfil_investidor: perfilInvestidor.value,
-            horario_notificacao: horarioNotificacao.value,
-            alerta_gastos_ativo: alertaGastosAtivo.checked,
-          }),
-        });
-        const data = await response.json();
-        if (data.ok) {
-          mainStatus.textContent = 'Configurações salvas';
-          mainStatus.className = 'font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#7b1e2d] to-[#a44a5a]';
-          await loadConfiguracoes();
-        }
-      } catch (e) {}
-    }
-
-    async function createConta() {
-      if (!sessionId) return;
-      const payload = {
-        nome: novaContaNome.value.trim(),
-        tipo: novaContaTipo.value,
-        dia_fechamento: novaContaFechamento.value,
-        dia_vencimento: novaContaVencimento.value,
-        limite_cartao: novaContaLimite.value,
-        email_notificacao: novaContaEmail.value.trim(),
-      };
-      try {
-        const response = await fetch('/api/miniapp/contas', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
-          body: JSON.stringify(payload),
-        });
-        const data = await response.json();
-        if (data.ok) {
-          novaContaNome.value = '';
-          novaContaFechamento.value = '';
-          novaContaVencimento.value = '';
-          novaContaLimite.value = '';
-          novaContaEmail.value = '';
-          await loadConfiguracoes();
-        }
-      } catch (e) {}
-    }
-
     async function saveLancamentoEdit() {
       if (!sessionId || !selectedLancamento) return;
       
@@ -1274,7 +1180,6 @@
         tipo: editTipo.value,
         data_transacao: editData.value,
         forma_pagamento: editForma.value.trim(),
-        id_conta: editConta.value ? Number(editConta.value) : null,
       };
       try {
         const isDraft = !selectedLancamento.id;
@@ -1408,7 +1313,6 @@
         // Carrega o essencial em paralelo sem bloquear a abertura do miniapp.
         loadHomeOverview();
         loadHistory(true);
-        loadConfiguracoes();
 
         // Carregamentos não críticos ficam assíncronos após a primeira pintura.
         setTimeout(() => {
@@ -1652,14 +1556,10 @@
     metaRefresh.addEventListener('click', loadMetas);
     metaNew.addEventListener('click', () => openMetaModal(null));
     metaSave.addEventListener('click', saveMeta);
-    configRefresh.addEventListener('click', loadConfiguracoes);
     editSave.addEventListener('click', saveLancamentoEdit);
     newAgendSave.addEventListener('click', createAgendamento);
     newAgendFrequencia.addEventListener('change', updateParcelasVisibility);
     newAgendInfinito.addEventListener('change', updateParcelasVisibility);
-    configSave.addEventListener('click', saveConfiguracoes);
-    configFinish.addEventListener('click', saveConfiguracoes);
-    novaContaSalvar.addEventListener('click', createConta);
     editModal.addEventListener('click', (e) => {
       if (e.target === editModal) closeEditModal();
     });

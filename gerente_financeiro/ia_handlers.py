@@ -30,6 +30,170 @@ except ModuleNotFoundError:
 
 logger = logging.getLogger(__name__)
 
+_FORMAS_PAGAMENTO_VALIDAS = {"Pix", "Crédito", "Débito", "Boleto", "Dinheiro", "Nao_informado"}
+
+
+class GroqAPIError(RuntimeError):
+    def __init__(self, message: str, status_code: int | None = None, response_body: str | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.response_body = response_body
+
+
+def _normalizar_forma_pagamento(valor: str | None) -> str:
+    raw = str(valor or "").strip().lower()
+    mapa = {
+        "pix": "Pix",
+        "credito": "Crédito",
+        "crédito": "Crédito",
+        "debito": "Débito",
+        "débito": "Débito",
+        "boleto": "Boleto",
+        "dinheiro": "Dinheiro",
+        "nao_informado": "Nao_informado",
+        "não informado": "Nao_informado",
+        "nao informado": "Nao_informado",
+        "n/a": "Nao_informado",
+        "": "Nao_informado",
+    }
+    return mapa.get(raw, "Nao_informado")
+
+
+def _detectar_forma_pagamento_no_texto(texto: str) -> str:
+    t = (texto or "").lower()
+    if "pix" in t:
+        return "Pix"
+    if "credito" in t or "crédito" in t:
+        return "Crédito"
+    if "debito" in t or "débito" in t:
+        return "Débito"
+    if "boleto" in t:
+        return "Boleto"
+    if "dinheiro" in t or "espécie" in t or "especie" in t:
+        return "Dinheiro"
+    return "Nao_informado"
+
+
+def _detectar_categoria_basica(texto: str) -> str:
+    t = (texto or "").lower()
+    mapa = {
+        "aliment": "Alimentação",
+        "mercado": "Alimentação",
+        "farm": "Saúde",
+        "uber": "Transporte",
+        "combust": "Transporte",
+        "gasolina": "Transporte",
+        "aluguel": "Moradia",
+        "condominio": "Moradia",
+        "condomínio": "Moradia",
+        "luz": "Moradia",
+        "água": "Moradia",
+        "agua": "Moradia",
+        "internet": "Moradia",
+        "salario": "Salário",
+        "salário": "Salário",
+        "freela": "Renda Extra",
+        "recebi": "Renda",
+        "ganhei": "Renda",
+    }
+    for chave, categoria in mapa.items():
+        if chave in t:
+            return categoria
+    return "Outros"
+
+
+def _intencao_registro_lancamento(texto: str) -> bool:
+    texto = (texto or "").lower()
+    gatilhos = [
+        "gastei",
+        "paguei",
+        "comprei",
+        "despesa",
+        "gasto",
+        "recebi",
+        "ganhei",
+        "entrada",
+        "registra",
+        "registrar",
+        "lançar",
+        "lancar",
+        "lançamento",
+        "lancamento",
+    ]
+    return any(g in texto for g in gatilhos)
+
+
+def _extrair_valor_texto(texto: str) -> float | None:
+    t = (texto or "").strip()
+    if not t:
+        return None
+
+    moeda = re.search(r"r\$\s*(-?\d[\d\.,]*)", t, flags=re.IGNORECASE)
+    bruto = moeda.group(1) if moeda else None
+
+    if not bruto:
+        numeros = re.findall(r"-?\d[\d\.,]*", t)
+        if not numeros:
+            return None
+        bruto = numeros[-1]
+
+    limpo = bruto.replace(".", "").replace(",", ".")
+    try:
+        valor = float(limpo)
+    except ValueError:
+        return None
+
+    return abs(valor) if valor != 0 else None
+
+
+def _extrair_lancamento_do_texto(texto: str) -> dict | None:
+    valor = _extrair_valor_texto(texto)
+    if valor is None:
+        return None
+
+    t = (texto or "").strip()
+    t_lower = t.lower()
+    tipo = "Saída"
+    if any(k in t_lower for k in ["recebi", "ganhei", "entrada", "salário", "salario"]):
+        tipo = "Entrada"
+
+    descricao_limpa = re.sub(r"r\$\s*-?\d[\d\.,]*", "", t, flags=re.IGNORECASE)
+    descricao_limpa = re.sub(r"-?\d[\d\.,]*", "", descricao_limpa)
+    descricao_limpa = re.sub(r"\b(registra|registrar|lancar|lançar|lancamento|lançamento)\b", "", descricao_limpa, flags=re.IGNORECASE)
+    descricao_limpa = re.sub(r"\s+", " ", descricao_limpa).strip(" .,:;-")
+
+    return {
+        "descricao": descricao_limpa or ("Entrada" if tipo == "Entrada" else "Despesa"),
+        "valor": float(valor),
+        "tipo": tipo,
+        "categoria": _detectar_categoria_basica(t),
+        "forma_pagamento": _detectar_forma_pagamento_no_texto(t),
+    }
+
+
+def _registrar_lancamento_local(db, usuario_db: Usuario, dados: dict) -> Lancamento:
+    descricao = str(dados.get("descricao") or "Lançamento")
+    valor = abs(float(dados.get("valor") or 0))
+    tipo_raw = str(dados.get("tipo") or "Saída").strip().lower()
+    tipo = "Entrada" if tipo_raw.startswith("entr") else "Saída"
+    categoria = str(dados.get("categoria") or "Outros")
+    forma_pagamento = _normalizar_forma_pagamento(dados.get("forma_pagamento"))
+    id_categoria = _resolve_categoria_id(db, categoria)
+
+    lanc = Lancamento(
+        id_usuario=usuario_db.id,
+        descricao=descricao,
+        valor=valor,
+        tipo=tipo,
+        data_transacao=datetime.utcnow(),
+        forma_pagamento=forma_pagamento if forma_pagamento in _FORMAS_PAGAMENTO_VALIDAS else "Nao_informado",
+        id_categoria=id_categoria,
+        origem="alfredo",
+    )
+    db.add(lanc)
+    db.commit()
+    return lanc
+
 
 _ALFREDO_TOOLS = [
     {
@@ -42,7 +206,12 @@ _ALFREDO_TOOLS = [
                 "properties": {
                     "descricao": {"type": "string"},
                     "valor": {"type": "number"},
+                    "tipo": {"type": "string", "enum": ["Entrada", "Saída"]},
                     "categoria": {"type": "string"},
+                    "forma_pagamento": {
+                        "type": "string",
+                        "enum": ["Pix", "Crédito", "Débito", "Boleto", "Dinheiro", "Nao_informado"],
+                    },
                 },
                 "required": ["descricao", "valor", "categoria"],
             },
@@ -140,7 +309,20 @@ def _groq_chat_completion(messages: list[dict], tools: list[dict] | None = None,
         json=payload,
         timeout=45,
     )
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        body_preview = (response.text or "")[:1500]
+        logger.error(
+            "Groq chat/completions retornou erro status=%s body=%s",
+            response.status_code,
+            body_preview,
+        )
+        raise GroqAPIError(
+            f"Groq chat/completions falhou com status {response.status_code}",
+            status_code=response.status_code,
+            response_body=body_preview,
+        ) from exc
     return response.json()
 
 
@@ -327,7 +509,9 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             "Responda em português do Brasil usando HTML simples para Telegram. "
             "Nunca use markdown com asteriscos. "
             "Não invente valores, datas, categorias ou lançamentos ausentes. "
-            "Se faltar dado no contexto ou no banco, diga claramente que não encontrou a informação."
+            "Se faltar dado no contexto ou no banco, diga claramente que não encontrou a informação. "
+            "Tente deduzir a forma de pagamento da mensagem do usuário. "
+            "Se não houver indicação explícita, preencha obrigatoriamente como Nao_informado."
         )
 
         messages = [
@@ -335,12 +519,60 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             {"role": "user", "content": texto_usuario},
         ]
 
-        completion = await _groq_chat_completion_async(messages, tools=_ALFREDO_TOOLS, tool_choice="auto")
+        intencao_registro = _intencao_registro_lancamento(texto_normalizado)
+
+        try:
+            completion = await _groq_chat_completion_async(messages, tools=_ALFREDO_TOOLS, tool_choice="auto")
+        except Exception as exc:
+            logger.error("Falha no Groq com tools no Alfredo: %s", exc, exc_info=True)
+
+            if intencao_registro:
+                extraido = _extrair_lancamento_do_texto(texto_usuario)
+                if extraido and extraido.get("valor", 0) > 0:
+                    _registrar_lancamento_local(db, usuario_db, extraido)
+                    await update.message.reply_text(
+                        f"✅ Lançamento de R$ {extraido['valor']:.2f} em {escape(extraido['categoria'])} registrado!"
+                    )
+                    return ConversationHandler.END
+
+            fallback_messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "Você é Alfredo. O modo de tools está indisponível agora. "
+                        "Responda sem inventar números, lançamentos ou confirmações de ações. "
+                        "Se o usuário pedir para registrar algo, peça os dados faltantes de forma objetiva."
+                    ),
+                },
+                {"role": "user", "content": texto_usuario},
+            ]
+            fallback_completion = await _groq_chat_completion_async(fallback_messages)
+            fallback_choice = ((fallback_completion or {}).get("choices") or [{}])[0]
+            fallback_message = fallback_choice.get("message") or {}
+            fallback_text = (fallback_message.get("content") or "Não consegui processar agora. Tente novamente.").strip()
+            await update.message.reply_html(_formatar_resposta_html(fallback_text))
+            return ConversationHandler.END
+
         choice = ((completion or {}).get("choices") or [{}])[0]
         message = choice.get("message") or {}
         tool_calls = message.get("tool_calls") or []
 
         if not tool_calls:
+            if intencao_registro:
+                extraido = _extrair_lancamento_do_texto(texto_usuario)
+                if extraido and extraido.get("valor", 0) > 0:
+                    _registrar_lancamento_local(db, usuario_db, extraido)
+                    await update.message.reply_text(
+                        f"✅ Lançamento de R$ {extraido['valor']:.2f} em {escape(extraido['categoria'])} registrado!"
+                    )
+                    return ConversationHandler.END
+
+                await update.message.reply_text(
+                    "❌ Não consegui registrar automaticamente. Me envie no formato: "
+                    "'gastei 120,50 no mercado no pix'."
+                )
+                return ConversationHandler.END
+
             resposta_direta = (message.get("content") or "Não consegui processar agora. Tente novamente.").strip()
             await update.message.reply_html(_formatar_resposta_html(resposta_direta))
             return ConversationHandler.END
@@ -355,31 +587,22 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             args = {}
 
         if fn_name == "registrar_lancamento":
-            descricao = str(args.get("descricao") or "Lançamento")
             valor = float(args.get("valor") or 0)
-            categoria = str(args.get("categoria") or "Outros")
-            if valor <= 0:
+            if valor == 0:
                 await update.message.reply_text("❌ Preciso de um valor maior que zero para registrar o lançamento.")
                 return ConversationHandler.END
 
-            tipo = "Saída"
-            if valor < 0:
-                tipo = "Entrada"
-                valor = abs(valor)
-
-            id_categoria = _resolve_categoria_id(db, categoria)
-            lanc = Lancamento(
-                id_usuario=usuario_db.id,
-                descricao=descricao,
-                valor=valor,
-                tipo=tipo,
-                data_transacao=datetime.utcnow(),
-                id_categoria=id_categoria,
-                origem="alfredo",
+            dados_lancamento = {
+                "descricao": str(args.get("descricao") or "Lançamento"),
+                "valor": abs(valor),
+                "tipo": str(args.get("tipo") or ("Entrada" if valor < 0 else "Saída")),
+                "categoria": str(args.get("categoria") or "Outros"),
+                "forma_pagamento": str(args.get("forma_pagamento") or "Nao_informado"),
+            }
+            _registrar_lancamento_local(db, usuario_db, dados_lancamento)
+            await update.message.reply_text(
+                f"✅ Lançamento de R$ {abs(valor):.2f} em {escape(dados_lancamento['categoria'])} registrado!"
             )
-            db.add(lanc)
-            db.commit()
-            await update.message.reply_text(f"✅ Lançamento de R$ {valor:.2f} em {escape(categoria)} registrado!")
             return ConversationHandler.END
 
         if fn_name == "agendar_despesa":

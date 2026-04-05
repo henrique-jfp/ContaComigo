@@ -360,6 +360,36 @@ def _category_distribution(lancamentos: list[Lancamento]) -> list[dict]:
     ]
 
 
+def _payment_method_distribution(lancamentos: list[Lancamento]) -> list[dict]:
+    counts: dict[str, int] = {}
+    labels_map = {
+        "Pix": "Pix",
+        "Crédito": "Crédito",
+        "Débito": "Débito",
+        "Boleto": "Boleto",
+        "Dinheiro": "Dinheiro",
+        "Nao_informado": "Não informado",
+    }
+
+    for lanc in lancamentos:
+        forma = _normalize_forma_pagamento(getattr(lanc, "forma_pagamento", None))
+        counts[forma] = counts.get(forma, 0) + 1
+
+    if not counts:
+        return []
+
+    ordered = sorted(counts.items(), key=lambda item: item[1], reverse=True)
+    palette = ["#7b1e2d", "#b85d6e", "#2563eb", "#16a34a", "#f59e0b", "#475569"]
+    return [
+        {
+            "label": labels_map.get(key, key),
+            "count": value,
+            "color": palette[i % len(palette)],
+        }
+        for i, (key, value) in enumerate(ordered)
+    ]
+
+
 def _build_miniapp_insight(usuario: Usuario, balance: float, receita: float, despesa: float, categories: list[dict], cashflow: list[dict]) -> str:
     if receita <= 0 and despesa <= 0:
         return "Comece registrando seus primeiros lançamentos. O Alfredo vai te mostrar os padrões assim que o fluxo começar."
@@ -632,6 +662,7 @@ def miniapp_overview():
         balance = receita - despesa
         cashflow = _daily_cashflow(lancamentos_mes, start_date, end_date)
         categories = _category_distribution(lancamentos_mes)
+        payment_methods = _payment_method_distribution(lancamentos_mes)
         insight = _build_miniapp_insight(usuario, balance, receita, despesa, categories, cashflow)
 
         recent_items = (
@@ -660,6 +691,7 @@ def miniapp_overview():
                 "insight": insight,
                 "cashflow": cashflow,
                 "categories": categories,
+                "payment_methods": payment_methods,
                 "recent": [_serialize_miniapp_lancamento(lanc) for lanc in recent_items],
             }
         })
