@@ -294,7 +294,7 @@
               <h2 id="homeBalance" class="mt-2 text-4xl font-extrabold tracking-tight text-telegram-text">R$ 0,00</h2>
               <p id="homeBalanceHint" class="mt-1 text-sm font-semibold text-telegram-hint">Carregando seu fluxo...</p>
             </div>
-            <div class="shrink-0 rounded-2xl bg-telegram-card border border-telegram-separator shadow-soft p-3 w-[120px]">
+            <button id="homeLevelCard" type="button" class="shrink-0 rounded-2xl bg-telegram-card border border-telegram-separator shadow-soft p-3 w-[120px] text-left hover:border-brand/40 hover:bg-brand/5 transition" title="Abrir perfil do jogo">
               <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.24em] text-telegram-hint mb-2">
                 <span>Nível</span>
                 <span id="homeStreakIcon">🔥</span>
@@ -302,7 +302,7 @@
               <div class="text-2xl font-extrabold text-brand leading-none" id="homeLevel">1</div>
               <div class="mt-1 text-[11px] text-telegram-hint"><span id="homeXp">0</span> XP</div>
               <div class="mt-2 text-[11px] font-semibold text-telegram-text">🔥 <span id="homeStreak">0</span> dias</div>
-            </div>
+            </button>
           </div>
 
           <div class="mt-6 relative z-10">
@@ -514,6 +514,68 @@
       </div>
     </section>
 
+    <!-- Tela 6: PERFIL DO JOGO (acesso pelo card de nível) -->
+    <section class="panel" id="perfil-jogo">
+      <div class="space-y-4">
+        <div class="rounded-3xl border border-brand/20 p-6 text-white shadow-lift" style="background: radial-gradient(circle at 15% 20%, rgba(255,255,255,0.2), transparent 45%), linear-gradient(135deg, #7b1e2d 0%, #b85d6e 55%, #1f2937 100%);">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-xs uppercase tracking-[0.28em] text-white/80">Perfil do Jogo</p>
+              <h2 id="gameProfileName" class="mt-2 text-2xl font-extrabold">Jogador</h2>
+              <p id="gameProfileTitle" class="mt-1 text-sm font-semibold text-white/85">Iniciante</p>
+            </div>
+            <span id="gameProfileBadge" class="rounded-full border border-white/30 bg-white/15 px-3 py-1 text-xs font-bold">🌱 Em evolução</span>
+          </div>
+
+          <div class="mt-5">
+            <div class="flex items-center justify-between text-xs font-semibold text-white/90">
+              <span id="gameProfileLevelLine">Nível 1</span>
+              <span id="gameProfileXpLine">0 / 100 XP</span>
+            </div>
+            <div class="mt-2 h-3 w-full overflow-hidden rounded-full bg-white/20">
+              <div id="gameProfileProgressBar" class="h-full rounded-full bg-white transition-[width] duration-700 ease-out" style="width: 0%"></div>
+            </div>
+            <p id="gameProfileNextHint" class="mt-2 text-xs font-semibold text-white/80">Faltam 0 XP para o próximo nível</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="glass-card rounded-2xl p-4">
+            <p class="text-xs font-semibold uppercase tracking-[0.2em] text-telegram-hint">Interações (histórico)</p>
+            <p id="gameInteractionsTotal" class="mt-2 text-2xl font-extrabold text-telegram-text">0</p>
+          </div>
+          <div class="glass-card rounded-2xl p-4">
+            <p class="text-xs font-semibold uppercase tracking-[0.2em] text-telegram-hint">Interações (7 dias)</p>
+            <p id="gameInteractionsWeek" class="mt-2 text-2xl font-extrabold text-telegram-text">0</p>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-3xl p-5">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-telegram-text">Features que você mais usa</h3>
+            <button id="gameProfileRefresh" class="text-brand hover:text-brand-soft transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+          </div>
+          <div id="gameTopFeatures" class="mt-3 space-y-2"></div>
+        </div>
+
+        <div class="glass-card rounded-3xl p-5 border border-slate-800/10 bg-slate-950 text-white dark:border-slate-700/40 dark:bg-slate-900">
+          <p class="text-xs font-bold uppercase tracking-[0.2em] text-white/70">Recadinho do Alfredo</p>
+          <p id="gameAlfredoNote" class="mt-2 text-sm font-semibold text-white/95">Carregando recomendação...</p>
+        </div>
+
+        <div class="glass-card rounded-3xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold text-telegram-text">Ranking mensal</h3>
+            <span id="gameRankingUpdatedAt" class="text-xs text-telegram-hint">--</span>
+          </div>
+          <div id="gameRankingList" class="space-y-2"></div>
+          <button id="gameSeeRanking" class="mt-4 w-full rounded-xl bg-brand py-3 text-sm font-semibold text-white hover:bg-brand-soft transition">Veja o Ranking Mensal</button>
+        </div>
+
+        <button id="gameBackHome" class="w-full rounded-xl border border-telegram-separator bg-telegram-card py-3 text-sm font-semibold text-telegram-text hover:bg-brand/5 transition">Voltar para o Início</button>
+      </div>
+    </section>
+
   </main>
 
   <!-- Toast Notifications Container -->
@@ -701,6 +763,7 @@
     const mainStatus = document.getElementById('mainStatus');
     const homeBalance = document.getElementById('homeBalance');
     const homeBalanceHint = document.getElementById('homeBalanceHint');
+    const homeLevelCard = document.getElementById('homeLevelCard');
     const homeLevel = document.getElementById('homeLevel');
     const homeXp = document.getElementById('homeXp');
     const homeStreak = document.getElementById('homeStreak');
@@ -779,6 +842,23 @@
     const configSave = document.getElementById('configSave');
     const configFinish = document.getElementById('configFinish');
 
+    const gameProfileName = document.getElementById('gameProfileName');
+    const gameProfileTitle = document.getElementById('gameProfileTitle');
+    const gameProfileBadge = document.getElementById('gameProfileBadge');
+    const gameProfileLevelLine = document.getElementById('gameProfileLevelLine');
+    const gameProfileXpLine = document.getElementById('gameProfileXpLine');
+    const gameProfileProgressBar = document.getElementById('gameProfileProgressBar');
+    const gameProfileNextHint = document.getElementById('gameProfileNextHint');
+    const gameInteractionsTotal = document.getElementById('gameInteractionsTotal');
+    const gameInteractionsWeek = document.getElementById('gameInteractionsWeek');
+    const gameTopFeatures = document.getElementById('gameTopFeatures');
+    const gameAlfredoNote = document.getElementById('gameAlfredoNote');
+    const gameRankingList = document.getElementById('gameRankingList');
+    const gameRankingUpdatedAt = document.getElementById('gameRankingUpdatedAt');
+    const gameProfileRefresh = document.getElementById('gameProfileRefresh');
+    const gameSeeRanking = document.getElementById('gameSeeRanking');
+    const gameBackHome = document.getElementById('gameBackHome');
+
     let sessionId = null;
     let telegramInitData = null;
     let reauthInFlight = null;
@@ -795,6 +875,9 @@
     let deviceProfile = '';
     let deviceResizeTimer = null;
     let homeRecentCache = [];
+    let gameProfileCache = null;
+    let gameRankingCache = [];
+    let gameRankingRefreshTimer = null;
     const urlParams = new URLSearchParams(window.location.search);
     const initialTabFromUrl = urlParams.get('tab') || '';
     const rawDraftFromUrl = urlParams.get('draft') || '';
@@ -845,27 +928,47 @@
     }
 
     // Navigation
-    const switchTab = (el) => {
-      if(!el.dataset.tab) return;
-      document.querySelectorAll('.nav-btn').forEach(b => { 
-        b.classList.remove('tab-active', 'text-brand'); 
-        b.classList.add('text-telegram-hint'); 
+    function setActiveNav(tabName) {
+      const navButtons = document.querySelectorAll('.nav-btn');
+      navButtons.forEach((btn) => {
+        const isActive = btn.dataset.tab === tabName;
+        btn.classList.toggle('tab-active', isActive);
+        btn.classList.toggle('text-brand', isActive);
+        btn.classList.toggle('text-telegram-hint', !isActive);
       });
-      if(el.classList.contains('nav-btn')) {
-        el.classList.add('tab-active', 'text-brand'); 
-        el.classList.remove('text-telegram-hint');
+    }
+
+    function openPanel(tabName, keepNav = false) {
+      if (!tabName) return;
+      if (tabName !== 'perfil-jogo' && gameRankingRefreshTimer) {
+        clearInterval(gameRankingRefreshTimer);
+        gameRankingRefreshTimer = null;
       }
       panels.forEach(p => p.classList.remove('active'));
-      document.getElementById(el.dataset.tab).classList.add('active');
-      if (el.dataset.tab === 'inicio' && sessionId) {
+      const panel = document.getElementById(tabName);
+      if (!panel) return;
+      panel.classList.add('active');
+      if (!keepNav) {
+        setActiveNav(tabName);
+      }
+      if (tabName === 'inicio' && sessionId) {
         loadHomeOverview();
       }
+    }
+
+    const switchTab = (el) => {
+      if (!el?.dataset?.tab) return;
+      openPanel(el.dataset.tab, false);
     };
 
     const switchTabByName = (tabName) => {
       if (!tabName) return;
       const button = document.querySelector(`.nav-btn[data-tab="${tabName}"]`);
-      if (button) switchTab(button);
+      if (button) {
+        switchTab(button);
+      } else {
+        openPanel(tabName, true);
+      }
     };
 
     function isEntradaTipo(tipo, value) {
@@ -1604,6 +1707,113 @@
       }
     }
 
+    function renderGameTopFeatures(features = []) {
+      if (!features.length) {
+        gameTopFeatures.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-3 text-xs text-telegram-hint">Ainda sem interações suficientes para ranking de features.</div>';
+        return;
+      }
+
+      gameTopFeatures.innerHTML = features.map((item, idx) => {
+        const total = Number(item.interactions || 0);
+        const bar = Math.max(12, Math.min(100, 100 - idx * 14));
+        return `
+          <div class="rounded-2xl border border-telegram-separator bg-telegram-card p-3">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-bold text-telegram-text truncate">${item.feature}</span>
+              <span class="text-xs font-semibold text-brand">${total}x</span>
+            </div>
+            <div class="mt-2 h-1.5 w-full rounded-full bg-slate-200/70 overflow-hidden">
+              <div class="h-full rounded-full" style="width:${bar}%; background: linear-gradient(90deg, #7b1e2d, #b85d6e);"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderGameRanking(items = []) {
+      if (!items.length) {
+        gameRankingList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-3 text-xs text-telegram-hint">Sem dados no ranking deste mês ainda.</div>';
+        return;
+      }
+
+      gameRankingList.innerHTML = items.slice(0, 20).map((item) => {
+        const isMe = Boolean(item.is_current_user);
+        const medal = item.position === 1 ? '🥇' : item.position === 2 ? '🥈' : item.position === 3 ? '🥉' : '•';
+        return `
+          <div class="rounded-2xl border p-3 ${isMe ? 'border-brand/40 bg-brand/5' : 'border-telegram-separator bg-telegram-card'}">
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-bold ${isMe ? 'text-brand' : 'text-telegram-text'}">${medal} #${item.position} ${item.name}</p>
+                <p class="text-[11px] text-telegram-hint">Nível ${item.level} • ${item.interactions} interações</p>
+              </div>
+              <span class="text-sm font-extrabold ${isMe ? 'text-brand' : 'text-telegram-text'}">${item.monthly_xp} XP</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderGameProfile(profile) {
+      if (!profile) return;
+      const xp = profile.xp || {};
+      const progress = Math.max(0, Math.min(100, Number(xp.progress_pct || 0)));
+
+      gameProfileName.textContent = profile.name || 'Jogador';
+      gameProfileTitle.textContent = profile.title || 'Iniciante';
+      gameProfileBadge.textContent = profile.badge || '🌱 Em evolução';
+      gameProfileLevelLine.textContent = `Nível ${profile.level || 1}`;
+      gameProfileXpLine.textContent = `${xp.xp_in_level || 0} / ${xp.xp_needed || 1} XP`;
+      gameProfileProgressBar.style.width = `${progress}%`;
+      gameProfileNextHint.textContent = `Faltam ${xp.xp_to_next || 0} XP para o nível ${xp.next_level || ((profile.level || 1) + 1)}`;
+      gameInteractionsTotal.textContent = String(profile.interactions_total || 0);
+      gameInteractionsWeek.textContent = String(profile.interactions_week || 0);
+      gameAlfredoNote.textContent = profile.alfredo_note || 'Mantenha consistência para subir no ranking.';
+      renderGameTopFeatures(Array.isArray(profile.top_features) ? profile.top_features : []);
+    }
+
+    async function loadGameProfile() {
+      if (!sessionId) return;
+      try {
+        const response = await fetchWithSession('/api/miniapp/game-profile');
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error || 'profile_error');
+        gameProfileCache = data.profile || null;
+        renderGameProfile(gameProfileCache);
+      } catch (_) {
+        gameAlfredoNote.textContent = 'Nao foi possivel carregar o perfil gamer agora.';
+      }
+    }
+
+    async function loadMonthlyRanking() {
+      if (!sessionId) return;
+      try {
+        const response = await fetchWithSession('/api/miniapp/ranking-monthly');
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error || 'ranking_error');
+        gameRankingCache = Array.isArray(data.ranking) ? data.ranking : [];
+        renderGameRanking(gameRankingCache);
+
+        const updatedAt = new Date(data.updated_at || Date.now());
+        gameRankingUpdatedAt.textContent = `Atualizado ${updatedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+      } catch (_) {
+        gameRankingUpdatedAt.textContent = 'Falha ao atualizar';
+      }
+    }
+
+    function openGameProfilePanel() {
+      openPanel('perfil-jogo', true);
+      loadGameProfile();
+      loadMonthlyRanking();
+
+      if (gameRankingRefreshTimer) {
+        clearInterval(gameRankingRefreshTimer);
+      }
+      gameRankingRefreshTimer = setInterval(() => {
+        if (document.hidden || !sessionId || !document.getElementById('perfil-jogo')?.classList.contains('active')) return;
+        loadMonthlyRanking();
+      }, 15000);
+    }
+
     function openNewAgendamentoModal() {
       newAgendDescricao.value = '';
       newAgendValor.value = '';
@@ -1880,6 +2090,8 @@
         setTimeout(() => {
           loadAgendamentos();
           loadMetas();
+          loadGameProfile();
+          loadMonthlyRanking();
         }, 80);
 
         setInterval(() => {
@@ -2212,6 +2424,13 @@
     });
 
     homeRecentRefresh.addEventListener('click', loadHomeOverview);
+    homeLevelCard.addEventListener('click', openGameProfilePanel);
+    gameProfileRefresh.addEventListener('click', async () => {
+      await loadGameProfile();
+      await loadMonthlyRanking();
+    });
+    gameSeeRanking.addEventListener('click', loadMonthlyRanking);
+    gameBackHome.addEventListener('click', () => switchTabByName('inicio'));
 
     metaList.addEventListener('click', (event) => {
       const target = event.target.closest('[data-meta-action]');

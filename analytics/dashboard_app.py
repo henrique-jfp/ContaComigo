@@ -16,7 +16,7 @@ import re
 import requests
 from urllib.parse import parse_qsl
 from functools import wraps
-from sqlalchemy import and_, func
+from sqlalchemy import and_, func, desc
 from flask import Flask, render_template, jsonify, request, g
 from sqlalchemy.orm import joinedload
 from datetime import datetime, timedelta, date
@@ -67,10 +67,12 @@ static_dir = os.path.join(parent_dir, 'static')
 sys.path.insert(0, parent_dir)
 import config
 from database.database import get_db, buscar_lancamentos_usuario
-from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Categoria, Subcategoria
+from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Categoria, Subcategoria, XpEvent
 from gerente_financeiro.prompts import PROMPT_ALFREDO
 from gerente_financeiro.services import preparar_contexto_financeiro_completo
+from gerente_financeiro.gamification_service import get_level_progress_payload, award_xp
 import google.generativeai as genai
+from types import SimpleNamespace
 
 # Criar app Flask
 app = Flask(__name__, 
@@ -450,6 +452,50 @@ def _serialize_miniapp_lancamento(lanc: Lancamento) -> dict:
         "categoria_nome": lanc.categoria.nome if lanc.categoria else None,
         "subcategoria_nome": lanc.subcategoria.nome if lanc.subcategoria else None,
     }
+
+
+def _level_badge(level: int) -> str:
+    level_num = int(level or 1)
+    if level_num >= 14:
+        return "👑 Coroa de Platina"
+    if level_num >= 11:
+        return "🏆 Elite Financeira"
+    if level_num >= 8:
+        return "⚔️ Mestre Competitivo"
+    if level_num >= 5:
+        return "🛡️ Guardião das Metas"
+    return "🌱 Em evolução"
+
+
+def _alfredo_profile_note(progress_pct: int, week_interactions: int, top_feature: str | None) -> str:
+    if progress_pct >= 85:
+        return "Você está no sprint final para subir de nível. Mais algumas ações estratégicas e você vira o jogo."
+    if week_interactions >= 25:
+        return "Ritmo excelente nesta semana. Continue repetindo sua feature forte para consolidar vantagem no ranking."
+    if top_feature:
+        return f"Seu ponto forte está em {top_feature}. Transforme isso em consistência diária e o level sobe rápido."
+    return "Comece pelas features-chave (lançamentos, metas e IA) para acelerar sua progressão sem farm gratuito."
+
+
+def _get_month_bounds(reference: date | None = None) -> tuple[datetime, datetime]:
+    ref = reference or datetime.utcnow().date()
+    start = datetime(ref.year, ref.month, 1)
+    if ref.month == 12:
+        end = datetime(ref.year, 12, 31, 23, 59, 59)
+    else:
+        end = datetime(ref.year, ref.month + 1, 1) - timedelta(seconds=1)
+    return start, end
+
+
+def _award_xp_from_miniapp(db, telegram_id: int, action: str) -> None:
+    # Contexto mínimo para reaproveitar a regra central de XP sem quebrar no Flask.
+    noop_bot = SimpleNamespace(send_message=lambda **kwargs: None, delete_message=lambda **kwargs: None)
+    fake_context = SimpleNamespace(bot=noop_bot)
+    try:
+        _run_async(award_xp(db, telegram_id, action, fake_context))
+    except Exception:
+        # XP jamais deve quebrar o fluxo principal da API.
+        logger.debug("Falha nao critica ao conceder XP no MiniApp", exc_info=True)
 
 
 def _run_async(coro):
@@ -881,6 +927,7 @@ def miniapp_overview():
         xp = int(usuario.xp or 0)
         level = int(usuario.level or 1)
         streak = int(usuario.streak_dias or 0)
+        level_progress = get_level_progress_payload(usuario)
 
         return jsonify({
             "ok": True,
@@ -892,6 +939,8 @@ def miniapp_overview():
                 "level": level,
                 "xp": xp,
                 "streak": streak,
+                "level_title": level_progress.get("title"),
+                "level_progress": level_progress,
                 "insight": insight,
                 "cashflow": cashflow,
                 "cashflow_monthly": monthly_cashflow,
@@ -1310,11 +1359,152 @@ def miniapp_meta_confirmar_mes(meta_id: int):
         else:
             confirmacao.valor_confirmado = valor_confirmado
 
-        if valor_confirmado > float(meta.valor_atual or 0):
+        valor_meta_alvo = float(meta.valor_meta or 0)
+        valor_atual_antes = float(meta.valor_atual or 0)
+
+        if valor_confirmado > valor_atual_antes:
             meta.valor_atual = valor_confirmado
+
+        # Concede XP por check-in mensal da meta.
+        _award_xp_from_miniapp(db, session["user_id"], "META_CHECKIN_MENSAL")
+
+        # Bonus grande ao atingir a meta pela primeira vez.
+        atingiu_agora = valor_meta_alvo > 0 and valor_atual_antes < valor_meta_alvo and float(meta.valor_atual or 0) >= valor_meta_alvo
+        if atingiu_agora:
+            _award_xp_from_miniapp(db, session["user_id"], "META_ATINGIDA")
+            _award_xp_from_miniapp(db, session["user_id"], "META_CONCLUIDA_100")
 
         db.commit()
         return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/game-profile')
+def miniapp_game_profile():
+    """Perfil gamer do usuário com progressão, interações e top features."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        now = datetime.utcnow()
+        week_start = now - timedelta(days=7)
+
+        total_interactions = (
+            db.query(func.count(XpEvent.id))
+            .filter(XpEvent.id_usuario == usuario.id)
+            .scalar()
+        ) or 0
+
+        week_interactions = (
+            db.query(func.count(XpEvent.id))
+            .filter(XpEvent.id_usuario == usuario.id)
+            .filter(XpEvent.created_at >= week_start)
+            .scalar()
+        ) or 0
+
+        top_features_rows = (
+            db.query(XpEvent.action, func.count(XpEvent.id).label('total'))
+            .filter(XpEvent.id_usuario == usuario.id)
+            .group_by(XpEvent.action)
+            .order_by(desc('total'))
+            .limit(6)
+            .all()
+        )
+        top_features = [{"feature": row.action, "interactions": int(row.total or 0)} for row in top_features_rows]
+
+        month_start, month_end = _get_month_bounds()
+        monthly_scores = (
+            db.query(
+                XpEvent.id_usuario,
+                func.sum(XpEvent.xp_gained).label('monthly_xp'),
+            )
+            .filter(XpEvent.created_at >= month_start)
+            .filter(XpEvent.created_at <= month_end)
+            .group_by(XpEvent.id_usuario)
+            .order_by(desc('monthly_xp'))
+            .all()
+        )
+        monthly_rank = None
+        for idx, row in enumerate(monthly_scores, start=1):
+            if int(row.id_usuario) == int(usuario.id):
+                monthly_rank = idx
+                break
+
+        level_progress = get_level_progress_payload(usuario)
+        top_feature_name = top_features[0]["feature"] if top_features else None
+
+        return jsonify({
+            "ok": True,
+            "profile": {
+                "name": usuario.nome_completo or "Jogador",
+                "telegram_id": int(usuario.telegram_id),
+                "level": int(usuario.level or 1),
+                "title": level_progress.get("title"),
+                "badge": _level_badge(int(usuario.level or 1)),
+                "streak": int(usuario.streak_dias or 0),
+                "xp": level_progress,
+                "monthly_rank": monthly_rank,
+                "interactions_total": int(total_interactions),
+                "interactions_week": int(week_interactions),
+                "top_features": top_features,
+                "alfredo_note": _alfredo_profile_note(int(level_progress.get("progress_pct", 0)), int(week_interactions), top_feature_name),
+            },
+        })
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/ranking-monthly')
+def miniapp_ranking_monthly():
+    """Ranking mensal em tempo real por XP ganho no mês corrente."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        month_start, month_end = _get_month_bounds()
+        rows = (
+            db.query(
+                Usuario.nome_completo,
+                Usuario.telegram_id,
+                Usuario.level,
+                func.sum(XpEvent.xp_gained).label('monthly_xp'),
+                func.count(XpEvent.id).label('interactions'),
+            )
+            .join(XpEvent, XpEvent.id_usuario == Usuario.id)
+            .filter(XpEvent.created_at >= month_start)
+            .filter(XpEvent.created_at <= month_end)
+            .group_by(Usuario.id)
+            .order_by(desc('monthly_xp'), desc('interactions'))
+            .all()
+        )
+
+        ranking = []
+        for idx, row in enumerate(rows, start=1):
+            nome = (row.nome_completo or "Jogador").strip() or "Jogador"
+            ranking.append({
+                "position": idx,
+                "name": nome,
+                "level": int(row.level or 1),
+                "monthly_xp": int(row.monthly_xp or 0),
+                "interactions": int(row.interactions or 0),
+                "is_current_user": int(row.telegram_id or 0) == int(session["user_id"]),
+            })
+
+        return jsonify({
+            "ok": True,
+            "month": month_start.strftime('%m/%Y'),
+            "ranking": ranking,
+            "updated_at": datetime.utcnow().isoformat(),
+        })
     finally:
         db.close()
 

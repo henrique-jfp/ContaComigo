@@ -35,6 +35,9 @@ class Usuario(Base):
     investments = relationship("Investment", back_populates="usuario", cascade="all, delete-orphan")
     investment_goals = relationship("InvestmentGoal", back_populates="usuario", cascade="all, delete-orphan")
     patrimony_snapshots = relationship("PatrimonySnapshot", back_populates="usuario", cascade="all, delete-orphan")
+    xp_events = relationship("XpEvent", back_populates="usuario", cascade="all, delete-orphan")
+    xp_daily_counters = relationship("XpDailyCounter", back_populates="usuario", cascade="all, delete-orphan")
+    monthly_gamification_awards = relationship("MonthlyGamificationAward", back_populates="usuario", cascade="all, delete-orphan")
 
 class Conquista(Base):
     __tablename__ = 'conquistas'
@@ -298,3 +301,48 @@ class PatrimonySnapshot(Base):
     
     def __repr__(self):
         return f"<PatrimonySnapshot(usuario={self.id_usuario}, mes={self.mes_referencia}, total=R${self.total_patrimonio})>"
+
+
+class XpEvent(Base):
+    """Eventos de gamificação para histórico de interações e ranking."""
+    __tablename__ = 'xp_events'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id', ondelete='CASCADE'), nullable=False, index=True)
+    action = Column(String, nullable=False, index=True)
+    xp_base = Column(Integer, nullable=False, default=0)
+    xp_gained = Column(Integer, nullable=False, default=0)
+    details = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+    usuario = relationship("Usuario", back_populates="xp_events")
+
+
+class XpDailyCounter(Base):
+    """Contador diário por ação para aplicar limites de XP por feature."""
+    __tablename__ = 'xp_daily_counters'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id', ondelete='CASCADE'), nullable=False, index=True)
+    action = Column(String, nullable=False, index=True)
+    day_ref = Column(Date, nullable=False, index=True)
+    count = Column(Integer, nullable=False, default=0)
+    xp_gained = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    usuario = relationship("Usuario", back_populates="xp_daily_counters")
+
+
+class MonthlyGamificationAward(Base):
+    """Marca bônus/penalidade mensal já aplicada para não duplicar pontos."""
+    __tablename__ = 'monthly_gamification_awards'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id', ondelete='CASCADE'), nullable=False, index=True)
+    ano_ref = Column(Integer, nullable=False, index=True)
+    mes_ref = Column(Integer, nullable=False, index=True)
+    ajuste_xp = Column(Integer, nullable=False, default=0)
+    motivo = Column(String, nullable=False, default='monthly_balance')
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+    usuario = relationship("Usuario", back_populates="monthly_gamification_awards")
