@@ -10,7 +10,7 @@ import logging
 import json
 import hmac
 import hashlib
-import uuid
+import base64
 import asyncio
 import re
 import requests
@@ -217,10 +217,19 @@ def _resolve_categoria_ids(payload: dict) -> tuple[int | None, int | None]:
 
 
 def _create_miniapp_session(user_id: int) -> dict:
-    session_id = str(uuid.uuid4())
+    expires_at = datetime.utcnow() + timedelta(seconds=MINIAPP_SESSION_TTL)
+    expires_ts = int(expires_at.timestamp())
+
+    # Stateless signed token avoids random 401s in multi-instance deployments.
+    payload = f"{int(user_id)}|{expires_ts}"
+    signature = hmac.new(_miniapp_session_secret(), payload.encode(), hashlib.sha256).hexdigest()
+    token_bytes = f"{payload}|{signature}".encode()
+    session_id = base64.urlsafe_b64encode(token_bytes).decode().rstrip("=")
+
+    # Keep in-memory entry for backward compatibility with legacy sessions.
     _miniapp_sessions[session_id] = {
         "user_id": user_id,
-        "expires_at": datetime.utcnow() + timedelta(seconds=MINIAPP_SESSION_TTL),
+        "expires_at": expires_at,
     }
     return {
         "session_id": session_id,
@@ -228,20 +237,59 @@ def _create_miniapp_session(user_id: int) -> dict:
     }
 
 
+def _miniapp_session_secret() -> bytes:
+    raw = (
+        os.getenv("MINIAPP_SESSION_SECRET")
+        or config.TELEGRAM_TOKEN
+        or os.getenv("SECRET_KEY")
+        or "contacomigo-miniapp"
+    )
+    return hashlib.sha256(str(raw).encode()).digest()
+
+
 def _get_session(session_id: str) -> dict | None:
     if not session_id:
         return None
+
+    # Legacy in-memory session support.
     session = _miniapp_sessions.get(session_id)
-    if not session:
+    if session:
+        if session["expires_at"] < datetime.utcnow():
+            _miniapp_sessions.pop(session_id, None)
+        else:
+            return session
+
+    # Stateless signed token support.
+    try:
+        padded = session_id + "=" * (-len(session_id) % 4)
+        raw = base64.urlsafe_b64decode(padded.encode()).decode()
+        user_id_str, expires_ts_str, received_sig = raw.rsplit("|", 2)
+    except Exception:
         return None
-    if session["expires_at"] < datetime.utcnow():
-        _miniapp_sessions.pop(session_id, None)
+
+    payload = f"{user_id_str}|{expires_ts_str}"
+    expected_sig = hmac.new(_miniapp_session_secret(), payload.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(received_sig, expected_sig):
         return None
-    return session
+
+    try:
+        user_id = int(user_id_str)
+        expires_ts = int(expires_ts_str)
+    except (TypeError, ValueError):
+        return None
+
+    expires_at = datetime.utcfromtimestamp(expires_ts)
+    if expires_at < datetime.utcnow():
+        return None
+
+    return {
+        "user_id": user_id,
+        "expires_at": expires_at,
+    }
 
 
 def _require_session() -> dict | None:
-    session_id = request.headers.get("X-Session-Id")
+    session_id = request.headers.get("X-Session-Id") or request.args.get("session_id")
     return _get_session(session_id)
 
 

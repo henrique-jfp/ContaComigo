@@ -598,6 +598,8 @@
     const novaContaSalvar = document.getElementById('novaContaSalvar');
 
     let sessionId = null;
+    let telegramInitData = null;
+    let reauthInFlight = null;
     let historyOffset = 0;
     const historyLimit = 20;
     let historyCache = [];
@@ -776,6 +778,45 @@
       toast.innerHTML = `<span>${icon}</span><span>${message}</span>`;
       toastContainer.appendChild(toast);
       setTimeout(() => toast.remove(), 3000);
+    }
+
+    async function reauthenticateSession() {
+      if (!telegramInitData) return false;
+      if (reauthInFlight) return reauthInFlight;
+
+      reauthInFlight = (async () => {
+        try {
+          const response = await fetch('/api/telegram/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ init_data: telegramInitData }),
+          });
+          const data = await response.json();
+          if (!data.ok || !data.session_id) return false;
+          sessionId = data.session_id;
+          return true;
+        } catch (_) {
+          return false;
+        } finally {
+          reauthInFlight = null;
+        }
+      })();
+
+      return reauthInFlight;
+    }
+
+    async function fetchWithSession(url, options = {}, retryOnUnauthorized = true) {
+      if (!sessionId) throw new Error('no_session');
+
+      const headers = { ...(options.headers || {}), 'X-Session-Id': sessionId };
+      const response = await fetch(url, { ...options, headers });
+      if (response.status !== 401 || !retryOnUnauthorized) return response;
+
+      const reauthOk = await reauthenticateSession();
+      if (!reauthOk) return response;
+
+      const retryHeaders = { ...(options.headers || {}), 'X-Session-Id': sessionId };
+      return fetch(url, { ...options, headers: retryHeaders });
     }
 
     function formatCurrencyBR(value) {
@@ -1027,7 +1068,7 @@
     async function loadHomeOverview() {
       if (!sessionId) return;
       try {
-        const response = await fetch('/api/miniapp/overview', { headers: { 'X-Session-Id': sessionId } });
+        const response = await fetchWithSession('/api/miniapp/overview');
         const data = await response.json();
         if (!data.ok) throw new Error(data.error || 'overview_error');
         renderHomeOverview(data.summary || {});
@@ -1156,7 +1197,7 @@
     async function loadConfiguracoes() {
       if (!sessionId) return;
       try {
-        const response = await fetch('/api/miniapp/configuracoes', { headers: { 'X-Session-Id': sessionId } });
+        const response = await fetchWithSession('/api/miniapp/configuracoes');
         const data = await response.json();
         if (!data.ok) return;
         perfilInvestidor.value = data.usuario?.perfil_investidor || '';
@@ -1336,6 +1377,8 @@
         return;
       }
 
+      telegramInitData = initData;
+
       try {
         const response = await fetch('/api/telegram/auth', {
           method: 'POST',
@@ -1384,7 +1427,7 @@
       if (reset) { historyOffset = 0; historyList.innerHTML = ''; }
       const params = new URLSearchParams({ limit: historyLimit, offset: historyOffset, query: historyQuery.value || '', tipo: historyTipo.value || '' });
       try {
-        const response = await fetch(`/api/miniapp/history?${params.toString()}`, { headers: { 'X-Session-Id': sessionId }});
+        const response = await fetchWithSession(`/api/miniapp/history?${params.toString()}`);
         const data = await response.json();
         if (!data.ok) return;
         historyStatus.textContent = '';
@@ -1537,7 +1580,7 @@
       if (!sessionId) return;
       metaStatus.textContent = 'Carregando...';
       try {
-        const response = await fetch('/api/miniapp/metas', { headers: { 'X-Session-Id': sessionId }});
+        const response = await fetchWithSession('/api/miniapp/metas');
         const data = await response.json();
         if (!data.ok || !data.items.length) { metasCache = []; metaStatus.textContent = 'Nenhuma meta.'; return; }
         metaStatus.textContent = '';
@@ -1575,7 +1618,7 @@
       if (!sessionId) return;
       agendamentoStatus.textContent = 'Carregando...';
       try {
-        const response = await fetch('/api/miniapp/agendamentos', { headers: { 'X-Session-Id': sessionId }});
+        const response = await fetchWithSession('/api/miniapp/agendamentos');
         const data = await response.json();
         if (!data.ok || !data.items.length) { agendamentoStatus.textContent = 'Nenhum agendamento.'; return; }
         agendamentoStatus.textContent = '';

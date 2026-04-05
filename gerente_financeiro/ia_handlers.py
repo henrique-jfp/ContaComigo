@@ -20,7 +20,12 @@ from sqlalchemy import and_, extract
 from database.database import get_db, get_or_create_user
 from models import Lancamento, Usuario, Categoria, Agendamento, Objetivo
 import config
-from .analises_ia import get_analisador
+
+try:
+    from .analises_ia import get_analisador
+except ModuleNotFoundError:
+    def get_analisador():
+        raise RuntimeError("Modulo opcional analises_ia indisponivel neste ambiente")
 
 logger = logging.getLogger(__name__)
 
