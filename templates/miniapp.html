@@ -101,6 +101,7 @@
     transition: opacity 220ms ease, transform 220ms ease, visibility 0s linear 220ms;
     overflow-y: auto;
     padding-bottom: 8rem;
+    z-index: 10;
   }
   .panel.active {
     opacity: 1;
@@ -108,6 +109,7 @@
     transform: translateY(0);
     pointer-events: auto;
     transition: opacity 220ms ease, transform 220ms ease, visibility 0s linear 0s;
+    z-index: 20;
   }
   .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(2, 6, 23, 0.52); backdrop-filter: blur(10px); z-index: 100; animation: fadeIn 0.2s ease; }
   .modal-overlay.active { display: flex; align-items: flex-end; }
@@ -576,6 +578,46 @@
       </div>
     </section>
 
+    <!-- Tela 7: RANKING MENSAL FULLSCREEN -->
+    <section class="panel" id="ranking-panel">
+      <div class="space-y-4">
+        <div class="flex items-center justify-between sticky top-0 bg-gradient-to-b from-telegram-bg to-transparent pb-2 z-10">
+          <h2 class="text-lg font-bold text-telegram-text flex items-center gap-2">
+            <i data-lucide="trophy" class="w-5 h-5 text-brand"></i> Ranking Mensal
+          </h2>
+          <button id="rankingBackBtn" class="text-brand hover:text-brand-soft transition">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+        
+        <div id="rankingFullList" class="space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- Tela 8: EDITOR DE FATURA (Edição de Lançamentos) -->
+    <section class="panel" id="fatura-editor-panel">
+      <div class="space-y-4">
+        <div class="sticky top-0 bg-gradient-to-b from-telegram-bg to-transparent pb-3 z-10">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-bold text-telegram-text flex items-center gap-2">
+              <i data-lucide="file-text" class="w-5 h-5 text-brand"></i> Editar Lançamentos
+            </h2>
+            <button id="faturaBkBtn" class="text-brand hover:text-brand-soft transition">
+              <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+          </div>
+          <div id="faturaHeaderInfo" class="text-xs text-telegram-hint">Carregando dados da fatura...</div>
+        </div>
+
+        <div id="faturaEditList" class="space-y-2"></div>
+
+        <div class="sticky bottom-0 py-3 bg-gradient-to-t from-telegram-bg to-transparent flex gap-2">
+          <button id="faturaEditorSave" class="flex-1 rounded-xl bg-brand py-2 text-sm font-semibold text-white hover:bg-brand-soft transition">💾 Confirmar</button>
+          <button id="faturaEditorCancel" class="flex-1 rounded-xl border border-telegram-separator bg-telegram-card py-2 text-sm font-semibold text-telegram-text hover:bg-slate-100 dark:hover:bg-slate-800 transition">❌ Cancelar</button>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- Toast Notifications Container -->
@@ -857,6 +899,14 @@
     const gameRankingUpdatedAt = document.getElementById('gameRankingUpdatedAt');
     const gameProfileRefresh = document.getElementById('gameProfileRefresh');
     const gameSeeRanking = document.getElementById('gameSeeRanking');
+    const rankingBackBtn = document.getElementById('rankingBackBtn');
+    const rankingFullList = document.getElementById('rankingFullList');
+   
+    const faturaBkBtn = document.getElementById('faturaBkBtn');
+    const faturaHeaderInfo = document.getElementById('faturaHeaderInfo');
+    const faturaEditList = document.getElementById('faturaEditList');
+    const faturaEditorSave = document.getElementById('faturaEditorSave');
+    const faturaEditorCancel = document.getElementById('faturaEditorCancel');
     const gameBackHome = document.getElementById('gameBackHome');
 
     let sessionId = null;
@@ -1800,6 +1850,138 @@
       }
     }
 
+    function renderGameRankingFull(items = []) {
+      if (!items.length) {
+        rankingFullList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-center text-xs text-telegram-hint mt-8">Sem dados no ranking deste mês ainda. Comece a usar o app!</div>';
+        return;
+      }
+
+      rankingFullList.innerHTML = items.map((item, idx) => {
+        const isMe = Boolean(item.is_current_user);
+        const medal = item.position === 1 ? '🥇' : item.position === 2 ? '🥈' : item.position === 3 ? '🥉' : '•';
+        return `
+          <div class="rounded-2xl border p-4 ${isMe ? 'border-brand/40 bg-brand/8 shadow-lg' : 'border-telegram-separator bg-telegram-card'} transition">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-3 flex-1 min-w-0">
+                <div class="text-2xl font-bold">${medal}</div>
+                <div class="min-w-0">
+                  <p class="text-sm font-bold ${isMe ? 'text-brand' : 'text-telegram-text'}">#${item.position} ${item.name}</p>
+                  <p class="text-xs text-telegram-hint">Nível ${item.level} • ${item.interactions} interações • ${item.monthly_xp} XP</p>
+                </div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <p class="text-lg font-extrabold ${isMe ? 'text-brand' : 'text-telegram-text'}">${item.monthly_xp}</p>
+                <p class="text-[10px] text-telegram-hint">XP</p>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function loadMonthlyRankingFull() {
+      if (!sessionId) return;
+      try {
+        rankingFullList.innerHTML = '<div class="text-center text-xs text-telegram-hint mt-4"><div class="spinner mx-auto"></div> Carregando ranking...</div>';
+        const response = await fetchWithSession('/api/miniapp/ranking-monthly');
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error || 'ranking_error');
+        gameRankingCache = Array.isArray(data.ranking) ? data.ranking : [];
+        renderGameRankingFull(gameRankingCache);
+      } catch (_) {
+        rankingFullList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-center text-xs text-telegram-hint">Falha ao carregar ranking. Tente novamente.</div>';
+      }
+    }
+
+    async function loadFaturaEditor() {
+      if (!sessionId) return;
+      try {
+        faturaHeaderInfo.innerHTML = '<div class="text-xs text-telegram-hint"><div class="spinner inline mr-2"></div> Carregando lançamentos...</div>';
+        const response = await fetchWithSession('/api/miniapp/fatura-editor');
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error || 'fatura_error');
+        
+        const transacoes = Array.isArray(data.transacoes) ? data.transacoes : [];
+        const conta = data.conta || 'Cartão de Crédito';
+        const total = transacoes.length;
+        const totalDebito = transacoes.reduce((sum, t) => sum + (t.valor < 0 ? Math.abs(t.valor) : 0), 0);
+        
+        faturaHeaderInfo.innerHTML = `<p class="font-semibold">📌 ${conta}</p><p class="text-[11px]">${total} lançamentos • Débito: R$ ${totalDebito.toFixed(2)}</p>`;
+        renderFaturaEditor(transacoes);
+      } catch (err) {
+        faturaHeaderInfo.innerHTML = '<p class="text-red-500 text-xs">Falha ao carregar. Tente novamente.</p>';
+        faturaEditList.innerHTML = '';
+      }
+    }
+
+    function renderFaturaEditor(transacoes = []) {
+      if (!transacoes.length) {
+        faturaEditList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-center text-xs text-telegram-hint">Nenhum lançamento para editar.</div>';
+        return;
+      }
+
+      faturaEditList.innerHTML = transacoes.map((t, idx) => {
+        const data = new Date(t.data_transacao).toLocaleDateString('pt-BR');
+        return `
+          <div class="rounded-2xl border border-telegram-separator bg-telegram-card p-3" data-fatura-id="${idx}">
+            <div class="flex flex-col gap-2">
+              <input type="text" class="fatura-desc floating-input text-sm" value="${(t.descricao || '').replace(/"/g, '&quot;')}" placeholder="Descrição">
+              <div class="grid grid-cols-2 gap-2">
+                <input type="number" class="fatura-valor floating-input text-sm" value="${t.valor}" step="0.01" placeholder="Valor">
+                <input type="date" class="fatura-data floating-input text-sm" value="${new Date(t.data_transacao).toISOString().split('T')[0]}">
+              </div>
+              <button class="fatura-delete text-xs text-red-500 hover:text-red-600 transition flex items-center gap-1" onclick="this.closest('[data-fatura-id]').remove()">
+                <i data-lucide="trash-2" class="w-3 h-3"></i> Remover
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      lucide.createIcons();
+    }
+
+    async function saveFaturaEdits() {
+      if (!sessionId) return;
+      
+      const items = Array.from(document.querySelectorAll('[data-fatura-id]')).map((el, idx) => ({
+        index: idx,
+        descricao: el.querySelector('.fatura-desc').value || '',
+        valor: parseFloat(el.querySelector('.fatura-valor').value) || 0,
+        data_transacao: el.querySelector('.fatura-data').value,
+      }));
+
+      try {
+        faturaEditorSave.disabled = true;
+        faturaEditorSave.textContent = '⏳ Salvando...';
+        
+        const response = await fetchWithSession('/api/miniapp/fatura-editor-save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transacoes: items })
+        });
+
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error || 'save_error');
+
+        showToast('✅ Lançamentos salvos com sucesso!', 'success');
+        setTimeout(() => switchTabByName('inicio'), 1500);
+      } catch (err) {
+        showToast('❌ Erro ao salvar: ' + (err.message || 'Tente novamente'), 'error');
+      } finally {
+        faturaEditorSave.disabled = false;
+        faturaEditorSave.textContent = '💾 Confirmar';
+      }
+    }
+
+    function cancelFaturaEditor() {
+      if (confirm('⚠️ Descartar todas as edições?')) {
+        switchTabByName('inicio');
+      }
+    }
+
+
+
     function openGameProfilePanel() {
       openPanel('perfil-jogo', true);
       loadGameProfile();
@@ -2092,6 +2274,13 @@
           loadMetas();
           loadGameProfile();
           loadMonthlyRanking();
+          
+          // Verifica se há fatura pendente de edição
+          const urlParams = new URLSearchParams(window.location.search);
+          if (urlParams.get('page') === 'fatura_editor') {
+            openPanel('fatura-editor-panel', true);
+            loadFaturaEditor();
+          }
         }, 80);
 
         setInterval(() => {
@@ -2429,8 +2618,21 @@
       await loadGameProfile();
       await loadMonthlyRanking();
     });
-    gameSeeRanking.addEventListener('click', loadMonthlyRanking);
+    gameSeeRanking.addEventListener('click', () => {
+      openPanel('ranking-panel', true);
+      loadMonthlyRankingFull();
+      if (gameRankingRefreshTimer) clearInterval(gameRankingRefreshTimer);
+      gameRankingRefreshTimer = setInterval(() => {
+        if (document.hidden || !sessionId || !document.getElementById('ranking-panel')?.classList.contains('active')) return;
+        loadMonthlyRankingFull();
+      }, 15000);
+    });
+    rankingBackBtn.addEventListener('click', () => switchTabByName('inicio'));
     gameBackHome.addEventListener('click', () => switchTabByName('inicio'));
+
+    faturaBkBtn.addEventListener('click', () => switchTabByName('inicio'));
+    faturaEditorSave.addEventListener('click', saveFaturaEdits);
+    faturaEditorCancel.addEventListener('click', cancelFaturaEditor);
 
     metaList.addEventListener('click', (event) => {
       const target = event.target.closest('[data-meta-action]');

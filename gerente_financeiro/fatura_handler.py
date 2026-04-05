@@ -591,57 +591,45 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             return ConversationHandler.END
 
-        botoes = [
-            [InlineKeyboardButton(f"{c.nome}", callback_data=f"fatura_conta_{c.id}")]
-            for c in contas
-        ]
-        await update.message.reply_text(
-            "Selecione o cartao/conta para associar a fatura:",
-            reply_markup=InlineKeyboardMarkup(botoes),
+        # Use first available account automatically
+        primeira_conta = contas[0]
+        context.user_data["fatura_conta_id"] = primeira_conta.id
+        
+        # Show summary directly with Confirm/Edit/Cancel buttons
+        total = len(transacoes)
+        total_debito = sum(-t["valor"] for t in transacoes if t["valor"] < 0)
+        total_credito = sum(t["valor"] for t in transacoes if t["valor"] > 0)
+
+        preview_lines = []
+        for item in transacoes[:15]:
+            data = item["data_transacao"].strftime("%d/%m")
+            valor = abs(item["valor"])
+            preview_lines.append(f"• {data} {item['descricao']} - R$ {valor:.2f}")
+
+        preview_text = "\n".join(preview_lines)
+        ignored_text = f"\n- Ignoradas (pagamentos/estornos): {ignoradas}" if ignoradas else ""
+        conta_text = f" na conta <b>{primeira_conta.nome}</b>"
+
+        origem_label = context.user_data.get("fatura_origem_label", "Inter")
+        resumo = (
+            f"<b>Resumo da fatura ({origem_label})</b>\n"
+            f"- Transacoes detectadas: {total}{ignored_text}\n"
+            f"- Total debitos: <b>R$ {total_debito:.2f}</b>\n"
+            f"- Total creditos: R$ {total_credito:.2f}\n\n"
+            f"<b>Exemplos (primeiras 15):</b>\n{preview_text}\n\n"
+            f"<b>Acao:</b> Importar{conta_text}?\n\n"
+            "Use <b>Editar</b> para revisar/corrigir os lancamentos antes de salvar."
         )
-        return FATURA_ASK_FORMA_PAGAMENTO
+
+        keyboard = [
+            [InlineKeyboardButton("✅ Confirmar e Salvar", callback_data="fatura_salvar")],
+            [InlineKeyboardButton("✏️ Editar", callback_data="fatura_editar_inline")],
+            [InlineKeyboardButton("❌ Cancelar", callback_data="fatura_cancelar")],
+        ]
+        await update.message.reply_text(resumo, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        return FATURA_CONFIRMATION_STATE
     finally:
         db.close()
-
-
-async def fatura_select_conta(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-
-    conta_id = int(query.data.split("_")[-1])
-    context.user_data["fatura_conta_id"] = conta_id
-
-    transacoes = context.user_data.get("fatura_transacoes", [])
-    ignoradas = context.user_data.get("fatura_ignoradas", 0)
-    total = len(transacoes)
-    total_debito = sum(-t["valor"] for t in transacoes if t["valor"] < 0)
-    total_credito = sum(t["valor"] for t in transacoes if t["valor"] > 0)
-
-    preview_lines = []
-    for item in transacoes[:30]:
-        data = item["data_transacao"].strftime("%d/%m")
-        valor = abs(item["valor"])
-        preview_lines.append(f"• {data} {item['descricao']} - R$ {valor:.2f}")
-
-    preview_text = "\n".join(preview_lines)
-    ignored_text = f"\n- Ignoradas (pagamentos/estornos): {ignoradas}" if ignoradas else ""
-
-    origem_label = context.user_data.get("fatura_origem_label", "Inter")
-    resumo = (
-        f"<b>Resumo da fatura ({origem_label})</b>\n"
-        f"- Transacoes: {total}{ignored_text}\n"
-        f"- Total debitos: <b>R$ {total_debito:.2f}</b>\n"
-        f"- Total creditos: R$ {total_credito:.2f}\n\n"
-        f"<b>Exemplos:</b>\n{preview_text}\n\n"
-        "Deseja salvar esses lancamentos?"
-    )
-
-    keyboard = [
-        [InlineKeyboardButton("Confirmar", callback_data="fatura_salvar")],
-        [InlineKeyboardButton("Cancelar", callback_data="fatura_cancelar")],
-    ]
-    await query.edit_message_text(resumo, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-    return FATURA_CONFIRMATION_STATE
 
 
 async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -652,39 +640,62 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if action == "fatura_cancelar":
         context.user_data.pop("fatura_transacoes", None)
         context.user_data.pop("fatura_conta_id", None)
-        await query.edit_message_text("Importacao cancelada.")
+        await query.edit_message_text("❌ Importacao cancelada.")
         return ConversationHandler.END
 
-    transacoes = context.user_data.get("fatura_transacoes", [])
-    conta_id = context.user_data.get("fatura_conta_id")
-    if not transacoes or not conta_id:
-        await query.edit_message_text("Dados da fatura perdidos. Tente novamente.")
-        return ConversationHandler.END
-
-    db = next(get_db())
-    try:
-        conta_obj = db.query(Conta).filter(Conta.id == conta_id).first()
-        conta_nome = conta_obj.nome if conta_obj else "Cartao de Credito"
-        for item in transacoes:
-            item["forma_pagamento"] = conta_nome
-
-        usuario_db = get_or_create_user(db, query.from_user.id, query.from_user.full_name)
-        tipo_origem = transacoes[0].get("origem", "fatura_pdf_generic") if transacoes else "fatura_pdf_generic"
-        ok, msg, _stats = await salvar_transacoes_generica(
-            db, usuario_db, transacoes, conta_id, tipo_origem=tipo_origem
+    if action == "fatura_editar_inline":
+        # Store transaction data for later access in miniapp
+        context.user_data["fatura_pending_edit"] = True
+        conta_id = context.user_data.get("fatura_conta_id")
+        
+        await query.edit_message_text(
+            "📱 <b>Abrindo editor de transacoes...</b>\n\n"
+            "Clique no botao aqui embaixo para acessar o MiniApp onde voca pode revisar e editar cada lancamento antes de salvar.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📋 Abrir Editor de Transacoes", 
+                    url="https://t.me/conta_comigo_bot/webapp?page=fatura_editor")],
+            ])
         )
-        if ok:
-            try:
-                await give_xp_for_action(query.from_user.id, "FATURA_PROCESSADA", context)
-            except Exception:
-                logger.debug("Falha ao conceder XP da fatura (nao critico).")
-        await query.edit_message_text(msg, parse_mode="HTML")
-        return ConversationHandler.END
-    finally:
-        db.close()
-        context.user_data.pop("fatura_transacoes", None)
-        context.user_data.pop("fatura_conta_id", None)
-        context.user_data.pop("fatura_origem_label", None)
+        return FATURA_CONFIRMATION_STATE
+
+    if action == "fatura_salvar":
+        transacoes = context.user_data.get("fatura_transacoes", [])
+        conta_id = context.user_data.get("fatura_conta_id")
+        if not transacoes or not conta_id:
+            await query.edit_message_text("❌ Dados da fatura perdidos. Tente novamente.")
+            return ConversationHandler.END
+
+        db = next(get_db())
+        try:
+            conta_obj = db.query(Conta).filter(Conta.id == conta_id).first()
+            conta_nome = conta_obj.nome if conta_obj else "Cartao de Credito"
+            for item in transacoes:
+                item["forma_pagamento"] = conta_nome
+
+            usuario_db = get_or_create_user(db, query.from_user.id, query.from_user.full_name)
+            tipo_origem = transacoes[0].get("origem", "fatura_pdf_generic") if transacoes else "fatura_pdf_generic"
+            ok, msg, _stats = await salvar_transacoes_generica(
+                db, usuario_db, transacoes, conta_id, tipo_origem=tipo_origem
+            )
+            if ok:
+                try:
+                    await give_xp_for_action(query.from_user.id, "FATURA_PROCESSADA", context)
+                except Exception:
+                    logger.debug("Falha ao conceder XP da fatura (nao critico).")
+            
+            await query.edit_message_text(msg, parse_mode="HTML")
+            return ConversationHandler.END
+        finally:
+            db.close()
+            context.user_data.pop("fatura_transacoes", None)
+            context.user_data.pop("fatura_conta_id", None)
+            context.user_data.pop("fatura_origem_label", None)
+            context.user_data.pop("fatura_pending_edit", None)
+
+    # Unknown action
+    await query.answer("Acao invalida")
+    return FATURA_CONFIRMATION_STATE
 
 
 async def fatura_training_consent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -761,9 +772,6 @@ fatura_conv = ConversationHandler(
     states={
         FATURA_AWAIT_FILE: [
             MessageHandler(filters.Document.MimeType("application/pdf"), fatura_receive_file)
-        ],
-        FATURA_ASK_FORMA_PAGAMENTO: [
-            CallbackQueryHandler(fatura_select_conta, pattern="^fatura_conta_")
         ],
         FATURA_CONFIRMATION_STATE: [
             CallbackQueryHandler(fatura_confirm, pattern="^fatura_")

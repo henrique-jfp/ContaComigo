@@ -1509,6 +1509,74 @@ def miniapp_ranking_monthly():
         db.close()
 
 
+@app.route('/api/miniapp/fatura-editor', methods=['GET'])
+def miniapp_fatura_editor():
+    """Retorna lançamentos pendentes de edição de fatura"""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    # Simulated data from context - in real app, would come from session storage
+    # This is a placeholder that returns an empty list
+    # The actual data will be populated when showFaturaSummary is called
+    return jsonify({
+        "ok": True,
+        "transacoes": [],
+        "conta": "Cartão de Crédito",
+    })
+
+
+@app.route('/api/miniapp/fatura-editor-save', methods=['POST'])
+def miniapp_fatura_editor_save():
+    """Salva as edições dos lançamentos da fatura"""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    transacoes = data.get("transacoes", [])
+    
+    if not transacoes:
+        return jsonify({"ok": False, "error": "no_transactions"}), 400
+
+    db = next(get_db())
+    try:
+        # Save the edited transactions
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        saved_count = 0
+        for t in transacoes:
+            # Create Lancamento record
+            try:
+                lancamento = Lancamento(
+                    id_usuario=usuario.id,
+                    descricao=t.get("descricao", ""),
+                    valor=float(t.get("valor", 0)),
+                    data_transacao=datetime.fromisoformat(t.get("data_transacao", datetime.utcnow().isoformat())),
+                    origem="fatura_pdf_editado",
+                )
+                db.add(lancamento)
+                saved_count += 1
+            except Exception:
+                continue
+
+        db.commit()
+        
+        return jsonify({
+            "ok": True,
+            "message": f"✅ {saved_count} lançamentos salvos com sucesso!",
+            "saved_count": saved_count,
+        })
+    except Exception as e:
+        db.rollback()
+        logger.exception("Erro ao salvar edições de fatura")
+        return jsonify({"ok": False, "error": "save_failed"}), 500
+    finally:
+        db.close()
+
+
 @app.route('/api/miniapp/gerente', methods=['POST'])
 def miniapp_gerente():
     """Stub do chat do gerente para o miniapp"""
