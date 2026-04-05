@@ -7,6 +7,7 @@ import os
 import sys
 import logging
 import signal
+import asyncio
 from enum import Enum, auto
 from threading import Thread
 from dataclasses import dataclass
@@ -144,6 +145,14 @@ def start_telegram_bot(enable_health_server: bool = True):
             logger.info("✅ Aplicação criada!")
             
             if application:
+                # python-telegram-bot 22+ exige um event loop ativo na thread.
+                try:
+                    asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    logger.info("🔁 Event loop criado para a thread do bot.")
+
                 logger.info("🚀 Iniciando polling do bot (isso pode demorar 10-30s)...")
                 application.run_polling(allowed_updates=None, drop_pending_updates=True)
                 logger.info("✅ Bot iniciado com sucesso!")
