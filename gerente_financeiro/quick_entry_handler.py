@@ -438,6 +438,7 @@ async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 id_conta=dados.get("id_conta"),
                 id_categoria=id_categoria,
                 id_subcategoria=id_subcategoria,
+                origem="texto",
             )
             db.add(novo_lancamento)
             db.commit()

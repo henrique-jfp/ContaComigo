@@ -18,6 +18,7 @@ from urllib.parse import parse_qsl
 from functools import wraps
 from sqlalchemy import and_, func
 from flask import Flask, render_template, jsonify, request, g
+from sqlalchemy.orm import joinedload
 from datetime import datetime, timedelta, date
 
 # Configurar logging
@@ -165,6 +166,15 @@ def _validate_telegram_init_data(init_data: str) -> dict | None:
     except Exception:
         return None
 
+    user_data = parsed.get("user")
+    if not user_data:
+        return None
+
+    try:
+        return json.loads(user_data)
+    except json.JSONDecodeError:
+        return None
+
 
 def _resolve_categoria_ids(payload: dict) -> tuple[int | None, int | None]:
     id_categoria = payload.get("id_categoria")
@@ -205,15 +215,6 @@ def _resolve_categoria_ids(payload: dict) -> tuple[int | None, int | None]:
     finally:
         db.close()
 
-    user_data = parsed.get("user")
-    if not user_data:
-        return None
-
-    try:
-        return json.loads(user_data)
-    except json.JSONDecodeError:
-        return None
-
 
 def _create_miniapp_session(user_id: int) -> dict:
     session_id = str(uuid.uuid4())
@@ -251,6 +252,122 @@ def _parse_date(value: str) -> date | None:
         return datetime.fromisoformat(value).date()
     except ValueError:
         return None
+
+
+def _month_bounds(reference: date | None = None) -> tuple[date, date]:
+    ref = reference or datetime.utcnow().date()
+    start = date(ref.year, ref.month, 1)
+    if ref.month == 12:
+        end = date(ref.year, 12, 31)
+    else:
+        end = date(ref.year, ref.month + 1, 1) - timedelta(days=1)
+    return start, end
+
+
+def _daily_cashflow(lancamentos: list[Lancamento], start: date, end: date) -> list[dict]:
+    days = (end - start).days + 1
+    labels = [(start + timedelta(days=i)).strftime("%d/%m") for i in range(days)]
+    series = {label: {"Entrada": 0.0, "Saída": 0.0} for label in labels}
+
+    for lanc in lancamentos:
+        data = lanc.data_transacao.date() if isinstance(lanc.data_transacao, datetime) else lanc.data_transacao
+        if not data or data < start or data > end:
+            continue
+        label = data.strftime("%d/%m")
+        tipo = "Entrada" if str(lanc.tipo).lower().startswith("entr") else "Saída"
+        series[label][tipo] += float(lanc.valor or 0)
+
+    return [
+        {"label": label, "entrada": round(series[label]["Entrada"], 2), "saida": round(series[label]["Saída"], 2)}
+        for label in labels
+    ]
+
+
+def _category_distribution(lancamentos: list[Lancamento]) -> list[dict]:
+    totals: dict[str, float] = {}
+    for lanc in lancamentos:
+        if str(lanc.tipo).lower().startswith("entr"):
+            continue
+        categoria = "Sem categoria"
+        if getattr(lanc, "categoria", None) and lanc.categoria.nome:
+            categoria = lanc.categoria.nome
+            if getattr(lanc, "subcategoria", None) and lanc.subcategoria.nome:
+                categoria = f"{categoria} / {lanc.subcategoria.nome}"
+        totals[categoria] = totals.get(categoria, 0.0) + abs(float(lanc.valor or 0))
+
+    if not totals:
+        return []
+
+    ordered = sorted(totals.items(), key=lambda item: item[1], reverse=True)
+    top = ordered[:5]
+    restante = sum(value for _, value in ordered[5:])
+    if restante > 0:
+        top.append(("Outros", restante))
+
+    palette = ["#7b1e2d", "#b85d6e", "#16a34a", "#f59e0b", "#2563eb", "#8b5cf6"]
+    return [
+        {"label": label, "value": round(value, 2), "color": palette[i % len(palette)]}
+        for i, (label, value) in enumerate(top)
+    ]
+
+
+def _build_miniapp_insight(usuario: Usuario, balance: float, receita: float, despesa: float, categories: list[dict], cashflow: list[dict]) -> str:
+    if receita <= 0 and despesa <= 0:
+        return "Comece registrando seus primeiros lançamentos. O Alfredo vai te mostrar os padrões assim que o fluxo começar."
+
+    predominant = categories[0]["label"] if categories else None
+    category_value = categories[0]["value"] if categories else 0
+    ratio = (despesa / receita * 100) if receita > 0 else 0
+    first = cashflow[0]["label"] if cashflow else ""
+    last = cashflow[-1]["label"] if cashflow else ""
+
+    prompt = (
+        "Você é Alfredo, gerente financeiro. Gere 1 ou 2 frases curtas, objetivas e acolhedoras em português do Brasil, "
+        "para um card de insights do miniapp. Não use listas. Não use markdown. "
+        f"Saldo do mês: R$ {balance:.2f}. Receita: R$ {receita:.2f}. Despesa: R$ {despesa:.2f}. "
+        f"Gasto principal: {predominant or 'N/A'} com R$ {category_value:.2f}. "
+        f"Despesas representam {ratio:.1f}% da receita. "
+        f"Primeiro dia do período: {first}. Último dia: {last}. "
+        "Se houver economia, destaque isso. Se houver alerta, seja direto."
+    )
+
+    resposta = None
+    if config.GEMINI_API_KEY:
+        try:
+            genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'\"").strip())
+            model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
+            response = model.generate_content(prompt)
+            resposta = _sanitize_response(response.text or "")
+        except Exception as exc:
+            logger.warning("Gemini falhou no insight do MiniApp: %s", exc, exc_info=True)
+
+    if not resposta:
+        resposta = _run_async(_generate_with_groq(prompt)) if config.GROQ_API_KEY else None
+        if resposta:
+            resposta = _sanitize_response(resposta)
+
+    if resposta:
+        return resposta
+
+    if balance >= 0:
+        return f"Você fechou o mês no azul com R$ {abs(balance):.2f}. O Alfredo está de olho para manter esse ritmo."
+    return f"Cuidado: suas despesas já passaram as receitas em R$ {abs(balance):.2f}. Vale apertar os vilões do mês."
+
+
+def _serialize_miniapp_lancamento(lanc: Lancamento) -> dict:
+    return {
+        "id": lanc.id,
+        "descricao": lanc.descricao,
+        "valor": float(lanc.valor or 0),
+        "tipo": lanc.tipo,
+        "data": lanc.data_transacao.isoformat() if lanc.data_transacao else None,
+        "forma_pagamento": lanc.forma_pagamento,
+        "origem": lanc.origem,
+        "id_categoria": lanc.id_categoria,
+        "id_subcategoria": lanc.id_subcategoria,
+        "categoria_nome": lanc.categoria.nome if lanc.categoria else None,
+        "subcategoria_nome": lanc.subcategoria.nome if lanc.subcategoria else None,
+    }
 
 
 def _run_async(coro):
@@ -414,25 +531,87 @@ def miniapp_history():
 
         total = base_query.count()
         lancamentos = (
-            base_query.order_by(Lancamento.data_transacao.desc())
+            base_query.options(
+                joinedload(Lancamento.categoria),
+                joinedload(Lancamento.subcategoria),
+                joinedload(Lancamento.conta),
+            )
+            .order_by(Lancamento.data_transacao.desc())
             .offset(offset)
             .limit(limit)
             .all()
         )
 
-        itens = [
-            {
-                "id": lanc.id,
-                "descricao": lanc.descricao,
-                "valor": float(lanc.valor),
-                "tipo": lanc.tipo,
-                "data": lanc.data_transacao.isoformat(),
-                "forma_pagamento": lanc.forma_pagamento,
-            }
-            for lanc in lancamentos
-        ]
+        itens = [_serialize_miniapp_lancamento(lanc) for lanc in lancamentos]
 
         return jsonify({"ok": True, "items": itens, "total": total, "offset": offset})
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/overview')
+def miniapp_overview():
+    """Retorna o resumo da home do miniapp."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        start_date, end_date = _month_bounds()
+        base_query = (
+            db.query(Lancamento)
+            .options(joinedload(Lancamento.categoria), joinedload(Lancamento.subcategoria), joinedload(Lancamento.conta))
+            .filter(Lancamento.id_usuario == usuario.id)
+        )
+        lancamentos_mes = (
+            base_query
+            .filter(Lancamento.data_transacao >= datetime.combine(start_date, datetime.min.time()))
+            .filter(Lancamento.data_transacao <= datetime.combine(end_date, datetime.max.time()))
+            .order_by(Lancamento.data_transacao.asc())
+            .all()
+        )
+
+        receita = sum(float(lanc.valor or 0) for lanc in lancamentos_mes if str(lanc.tipo).lower().startswith("entr"))
+        despesa = sum(abs(float(lanc.valor or 0)) for lanc in lancamentos_mes if not str(lanc.tipo).lower().startswith("entr"))
+        balance = receita - despesa
+        cashflow = _daily_cashflow(lancamentos_mes, start_date, end_date)
+        categories = _category_distribution(lancamentos_mes)
+        insight = _build_miniapp_insight(usuario, balance, receita, despesa, categories, cashflow)
+
+        recent_items = (
+            base_query
+            .order_by(Lancamento.data_transacao.desc())
+            .limit(6)
+            .all()
+        )
+
+        progress_base = receita + despesa
+        progress_pct = round((despesa / progress_base) * 100) if progress_base > 0 else 0
+        xp = int(usuario.xp or 0)
+        level = int(usuario.level or 1)
+        streak = int(usuario.streak_dias or 0)
+
+        return jsonify({
+            "ok": True,
+            "summary": {
+                "balance": round(balance, 2),
+                "receita": round(receita, 2),
+                "despesa": round(despesa, 2),
+                "progress_pct": max(0, min(progress_pct, 100)),
+                "level": level,
+                "xp": xp,
+                "streak": streak,
+                "insight": insight,
+                "cashflow": cashflow,
+                "categories": categories,
+                "recent": [_serialize_miniapp_lancamento(lanc) for lanc in recent_items],
+            }
+        })
     finally:
         db.close()
 
@@ -485,6 +664,7 @@ def miniapp_lancamento_create():
             id_conta=id_conta,
             id_categoria=id_categoria,
             id_subcategoria=id_subcategoria,
+                origem="miniapp",
         )
         db.add(lancamento)
         db.commit()

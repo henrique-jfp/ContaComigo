@@ -7,6 +7,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
   tailwind.config = {
@@ -25,10 +26,21 @@
 </script>
 <style>
   body { background: radial-gradient(circle at top, #ffffff 0%, #f7f1f3 38%, #f1e8ea 100%); color: #1f2937; }
+  main#app-content {
+    background-image: radial-gradient(rgba(123, 30, 45, 0.08) 1px, transparent 1px);
+    background-size: 22px 22px;
+    background-position: 0 8px;
+  }
   .glass-card { 
     background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.72));
     backdrop-filter: blur(18px); border: 1px solid rgba(123, 30, 45, 0.12); 
     box-shadow: 0 16px 40px rgba(123, 30, 45, 0.08);
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+  }
+  .glass-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(123, 30, 45, 0.2);
+    box-shadow: 0 18px 45px rgba(123, 30, 45, 0.12);
   }
   .hide-scroll::-webkit-scrollbar { display: none; }
   .chat-bubble::after { content: ''; position: absolute; bottom: 0; width: 12px; height: 12px; }
@@ -54,6 +66,44 @@
   @keyframes toastSlideOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(50%); } }
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(123, 30, 45, 0.2); border-top-color: #7b1e2d; border-radius: 50%; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .home-reveal {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+    animation: homeReveal 460ms cubic-bezier(.2,.8,.2,1) forwards;
+    animation-delay: var(--delay, 0ms);
+  }
+  @keyframes homeReveal {
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  .recent-item {
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+  }
+  .recent-item:hover {
+    transform: translateY(-1px);
+  }
+  @media (max-width: 768px) {
+    main#app-content {
+      background-size: 16px 16px;
+      padding-bottom: 7.5rem;
+    }
+    .glass-card:hover {
+      transform: none;
+      box-shadow: 0 16px 40px rgba(123, 30, 45, 0.08);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .home-reveal,
+    .panel.active,
+    .modal-content,
+    .toast,
+    .spinner {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
 </style>
 </head>
 <body class="text-slate-900 h-screen w-screen overflow-hidden flex flex-col font-sans antialiased selection:bg-neon-purple selection:text-white">
@@ -66,15 +116,112 @@
   <!-- Viewport -->
   <main id="app-content" class="flex-1 overflow-y-auto hide-scroll p-4 pb-28 relative z-0">
     
-    <!-- Tela 1: HISTORICO (Home) -->
-    <section class="panel active" id="historico">
+    <!-- Tela 1: INÍCIO -->
+    <section class="panel active" id="inicio">
+      <div class="space-y-4">
+        <div class="glass-card home-reveal rounded-[28px] p-5 bg-gradient-to-br from-white via-white to-[#fff5f7] relative overflow-hidden" style="--delay: 30ms">
+          <div class="absolute -right-12 -top-12 w-40 h-40 rounded-full bg-[#7b1e2d]/10 blur-2xl"></div>
+          <div class="absolute -left-10 bottom-0 w-32 h-32 rounded-full bg-emerald-400/10 blur-2xl"></div>
+          <div class="flex items-start justify-between gap-3 relative z-10">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-[0.28em] text-[#7b1e2d]/70">Resumo do mês</p>
+              <h2 id="homeBalance" class="mt-2 text-4xl font-extrabold tracking-tight text-slate-900">R$ 0,00</h2>
+              <p id="homeBalanceHint" class="mt-1 text-sm font-semibold text-slate-500">Carregando seu fluxo...</p>
+            </div>
+            <div class="shrink-0 rounded-2xl bg-white/80 border border-[#7b1e2d]/10 shadow-lg p-3 w-[120px]">
+              <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500 mb-2">
+                <span>Nível</span>
+                <span id="homeStreakIcon">🔥</span>
+              </div>
+              <div class="text-2xl font-extrabold text-[#7b1e2d] leading-none" id="homeLevel">1</div>
+              <div class="mt-1 text-[11px] text-slate-600"><span id="homeXp">0</span> XP</div>
+              <div class="mt-2 text-[11px] font-semibold text-slate-700">🔥 <span id="homeStreak">0</span> dias</div>
+            </div>
+          </div>
+
+          <div class="mt-6 relative z-10">
+            <div class="flex items-center justify-between text-xs font-semibold text-slate-500 mb-2">
+              <span>Receitas vs despesas</span>
+              <span id="homeProgressLabel">0%</span>
+            </div>
+            <div class="h-4 rounded-full bg-slate-200 overflow-hidden relative shadow-inner">
+              <div id="homeProgressGreen" class="absolute left-0 top-0 h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full"></div>
+              <div id="homeProgressRed" class="absolute right-0 top-0 h-full bg-gradient-to-l from-rose-500 to-[#7b1e2d] rounded-full"></div>
+              <div class="absolute left-1/2 top-0 h-full w-px bg-white/80"></div>
+            </div>
+            <div class="mt-2 flex items-center justify-between text-[11px] font-semibold text-slate-500">
+              <span id="homeReceita">Receitas: R$ 0,00</span>
+              <span id="homeDespesa">Despesas: R$ 0,00</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid gap-4">
+          <div class="glass-card home-reveal rounded-[28px] p-5" style="--delay: 95ms">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-[#7b1e2d]/70">Fluxo de caixa</p>
+                <h3 class="text-lg font-extrabold text-slate-900">O pulso do dinheiro</h3>
+              </div>
+              <i data-lucide="bar-chart-3" class="w-5 h-5 text-[#7b1e2d]"></i>
+            </div>
+            <div class="h-[260px]">
+              <canvas id="homeCashflowChart"></canvas>
+            </div>
+          </div>
+
+          <div class="grid gap-4 md:grid-cols-2">
+            <div class="glass-card home-reveal rounded-[28px] p-5 border border-[#7b1e2d]/15 bg-gradient-to-br from-[#7b1e2d] via-[#9a3243] to-[#c66b7a] text-white shadow-glow" style="--delay: 145ms">
+              <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-white/80 mb-3">
+                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                Alfredo em destaque
+              </div>
+              <p id="homeInsight" class="text-base leading-relaxed font-semibold">Carregando insight do Alfredo...</p>
+            </div>
+
+            <div class="glass-card home-reveal rounded-[28px] p-5 relative overflow-hidden" style="--delay: 185ms">
+              <div class="flex items-center justify-between mb-2">
+                <div>
+                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-[#7b1e2d]/70">Vilões e heróis</p>
+                  <h3 class="text-lg font-extrabold text-slate-900">Categorias do mês</h3>
+                </div>
+                <i data-lucide="pie-chart" class="w-5 h-5 text-[#7b1e2d]"></i>
+              </div>
+              <div class="relative h-[250px]">
+                <canvas id="homeCategoryChart"></canvas>
+                <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div class="rounded-full bg-white/90 border border-[#7b1e2d]/10 px-5 py-4 text-center shadow-lg min-w-[140px]">
+                    <div class="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500">Selecionado</div>
+                    <div id="homeCategoryValue" class="mt-1 text-xl font-extrabold text-[#7b1e2d]">R$ 0,00</div>
+                    <div id="homeCategoryLabel" class="text-xs font-semibold text-slate-500">Nenhuma fatia</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass-card home-reveal rounded-[28px] p-5" style="--delay: 235ms">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-[#7b1e2d]/70">Últimas movimentações</p>
+                <h3 class="text-lg font-extrabold text-slate-900">Atalho para ajustes rápidos</h3>
+              </div>
+              <button id="homeRecentRefresh" class="text-[#7b1e2d] hover:text-[#b85d6e] transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+            </div>
+            <div id="homeRecentList" class="space-y-3"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tela 2: HISTÓRICO -->
+    <section class="panel" id="historico">
       <div class="glass-card rounded-[24px] p-5">
         <h2 class="text-sm font-semibold text-slate-700 mb-4 flex items-center justify-between">
           <span>Histórico de Movimentações</span>
           <button id="historyRefresh" class="text-[#7b1e2d] hover:text-[#b85d6e] transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
         </h2>
-        
-        <!-- Filtros invisiveis para manter compativel com API original -->
+
         <input id="historyQuery" type="hidden" value="" />
         <input id="historyTipo" type="hidden" value="" />
 
@@ -84,7 +231,7 @@
       </div>
     </section>
 
-    <!-- Tela 2: METAS -->
+    <!-- Tela 3: METAS -->
     <section class="panel" id="metas">
       <div class="glass-card rounded-[24px] p-5">
         <h2 class="text-sm font-semibold text-slate-700 mb-4 flex items-center justify-between">
@@ -96,7 +243,7 @@
       </div>
     </section>
 
-    <!-- Tela 3: EDITAR LANCAMENTOS -->
+    <!-- Tela 4: EDITAR LANCAMENTOS -->
     <section class="panel" id="editar">
       <div class="glass-card rounded-[24px] p-5 space-y-4">
         <h2 class="text-sm font-semibold text-slate-700 flex items-center justify-between">
@@ -365,11 +512,12 @@
 
   <!-- Bottom Tab Bar Premium -->
   <nav class="fixed bottom-5 left-1/2 -translate-x-1/2 w-[94%] glass-card rounded-[28px] px-3 py-2 grid grid-cols-6 gap-1 z-50 shadow-2xl backdrop-blur-3xl border border-[#7b1e2d]/15">
-    <button class="nav-btn tab-active text-[#7b1e2d] flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="historico" onclick="switchTab(this)"><i data-lucide="home" class="w-5 h-5"></i><span>Histórico</span></button>
+    <button class="nav-btn tab-active text-[#7b1e2d] flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="inicio" onclick="switchTab(this)"><i data-lucide="sparkles" class="w-5 h-5"></i><span>Início</span></button>
     <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="metas" onclick="switchTab(this)"><i data-lucide="target" class="w-5 h-5"></i><span>Metas</span></button>
     <button class="nav-btn text-white bg-gradient-to-r from-[#7b1e2d] to-[#b85d6e] rounded-2xl flex flex-col items-center justify-center gap-1 text-[10px] font-semibold py-2 shadow-lg" data-tab="gerente" onclick="switchTab(this)"><i data-lucide="bot" class="w-5 h-5"></i><span>Alfredo</span></button>
     <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="configuracoes" onclick="switchTab(this)"><i data-lucide="sliders-horizontal" class="w-5 h-5"></i><span>Config</span></button>
     <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="agendamentos" onclick="switchTab(this)"><i data-lucide="calendar" class="w-5 h-5"></i><span>Agendamento</span></button>
+    <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="historico" onclick="switchTab(this)"><i data-lucide="history" class="w-5 h-5"></i><span>Histórico</span></button>
   </nav>
 
   <script>
@@ -378,6 +526,23 @@
     // DOM Elements
     const panels = document.querySelectorAll('.panel');
     const mainStatus = document.getElementById('mainStatus');
+    const homeBalance = document.getElementById('homeBalance');
+    const homeBalanceHint = document.getElementById('homeBalanceHint');
+    const homeLevel = document.getElementById('homeLevel');
+    const homeXp = document.getElementById('homeXp');
+    const homeStreak = document.getElementById('homeStreak');
+    const homeProgressLabel = document.getElementById('homeProgressLabel');
+    const homeProgressGreen = document.getElementById('homeProgressGreen');
+    const homeProgressRed = document.getElementById('homeProgressRed');
+    const homeReceita = document.getElementById('homeReceita');
+    const homeDespesa = document.getElementById('homeDespesa');
+    const homeInsight = document.getElementById('homeInsight');
+    const homeRecentList = document.getElementById('homeRecentList');
+    const homeRecentRefresh = document.getElementById('homeRecentRefresh');
+    const homeCashflowChartEl = document.getElementById('homeCashflowChart');
+    const homeCategoryChartEl = document.getElementById('homeCategoryChart');
+    const homeCategoryValue = document.getElementById('homeCategoryValue');
+    const homeCategoryLabel = document.getElementById('homeCategoryLabel');
     const historyList = document.getElementById('historyList');
     const historyStatus = document.getElementById('historyStatus');
     const historyQuery = document.getElementById('historyQuery');
@@ -443,6 +608,9 @@
     let contasCache = [];
     let selectedLancamentoIsDraft = false;
     let pendingDraftLaunch = null;
+    let homeCashflowChart = null;
+    let homeCategoryChart = null;
+    let homeRecentCache = [];
     const urlParams = new URLSearchParams(window.location.search);
     const initialTabFromUrl = urlParams.get('tab') || '';
     const rawDraftFromUrl = urlParams.get('draft') || '';
@@ -619,6 +787,261 @@
       toast.innerHTML = `<span>${icon}</span><span>${message}</span>`;
       toastContainer.appendChild(toast);
       setTimeout(() => toast.remove(), 3000);
+    }
+
+    function formatCurrencyBR(value) {
+      return `R$ ${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    function destroyHomeCharts() {
+      if (homeCashflowChart) {
+        homeCashflowChart.destroy();
+        homeCashflowChart = null;
+      }
+      if (homeCategoryChart) {
+        homeCategoryChart.destroy();
+        homeCategoryChart = null;
+      }
+    }
+
+    function sourceBadgeConfig(origem) {
+      const source = String(origem || 'miniapp').toLowerCase();
+      const mapping = {
+        manual: ['Manual', 'bg-slate-100 text-slate-700 border-slate-200'],
+        texto: ['Texto', 'bg-amber-100 text-amber-800 border-amber-200'],
+        audio: ['Áudio', 'bg-cyan-100 text-cyan-800 border-cyan-200'],
+        ocr: ['OCR', 'bg-violet-100 text-violet-800 border-violet-200'],
+        miniapp: ['MiniApp', 'bg-[#7b1e2d]/10 text-[#7b1e2d] border-[#7b1e2d]/15'],
+      };
+      return mapping[source] || [source.charAt(0).toUpperCase() + source.slice(1), 'bg-slate-100 text-slate-700 border-slate-200'];
+    }
+
+    function renderHomeRecent(items = []) {
+      if (!items.length) {
+        homeRecentList.innerHTML = '<div class="rounded-2xl border border-dashed border-[#7b1e2d]/15 bg-white/70 p-4 text-sm text-slate-500">Sem movimentações recentes por enquanto.</div>';
+        return;
+      }
+
+      homeRecentList.innerHTML = items.map((item) => {
+        const numericValue = Number(item.valor) || 0;
+        const isReceita = isEntradaTipo(item.tipo, numericValue);
+        const [badgeLabel, badgeClass] = sourceBadgeConfig(item.origem);
+        return `
+          <button class="recent-item w-full text-left rounded-2xl border border-[#7b1e2d]/10 bg-white/80 p-4 hover:bg-[#7b1e2d]/5 transition" data-action="edit" data-id="${item.id}">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <p class="font-semibold text-sm text-slate-900 truncate max-w-[190px]">${item.descricao || 'Lançamento'}</p>
+                  <span class="text-[10px] font-bold uppercase tracking-[0.16em] rounded-full border px-2 py-1 ${badgeClass}">${badgeLabel}</span>
+                </div>
+                <p class="text-xs text-slate-500 mt-1">${new Date(item.data).toLocaleDateString('pt-BR')} • ${item.forma_pagamento || '-'}</p>
+                <p class="text-xs text-slate-400 mt-1">${item.categoria_nome ? `${item.categoria_nome}${item.subcategoria_nome ? ` / ${item.subcategoria_nome}` : ''}` : 'Sem categoria'}</p>
+              </div>
+              <span class="shrink-0 font-extrabold ${isReceita ? 'text-emerald-600' : 'text-rose-600'}">${formatMoney(item.valor, item.tipo)}</span>
+            </div>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function canUseChartMotion() {
+      return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    function getChartRuntime() {
+      const isMobile = window.matchMedia('(max-width: 768px)').matches;
+      return {
+        isMobile,
+        enableMotion: canUseChartMotion() && !isMobile,
+        barThickness: isMobile ? 8 : 12,
+        legendFont: isMobile ? 11 : 12,
+        maxTicks: isMobile ? 8 : 14,
+      };
+    }
+
+    function compactCashflow(cashflow, targetPoints) {
+      if (!Array.isArray(cashflow) || cashflow.length <= targetPoints) return cashflow || [];
+      const chunkSize = Math.ceil(cashflow.length / targetPoints);
+      const compacted = [];
+
+      for (let i = 0; i < cashflow.length; i += chunkSize) {
+        const chunk = cashflow.slice(i, i + chunkSize);
+        const first = chunk[0];
+        const last = chunk[chunk.length - 1];
+        const label = first === last ? first.label : `${first.label}-${last.label}`;
+        compacted.push({
+          label,
+          entrada: chunk.reduce((acc, item) => acc + Number(item.entrada || 0), 0),
+          saida: chunk.reduce((acc, item) => acc + Number(item.saida || 0), 0),
+        });
+      }
+
+      return compacted;
+    }
+
+    function renderHomeOverview(summary) {
+      const balance = Number(summary?.balance || 0);
+      const receita = Number(summary?.receita || 0);
+      const despesa = Number(summary?.despesa || 0);
+      const progressPct = Math.max(0, Math.min(Number(summary?.progress_pct || 0), 100));
+
+      homeBalance.textContent = formatCurrencyBR(balance);
+      homeBalanceHint.textContent = balance >= 0 ? 'Você está fechando o mês no azul.' : 'As despesas estão pressionando o mês.';
+      homeLevel.textContent = String(summary?.level || 1);
+      homeXp.textContent = String(summary?.xp || 0);
+      homeStreak.textContent = String(summary?.streak || 0);
+      homeProgressLabel.textContent = `${progressPct}%`;
+      homeProgressGreen.style.width = `${100 - progressPct}%`;
+      homeProgressRed.style.width = `${progressPct}%`;
+      homeReceita.textContent = `Receitas: ${formatCurrencyBR(receita)}`;
+      homeDespesa.textContent = `Despesas: ${formatCurrencyBR(despesa)}`;
+      homeInsight.textContent = summary?.insight || 'Carregando insight do Alfredo...';
+
+      const cashflow = Array.isArray(summary?.cashflow) ? summary.cashflow : [];
+      const categories = Array.isArray(summary?.categories) ? summary.categories : [];
+      homeRecentCache = Array.isArray(summary?.recent) ? summary.recent : [];
+      const chartRuntime = getChartRuntime();
+      const cashflowDisplay = compactCashflow(cashflow, chartRuntime.isMobile ? 12 : 31);
+
+      destroyHomeCharts();
+
+      if (homeCashflowChartEl && cashflowDisplay.length) {
+        const labels = cashflowDisplay.map((item) => item.label);
+        homeCashflowChart = new Chart(homeCashflowChartEl, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [
+              {
+                label: 'Entradas',
+                data: cashflowDisplay.map((item) => item.entrada || 0),
+                backgroundColor: 'rgba(22, 163, 74, 0.75)',
+                borderRadius: 10,
+                borderSkipped: false,
+                barThickness: chartRuntime.barThickness,
+                maxBarThickness: chartRuntime.barThickness + 2,
+              },
+              {
+                label: 'Saídas',
+                data: cashflowDisplay.map((item) => item.saida || 0),
+                backgroundColor: 'rgba(123, 30, 45, 0.82)',
+                borderRadius: 10,
+                borderSkipped: false,
+                barThickness: chartRuntime.barThickness,
+                maxBarThickness: chartRuntime.barThickness + 2,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            normalized: true,
+            parsing: false,
+            animation: chartRuntime.enableMotion ? { duration: 520, easing: 'easeOutQuart' } : false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: {
+                  usePointStyle: true,
+                  boxWidth: 8,
+                  boxHeight: 8,
+                  font: { size: chartRuntime.legendFont },
+                },
+              },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => `${ctx.dataset.label}: ${formatCurrencyBR(ctx.raw)}`,
+                },
+              },
+            },
+            scales: {
+              x: {
+                grid: { display: false },
+                ticks: { color: '#64748b', maxTicksLimit: chartRuntime.maxTicks },
+              },
+              y: {
+                grid: { color: 'rgba(123, 30, 45, 0.08)' },
+                ticks: { color: '#64748b', callback: (v) => `R$ ${Number(v).toLocaleString('pt-BR')}` },
+              },
+            },
+          },
+        });
+      }
+
+      if (homeCategoryChartEl) {
+        const hasCategories = categories.length > 0;
+        homeCategoryChart = new Chart(homeCategoryChartEl, {
+          type: 'doughnut',
+          data: {
+            labels: hasCategories ? categories.map((item) => item.label) : ['Sem dados'],
+            datasets: [{
+              data: hasCategories ? categories.map((item) => item.value || 0) : [1],
+              backgroundColor: hasCategories ? categories.map((item) => item.color || '#7b1e2d') : ['#e2e8f0'],
+              borderWidth: 0,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            normalized: true,
+            parsing: false,
+            animation: chartRuntime.enableMotion ? { duration: 420, easing: 'easeOutQuad' } : false,
+            cutout: '68%',
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: {
+                  usePointStyle: true,
+                  boxWidth: 8,
+                  boxHeight: 8,
+                  padding: chartRuntime.isMobile ? 10 : 14,
+                  font: { size: chartRuntime.legendFont },
+                },
+              },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => `${ctx.label}: ${formatCurrencyBR(ctx.raw)}`,
+                },
+              },
+            },
+            onClick: (_, elements) => {
+              if (!elements.length || !hasCategories) return;
+              const index = elements[0].index;
+              const selected = categories[index];
+              if (!selected) return;
+              homeCategoryValue.textContent = formatCurrencyBR(selected.value);
+              homeCategoryLabel.textContent = selected.label;
+            },
+          },
+        });
+
+        if (hasCategories) {
+          homeCategoryValue.textContent = formatCurrencyBR(categories[0].value);
+          homeCategoryLabel.textContent = categories[0].label;
+        } else {
+          homeCategoryValue.textContent = formatCurrencyBR(0);
+          homeCategoryLabel.textContent = 'Sem categoria';
+        }
+      }
+
+      renderHomeRecent(summary?.recent || []);
+      lucide.createIcons();
+    }
+
+    async function loadHomeOverview() {
+      if (!sessionId) return;
+      try {
+        const response = await fetch('/api/miniapp/overview', { headers: { 'X-Session-Id': sessionId } });
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error || 'overview_error');
+        renderHomeOverview(data.summary || {});
+      } catch (error) {
+        homeBalance.textContent = 'R$ 0,00';
+        homeBalanceHint.textContent = 'Não foi possível carregar o resumo agora.';
+        homeInsight.textContent = 'O Alfredo não conseguiu montar o resumo agora. Tente atualizar em instantes.';
+        homeRecentList.innerHTML = '<div class="rounded-2xl border border-dashed border-[#7b1e2d]/15 bg-white/70 p-4 text-sm text-slate-500">Resumo indisponível no momento.</div>';
+      }
     }
 
     function openNewAgendamentoModal() {
@@ -840,6 +1263,7 @@
             isDraft ? `✓ ${selectedLancamento.descricao} salvo com sucesso!` : `✓ ${selectedLancamento.descricao} atualizado com sucesso!`,
             'success'
           );
+          await loadHomeOverview();
           await loadHistory(true);
           closeEditModal();
         } else {
@@ -865,6 +1289,7 @@
         const data = await response.json();
         if (data.ok) {
           showToast('✓ Lançamento excluído com sucesso!', 'success');
+          await loadHomeOverview();
           await loadHistory(true);
           if (selectedLancamento && selectedLancamento.id === id) {
             closeEditModal();
@@ -912,7 +1337,7 @@
         mainStatus.textContent = 'Ambiente Local (Sem TG)';
         mainStatus.className = "text-gray-400 font-bold";
         // Local mode block can go here if needed.
-        switchTabByName(initialTabFromUrl || 'historico');
+        switchTabByName(initialTabFromUrl || 'inicio');
         return;
       }
 
@@ -930,11 +1355,12 @@
         }
         sessionId = data.session_id;
         mainStatus.textContent = 'Sincronizado';
+        await loadHomeOverview();
         await loadHistory(true);
         await loadConfiguracoes();
         await loadAgendamentos();
         await loadMetas();
-        switchTabByName(initialTabFromUrl || (pendingDraftLaunch ? 'editar' : 'historico'));
+        switchTabByName(initialTabFromUrl || (pendingDraftLaunch ? 'editar' : 'inicio'));
         if (pendingDraftLaunch) {
           const draft = normalizeDraftLancamento(pendingDraftLaunch);
           if (draft) {
@@ -1115,6 +1541,17 @@
         deleteLancamentoById(Number(id));
       }
     });
+
+    homeRecentList.addEventListener('click', (event) => {
+      const target = event.target.closest('[data-action="edit"]');
+      if (!target?.dataset?.id) return;
+      const item = homeRecentCache.find((lanc) => String(lanc.id) === String(target.dataset.id)) || historyCache.find((lanc) => String(lanc.id) === String(target.dataset.id));
+      if (item) {
+        openEditModal(item);
+      }
+    });
+
+    homeRecentRefresh.addEventListener('click', loadHomeOverview);
 
     agendamentoList.addEventListener('click', (event) => {
       const target = event.target;

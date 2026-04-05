@@ -890,7 +890,8 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
                 forma_pagamento=dados.get('forma_pagamento'),
                 documento_fiscal=doc_fiscal,
                 id_categoria=id_categoria,
-                id_subcategoria=id_subcategoria
+                id_subcategoria=id_subcategoria,
+                origem="ocr",
             )
             for item_data in dados.get('itens', []):
                 valor_unit_str = str(item_data.get('valor_unitario', '0')).replace(',', '.')

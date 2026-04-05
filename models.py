@@ -123,6 +123,7 @@ class Lancamento(Base):
     tipo = Column(String, nullable=False)
     data_transacao = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     forma_pagamento = Column(String) # Será preenchido com o nome da conta/cartão
+    origem = Column(String, nullable=True)  # manual, texto, audio, ocr, miniapp
     documento_fiscal = Column(String, nullable=True)
     
     id_usuario = Column(Integer, ForeignKey('usuarios.id'), nullable=False)

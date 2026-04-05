@@ -444,7 +444,7 @@ async def save_manual_lancamento_and_return(update: Update, context: ContextType
         usuario_db = get_or_create_user(db, user_info.id, user_info.full_name)
         dados = context.user_data['novo_lancamento']
         
-        novo_lancamento = Lancamento(id_usuario=usuario_db.id, **dados)
+        novo_lancamento = Lancamento(id_usuario=usuario_db.id, origem="manual", **dados)
         db.add(novo_lancamento)
         db.commit()
         try:

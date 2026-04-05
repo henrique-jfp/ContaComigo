@@ -322,7 +322,8 @@ async def audio_action_processor(update: Update, context: ContextTypes.DEFAULT_T
                 forma_pagamento=dados.get('forma_pagamento'),
                 id_conta=dados.get('id_conta'),
                 id_categoria=id_categoria,
-                id_subcategoria=id_subcategoria
+                id_subcategoria=id_subcategoria,
+                origem="audio",
             )
             
             db.add(novo_lancamento)
