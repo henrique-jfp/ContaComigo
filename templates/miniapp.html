@@ -40,7 +40,7 @@
   @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; animation: fadeIn 0.2s ease; }
   .modal-overlay.active { display: flex; align-items: flex-end; }
-  .modal-content { background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.88)); backdrop-filter: blur(18px); border: 1px solid rgba(123, 30, 45, 0.12); border-radius: 28px 28px 0 0; width: 100%; max-height: 90vh; overflow-y-auto; animation: slideUp 0.3s ease; box-shadow: 0 -16px 40px rgba(123, 30, 45, 0.08); }
+  .modal-content { background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.88)); backdrop-filter: blur(18px); border: 1px solid rgba(123, 30, 45, 0.12); border-radius: 28px 28px 0 0; width: 100%; max-height: 90vh; overflow-y: auto; animation: slideUp 0.3s ease; box-shadow: 0 -16px 40px rgba(123, 30, 45, 0.08); }
   @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
   .modal-header { position: sticky; top: 0; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.88)); padding: 16px 20px; border-bottom: 1px solid rgba(123, 30, 45, 0.1); display: flex; justify-content: space-between; align-items: center; }
   .modal-close-btn { background: none; border: none; cursor: pointer; color: #7b1e2d; font-size: 24px; padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
@@ -318,6 +318,7 @@
       </div>
       <div class="modal-body space-y-4">
         <div id="editModalBadge" class="rounded-full bg-[#7b1e2d]/10 text-[#7b1e2d] px-3 py-2 text-xs font-semibold w-fit"></div>
+        <div id="editDraftInfo" class="hidden rounded-2xl bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-600"></div>
 
         <div>
           <label class="text-xs font-semibold text-slate-600 block mb-2">Descrição</label>
@@ -409,6 +410,7 @@
 
     const editModal = document.getElementById('editModal');
     const editModalBadge = document.getElementById('editModalBadge');
+    const editDraftInfo = document.getElementById('editDraftInfo');
     const editDescricao = document.getElementById('editDescricao');
     const editValor = document.getElementById('editValor');
     const editTipo = document.getElementById('editTipo');
@@ -439,6 +441,11 @@
     let historyCache = [];
     let selectedLancamento = null;
     let contasCache = [];
+    let selectedLancamentoIsDraft = false;
+    let pendingDraftLaunch = null;
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialTabFromUrl = urlParams.get('tab') || '';
+    const rawDraftFromUrl = urlParams.get('draft') || '';
 
     // Navigation
     const switchTab = (el) => {
@@ -453,6 +460,12 @@
       }
       panels.forEach(p => p.classList.remove('active'));
       document.getElementById(el.dataset.tab).classList.add('active');
+    };
+
+    const switchTabByName = (tabName) => {
+      if (!tabName) return;
+      const button = document.querySelector(`.nav-btn[data-tab="${tabName}"]`);
+      if (button) switchTab(button);
     };
 
     // Chat Helpers
@@ -486,6 +499,10 @@
 
     function formatDateForInput(value) {
       if (!value) return '';
+      if (typeof value === 'string') {
+        const br = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+      }
       const d = new Date(value);
       if (Number.isNaN(d.getTime())) return '';
       const year = d.getFullYear();
@@ -493,6 +510,58 @@
       const day = String(d.getDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
     }
+
+    function parseDraftFromUrl(raw) {
+      if (!raw) return null;
+      try {
+        return JSON.parse(decodeURIComponent(raw));
+      } catch (error) {
+        try {
+          return JSON.parse(raw);
+        } catch (error2) {
+          return null;
+        }
+      }
+    }
+
+    function normalizeDraftLancamento(raw) {
+      if (!raw) return null;
+      const descricao = raw.descricao || raw.nome_estabelecimento || 'Lançamento';
+      const valor = raw.valor ?? raw.valor_total ?? 0;
+      const tipo = raw.tipo || raw.tipo_transacao || 'Saída';
+      const data = raw.data_transacao || raw.data || '';
+      const formaPagamento = raw.forma_pagamento_conta || raw.forma_pagamento || '';
+      const contaNome = raw.forma_pagamento_conta || raw.conta_nome || '';
+      const categoria = raw.categoria_sugerida || raw.categoria || '';
+      const subcategoria = raw.subcategoria_sugerida || raw.subcategoria || '';
+
+      return {
+        ...raw,
+        id: raw.id || null,
+        descricao,
+        valor,
+        tipo,
+        data,
+        forma_pagamento: formaPagamento,
+        conta_nome: contaNome,
+        categoria_sugerida: categoria,
+        subcategoria_sugerida: subcategoria,
+      };
+    }
+
+    function applyDraftDetails(item) {
+      if (!item) return;
+      const categoria = [item.categoria_sugerida, item.subcategoria_sugerida].filter(Boolean).join(' / ');
+      const contaLabel = item.conta_nome || item.forma_pagamento || 'Conta não definida';
+      editDraftInfo.innerHTML = `
+        <div><b>Pré-preenchido:</b> ${item.descricao || 'Lançamento'}</div>
+        <div><b>Conta:</b> ${contaLabel}</div>
+        <div><b>Categoria:</b> ${categoria || 'N/A'}</div>
+      `;
+      editDraftInfo.classList.remove('hidden');
+    }
+
+    pendingDraftLaunch = parseDraftFromUrl(rawDraftFromUrl);
 
     function parseMoneyInput(value) {
       const raw = String(value || '').replace(/\./g, '').replace(',', '.').trim();
@@ -502,8 +571,11 @@
 
     function setSelectedLancamento(item) {
       selectedLancamento = item;
+      selectedLancamentoIsDraft = Boolean(item && !item.id);
       if (!item) {
         editModalBadge.textContent = 'Nenhum lançamento selecionado';
+        editDraftInfo.classList.add('hidden');
+        editDraftInfo.innerHTML = '';
         editDescricao.value = '';
         editValor.value = '';
         editTipo.value = 'Saída';
@@ -512,13 +584,19 @@
         editConta.value = '';
         return;
       }
-      editModalBadge.textContent = `Editando: ${item.descricao || 'Lançamento'}`;
+      editModalBadge.textContent = item.id ? `Editando: ${item.descricao || 'Lançamento'}` : `Pré-edição: ${item.descricao || 'Lançamento'}`;
       editDescricao.value = item.descricao || '';
       editValor.value = item.valor != null ? String(item.valor).replace('.', ',') : '';
       editTipo.value = item.tipo || 'Saída';
       editData.value = formatDateForInput(item.data);
       editForma.value = item.forma_pagamento || '';
       editConta.value = item.id_conta ? String(item.id_conta) : '';
+      if (item.id) {
+        editDraftInfo.classList.add('hidden');
+        editDraftInfo.innerHTML = '';
+      } else {
+        applyDraftDetails(item);
+      }
     }
 
     function openEditModal(item) {
@@ -632,6 +710,9 @@
         options.push(`<option value="${conta.id}">${conta.nome} • ${conta.tipo}</option>`);
       }
       editConta.innerHTML = options.join('');
+      if (selectedLancamento?.id_conta) {
+        editConta.value = String(selectedLancamento.id_conta);
+      }
     }
 
     function renderContasList() {
@@ -737,18 +818,32 @@
         id_conta: editConta.value ? Number(editConta.value) : null,
       };
       try {
-        const response = await fetch(`/api/miniapp/lancamentos/${selectedLancamento.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
-          body: JSON.stringify(payload),
-        });
+        const isDraft = !selectedLancamento.id;
+        const requestPayload = isDraft
+          ? {
+              ...payload,
+              categoria_sugerida: selectedLancamento.categoria_sugerida || null,
+              subcategoria_sugerida: selectedLancamento.subcategoria_sugerida || null,
+            }
+          : payload;
+        const response = await fetch(
+          isDraft ? '/api/miniapp/lancamentos' : `/api/miniapp/lancamentos/${selectedLancamento.id}`,
+          {
+            method: isDraft ? 'POST' : 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
+            body: JSON.stringify(requestPayload),
+          }
+        );
         const data = await response.json();
         if (data.ok) {
-          showToast(`✓ ${selectedLancamento.descricao} atualizado com sucesso!`, 'success');
+          showToast(
+            isDraft ? `✓ ${selectedLancamento.descricao} salvo com sucesso!` : `✓ ${selectedLancamento.descricao} atualizado com sucesso!`,
+            'success'
+          );
           await loadHistory(true);
           closeEditModal();
         } else {
-          showToast(`Erro ao atualizar: ${data.message || 'Tente novamente'}`, 'error');
+          showToast(`Erro ao ${isDraft ? 'salvar' : 'atualizar'}: ${data.message || data.error || 'Tente novamente'}`, 'error');
         }
       } catch (e) {
         showToast('Erro de conexão ao salvar', 'error');
@@ -817,6 +912,7 @@
         mainStatus.textContent = 'Ambiente Local (Sem TG)';
         mainStatus.className = "text-gray-400 font-bold";
         // Local mode block can go here if needed.
+        switchTabByName(initialTabFromUrl || 'historico');
         return;
       }
 
@@ -838,6 +934,15 @@
         await loadConfiguracoes();
         await loadAgendamentos();
         await loadMetas();
+        switchTabByName(initialTabFromUrl || (pendingDraftLaunch ? 'editar' : 'historico'));
+        if (pendingDraftLaunch) {
+          const draft = normalizeDraftLancamento(pendingDraftLaunch);
+          if (draft) {
+            setSelectedLancamento(draft);
+            editModal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+          }
+        }
         addChatMessage('Olá! Sou o Alfredo. Seu saldo sincronizou, como ajudo hoje?', 'bot');
         setInterval(() => loadHistory(true), 25000); // Polling slower 25s
       } catch(e) {

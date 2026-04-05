@@ -1,6 +1,7 @@
 import logging
 import json
 import os
+from urllib.parse import quote
 from datetime import datetime, timezone
 from telegram.ext import filters, CommandHandler, MessageHandler, CallbackQueryHandler
 import google.generativeai as genai
@@ -35,11 +36,16 @@ def _normalizar_tipo(tipo: str) -> str:
     return 'Entrada' if str(tipo).strip().lower() == 'entrada' else 'Saída'
 
 
-def _get_webapp_url(tab: str | None = None) -> str:
+def _get_webapp_url(tab: str | None = None, draft: dict | None = None) -> str:
     base_url = os.getenv("DASHBOARD_BASE_URL", "http://localhost:5000").rstrip("/")
     url = f"{base_url}/webapp"
+    params: list[str] = []
     if tab:
-        url = f"{url}?tab={tab}"
+        params.append(f"tab={quote(tab, safe='')}")
+    if draft:
+        params.append(f"draft={quote(json.dumps(draft, ensure_ascii=False), safe='')}")
+    if params:
+        url = f"{url}?{'&'.join(params)}"
     return url
 
 
@@ -154,7 +160,7 @@ async def _reply_with_audio_summary(update_or_query, context: ContextTypes.DEFAU
     keyboard = [
         [InlineKeyboardButton("✅ Confirmar e Salvar", callback_data="audio_salvar")],
         [InlineKeyboardButton("❌ Cancelar", callback_data="audio_cancelar")],
-        [InlineKeyboardButton("✍️ Editar no Miniapp", web_app=WebAppInfo(url=_get_webapp_url("editar")))]
+        [InlineKeyboardButton("✍️ Editar no Miniapp", web_app=WebAppInfo(url=_get_webapp_url("editar", draft=dados_ia)))]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 

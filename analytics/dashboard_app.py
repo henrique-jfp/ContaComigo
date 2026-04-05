@@ -16,7 +16,7 @@ import re
 import requests
 from urllib.parse import parse_qsl
 from functools import wraps
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 from flask import Flask, render_template, jsonify, request, g
 from datetime import datetime, timedelta, date
 
@@ -65,7 +65,7 @@ static_dir = os.path.join(parent_dir, 'static')
 sys.path.insert(0, parent_dir)
 import config
 from database.database import get_db, buscar_lancamentos_usuario
-from models import Usuario, Lancamento, Agendamento, Objetivo, Conta
+from models import Usuario, Lancamento, Agendamento, Objetivo, Conta, Categoria, Subcategoria
 from gerente_financeiro.prompts import PROMPT_ALFREDO
 from gerente_financeiro.services import preparar_contexto_financeiro_completo
 import google.generativeai as genai
@@ -164,6 +164,46 @@ def _validate_telegram_init_data(init_data: str) -> dict | None:
             return None
     except Exception:
         return None
+
+
+def _resolve_categoria_ids(payload: dict) -> tuple[int | None, int | None]:
+    id_categoria = payload.get("id_categoria")
+    id_subcategoria = payload.get("id_subcategoria")
+
+    try:
+        id_categoria = int(id_categoria) if id_categoria not in (None, "") else None
+    except (TypeError, ValueError):
+        id_categoria = None
+    try:
+        id_subcategoria = int(id_subcategoria) if id_subcategoria not in (None, "") else None
+    except (TypeError, ValueError):
+        id_subcategoria = None
+
+    if id_categoria is not None:
+        return id_categoria, id_subcategoria
+
+    categoria_nome = (payload.get("categoria_sugerida") or payload.get("categoria") or "").strip()
+    subcategoria_nome = (payload.get("subcategoria_sugerida") or payload.get("subcategoria") or "").strip()
+    if not categoria_nome:
+        return None, None
+
+    db = next(get_db())
+    try:
+        categoria_obj = db.query(Categoria).filter(func.lower(Categoria.nome) == categoria_nome.lower()).first()
+        if not categoria_obj:
+            return None, None
+
+        id_categoria = categoria_obj.id
+        if subcategoria_nome:
+            sub_obj = db.query(Subcategoria).filter(
+                Subcategoria.id_categoria == id_categoria,
+                func.lower(Subcategoria.nome) == subcategoria_nome.lower(),
+            ).first()
+            if sub_obj:
+                id_subcategoria = sub_obj.id
+        return id_categoria, id_subcategoria
+    finally:
+        db.close()
 
     user_data = parsed.get("user")
     if not user_data:
@@ -393,6 +433,62 @@ def miniapp_history():
         ]
 
         return jsonify({"ok": True, "items": itens, "total": total, "offset": offset})
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/lancamentos', methods=['POST'])
+def miniapp_lancamento_create():
+    """Cria um lançamento pelo miniapp."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    descricao = (payload.get("descricao") or "").strip()
+    if not descricao:
+        return jsonify({"ok": False, "error": "missing_descricao"}), 400
+
+    try:
+        valor = float(str(payload.get("valor", 0)).replace(",", "."))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_valor"}), 400
+    if valor <= 0:
+        return jsonify({"ok": False, "error": "invalid_valor"}), 400
+
+    tipo = "Entrada" if str(payload.get("tipo", "Saída")).strip().lower() == "entrada" else "Saída"
+    forma_pagamento = (payload.get("forma_pagamento") or "").strip() or None
+
+    parsed_date = _parse_date(payload.get("data_transacao") or payload.get("data"))
+    data_transacao = datetime.combine(parsed_date, datetime.min.time()) if parsed_date else datetime.now()
+
+    id_categoria, id_subcategoria = _resolve_categoria_ids(payload)
+    id_conta = payload.get("id_conta")
+    try:
+        id_conta = int(id_conta) if id_conta not in (None, "") else None
+    except (TypeError, ValueError):
+        id_conta = None
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        lancamento = Lancamento(
+            id_usuario=usuario.id,
+            descricao=descricao,
+            valor=valor,
+            tipo=tipo,
+            data_transacao=data_transacao,
+            forma_pagamento=forma_pagamento,
+            id_conta=id_conta,
+            id_categoria=id_categoria,
+            id_subcategoria=id_subcategoria,
+        )
+        db.add(lancamento)
+        db.commit()
+        return jsonify({"ok": True, "id": lancamento.id})
     finally:
         db.close()
 

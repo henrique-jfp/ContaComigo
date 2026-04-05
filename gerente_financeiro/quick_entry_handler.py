@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import asyncio
+from urllib.parse import quote
 from datetime import datetime
 
 import google.generativeai as genai
@@ -53,11 +54,16 @@ _BOTOES_MENU = {
 }
 
 
-def _get_webapp_url(tab: str | None = None) -> str:
+def _get_webapp_url(tab: str | None = None, draft: dict | None = None) -> str:
     base_url = os.getenv("DASHBOARD_BASE_URL", "http://localhost:5000").rstrip("/")
     url = f"{base_url}/webapp"
+    params: list[str] = []
     if tab:
-        url = f"{url}?tab={tab}"
+        params.append(f"tab={quote(tab, safe='')}")
+    if draft:
+        params.append(f"draft={quote(json.dumps(draft, ensure_ascii=False), safe='')}")
+    if params:
+        url = f"{url}?{'&'.join(params)}"
     return url
 
 
@@ -189,6 +195,16 @@ def _format_categoria_str(dados: dict) -> str:
     return categoria
 
 
+def _conta_permite_recebimento(conta: Conta) -> bool:
+    return "cart" not in str(conta.tipo or "").lower()
+
+
+def _contas_eligiveis_por_tipo(contas: list[Conta], tipo: str) -> list[Conta]:
+    if _normalize_tipo(tipo) == "Entrada":
+        return [conta for conta in contas if _conta_permite_recebimento(conta)]
+    return contas
+
+
 def _format_quick_card(dados: dict) -> str:
     descricao = dados.get("descricao") or dados.get("nome_estabelecimento") or "Lançamento"
     try:
@@ -234,7 +250,7 @@ async def _send_quick_summary(update_or_query, context: ContextTypes.DEFAULT_TYP
         return
 
     card_text = _format_quick_card(dados)
-    webapp_url = _get_webapp_url("editar")
+    webapp_url = _get_webapp_url("editar", draft=dados)
     keyboard = [
         [InlineKeyboardButton("✅ Confirmar e Salvar", callback_data="quick_confirm")],
         [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")],
@@ -341,16 +357,25 @@ Frase do usuario:
         context.user_data.pop("quick_lancamento", None)
         return
 
-    if len(contas) == 1:
-        dados_ia["id_conta"] = contas[0].id
-        dados_ia["forma_pagamento_conta"] = contas[0].nome
+    contas_eligiveis = _contas_eligiveis_por_tipo(contas, dados_ia.get("tipo_transacao", "Saída"))
+    if not contas_eligiveis:
+        tipo_norm = _normalize_tipo(dados_ia.get("tipo_transacao", "Saída"))
+        texto_tipo = "contas bancárias" if tipo_norm == "Entrada" else "contas/cartões"
+        await status.edit_text(f"❌ Nenhuma {texto_tipo} cadastrada. Use /configurar para adicionar.")
+        context.user_data.pop("quick_lancamento", None)
+        return
+
+    if len(contas_eligiveis) == 1:
+        conta = contas_eligiveis[0]
+        dados_ia["id_conta"] = conta.id
+        dados_ia["forma_pagamento_conta"] = conta.nome
         context.user_data["quick_lancamento"] = dados_ia
         await status.delete()
         await _send_quick_summary(update, context)
         return
 
     await status.delete()
-    await _ask_for_conta(update, context, contas)
+    await _ask_for_conta(update, context, contas_eligiveis)
 
 
 async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
