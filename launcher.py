@@ -154,7 +154,13 @@ def start_telegram_bot(enable_health_server: bool = True):
                     logger.info("🔁 Event loop criado para a thread do bot.")
 
                 logger.info("🚀 Iniciando polling do bot (isso pode demorar 10-30s)...")
-                application.run_polling(allowed_updates=None, drop_pending_updates=True)
+                # Em execução em thread, não é possível registrar sinais do SO.
+                # Desativar stop_signals evita o crash em add_signal_handler.
+                application.run_polling(
+                    allowed_updates=None,
+                    drop_pending_updates=True,
+                    stop_signals=(),
+                )
                 logger.info("✅ Bot iniciado com sucesso!")
             else:
                 logger.error("❌ Falha ao criar aplicação do bot")
