@@ -456,7 +456,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("/debuglogs", lambda: CommandHandler("debuglogs", debug_logs_command)),
         ("/teste_assistente", lambda: teste_assistente_handler),
         ("/meu_wrapped", lambda: meu_wrapped_handler),
-        ("/importar", lambda: CommandHandler("importar", importar_of)),
+        # ❌ REMOVIDO: ("/importar", ...) - função importar_of não estava definida em lugar nenhum
         # Texto/voz/PDF/foto agora são roteados no grupo -1 para evitar conflito com fluxos legados.
         # ("confirmar_importacao_callback", lambda: CallbackQueryHandler(confirmar_callback, pattern="^confirmar_importacao$")),  # Removido: confirmar_callback não existe mais
         # ("cancelar_importacao_callback", lambda: CallbackQueryHandler(cancelar_callback, pattern="^cancelar_importacao$")),  # Removido: cancelar_callback não existe mais
