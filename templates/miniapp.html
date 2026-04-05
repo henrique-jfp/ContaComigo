@@ -17,7 +17,7 @@
         fontFamily: { sans: ['Outfit', 'sans-serif'] },
         colors: { 
           'glass': 'rgba(255, 255, 255, 0.72)', flex: { '2': '2 2 0%' },
-          'neon-purple': '#7b1e2d', 'emerald': '#7b1e2d', 'carmine': '#7b1e2d'
+          'neon-purple': '#7b1e2d', 'brand-wine': '#7b1e2d', 'carmine': '#7b1e2d'
         },
         boxShadow: { 'glow': '0 0 30px -10px rgba(123, 30, 45, 0.35)' }
       }
@@ -145,8 +145,8 @@
               <span id="homeProgressLabel">0%</span>
             </div>
             <div class="h-4 rounded-full bg-slate-200 overflow-hidden relative shadow-inner">
-              <div id="homeProgressGreen" class="absolute left-0 top-0 h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full"></div>
-              <div id="homeProgressRed" class="absolute right-0 top-0 h-full bg-gradient-to-l from-rose-500 to-[#7b1e2d] rounded-full"></div>
+              <div id="homeProgressGreen" class="absolute left-0 top-0 h-full rounded-full" style="background: linear-gradient(to right, #22c55e, #34d399);"></div>
+              <div id="homeProgressRed" class="absolute right-0 top-0 h-full rounded-full" style="background: linear-gradient(to left, #ef4444, #7b1e2d);"></div>
               <div class="absolute left-1/2 top-0 h-full w-px bg-white/80"></div>
             </div>
             <div class="mt-2 flex items-center justify-between text-[11px] font-semibold text-slate-500">
@@ -891,8 +891,10 @@
       homeXp.textContent = String(summary?.xp || 0);
       homeStreak.textContent = String(summary?.streak || 0);
       homeProgressLabel.textContent = `${progressPct}%`;
-      homeProgressGreen.style.width = `${100 - progressPct}%`;
-      homeProgressRed.style.width = `${progressPct}%`;
+      const greenPct = Math.max(0, Math.min(100 - progressPct, 100));
+      const redPct = Math.max(0, Math.min(progressPct, 100));
+      homeProgressGreen.style.width = `${greenPct}%`;
+      homeProgressRed.style.width = `${redPct}%`;
       homeReceita.textContent = `Receitas: ${formatCurrencyBR(receita)}`;
       homeDespesa.textContent = `Despesas: ${formatCurrencyBR(despesa)}`;
       homeInsight.textContent = summary?.insight || 'Carregando insight do Alfredo...';
@@ -916,6 +918,9 @@
                 label: 'Entradas',
                 data: cashflowDisplay.map((item) => item.entrada || 0),
                 backgroundColor: 'rgba(22, 163, 74, 0.75)',
+                borderColor: 'rgba(22, 163, 74, 1)',
+                borderWidth: 1,
+                minBarLength: 2,
                 borderRadius: 10,
                 borderSkipped: false,
                 barThickness: chartRuntime.barThickness,
@@ -925,6 +930,9 @@
                 label: 'Saídas',
                 data: cashflowDisplay.map((item) => item.saida || 0),
                 backgroundColor: 'rgba(123, 30, 45, 0.82)',
+                borderColor: 'rgba(123, 30, 45, 1)',
+                borderWidth: 1,
+                minBarLength: 2,
                 borderRadius: 10,
                 borderSkipped: false,
                 barThickness: chartRuntime.barThickness,
@@ -936,7 +944,6 @@
             responsive: true,
             maintainAspectRatio: false,
             normalized: true,
-            parsing: false,
             animation: chartRuntime.enableMotion ? { duration: 520, easing: 'easeOutQuart' } : false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
@@ -985,7 +992,6 @@
             responsive: true,
             maintainAspectRatio: false,
             normalized: true,
-            parsing: false,
             animation: chartRuntime.enableMotion ? { duration: 420, easing: 'easeOutQuad' } : false,
             cutout: '68%',
             plugins: {
