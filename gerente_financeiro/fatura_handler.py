@@ -3,10 +3,13 @@ import logging
 import os
 import re
 import uuid
+import asyncio
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 
 import pdfplumber
+from pdfminer.pdfdocument import PDFPasswordIncorrect
+from pdfplumber.utils.exceptions import PdfminerException
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     ContextTypes,
@@ -31,8 +34,9 @@ from .gamification_utils import give_xp_for_action, touch_user_interaction
 
 logger = logging.getLogger(__name__)
 
-MAX_PDF_SIZE_MB = 20
+MAX_PDF_SIZE_MB = int(os.getenv("FATURA_MAX_PDF_SIZE_MB", "100"))
 MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024
+MAX_PDF_PARSE_SECONDS = int(os.getenv("FATURA_PARSE_TIMEOUT_SECONDS", "300"))
 TRAINING_TEXT_MAX_LINES = 80
 GENERIC_TEXT_MAX_LINES = 2000
 GENERIC_MIN_TRANSACOES = 3
@@ -179,6 +183,37 @@ def _extract_reference_year(lines: List[str]) -> int:
         if match:
             return int(match.group(1))
     return datetime.now().year
+
+
+def _is_pdf_password_error(exc: Exception) -> bool:
+    if isinstance(exc, PDFPasswordIncorrect):
+        return True
+    if isinstance(exc, PdfminerException):
+        cause = getattr(exc, "__cause__", None)
+        if isinstance(cause, PDFPasswordIncorrect):
+            return True
+    message = str(exc).lower()
+    return "password" in message and "pdf" in message
+
+
+def _parse_fatura_pipeline(file_bytes: bytes) -> Tuple[List[Dict], int, str]:
+    transacoes, ignoradas = parse_inter_pdf_bytes(file_bytes)
+    origem_label = "Inter"
+    if transacoes:
+        return transacoes, ignoradas, origem_label
+
+    text_lines = _extract_pdf_text_lines(file_bytes)
+    if _is_bradesco_pdf(text_lines):
+        transacoes, ignoradas = _parse_bradesco_pdf_lines(text_lines)
+        if transacoes:
+            return transacoes, ignoradas, "Bradesco"
+
+    bank_name, _score = _match_bank_from_samples(text_lines)
+    transacoes, ignoradas = _parse_generic_transactions(text_lines, bank_name)
+    if transacoes and len(transacoes) >= GENERIC_MIN_TRANSACOES:
+        return transacoes, ignoradas, bank_name or "Outros"
+
+    return [], 0, "Inter"
 
 
 def _is_bradesco_pdf(lines: List[str]) -> bool:
@@ -458,7 +493,7 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(
             "❌ Arquivo muito grande para importar aqui.\n"
             f"Tamanho maximo: {MAX_PDF_SIZE_MB}MB.\n"
-            "Dica: exporte um PDF mais leve ou envie apenas as paginas principais."
+            "Dica: se passar desse limite, exporte em partes (mesmo banco/cartao)."
         )
         return FATURA_AWAIT_FILE
 
@@ -472,23 +507,40 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return FATURA_AWAIT_FILE
 
-    transacoes, ignoradas = parse_inter_pdf_bytes(bytes(file_bytes))
-    origem_label = "Inter"
-    if not transacoes:
-        text_lines = _extract_pdf_text_lines(bytes(file_bytes))
-        if _is_bradesco_pdf(text_lines):
-            transacoes, ignoradas = _parse_bradesco_pdf_lines(text_lines)
-            if transacoes:
-                origem_label = "Bradesco"
+    process_msg = await update.message.reply_text(
+        "📄 PDF detectado! Estou processando a fatura.\n"
+        "Se o arquivo for grande, pode demorar um pouco."
+    )
 
-        if not transacoes:
-            bank_name, _score = _match_bank_from_samples(text_lines)
-            transacoes, ignoradas = _parse_generic_transactions(text_lines, bank_name)
-            if transacoes and len(transacoes) >= GENERIC_MIN_TRANSACOES:
-                origem_label = bank_name or "Outros"
-            else:
-                transacoes = []
-                ignoradas = 0
+    try:
+        transacoes, ignoradas, origem_label = await asyncio.wait_for(
+            asyncio.to_thread(_parse_fatura_pipeline, bytes(file_bytes)),
+            timeout=MAX_PDF_PARSE_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        await process_msg.edit_text(
+            "⏱️ O processamento da fatura excedeu o tempo limite.\n"
+            "Tente enviar novamente ou exportar em partes por período."
+        )
+        return FATURA_AWAIT_FILE
+    except Exception as exc:
+        logger.exception("Erro ao processar fatura PDF", exc_info=True)
+        if _is_pdf_password_error(exc):
+            await process_msg.edit_text(
+                "🔒 Este PDF está protegido por senha.\n"
+                "Remova a senha no app do banco e envie novamente."
+            )
+        else:
+            await process_msg.edit_text(
+                "❌ Nao consegui ler esse PDF de fatura.\n"
+                "Verifique se o arquivo nao está corrompido e tente novamente."
+            )
+        return FATURA_AWAIT_FILE
+    else:
+        try:
+            await process_msg.delete()
+        except Exception:
+            pass
 
     if not transacoes:
         await update.message.reply_text(
