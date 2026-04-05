@@ -394,12 +394,8 @@ def buscar_lancamentos_usuario(
         if data_fim:
             base_query = base_query.filter(Lancamento.data_transacao <= data_fim)
 
-        # Filtro 7: Por ID da conta (se necessário)
-        if id_conta:
-            base_query = base_query.filter(Lancamento.id_conta == id_conta)
-
-        if id_conta:
-            base_query = base_query.filter(Lancamento.id_conta == id_conta)
+        # Filtro legado de conta removido no modo Zero Setup.
+        # Mantemos o argumento id_conta apenas para compatibilidade de chamadas antigas.
 
         if forma_pagamento:
             # Usamos ilike para ser case-insensitive (não importa se é 'pix' ou 'PIX')

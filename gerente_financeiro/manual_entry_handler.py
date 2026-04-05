@@ -2,8 +2,11 @@
 from .analytics_utils import track_analytics
 
 import logging
+import json
+import os
+from urllib.parse import quote
 from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
     MessageHandler,
     ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler, MessageHandler, filters
@@ -19,14 +22,30 @@ from .utils_validation import (
 )
 
 from database.database import get_db, get_or_create_user
-from models import Categoria, Subcategoria, Lancamento, Conta, Usuario
+from models import Categoria, Subcategoria, Lancamento, Usuario
 from .gamification_utils import give_xp_for_action, touch_user_interaction
 from .states import (
-    AWAITING_LAUNCH_ACTION, ASK_DESCRIPTION, ASK_VALUE, ASK_CONTA,
-    ASK_CATEGORY, ASK_SUBCATEGORY, ASK_DATA, OCR_CONFIRMATION_STATE
+    AWAITING_LAUNCH_ACTION, ASK_DESCRIPTION, ASK_VALUE, ASK_FORMA_PAGAMENTO,
+    ASK_CATEGORY, ASK_SUBCATEGORY, ASK_DATA, MANUAL_CONFIRMATION_STATE, OCR_CONFIRMATION_STATE
 )
 
 logger = logging.getLogger(__name__)
+
+_FORMAS_PAGAMENTO = ["Pix", "Crédito", "Débito", "Boleto", "Dinheiro", "Nao_informado"]
+
+
+def _get_webapp_url(tab: str | None = None, draft: dict | None = None) -> str:
+    """Gera URL do miniapp com parâmetros de rascunho para edição."""
+    base_url = os.getenv("DASHBOARD_BASE_URL", "http://localhost:5000").rstrip("/")
+    url = f"{base_url}/webapp"
+    params: list[str] = []
+    if tab:
+        params.append(f"tab={quote(tab, safe='')}")
+    if draft:
+        params.append(f"draft={quote(json.dumps(draft, ensure_ascii=False), safe='')}")
+    if params:
+        url = f"{url}?{'&'.join(params)}"
+    return url
 
 
 
@@ -149,7 +168,7 @@ async def ask_description(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return ASK_VALUE
 
 async def ask_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Processa o valor e vai para seleção de conta"""
+    """Processa o valor e vai para seleção de forma de pagamento"""
     if update.message.text.strip() == BOTAO_FATURA:
         await update.message.reply_text(
             "ℹ️ Você estava em um lançamento. Fluxo encerrado.\n"
@@ -178,82 +197,35 @@ async def ask_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # Salva o valor
     context.user_data['novo_lancamento']['valor'] = valor
     
-    # Busca contas do usuário
-    db = next(get_db())
-    try:
-        user_db = db.query(Usuario).filter(Usuario.telegram_id == update.effective_user.id).first()
-        if not user_db:
-            await update.message.reply_text("❌ Usuário não encontrado. Use /start para se cadastrar.")
-            return ConversationHandler.END
-            
-        # Filtrar contas baseado no tipo de lançamento
-        tipo_lancamento = context.user_data['novo_lancamento']['tipo']
-        
-        if tipo_lancamento == "Entrada":
-            # Para entrada, só contas bancárias (não cartões)
-            contas = db.query(Conta).filter(
-                Conta.id_usuario == user_db.id,
-                Conta.tipo == "Conta"
-            ).all()
-            tipo_texto = "contas bancárias"
-        else:
-            # Para saída, todas as opções (contas e cartões)
-            contas = db.query(Conta).filter(Conta.id_usuario == user_db.id).all()
-            tipo_texto = "contas/cartões"
-        
-        if not contas:
-            await update.message.reply_text(
-                f"❌ <b>Nenhuma {tipo_texto} cadastrada</b>\n\n"
-                "Use /configurar para adicionar suas contas primeiro.",
-                parse_mode='HTML'
-            )
-            return ConversationHandler.END
+    descricao = context.user_data['novo_lancamento']['descricao']
+    tipo = context.user_data['novo_lancamento']['tipo']
+    emoji_tipo = "🟢" if tipo == "Entrada" else "🔴"
 
-        # Cria botões para as contas de forma mais organizada
-        botoes = []
-        for conta in contas:
-            # Emoji baseado no tipo
-            emoji = "🏦" if conta.tipo == "Conta" else "💳"
-            botoes.append(InlineKeyboardButton(
-                f"{emoji} {conta.nome}", 
-                callback_data=f"manual_conta_{conta.id}"
-            ))
-        
-        # Organiza em 2 colunas
-        teclado = criar_teclado_colunas(botoes, 2)
-        
-        descricao = context.user_data['novo_lancamento']['descricao']
-        tipo = context.user_data['novo_lancamento']['tipo']
-        emoji_tipo = "🟢" if tipo == "Entrada" else "�"
-        
-        await update.message.reply_text(
-            f"{emoji_tipo} <b>{descricao}</b>\n"
-            f"💰 R$ {valor:.2f}\n\n"
-            f"🏦 <b>Qual {tipo_texto}?</b>\n"
-            f"Selecione de onde {'entrou' if tipo_lancamento == 'Entrada' else 'saiu'} o dinheiro:",
-            reply_markup=InlineKeyboardMarkup(teclado),
-            parse_mode='HTML'
-        )
-        
-        return ASK_CONTA
-        
-    finally:
-        db.close()
+    botoes = [InlineKeyboardButton(forma, callback_data=f"manual_pag_{forma}") for forma in _FORMAS_PAGAMENTO]
+    teclado = criar_teclado_colunas(botoes, 2)
 
-async def ask_conta(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Processa seleção de conta e vai para categorias"""
+    await update.message.reply_text(
+        f"{emoji_tipo} <b>{descricao}</b>\n"
+        f"💰 R$ {valor:.2f}\n\n"
+        "💳 <b>Qual a forma de pagamento?</b>\n"
+        "Se não souber, escolha Nao_informado.",
+        reply_markup=InlineKeyboardMarkup(teclado),
+        parse_mode='HTML'
+    )
+
+    return ASK_FORMA_PAGAMENTO
+
+async def ask_forma_pagamento(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Processa seleção de forma de pagamento e vai para categorias"""
     query = update.callback_query
     await query.answer()
-    
-    conta_id = int(query.data.split('_')[-1])
-    context.user_data['novo_lancamento']['id_conta'] = conta_id
-    
-    # Busca info da conta e categorias
+
+    forma_pagamento = query.data.replace('manual_pag_', '').strip()
+    context.user_data['novo_lancamento']['forma_pagamento'] = forma_pagamento if forma_pagamento in _FORMAS_PAGAMENTO else 'Nao_informado'
+
+    # Busca categorias
     db = next(get_db())
     try:
-        conta_obj = db.query(Conta).filter(Conta.id == conta_id).first()
-        context.user_data['novo_lancamento']['forma_pagamento'] = conta_obj.nome
-        
         categorias = db.query(Categoria).order_by(Categoria.nome).all()
         
         # Cria botões para categorias
@@ -273,12 +245,11 @@ async def ask_conta(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         dados = context.user_data['novo_lancamento']
         tipo = dados['tipo']
         emoji_tipo = "🟢" if tipo == "Entrada" else "🔴"
-        emoji_conta = "🏦" if conta_obj.tipo == "Conta" else "💳"
         
         await query.edit_message_text(
             f"{emoji_tipo} <b>{dados['descricao']}</b>\n"
             f"💰 R$ {dados['valor']:.2f}\n"
-            f"{emoji_conta} {conta_obj.nome}\n\n"
+            f"💳 {dados.get('forma_pagamento', 'Nao_informado')}\n\n"
             f"📂 <b>Categoria:</b>\n"
             f"Em que categoria se encaixa?",
             reply_markup=InlineKeyboardMarkup(teclado),
@@ -412,9 +383,8 @@ async def ask_data_directly(update, context, categoria_nome=None, subcategoria_n
     return ASK_DATA
 
 async def save_manual_lancamento_and_return(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Salva o lançamento manual e exibe confirmação elegante."""
+    """Valida a data e mostra um card de confirmação antes de salvar."""
     if 'novo_lancamento' not in context.user_data:
-        # Se os dados não existem mais no context, avisa o usuário
         await update.message.reply_text("❌ Fluxo expirado ou corrompido. Use /cancelar e tente novamente.")
         return ConversationHandler.END
 
@@ -437,6 +407,47 @@ async def save_manual_lancamento_and_return(update: Update, context: ContextType
         )
         return ASK_DATA
 
+    # Mostra card de confirmação antes de salvar
+    dados = context.user_data['novo_lancamento']
+    tipo = dados['tipo']
+    emoji_tipo = "🟢" if tipo == "Entrada" else "🔴"
+    data_formatada = data_transacao.strftime('%d/%m/%Y')
+    
+    msg_confirmacao = (
+        f"🧾 <b>Confirmar Lançamento?</b>\n\n"
+        f"{emoji_tipo} <b>{dados['descricao']}</b>\n"
+        f"💰 <code>R$ {dados['valor']:.2f}</code>\n"
+        f"💳 {dados['forma_pagamento']}\n"
+        f"🏷️ {dados.get('categoria_nome', 'Sem categoria')}\n"
+        f"📅 {data_formatada}"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("✅ Confirmar e Salvar", callback_data="manual_confirmar")],
+        [InlineKeyboardButton("❌ Cancelar", callback_data="manual_cancelar")],
+        [InlineKeyboardButton("✍️ Editar no Miniapp", web_app=WebAppInfo(url=_get_webapp_url("editar", draft=dados)))]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(msg_confirmacao, parse_mode='HTML', reply_markup=reply_markup)
+    return MANUAL_CONFIRMATION_STATE
+
+
+async def manual_confirmation_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Processa a confirmação do lançamento manual."""
+    query = update.callback_query
+    await query.answer()
+    
+    action = query.data
+    
+    if action == "manual_cancelar":
+        await query.edit_message_text("❌ Lançamento cancelado.")
+        await show_launch_menu(update, context, new_message=True)
+        return AWAITING_LAUNCH_ACTION
+    
+    if action != "manual_confirmar":
+        return MANUAL_CONFIRMATION_STATE
+    
     # Salvar no banco
     db = next(get_db())
     try:
@@ -447,31 +458,28 @@ async def save_manual_lancamento_and_return(update: Update, context: ContextType
         novo_lancamento = Lancamento(id_usuario=usuario_db.id, origem="manual", **dados)
         db.add(novo_lancamento)
         db.commit()
+        
         try:
             await give_xp_for_action(update.effective_user.id, "LANCAMENTO_MANUAL", context)
         except Exception:
             logger.debug("Falha ao conceder XP do lancamento manual (nao critico).")
         
-        # Confirmação elegante
         tipo = dados['tipo']
         emoji_tipo = "🟢" if tipo == "Entrada" else "🔴"
-        data_formatada = data_transacao.strftime('%d/%m/%Y')
         
         confirmacao = (
-            f"✅ <b>Lançamento Salvo!</b>\n\n"
+            f"✅ <b>Lançamento Salvo com Sucesso!</b>\n\n"
             f"{emoji_tipo} <b>{dados['descricao']}</b>\n"
             f"💰 R$ {dados['valor']:.2f}\n"
-            f"🏦 {dados['forma_pagamento']}\n"
-            f"📅 {data_formatada}\n\n"
-            f"💡 <i>Quer adicionar outro lançamento?</i>"
+            f"📅 {dados['data_transacao'].strftime('%d/%m/%Y')}"
         )
         
-        await update.message.reply_text(confirmacao, parse_mode='HTML')
+        await query.edit_message_text(confirmacao, parse_mode='HTML')
         
     except Exception as e:
         db.rollback()
         logger.error(f"Erro ao salvar lançamento manual: {e}", exc_info=True)
-        await update.message.reply_text(
+        await query.edit_message_text(
             "❌ <b>Erro ao salvar</b>\n\n"
             "Algo deu errado. Tente novamente.",
             parse_mode='HTML'
@@ -526,10 +534,11 @@ manual_entry_conv = ConversationHandler(
         ],
         ASK_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_description)],
         ASK_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_value)],
-        ASK_CONTA: [CallbackQueryHandler(ask_conta, pattern='^manual_conta_')],
+        ASK_FORMA_PAGAMENTO: [CallbackQueryHandler(ask_forma_pagamento, pattern='^manual_pag_')],
         ASK_CATEGORY: [CallbackQueryHandler(ask_category, pattern='^manual_cat_')],
         ASK_SUBCATEGORY: [CallbackQueryHandler(ask_subcategory, pattern='^manual_subcat_')],
         ASK_DATA: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_manual_lancamento_and_return)],
+        MANUAL_CONFIRMATION_STATE: [CallbackQueryHandler(manual_confirmation_handler, pattern='^manual_')],
         OCR_CONFIRMATION_STATE: [CallbackQueryHandler(ocr_confirmation_handler, pattern='^ocr_')]
     },
     fallbacks=[

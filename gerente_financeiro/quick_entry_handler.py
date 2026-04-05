@@ -19,7 +19,7 @@ from telegram.ext import ContextTypes
 
 import config
 from database.database import get_db, get_or_create_user
-from models import Categoria, Conta, Lancamento, Subcategoria
+from models import Categoria, Lancamento, Subcategoria, Agendamento, Objetivo
 from .gamification_utils import give_xp_for_action, touch_user_interaction
 from .menu_botoes import (
     BOTAO_AGENDAMENTOS,
@@ -195,14 +195,23 @@ def _format_categoria_str(dados: dict) -> str:
     return categoria
 
 
-def _conta_permite_recebimento(conta: Conta) -> bool:
-    return "cart" not in str(conta.tipo or "").lower()
-
-
-def _contas_eligiveis_por_tipo(contas: list[Conta], tipo: str) -> list[Conta]:
-    if _normalize_tipo(tipo) == "Entrada":
-        return [conta for conta in contas if _conta_permite_recebimento(conta)]
-    return contas
+def _normalizar_forma_pagamento(valor: str | None) -> str:
+    raw = str(valor or "").strip().lower()
+    mapa = {
+        "pix": "Pix",
+        "credito": "Crédito",
+        "crédito": "Crédito",
+        "debito": "Débito",
+        "débito": "Débito",
+        "boleto": "Boleto",
+        "dinheiro": "Dinheiro",
+        "nao informado": "Nao_informado",
+        "não informado": "Nao_informado",
+        "n/a": "Nao_informado",
+        "": "Nao_informado",
+    }
+    forma = mapa.get(raw, "Nao_informado")
+    return forma
 
 
 def _format_quick_card(dados: dict) -> str:
@@ -213,8 +222,7 @@ def _format_quick_card(dados: dict) -> str:
         valor = 0.0
     tipo = _normalize_tipo(dados.get("tipo_transacao", "Saída"))
     data_str = dados.get("data") or datetime.now().strftime("%d/%m/%Y")
-    forma_pagamento = dados.get("forma_pagamento") or "Nao informado"
-    conta_nome = dados.get("forma_pagamento_conta") or "Conta nao definida"
+    forma_pagamento = _normalizar_forma_pagamento(dados.get("forma_pagamento"))
     categoria_str = _format_categoria_str(dados)
 
     tipo_emoji = "🟢" if tipo == "Entrada" else "🔴"
@@ -224,24 +232,9 @@ def _format_quick_card(dados: dict) -> str:
         f"{tipo_emoji} <b>Valor:</b> <code>R$ {valor:.2f}</code> ({tipo})\n"
         f"📅 <b>Data:</b> {data_str}\n"
         f"💳 <b>Pagamento:</b> {forma_pagamento}\n"
-        f"🏦 <b>Conta:</b> {conta_nome}\n"
         f"🏷️ <b>Categoria:</b> {categoria_str}\n\n"
         "Confirma o salvamento?"
     )
-
-
-async def _ask_for_conta(update_or_query, context: ContextTypes.DEFAULT_TYPE, contas: list[Conta]) -> None:
-    botoes = []
-    for conta in contas:
-        emoji = "🏦" if conta.tipo == "Conta" else "💳"
-        botoes.append(InlineKeyboardButton(f"{emoji} {conta.nome}", callback_data=f"quick_conta_{conta.id}"))
-    teclado = InlineKeyboardMarkup([botoes[i:i + 2] for i in range(0, len(botoes), 2)])
-    texto = "🏦 <b>Escolha a conta/cartao</b>\n\nSelecione de onde saiu/entrou o dinheiro."
-
-    if hasattr(update_or_query, "message") and update_or_query.message:
-        await update_or_query.message.reply_text(texto, parse_mode="HTML", reply_markup=teclado)
-    else:
-        await update_or_query.edit_message_text(texto, parse_mode="HTML", reply_markup=teclado)
 
 
 async def _send_quick_summary(update_or_query, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -299,7 +292,7 @@ Campos obrigatorios:
   "valor": float,
     "tipo_transacao": "Entrada" ou "Saída",
   "data": "DD/MM/AAAA",
-  "forma_pagamento": "Pix, Debito, Credito, Dinheiro ou N/A",
+    "forma_pagamento": "Pix, Crédito, Débito, Boleto, Dinheiro ou Nao_informado",
   "categoria_sugerida": "string (usar lista)",
   "subcategoria_sugerida": "string (usar lista)"
 }}
@@ -343,39 +336,11 @@ Frase do usuario:
         await status.edit_text("❌ Nao consegui entender. Tente algo como: 'Gastei 34,90 no iFood ontem'.")
         return
 
+    dados_ia["forma_pagamento"] = _normalizar_forma_pagamento(dados_ia.get("forma_pagamento"))
     context.user_data["quick_lancamento"] = dados_ia
 
-    db = next(get_db())
-    try:
-        usuario_db = get_or_create_user(db, update.effective_user.id, update.effective_user.full_name)
-        contas = db.query(Conta).filter(Conta.id_usuario == usuario_db.id).all()
-    finally:
-        db.close()
-
-    if not contas:
-        await status.edit_text("❌ Nenhuma conta cadastrada. Use /configurar para adicionar.")
-        context.user_data.pop("quick_lancamento", None)
-        return
-
-    contas_eligiveis = _contas_eligiveis_por_tipo(contas, dados_ia.get("tipo_transacao", "Saída"))
-    if not contas_eligiveis:
-        tipo_norm = _normalize_tipo(dados_ia.get("tipo_transacao", "Saída"))
-        texto_tipo = "contas bancárias" if tipo_norm == "Entrada" else "contas/cartões"
-        await status.edit_text(f"❌ Nenhuma {texto_tipo} cadastrada. Use /configurar para adicionar.")
-        context.user_data.pop("quick_lancamento", None)
-        return
-
-    if len(contas_eligiveis) == 1:
-        conta = contas_eligiveis[0]
-        dados_ia["id_conta"] = conta.id
-        dados_ia["forma_pagamento_conta"] = conta.nome
-        context.user_data["quick_lancamento"] = dados_ia
-        await status.delete()
-        await _send_quick_summary(update, context)
-        return
-
     await status.delete()
-    await _ask_for_conta(update, context, contas_eligiveis)
+    await _send_quick_summary(update, context)
 
 
 async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -383,31 +348,31 @@ async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     if not query:
         return
     action = query.data
-    dados = context.user_data.get("quick_lancamento")
+    dados_quick = context.user_data.get("dados_quick")
+    dados = context.user_data.get("quick_lancamento") or dados_quick
 
-    if not dados and not action.startswith("quick_conta_"):
+    if not dados:
         await query.answer("Dados da sessao expiraram.", show_alert=True)
-        return
-
-    if action.startswith("quick_conta_"):
-        conta_id = int(action.split("_")[-1])
-        db = next(get_db())
-        try:
-            conta = db.query(Conta).filter(Conta.id == conta_id).first()
-            if not conta:
-                await query.answer("Conta invalida.", show_alert=True)
-                return
-            dados["id_conta"] = conta.id
-            dados["forma_pagamento_conta"] = conta.nome
-            context.user_data["quick_lancamento"] = dados
-        finally:
-            db.close()
-        await _send_quick_summary(query, context)
         return
 
     if action == "quick_cancel":
         context.user_data.pop("quick_lancamento", None)
+        context.user_data.pop("dados_quick", None)
         await query.edit_message_text("❌ Lançamento cancelado.")
+        return
+
+    if action == "quick_edit":
+        # Reabre o miniapp com draft para permitir edicao antes de confirmar.
+        webapp_url = _get_webapp_url("editar", draft=dados)
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🚀 Abrir Mini App (Editar)", web_app=WebAppInfo(url=webapp_url))],
+            [InlineKeyboardButton("✅ Confirmar sem editar", callback_data="quick_confirm")],
+            [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")],
+        ])
+        await query.edit_message_text(
+            "✏️ Ajuste os dados no Mini App e depois confirme o salvamento.",
+            reply_markup=keyboard,
+        )
         return
 
     if action == "quick_confirm":
@@ -415,6 +380,73 @@ async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         db = next(get_db())
         try:
             usuario_db = get_or_create_user(db, query.from_user.id, query.from_user.full_name)
+            acao = (dados.get("acao") or "registrar_lancamento").strip()
+
+            if acao in {"agendar_despesa", "agendar_receita"}:
+                data_str = dados.get("data") or datetime.now().strftime("%Y-%m-%d")
+                try:
+                    data_obj = datetime.strptime(data_str, "%Y-%m-%d").date()
+                except ValueError:
+                    data_obj = datetime.now().date()
+
+                try:
+                    valor_float = float(str(dados.get("valor", "0")).replace(",", "."))
+                except (ValueError, TypeError):
+                    valor_float = 0.0
+
+                if valor_float <= 0:
+                    await query.edit_message_text("❌ Valor inválido para agendamento.")
+                    return
+
+                tipo_agendamento = "Entrada" if acao == "agendar_receita" else "Saída"
+                sucesso_msg = "✅ Agendamento de receita salvo com sucesso!" if acao == "agendar_receita" else "✅ Agendamento salvo com sucesso!"
+
+                novo_agendamento = Agendamento(
+                    id_usuario=usuario_db.id,
+                    descricao=dados.get("descricao") or "Despesa agendada",
+                    valor=valor_float,
+                    tipo=tipo_agendamento,
+                    frequencia=(dados.get("frequencia") or "mensal"),
+                    total_parcelas=dados.get("parcelas"),
+                    parcela_atual=0,
+                    data_primeiro_evento=data_obj,
+                    proxima_data_execucao=data_obj,
+                    ativo=True,
+                )
+                db.add(novo_agendamento)
+                db.commit()
+                await query.edit_message_text(sucesso_msg)
+                return
+
+            if acao == "criar_meta":
+                try:
+                    valor_alvo = float(str(dados.get("valor_alvo", "0")).replace(",", "."))
+                except (ValueError, TypeError):
+                    valor_alvo = 0.0
+
+                if valor_alvo <= 0:
+                    await query.edit_message_text("❌ Valor alvo inválido para meta.")
+                    return
+
+                data_meta_str = dados.get("data_meta")
+                data_meta = None
+                if data_meta_str:
+                    try:
+                        data_meta = datetime.strptime(data_meta_str, "%Y-%m-%d").date()
+                    except ValueError:
+                        data_meta = None
+
+                nova_meta = Objetivo(
+                    id_usuario=usuario_db.id,
+                    descricao=dados.get("descricao") or "Meta",
+                    valor_meta=valor_alvo,
+                    valor_atual=0,
+                    data_meta=data_meta,
+                )
+                db.add(nova_meta)
+                db.commit()
+                await query.edit_message_text("✅ Meta salva com sucesso!")
+                return
 
             data_str = dados.get("data") or datetime.now().strftime("%d/%m/%Y")
             try:
@@ -434,8 +466,7 @@ async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 valor=valor_float,
                 tipo=_normalize_tipo(dados.get("tipo_transacao", "Saída")),
                 data_transacao=data_obj,
-                forma_pagamento=dados.get("forma_pagamento_conta") or dados.get("forma_pagamento"),
-                id_conta=dados.get("id_conta"),
+                forma_pagamento=_normalizar_forma_pagamento(dados.get("forma_pagamento")),
                 id_categoria=id_categoria,
                 id_subcategoria=id_subcategoria,
                 origem="texto",
@@ -454,4 +485,5 @@ async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         finally:
             db.close()
             context.user_data.pop("quick_lancamento", None)
+            context.user_data.pop("dados_quick", None)
         return

@@ -67,7 +67,7 @@ static_dir = os.path.join(parent_dir, 'static')
 sys.path.insert(0, parent_dir)
 import config
 from database.database import get_db, buscar_lancamentos_usuario
-from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Conta, Categoria, Subcategoria
+from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Categoria, Subcategoria
 from gerente_financeiro.prompts import PROMPT_ALFREDO
 from gerente_financeiro.services import preparar_contexto_financeiro_completo
 import google.generativeai as genai
@@ -303,6 +303,25 @@ def _parse_date(value: str) -> date | None:
         return None
 
 
+def _normalize_forma_pagamento(value: str | None) -> str:
+    raw = str(value or "").strip().lower()
+    mapa = {
+        "pix": "Pix",
+        "credito": "Crédito",
+        "crédito": "Crédito",
+        "debito": "Débito",
+        "débito": "Débito",
+        "boleto": "Boleto",
+        "dinheiro": "Dinheiro",
+        "nao informado": "Nao_informado",
+        "não informado": "Nao_informado",
+        "nao_informado": "Nao_informado",
+        "n/a": "Nao_informado",
+        "": "Nao_informado",
+    }
+    return mapa.get(raw, "Nao_informado")
+
+
 def _month_bounds(reference: date | None = None) -> tuple[date, date]:
     ref = reference or datetime.utcnow().date()
     start = date(ref.year, ref.month, 1)
@@ -360,62 +379,6 @@ def _category_distribution(lancamentos: list[Lancamento]) -> list[dict]:
     ]
 
 
-def _payment_method_distribution(lancamentos: list[Lancamento]) -> list[dict]:
-    counts: dict[str, int] = {}
-    labels_map = {
-        "Pix": "Pix",
-        "Crédito": "Crédito",
-        "Débito": "Débito",
-        "Boleto": "Boleto",
-        "Dinheiro": "Dinheiro",
-        "Nao_informado": "Não informado",
-    }
-
-    normalizer = (
-        globals().get("_normalize_forma_pagamento")
-        or globals().get("_normalize_forma_pagamento")
-        or globals().get("_normalize_payment_method")
-    )
-
-    def _fallback_normalizer(value: str | None) -> str:
-        raw = str(value or "").strip().lower()
-        mapa = {
-            "pix": "Pix",
-            "credito": "Crédito",
-            "crédito": "Crédito",
-            "debito": "Débito",
-            "débito": "Débito",
-            "boleto": "Boleto",
-            "dinheiro": "Dinheiro",
-            "nao informado": "Nao_informado",
-            "não informado": "Nao_informado",
-            "nao_informado": "Nao_informado",
-            "n/a": "Nao_informado",
-            "": "Nao_informado",
-        }
-        return mapa.get(raw, "Nao_informado")
-
-    normalize_fn = normalizer if callable(normalizer) else _fallback_normalizer
-
-    for lanc in lancamentos:
-        forma = normalize_fn(getattr(lanc, "forma_pagamento", None))
-        counts[forma] = counts.get(forma, 0) + 1
-
-    if not counts:
-        return []
-
-    ordered = sorted(counts.items(), key=lambda item: item[1], reverse=True)
-    palette = ["#7b1e2d", "#b85d6e", "#2563eb", "#16a34a", "#f59e0b", "#475569"]
-    return [
-        {
-            "label": labels_map.get(key, key),
-            "count": value,
-            "color": palette[i % len(palette)],
-        }
-        for i, (key, value) in enumerate(ordered)
-    ]
-
-
 def _build_miniapp_insight(usuario: Usuario, balance: float, receita: float, despesa: float, categories: list[dict], cashflow: list[dict]) -> str:
     if receita <= 0 and despesa <= 0:
         return "Comece registrando seus primeiros lançamentos. O Alfredo vai te mostrar os padrões assim que o fluxo começar."
@@ -461,6 +424,18 @@ def _build_miniapp_insight(usuario: Usuario, balance: float, receita: float, des
 
 
 def _serialize_miniapp_lancamento(lanc: Lancamento) -> dict:
+    origem_raw = str(lanc.origem or "").strip().lower()
+    if origem_raw.startswith("audio"):
+        origem_label = "Por voz"
+    elif origem_raw.startswith("ocr"):
+        origem_label = "OCR"
+    elif origem_raw.startswith("fatura") or origem_raw.startswith("extrato"):
+        origem_label = "Fatura"
+    elif origem_raw in {"manual", "miniapp", "texto", "alfredo"}:
+        origem_label = "Manual"
+    else:
+        origem_label = "Manual"
+
     return {
         "id": lanc.id,
         "descricao": lanc.descricao,
@@ -469,6 +444,7 @@ def _serialize_miniapp_lancamento(lanc: Lancamento) -> dict:
         "data": lanc.data_transacao.isoformat() if lanc.data_transacao else None,
         "forma_pagamento": lanc.forma_pagamento,
         "origem": lanc.origem,
+        "origem_label": origem_label,
         "id_categoria": lanc.id_categoria,
         "id_subcategoria": lanc.id_subcategoria,
         "categoria_nome": lanc.categoria.nome if lanc.categoria else None,
@@ -617,6 +593,7 @@ def miniapp_history():
     offset = max(int(request.args.get("offset", 0)), 0)
     query = (request.args.get("query") or "").strip()
     tipo = (request.args.get("tipo") or "").strip()
+    order = (request.args.get("order") or "added_desc").strip().lower()
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
     db = next(get_db())
@@ -629,7 +606,13 @@ def miniapp_history():
         if query:
             base_query = base_query.filter(Lancamento.descricao.ilike(f"%{query}%"))
         if tipo:
-            base_query = base_query.filter(Lancamento.tipo == tipo)
+            tipo_norm = tipo.strip().lower()
+            if tipo_norm in {"entrada", "receita"}:
+                base_query = base_query.filter(func.lower(Lancamento.tipo).in_(["entrada", "receita"]))
+            elif tipo_norm in {"saída", "saida", "despesa"}:
+                base_query = base_query.filter(func.lower(Lancamento.tipo).in_(["saída", "saida", "despesa"]))
+            else:
+                base_query = base_query.filter(Lancamento.tipo == tipo)
         if start_date:
             base_query = base_query.filter(Lancamento.data_transacao >= datetime.combine(start_date, datetime.min.time()))
         if end_date:
@@ -637,17 +620,20 @@ def miniapp_history():
 
         # O frontend nao usa o total atualmente; remover count evita query pesada em bases grandes.
         total = None
-        lancamentos = (
-            base_query.options(
-                joinedload(Lancamento.categoria),
-                joinedload(Lancamento.subcategoria),
-                joinedload(Lancamento.conta),
-            )
-            .order_by(Lancamento.data_transacao.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
+        base_query = base_query.options(
+            joinedload(Lancamento.categoria),
+            joinedload(Lancamento.subcategoria),
         )
+
+        # Ordem padrao: ultimo inserido primeiro (ordem de adicao no banco).
+        if order == "date_asc":
+            base_query = base_query.order_by(Lancamento.data_transacao.asc(), Lancamento.id.asc())
+        elif order == "date_desc":
+            base_query = base_query.order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc())
+        else:
+            base_query = base_query.order_by(Lancamento.id.desc())
+
+        lancamentos = base_query.offset(offset).limit(limit).all()
 
         itens = [_serialize_miniapp_lancamento(lanc) for lanc in lancamentos]
 
@@ -672,7 +658,7 @@ def miniapp_overview():
         start_date, end_date = _month_bounds()
         base_query = (
             db.query(Lancamento)
-            .options(joinedload(Lancamento.categoria), joinedload(Lancamento.subcategoria), joinedload(Lancamento.conta))
+            .options(joinedload(Lancamento.categoria), joinedload(Lancamento.subcategoria))
             .filter(Lancamento.id_usuario == usuario.id)
         )
         lancamentos_mes = (
@@ -688,15 +674,207 @@ def miniapp_overview():
         balance = receita - despesa
         cashflow = _daily_cashflow(lancamentos_mes, start_date, end_date)
         categories = _category_distribution(lancamentos_mes)
-        payment_methods = _payment_method_distribution(lancamentos_mes)
         insight = _build_miniapp_insight(usuario, balance, receita, despesa, categories, cashflow)
 
         recent_items = (
             base_query
-            .order_by(Lancamento.data_transacao.desc())
+            .order_by(Lancamento.id.desc())
             .limit(6)
             .all()
         )
+
+        # Series reais para os 6 gráficos estratégicos.
+        today = datetime.utcnow().date()
+
+        # Últimos 6 meses para fluxo de caixa.
+        month_refs_6 = []
+        for i in range(5, -1, -1):
+            year = today.year
+            month = today.month - i
+            while month <= 0:
+                month += 12
+                year -= 1
+            month_refs_6.append((year, month))
+
+        start_6 = date(month_refs_6[0][0], month_refs_6[0][1], 1)
+        lanc_6m = (
+            db.query(Lancamento)
+            .options(joinedload(Lancamento.categoria), joinedload(Lancamento.subcategoria))
+            .filter(Lancamento.id_usuario == usuario.id)
+            .filter(Lancamento.data_transacao >= datetime.combine(start_6, datetime.min.time()))
+            .all()
+        )
+
+        monthly_map: dict[tuple[int, int], dict[str, float]] = {
+            key: {"entrada": 0.0, "saida": 0.0, "net": 0.0}
+            for key in month_refs_6
+        }
+        for lanc in lanc_6m:
+            if not lanc.data_transacao:
+                continue
+            key = (lanc.data_transacao.year, lanc.data_transacao.month)
+            if key not in monthly_map:
+                continue
+            valor = float(lanc.valor or 0)
+            is_entrada = str(lanc.tipo).lower().startswith("entr")
+            if is_entrada:
+                monthly_map[key]["entrada"] += max(valor, 0)
+                monthly_map[key]["net"] += max(valor, 0)
+            else:
+                saida = abs(valor)
+                monthly_map[key]["saida"] += saida
+                monthly_map[key]["net"] -= saida
+
+        monthly_cashflow = []
+        for year, month in month_refs_6:
+            d = date(year, month, 1)
+            label = d.strftime("%b").lower()
+            monthly_cashflow.append({
+                "label": label,
+                "entrada": round(monthly_map[(year, month)]["entrada"], 2),
+                "saida": round(monthly_map[(year, month)]["saida"], 2),
+            })
+
+        # Evolução patrimonial (últimos 8 meses) com base no saldo acumulado real.
+        month_refs_8 = []
+        for i in range(7, -1, -1):
+            year = today.year
+            month = today.month - i
+            while month <= 0:
+                month += 12
+                year -= 1
+            month_refs_8.append((year, month))
+        start_8 = date(month_refs_8[0][0], month_refs_8[0][1], 1)
+
+        prior_lanc = (
+            db.query(Lancamento)
+            .filter(Lancamento.id_usuario == usuario.id)
+            .filter(Lancamento.data_transacao < datetime.combine(start_8, datetime.min.time()))
+            .all()
+        )
+        prior_balance = 0.0
+        for lanc in prior_lanc:
+            valor = float(lanc.valor or 0)
+            prior_balance += valor if str(lanc.tipo).lower().startswith("entr") else -abs(valor)
+
+        patrimony_map: dict[tuple[int, int], float] = {key: 0.0 for key in month_refs_8}
+        lanc_8m = (
+            db.query(Lancamento)
+            .filter(Lancamento.id_usuario == usuario.id)
+            .filter(Lancamento.data_transacao >= datetime.combine(start_8, datetime.min.time()))
+            .all()
+        )
+        for lanc in lanc_8m:
+            if not lanc.data_transacao:
+                continue
+            key = (lanc.data_transacao.year, lanc.data_transacao.month)
+            if key not in patrimony_map:
+                continue
+            valor = float(lanc.valor or 0)
+            patrimony_map[key] += valor if str(lanc.tipo).lower().startswith("entr") else -abs(valor)
+
+        running_balance = prior_balance
+        patrimony_series = []
+        for year, month in month_refs_8:
+            running_balance += patrimony_map[(year, month)]
+            d = date(year, month, 1)
+            patrimony_series.append({
+                "label": d.strftime("%b").lower(),
+                "value": round(running_balance, 2),
+            })
+
+        # Orçamento vs realizado por categoria (realizado no mês vs média dos 3 meses anteriores como teto realista).
+        current_expenses: dict[str, float] = {}
+        for lanc in lancamentos_mes:
+            if str(lanc.tipo).lower().startswith("entr"):
+                continue
+            categoria = lanc.categoria.nome if lanc.categoria and lanc.categoria.nome else "Sem categoria"
+            current_expenses[categoria] = current_expenses.get(categoria, 0.0) + abs(float(lanc.valor or 0))
+
+        sorted_current = sorted(current_expenses.items(), key=lambda x: x[1], reverse=True)[:5]
+        budget_items = []
+        if sorted_current:
+            hist_start = date(start_date.year, start_date.month, 1) - timedelta(days=90)
+            hist_lanc = (
+                db.query(Lancamento)
+                .options(joinedload(Lancamento.categoria))
+                .filter(Lancamento.id_usuario == usuario.id)
+                .filter(Lancamento.data_transacao >= datetime.combine(hist_start, datetime.min.time()))
+                .filter(Lancamento.data_transacao < datetime.combine(start_date, datetime.min.time()))
+                .all()
+            )
+
+            hist_by_cat: dict[str, float] = {}
+            for lanc in hist_lanc:
+                if str(lanc.tipo).lower().startswith("entr"):
+                    continue
+                categoria = lanc.categoria.nome if lanc.categoria and lanc.categoria.nome else "Sem categoria"
+                hist_by_cat[categoria] = hist_by_cat.get(categoria, 0.0) + abs(float(lanc.valor or 0))
+
+            for categoria, realizado in sorted_current:
+                media_3m = hist_by_cat.get(categoria, 0.0) / 3.0 if hist_by_cat.get(categoria, 0.0) > 0 else realizado
+                limite = max(realizado, media_3m * 1.1)
+                budget_items.append({
+                    "label": categoria,
+                    "orcamento": round(limite, 2),
+                    "realizado": round(realizado, 2),
+                })
+
+        # Projeção simples com base no saldo e média de resultado mensal recente.
+        avg_net = sum(monthly_map[key]["net"] for key in month_refs_6) / max(len(month_refs_6), 1)
+        projection_series = []
+        if patrimony_series:
+            current_base = float(patrimony_series[-1]["value"])
+            month_refs_10 = []
+            for i in range(5, -1, -1):
+                year = today.year
+                month = today.month - i
+                while month <= 0:
+                    month += 12
+                    year -= 1
+                month_refs_10.append((year, month, "historico"))
+            for i in range(1, 5):
+                year = today.year
+                month = today.month + i
+                while month > 12:
+                    month -= 12
+                    year += 1
+                month_refs_10.append((year, month, "futuro"))
+
+            hist_map = {(item["label"], idx): item["value"] for idx, item in enumerate(patrimony_series[-6:])}
+            # Históricos: usa série patrimonial real mais recente.
+            hist_values = [item["value"] for item in patrimony_series[-6:]]
+            while len(hist_values) < 6:
+                hist_values.insert(0, current_base)
+
+            for idx, (year, month, tipo_ref) in enumerate(month_refs_10):
+                label = date(year, month, 1).strftime("%b").lower()
+                if tipo_ref == "historico":
+                    value = hist_values[idx]
+                    projection_series.append({"label": label, "historico": round(value, 2), "futuro": None})
+                else:
+                    passo = idx - 5
+                    future_value = current_base + (avg_net * passo)
+                    projection_series.append({"label": label, "historico": None, "futuro": round(future_value, 2)})
+
+        # Top vilões reais dos últimos 90 dias.
+        villains_start = today - timedelta(days=90)
+        villains_lanc = (
+            db.query(Lancamento)
+            .filter(Lancamento.id_usuario == usuario.id)
+            .filter(Lancamento.data_transacao >= datetime.combine(villains_start, datetime.min.time()))
+            .all()
+        )
+        villains_totals: dict[str, float] = {}
+        for lanc in villains_lanc:
+            if str(lanc.tipo).lower().startswith("entr"):
+                continue
+            nome = (lanc.descricao or "Sem nome").strip() or "Sem nome"
+            villains_totals[nome] = villains_totals.get(nome, 0.0) + abs(float(lanc.valor or 0))
+        top_villains = [
+            {"label": nome, "value": round(valor, 2)}
+            for nome, valor in sorted(villains_totals.items(), key=lambda x: x[1], reverse=True)[:5]
+        ]
 
         progress_base = receita + despesa
         progress_pct = round((despesa / progress_base) * 100) if progress_base > 0 else 0
@@ -716,8 +894,12 @@ def miniapp_overview():
                 "streak": streak,
                 "insight": insight,
                 "cashflow": cashflow,
+                "cashflow_monthly": monthly_cashflow,
                 "categories": categories,
-                "payment_methods": payment_methods,
+                "patrimony_series": patrimony_series,
+                "budget_vs_realizado": budget_items,
+                "projection_series": projection_series,
+                "top_villains": top_villains,
                 "recent": [_serialize_miniapp_lancamento(lanc) for lanc in recent_items],
             }
         })
@@ -745,17 +927,12 @@ def miniapp_lancamento_create():
         return jsonify({"ok": False, "error": "invalid_valor"}), 400
 
     tipo = "Entrada" if str(payload.get("tipo", "Saída")).strip().lower() == "entrada" else "Saída"
-    forma_pagamento = (payload.get("forma_pagamento") or "").strip() or None
+    forma_pagamento = _normalize_forma_pagamento(payload.get("forma_pagamento"))
 
     parsed_date = _parse_date(payload.get("data_transacao") or payload.get("data"))
     data_transacao = datetime.combine(parsed_date, datetime.min.time()) if parsed_date else datetime.now()
 
     id_categoria, id_subcategoria = _resolve_categoria_ids(payload)
-    id_conta = payload.get("id_conta")
-    try:
-        id_conta = int(id_conta) if id_conta not in (None, "") else None
-    except (TypeError, ValueError):
-        id_conta = None
 
     db = next(get_db())
     try:
@@ -770,7 +947,6 @@ def miniapp_lancamento_create():
             tipo=tipo,
             data_transacao=data_transacao,
             forma_pagamento=forma_pagamento,
-            id_conta=id_conta,
             id_categoria=id_categoria,
             id_subcategoria=id_subcategoria,
                 origem="miniapp",
@@ -814,7 +990,6 @@ def miniapp_lancamento_update(lancamento_id: int):
             "valor",
             "tipo",
             "forma_pagamento",
-            "id_conta",
             "id_categoria",
             "id_subcategoria",
             "data_transacao",
@@ -826,6 +1001,9 @@ def miniapp_lancamento_update(lancamento_id: int):
                 parsed_date = _parse_date(value)
                 if parsed_date:
                     lancamento.data_transacao = datetime.combine(parsed_date, datetime.min.time())
+                continue
+            if key == "forma_pagamento":
+                lancamento.forma_pagamento = _normalize_forma_pagamento(value)
                 continue
             setattr(lancamento, key, value)
 
@@ -849,12 +1027,6 @@ def miniapp_configuracoes():
             return jsonify({"ok": False, "error": "user_not_found"}), 404
 
         if request.method == 'GET':
-            contas = (
-                db.query(Conta)
-                .filter(Conta.id_usuario == usuario.id)
-                .order_by(Conta.tipo.asc(), Conta.nome.asc())
-                .all()
-            )
             return jsonify({
                 "ok": True,
                 "usuario": {
@@ -863,18 +1035,6 @@ def miniapp_configuracoes():
                     "horario_notificacao": usuario.horario_notificacao.strftime('%H:%M') if usuario.horario_notificacao else "09:00",
                     "alerta_gastos_ativo": bool(usuario.alerta_gastos_ativo),
                 },
-                "contas": [
-                    {
-                        "id": conta.id,
-                        "nome": conta.nome,
-                        "tipo": conta.tipo,
-                        "dia_fechamento": conta.dia_fechamento,
-                        "dia_vencimento": conta.dia_vencimento,
-                        "limite_cartao": float(conta.limite_cartao) if conta.limite_cartao is not None else None,
-                        "email_notificacao": conta.email_notificacao,
-                    }
-                    for conta in contas
-                ],
             })
 
         payload = request.get_json(silent=True) or {}
@@ -894,101 +1054,6 @@ def miniapp_configuracoes():
         return jsonify({"ok": True})
     finally:
         db.close()
-
-
-@app.route('/api/miniapp/contas', methods=['GET', 'POST'])
-def miniapp_contas():
-    """Lista ou cria contas/cartões do usuário."""
-    session = _require_session()
-    if not session:
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-
-    db = next(get_db())
-    try:
-        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
-        if not usuario:
-            return jsonify({"ok": False, "error": "user_not_found"}), 404
-
-        if request.method == 'GET':
-            contas = db.query(Conta).filter(Conta.id_usuario == usuario.id).order_by(Conta.tipo.asc(), Conta.nome.asc()).all()
-            return jsonify({
-                "ok": True,
-                "items": [
-                    {
-                        "id": conta.id,
-                        "nome": conta.nome,
-                        "tipo": conta.tipo,
-                        "dia_fechamento": conta.dia_fechamento,
-                        "dia_vencimento": conta.dia_vencimento,
-                        "limite_cartao": float(conta.limite_cartao) if conta.limite_cartao is not None else None,
-                        "email_notificacao": conta.email_notificacao,
-                    }
-                    for conta in contas
-                ],
-            })
-
-        payload = request.get_json(silent=True) or {}
-        nome = (payload.get("nome") or "").strip()
-        tipo = (payload.get("tipo") or "").strip()
-        if not nome or not tipo:
-            return jsonify({"ok": False, "error": "missing_fields"}), 400
-
-        conta = Conta(
-            id_usuario=usuario.id,
-            nome=nome,
-            tipo=tipo,
-            dia_fechamento=int(payload["dia_fechamento"]) if payload.get("dia_fechamento") not in (None, "") else None,
-            dia_vencimento=int(payload["dia_vencimento"]) if payload.get("dia_vencimento") not in (None, "") else None,
-            limite_cartao=float(str(payload["limite_cartao"]).replace(",", ".")) if payload.get("limite_cartao") not in (None, "") else None,
-            email_notificacao=(payload.get("email_notificacao") or "").strip() or None,
-        )
-        db.add(conta)
-        db.commit()
-        return jsonify({"ok": True, "id": conta.id})
-    finally:
-        db.close()
-
-
-@app.route('/api/miniapp/contas/<int:conta_id>', methods=['PATCH', 'DELETE'])
-def miniapp_conta_update(conta_id: int):
-    """Atualiza ou remove uma conta/cartão do usuário."""
-    session = _require_session()
-    if not session:
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-
-    db = next(get_db())
-    try:
-        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
-        if not usuario:
-            return jsonify({"ok": False, "error": "user_not_found"}), 404
-
-        conta = db.query(Conta).filter(Conta.id == conta_id, Conta.id_usuario == usuario.id).first()
-        if not conta:
-            return jsonify({"ok": False, "error": "not_found"}), 404
-
-        if request.method == 'DELETE':
-            db.delete(conta)
-            db.commit()
-            return jsonify({"ok": True})
-
-        payload = request.get_json(silent=True) or {}
-        for field in ("nome", "tipo", "email_notificacao"):
-            if field in payload:
-                value = (payload.get(field) or "").strip()
-                setattr(conta, field, value or None)
-        for field in ("dia_fechamento", "dia_vencimento"):
-            if field in payload:
-                value = payload.get(field)
-                setattr(conta, field, int(value) if value not in (None, "") else None)
-        if "limite_cartao" in payload:
-            value = payload.get("limite_cartao")
-            conta.limite_cartao = float(str(value).replace(",", ".")) if value not in (None, "") else None
-
-        db.commit()
-        return jsonify({"ok": True})
-    finally:
-        db.close()
-
 
 @app.route('/api/miniapp/agendamentos', methods=['GET', 'POST'])
 def miniapp_agendamentos():

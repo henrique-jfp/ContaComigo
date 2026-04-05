@@ -686,15 +686,6 @@ async def salvar_transacoes_generica(db: Session, usuario_db, transacoes: list,
         tuple: (sucesso: bool, mensagem: str, estatisticas: dict)
     """
     try:
-        # Verifica se a conta existe e pertence ao usuário
-        conta = db.query(Conta).filter(
-            Conta.id == conta_id, 
-            Conta.id_usuario == usuario_db.id
-        ).first()
-        
-        if not conta:
-            return False, "Conta não encontrada ou não pertence ao usuário.", {}
-        
         # Estatísticas de processamento
         stats = {
             'total_enviadas': len(transacoes),
@@ -722,7 +713,7 @@ async def salvar_transacoes_generica(db: Session, usuario_db, transacoes: list,
                     valid_cols = {c.name for c in Lancamento.__table__.columns}
                 except Exception:
                     # Fallback conservador: campos esperados
-                    valid_cols = {'descricao', 'valor', 'tipo', 'data_transacao', 'forma_pagamento', 'documento_fiscal', 'id_usuario', 'id_conta', 'id_categoria', 'id_subcategoria'}
+                    valid_cols = {'descricao', 'valor', 'tipo', 'data_transacao', 'forma_pagamento', 'documento_fiscal', 'id_usuario', 'id_categoria', 'id_subcategoria', 'origem'}
 
                 lanc_kwargs = {k: v for k, v in lancamento_data.items() if k in valid_cols}
 
@@ -781,7 +772,7 @@ def verificar_duplicidade_transacoes(db: Session, user_id: int, conta_id: int,
     Args:
         db: Sessão do banco
         user_id: ID do usuário
-        conta_id: ID da conta
+        conta_id: parâmetro legado (ignorado no modo Zero Setup)
         transacao_data: Dados da transação a verificar
         janela_dias: Janela de dias para buscar duplicatas
     
@@ -808,7 +799,6 @@ def verificar_duplicidade_transacoes(db: Session, user_id: int, conta_id: int,
         # Busca por duplicatas
         duplicata = db.query(Lancamento).filter(
             Lancamento.id_usuario == user_id,
-            Lancamento.id_conta == conta_id,
             Lancamento.valor == valor,
             Lancamento.data_transacao.between(data_inicio, data_fim)
         ).first()
@@ -841,12 +831,11 @@ def _preparar_dados_lancamento(transacao_data: dict, user_id: int, conta_id: int
 
     dados = {
         'id_usuario': user_id,
-        'id_conta': conta_id,
         'valor': abs(valor),  # Armazenamos sempre o valor absoluto
         'descricao': transacao_data.get('descricao', '').strip(),
         'data_transacao': transacao_data.get('data_transacao'),
         'tipo': tipo_transacao, # Usa o tipo definido pela regra de ouro
-        'forma_pagamento': transacao_data.get('forma_pagamento', 'Não informado'),
+        'forma_pagamento': transacao_data.get('forma_pagamento', 'Nao_informado'),
         'origem': transacao_data.get('origem', 'manual')
     }
     

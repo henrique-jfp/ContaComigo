@@ -25,7 +25,7 @@ from models import Conta
 from .services import salvar_transacoes_generica
 from .states import (
     FATURA_AWAIT_FILE,
-    FATURA_ASK_CONTA,
+    FATURA_ASK_FORMA_PAGAMENTO,
     FATURA_CONFIRMATION_STATE,
     FATURA_TRAIN_CONSENT,
     FATURA_TRAIN_BANK,
@@ -599,7 +599,7 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
             "Selecione o cartao/conta para associar a fatura:",
             reply_markup=InlineKeyboardMarkup(botoes),
         )
-        return FATURA_ASK_CONTA
+        return FATURA_ASK_FORMA_PAGAMENTO
     finally:
         db.close()
 
@@ -762,7 +762,7 @@ fatura_conv = ConversationHandler(
         FATURA_AWAIT_FILE: [
             MessageHandler(filters.Document.MimeType("application/pdf"), fatura_receive_file)
         ],
-        FATURA_ASK_CONTA: [
+        FATURA_ASK_FORMA_PAGAMENTO: [
             CallbackQueryHandler(fatura_select_conta, pattern="^fatura_conta_")
         ],
         FATURA_CONFIRMATION_STATE: [

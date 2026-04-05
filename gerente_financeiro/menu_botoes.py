@@ -1,6 +1,8 @@
 import os
+import time
 from telegram import ReplyKeyboardMarkup, Update, KeyboardButton, WebAppInfo
 from telegram.ext import ContextTypes
+from urllib.parse import urlencode
 
 # Definição dos textos dos botões para usarmos também nas regex dos Handlers (são conservados caso chamados na mão)
 BOTAO_LANCAMENTO = "💳 Lançamento"
@@ -18,12 +20,22 @@ BOTAO_NIVEL = "⭐ Seu Nível"
 BOTAO_CANCELAR = "❌ Cancelar"
 BOTAO_CONTATO = "💬 Fale com o Dev"
 
+
+def build_miniapp_url(source: str | None = None) -> str:
+    """Gera URL canonica do MiniApp com marcador de origem e anti-cache."""
+    base_url = os.getenv('DASHBOARD_BASE_URL', 'http://localhost:5000').rstrip('/')
+    params = {
+        'entry': source or 'bot',
+        # Evita abrir webview antiga/cacheada em alguns clientes Telegram.
+        'v': str(int(time.time())),
+    }
+    return f"{base_url}/webapp?{urlencode(params)}"
+
 def obter_teclado_painel():
     """
     Gera um painel de controle com botões minimizados.
     """
-    url_base = os.getenv('DASHBOARD_BASE_URL', 'http://127.0.0.1:5000') # fallback simples
-    webapp_url = f"{url_base}/webapp"
+    webapp_url = build_miniapp_url(source='keyboard')
 
     botoes = [
         [KeyboardButton("🚀 Abrir o App", web_app=WebAppInfo(url=webapp_url)), KeyboardButton(BOTAO_CONTATO)]

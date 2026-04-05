@@ -346,12 +346,15 @@ def calcular_progresso_esperado(objetivo: Objetivo) -> float:
     hoje = datetime.now().date()
     
     # Se a data já passou, deveria estar em 100%
+    if not objetivo.data_meta:
+        return 0.0
     if hoje >= objetivo.data_meta:
         return 100.0
     
-    # Calcular dias desde a criação
-    dias_totais = (objetivo.data_meta - objetivo.data_criacao).days
-    dias_decorridos = (hoje - objetivo.data_criacao).days
+    # Calcular dias desde a criação (compatível com campo criado_em do model).
+    inicio = objetivo.criado_em.date() if getattr(objetivo, 'criado_em', None) else hoje
+    dias_totais = (objetivo.data_meta - inicio).days
+    dias_decorridos = (hoje - inicio).days
     
     if dias_totais <= 0:
         return 100.0
@@ -366,10 +369,13 @@ def calcular_aporte_corretivo(objetivo: Objetivo) -> float:
     Calcula quanto o usuário precisa aportar por mês para recuperar a meta
     """
     hoje = datetime.now().date()
+    if not objetivo.data_meta:
+        falta_sem_prazo = float(objetivo.valor_meta - objetivo.valor_atual)
+        return max(falta_sem_prazo, 0.0)
     
     # Se já passou o prazo
     if hoje >= objetivo.data_meta:
-        return float(objetivo.valor_meta - objetivo.valor_atual)
+        return max(float(objetivo.valor_meta - objetivo.valor_atual), 0.0)
     
     # Calcular meses restantes
     meses_restantes = (objetivo.data_meta.year - hoje.year) * 12 + (objetivo.data_meta.month - hoje.month)
@@ -383,7 +389,7 @@ def calcular_aporte_corretivo(objetivo: Objetivo) -> float:
     # Aporte mensal necessário
     aporte_mensal = falta / meses_restantes
     
-    return aporte_mensal
+    return max(aporte_mensal, 0.0)
 
 
 def analisar_metas_usuario(usuario_id: int) -> Optional[Dict]:
@@ -395,11 +401,11 @@ def analisar_metas_usuario(usuario_id: int) -> Optional[Dict]:
     """
     db = next(get_db())
     try:
-        # Buscar metas ativas
+        # Buscar metas válidas (sem depender de campo 'ativo', ausente no model atual).
         metas = db.query(Objetivo).filter(
             and_(
                 Objetivo.id_usuario == usuario_id,
-                Objetivo.ativo == True,
+                Objetivo.data_meta.isnot(None),
                 Objetivo.data_meta >= datetime.now().date()
             )
         ).all()
@@ -410,6 +416,11 @@ def analisar_metas_usuario(usuario_id: int) -> Optional[Dict]:
         metas_em_risco = []
         
         for meta in metas:
+            if float(meta.valor_meta or 0) <= 0:
+                continue
+            if float(meta.valor_atual or 0) >= float(meta.valor_meta or 0):
+                continue
+
             progresso_esperado = calcular_progresso_esperado(meta)
             progresso_real = (float(meta.valor_atual) / float(meta.valor_meta)) * 100 if meta.valor_meta > 0 else 0
             

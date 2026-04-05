@@ -12,15 +12,15 @@ import logging
 import json
 import asyncio
 import re
-import unicodedata
+import os
 from html import escape
+from urllib.parse import quote
 import requests
-from collections import defaultdict
 from datetime import datetime, timedelta
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ContextTypes, CommandHandler, ConversationHandler
-from sqlalchemy import and_, extract
-from database.database import get_db, get_or_create_user, buscar_lancamentos_usuario
+from sqlalchemy import and_, extract, func
+from database.database import get_db, get_or_create_user
 from models import Lancamento, Usuario, Categoria, Agendamento, Objetivo
 import config
 
@@ -33,13 +33,6 @@ except ModuleNotFoundError:
 logger = logging.getLogger(__name__)
 
 _FORMAS_PAGAMENTO_VALIDAS = {"Pix", "Crédito", "Débito", "Boleto", "Dinheiro", "Nao_informado"}
-
-
-class GroqAPIError(RuntimeError):
-    def __init__(self, message: str, status_code: int | None = None, response_body: str | None = None):
-        super().__init__(message)
-        self.status_code = status_code
-        self.response_body = response_body
 
 
 def _normalizar_forma_pagamento(valor: str | None) -> str:
@@ -61,140 +54,60 @@ def _normalizar_forma_pagamento(valor: str | None) -> str:
     return mapa.get(raw, "Nao_informado")
 
 
-def _detectar_forma_pagamento_no_texto(texto: str) -> str:
-    t = (texto or "").lower()
-    if "pix" in t:
-        return "Pix"
-    if "credito" in t or "crédito" in t:
-        return "Crédito"
-    if "debito" in t or "débito" in t:
-        return "Débito"
-    if "boleto" in t:
-        return "Boleto"
-    if "dinheiro" in t or "espécie" in t or "especie" in t:
-        return "Dinheiro"
-    return "Nao_informado"
+def _get_webapp_url(tab: str | None = None, draft: dict | None = None) -> str:
+    base_url = os.getenv("DASHBOARD_BASE_URL", "http://localhost:5000").rstrip("/")
+    url = f"{base_url}/webapp"
+    params: list[str] = []
+    if tab:
+        params.append(f"tab={quote(tab, safe='')}")
+    if draft:
+        params.append(f"draft={quote(json.dumps(draft, ensure_ascii=False), safe='')}")
+    if params:
+        url = f"{url}?{'&'.join(params)}"
+    return url
 
 
-def _detectar_categoria_basica(texto: str) -> str:
-    t = (texto or "").lower()
-    mapa = {
-        "aliment": "Alimentação",
-        "mercado": "Alimentação",
-        "farm": "Saúde",
-        "uber": "Transporte",
-        "combust": "Transporte",
-        "gasolina": "Transporte",
-        "aluguel": "Moradia",
-        "condominio": "Moradia",
-        "condomínio": "Moradia",
-        "luz": "Moradia",
-        "água": "Moradia",
-        "agua": "Moradia",
-        "internet": "Moradia",
-        "salario": "Salário",
-        "salário": "Salário",
-        "freela": "Renda Extra",
-        "recebi": "Renda",
-        "ganhei": "Renda",
-    }
-    for chave, categoria in mapa.items():
-        if chave in t:
-            return categoria
-    return "Outros"
+def _inferir_tipo_lancamento(texto_usuario: str, categoria: str, tipo_ia: str | None = None) -> str:
+    tipo_raw = str(tipo_ia or "").strip().lower()
+    if tipo_raw in {"entrada", "receita"}:
+        return "Entrada"
+    if tipo_raw in {"saida", "saída", "despesa"}:
+        return "Saída"
+
+    texto = f"{texto_usuario} {categoria}".lower()
+    sinais_entrada = ["receita", "entrada", "recebi", "ganhei", "salario", "salário", "venda", "reembolso"]
+    sinais_saida = ["despesa", "saida", "saída", "gastei", "paguei", "compra", "debito", "débito"]
+
+    tem_entrada = any(s in texto for s in sinais_entrada)
+    tem_saida = any(s in texto for s in sinais_saida)
+
+    if tem_entrada and not tem_saida:
+        return "Entrada"
+    if tem_saida and not tem_entrada:
+        return "Saída"
+    return "Saída"
 
 
-def _intencao_registro_lancamento(texto: str) -> bool:
-    texto = (texto or "").lower()
-    gatilhos = [
-        "gastei",
-        "paguei",
-        "comprei",
-        "despesa",
-        "gasto",
-        "recebi",
-        "ganhei",
-        "entrada",
-        "registra",
-        "registrar",
-        "lançar",
-        "lancar",
-        "lançamento",
-        "lancamento",
-    ]
-    return any(g in texto for g in gatilhos)
+def _normalizar_data_lancamento(valor_data: str | None) -> str:
+    raw = str(valor_data or "").strip()
+    if not raw:
+        return datetime.now().strftime("%d/%m/%Y")
+    if raw.lower() == "hoje":
+        return datetime.now().strftime("%d/%m/%Y")
 
+    if re.fullmatch(r"\d{2}/\d{2}/\d{4}", raw):
+        return raw
 
-def _extrair_valor_texto(texto: str) -> float | None:
-    t = (texto or "").strip()
-    if not t:
-        return None
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
+        try:
+            return datetime.strptime(raw, "%Y-%m-%d").strftime("%d/%m/%Y")
+        except ValueError:
+            return datetime.now().strftime("%d/%m/%Y")
 
-    moeda = re.search(r"r\$\s*(-?\d[\d\.,]*)", t, flags=re.IGNORECASE)
-    bruto = moeda.group(1) if moeda else None
-
-    if not bruto:
-        numeros = re.findall(r"-?\d[\d\.,]*", t)
-        if not numeros:
-            return None
-        bruto = numeros[-1]
-
-    limpo = bruto.replace(".", "").replace(",", ".")
     try:
-        valor = float(limpo)
+        return datetime.fromisoformat(raw).strftime("%d/%m/%Y")
     except ValueError:
-        return None
-
-    return abs(valor) if valor != 0 else None
-
-
-def _extrair_lancamento_do_texto(texto: str) -> dict | None:
-    valor = _extrair_valor_texto(texto)
-    if valor is None:
-        return None
-
-    t = (texto or "").strip()
-    t_lower = t.lower()
-    tipo = "Saída"
-    if any(k in t_lower for k in ["recebi", "ganhei", "entrada", "salário", "salario"]):
-        tipo = "Entrada"
-
-    descricao_limpa = re.sub(r"r\$\s*-?\d[\d\.,]*", "", t, flags=re.IGNORECASE)
-    descricao_limpa = re.sub(r"-?\d[\d\.,]*", "", descricao_limpa)
-    descricao_limpa = re.sub(r"\b(registra|registrar|lancar|lançar|lancamento|lançamento)\b", "", descricao_limpa, flags=re.IGNORECASE)
-    descricao_limpa = re.sub(r"\s+", " ", descricao_limpa).strip(" .,:;-")
-
-    return {
-        "descricao": descricao_limpa or ("Entrada" if tipo == "Entrada" else "Despesa"),
-        "valor": float(valor),
-        "tipo": tipo,
-        "categoria": _detectar_categoria_basica(t),
-        "forma_pagamento": _detectar_forma_pagamento_no_texto(t),
-    }
-
-
-def _registrar_lancamento_local(db, usuario_db: Usuario, dados: dict) -> Lancamento:
-    descricao = str(dados.get("descricao") or "Lançamento")
-    valor = abs(float(dados.get("valor") or 0))
-    tipo_raw = str(dados.get("tipo") or "Saída").strip().lower()
-    tipo = "Entrada" if tipo_raw.startswith("entr") else "Saída"
-    categoria = str(dados.get("categoria") or "Outros")
-    forma_pagamento = _normalizar_forma_pagamento(dados.get("forma_pagamento"))
-    id_categoria = _resolve_categoria_id(db, categoria)
-
-    lanc = Lancamento(
-        id_usuario=usuario_db.id,
-        descricao=descricao,
-        valor=valor,
-        tipo=tipo,
-        data_transacao=datetime.utcnow(),
-        forma_pagamento=forma_pagamento if forma_pagamento in _FORMAS_PAGAMENTO_VALIDAS else "Nao_informado",
-        id_categoria=id_categoria,
-        origem="alfredo",
-    )
-    db.add(lanc)
-    db.commit()
-    return lanc
+        return datetime.now().strftime("%d/%m/%Y")
 
 
 _ALFREDO_TOOLS = [
@@ -208,14 +121,13 @@ _ALFREDO_TOOLS = [
                 "properties": {
                     "descricao": {"type": "string"},
                     "valor": {"type": "number"},
-                    "tipo": {"type": "string", "enum": ["Entrada", "Saída"]},
                     "categoria": {"type": "string"},
                     "forma_pagamento": {
                         "type": "string",
                         "enum": ["Pix", "Crédito", "Débito", "Boleto", "Dinheiro", "Nao_informado"],
                     },
                 },
-                "required": ["descricao", "valor", "categoria"],
+                "required": ["descricao", "valor", "categoria", "forma_pagamento"],
             },
         },
     },
@@ -223,14 +135,63 @@ _ALFREDO_TOOLS = [
         "type": "function",
         "function": {
             "name": "agendar_despesa",
-            "description": "Agenda uma despesa futura com frequência.",
+            "description": "Prepara um agendamento de despesa recorrente com validação explícita de valor, data de início e frequência.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "descricao": {"type": "string"},
-                    "valor": {"type": "number"},
-                    "data": {"type": "string", "description": "Data no formato YYYY-MM-DD."},
-                    "frequencia": {"type": "string", "description": "unico, semanal, mensal"},
+                    "descricao": {
+                        "type": "string",
+                        "description": "Descricao curta do compromisso financeiro. Ex.: 'Bike', 'Academia', 'Internet'.",
+                    },
+                    "valor": {
+                        "type": "number",
+                        "description": "Valor monetario unitario da parcela/evento. Extraia o numero exato citado pelo usuario (32 significa 32, nunca 12).",
+                    },
+                    "data": {
+                        "type": "string",
+                        "description": "Data do primeiro evento em YYYY-MM-DD. Converta datas brasileiras (DD/MM/AAAA) para YYYY-MM-DD.",
+                    },
+                    "frequencia": {
+                        "type": "string",
+                        "description": "Frequencia do agendamento: unico, semanal ou mensal. Se nao informado, usar mensal.",
+                    },
+                    "parcelas": {
+                        "type": "number",
+                        "description": "Quantidade de meses ou vezes (numero inteiro esperado). Se nao informado, assuma nulo/infinito.",
+                    },
+                },
+                "required": ["descricao", "valor", "data", "frequencia"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "agendar_receita",
+            "description": "Prepara um agendamento de receita recorrente com validação explícita de valor, data de início e frequência.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "descricao": {
+                        "type": "string",
+                        "description": "Descricao curta da receita. Ex.: 'Salário', 'Freela fixo', 'Aluguel recebido'.",
+                    },
+                    "valor": {
+                        "type": "number",
+                        "description": "Valor monetario unitario da receita recorrente.",
+                    },
+                    "data": {
+                        "type": "string",
+                        "description": "Data do primeiro recebimento em YYYY-MM-DD.",
+                    },
+                    "frequencia": {
+                        "type": "string",
+                        "description": "Frequencia do agendamento: unico, semanal ou mensal. Se nao informado, usar mensal.",
+                    },
+                    "parcelas": {
+                        "type": "number",
+                        "description": "Quantidade de meses ou vezes (inteiro). Se nao informado, assuma nulo/infinito.",
+                    },
                 },
                 "required": ["descricao", "valor", "data", "frequencia"],
             },
@@ -311,20 +272,9 @@ def _groq_chat_completion(messages: list[dict], tools: list[dict] | None = None,
         json=payload,
         timeout=45,
     )
-    try:
-        response.raise_for_status()
-    except requests.HTTPError as exc:
-        body_preview = (response.text or "")[:1500]
-        logger.error(
-            "Groq chat/completions retornou erro status=%s body=%s",
-            response.status_code,
-            body_preview,
-        )
-        raise GroqAPIError(
-            f"Groq chat/completions falhou com status {response.status_code}",
-            status_code=response.status_code,
-            response_body=body_preview,
-        ) from exc
+    if response.status_code >= 400:
+        logger.error("Groq HTTP %s: %s", response.status_code, response.text[:2000])
+    response.raise_for_status()
     return response.json()
 
 
@@ -440,283 +390,79 @@ def _intencao_saldo(texto: str) -> bool:
     return any(p in texto for p in ["saldo", "quanto tenho", "meu saldo", "saldo total", "quanto sobrou"])
 
 
-def _normalizar_texto_busca(texto: str) -> str:
-    base = unicodedata.normalize("NFKD", str(texto or "").lower())
-    sem_acentos = "".join(c for c in base if not unicodedata.combining(c))
-    return re.sub(r"\s+", " ", sem_acentos).strip()
-
-
-def _contains_any(texto: str, termos: list[str]) -> bool:
-    return any(termo in texto for termo in termos)
-
-
-def _resposta_deterministica_financeira(db, usuario_db: Usuario, texto_usuario: str, saldo: float) -> str | None:
-    t = _normalizar_texto_busca(texto_usuario)
-    hoje = datetime.utcnow().date()
-
-    # 1) Quanto gastei essa semana?
-    if _contains_any(t, ["gastei essa semana", "gastos essa semana", "quanto eu gastei essa semana"]):
-        inicio_semana = hoje - timedelta(days=hoje.weekday())
-        lancs = db.query(Lancamento).filter(
-            Lancamento.id_usuario == usuario_db.id,
-            Lancamento.data_transacao >= datetime.combine(inicio_semana, datetime.min.time()),
-            Lancamento.data_transacao <= datetime.combine(hoje, datetime.max.time()),
-        ).all()
-        saida = sum(abs(float(l.valor or 0)) for l in lancs if not str(l.tipo).lower().startswith("entr"))
-        entrada = sum(float(l.valor or 0) for l in lancs if str(l.tipo).lower().startswith("entr"))
-        return (
-            "📅 <b>Semana atual</b>\n"
-            "━━━━━━━━━━━━━━━━━━\n\n"
-            f"<b>Saídas:</b> <code>{_formatar_valor_brasileiro(saida)}</code>\n"
-            f"<b>Entradas:</b> <code>{_formatar_valor_brasileiro(entrada)}</code>\n"
-            f"<b>Resultado da semana:</b> <code>{_formatar_valor_brasileiro(entrada - saida)}</code>"
-        )
-
-    # 2) Maior gasto recente
-    if _contains_any(t, ["maior gasto recente", "maior gasto", "gasto mais alto"]):
-        corte = datetime.combine(hoje - timedelta(days=45), datetime.min.time())
-        maior = db.query(Lancamento).filter(
-            Lancamento.id_usuario == usuario_db.id,
-            Lancamento.data_transacao >= corte,
-        ).order_by(Lancamento.valor.desc()).first()
-        if not maior or str(maior.tipo).lower().startswith("entr"):
-            saidas = db.query(Lancamento).filter(
-                Lancamento.id_usuario == usuario_db.id,
-                Lancamento.data_transacao >= corte,
-            ).all()
-            saidas = [l for l in saidas if not str(l.tipo).lower().startswith("entr")]
-            maior = max(saidas, key=lambda x: abs(float(x.valor or 0)), default=None)
-
-        if not maior:
-            return "🔎 Não encontrei gastos recentes para analisar."
-
-        return (
-            "💥 <b>Maior gasto recente</b>\n"
-            "━━━━━━━━━━━━━━━━━━\n\n"
-            f"<b>Descrição:</b> {escape(maior.descricao or 'Sem descrição')}\n"
-            f"<b>Valor:</b> <code>{_formatar_valor_brasileiro(abs(float(maior.valor or 0)))}</code>\n"
-            f"<b>Data:</b> {maior.data_transacao.strftime('%d/%m/%Y')}"
-        )
-
-    # 3) Dias em que mais gasta
-    if _contains_any(t, ["dias eu mais gasto", "quais dias eu mais gasto", "dia da semana"]):
-        corte = datetime.combine(hoje - timedelta(days=90), datetime.min.time())
-        lancs = db.query(Lancamento).filter(
-            Lancamento.id_usuario == usuario_db.id,
-            Lancamento.data_transacao >= corte,
-        ).all()
-        saidas = [l for l in lancs if not str(l.tipo).lower().startswith("entr")]
-        if not saidas:
-            return "📉 Ainda não há gastos suficientes para identificar seus dias de maior consumo."
-
-        dias = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"]
-        total_por_dia = defaultdict(float)
-        for l in saidas:
-            total_por_dia[l.data_transacao.weekday()] += abs(float(l.valor or 0))
-
-        ranking = sorted(total_por_dia.items(), key=lambda x: x[1], reverse=True)[:3]
-        linhas = [f"• {dias[idx]}: <code>{_formatar_valor_brasileiro(v)}</code>" for idx, v in ranking]
-        return "🗓️ <b>Dias com maior gasto</b>\n━━━━━━━━━━━━━━━━━━\n\n" + "\n".join(linhas)
-
-    # 4) Contas e compromissos de agendamento
-    if _contains_any(t, ["conta vencendo hoje", "vencendo hoje", "pagar hoje", "contas tenho pra pagar hoje"]):
-        ags = db.query(Agendamento).filter(
-            Agendamento.id_usuario == usuario_db.id,
-            Agendamento.ativo == True,
-            Agendamento.proxima_data_execucao == hoje,
-        ).all()
-        if not ags:
-            return "✅ Hoje não encontrei compromissos agendados para vencimento."
-        linhas = [f"• {escape(a.descricao)} — <code>{_formatar_valor_brasileiro(float(a.valor or 0))}</code>" for a in ags]
-        total = sum(float(a.valor or 0) for a in ags)
-        return "⏰ <b>Vence hoje</b>\n━━━━━━━━━━━━━━━━━━\n\n" + "\n".join(linhas) + f"\n\n<b>Total:</b> <code>{_formatar_valor_brasileiro(total)}</code>"
-
-    if _contains_any(t, ["vence essa semana", "pagar essa semana", "falta pagar essa semana", "ainda preciso pagar essa semana"]):
-        fim = hoje + timedelta(days=7)
-        ags = db.query(Agendamento).filter(
-            Agendamento.id_usuario == usuario_db.id,
-            Agendamento.ativo == True,
-            Agendamento.proxima_data_execucao >= hoje,
-            Agendamento.proxima_data_execucao <= fim,
-        ).order_by(Agendamento.proxima_data_execucao.asc()).all()
-        if not ags:
-            return "✅ Não há compromissos agendados para os próximos 7 dias."
-        linhas = [
-            f"• {a.proxima_data_execucao.strftime('%d/%m')} — {escape(a.descricao)} — <code>{_formatar_valor_brasileiro(float(a.valor or 0))}</code>"
-            for a in ags
+def _intencao_metas(texto: str) -> bool:
+    texto = (texto or "").lower()
+    return any(
+        p in texto
+        for p in [
+            "meta ativa",
+            "meta ativas",
+            "metas ativas",
+            "minhas metas",
+            "quais metas",
+            "tenho metas",
+            "metas",
         ]
-        total = sum(float(a.valor or 0) for a in ags)
-        return "📌 <b>Compromissos da semana</b>\n━━━━━━━━━━━━━━━━━━\n\n" + "\n".join(linhas) + f"\n\n<b>Total:</b> <code>{_formatar_valor_brasileiro(total)}</code>"
-
-    if _contains_any(t, ["contas atrasadas", "conta que esqueci", "esqueci"]) and "meta" not in t:
-        atrasadas = db.query(Agendamento).filter(
-            Agendamento.id_usuario == usuario_db.id,
-            Agendamento.ativo == True,
-            Agendamento.proxima_data_execucao < hoje,
-        ).order_by(Agendamento.proxima_data_execucao.asc()).all()
-        if not atrasadas:
-            return "✅ Não encontrei compromissos atrasados no seu agendamento."
-        linhas = [
-            f"• {a.proxima_data_execucao.strftime('%d/%m')} — {escape(a.descricao)} — <code>{_formatar_valor_brasileiro(float(a.valor or 0))}</code>"
-            for a in atrasadas
-        ]
-        total = sum(float(a.valor or 0) for a in atrasadas)
-        return "🚨 <b>Compromissos atrasados</b>\n━━━━━━━━━━━━━━━━━━\n\n" + "\n".join(linhas) + f"\n\n<b>Total em atraso:</b> <code>{_formatar_valor_brasileiro(total)}</code>"
-
-    if _contains_any(t, ["contas fixas", "total de contas desse mes", "comprometido", "sobra depois das contas", "o que ainda falta pagar"]):
-        fim_mes = datetime(hoje.year + (1 if hoje.month == 12 else 0), 1 if hoje.month == 12 else hoje.month + 1, 1).date() - timedelta(days=1)
-        ags_mes = db.query(Agendamento).filter(
-            Agendamento.id_usuario == usuario_db.id,
-            Agendamento.ativo == True,
-            Agendamento.proxima_data_execucao >= hoje,
-            Agendamento.proxima_data_execucao <= fim_mes,
-        ).all()
-        total_comprometido = sum(float(a.valor or 0) for a in ags_mes)
-        fixas = [a for a in ags_mes if (a.frequencia or "").lower() in {"mensal", "semanal"}]
-        sobra = saldo - total_comprometido
-        return (
-            "🧾 <b>Compromissos até o fim do mês</b>\n"
-            "━━━━━━━━━━━━━━━━━━\n\n"
-            f"<b>Total agendado:</b> <code>{_formatar_valor_brasileiro(total_comprometido)}</code>\n"
-            f"<b>Contas fixas (recorrentes):</b> <code>{len(fixas)}</code>\n"
-            f"<b>Sobra estimada após compromissos:</b> <code>{_formatar_valor_brasileiro(sobra)}</code>"
-        )
-
-    if _contains_any(t, ["ja paguei aluguel", "ja paguei luz", "ja paguei internet"]):
-        inicio_mes = datetime(hoje.year, hoje.month, 1)
-        lancs_mes = db.query(Lancamento).filter(
-            Lancamento.id_usuario == usuario_db.id,
-            Lancamento.data_transacao >= inicio_mes,
-        ).all()
-        descs = [str(l.descricao or "").lower() for l in lancs_mes]
-        checks = {
-            "aluguel": any("aluguel" in d for d in descs),
-            "luz": any("luz" in d or "energia" in d for d in descs),
-            "internet": any("internet" in d or "wifi" in d or "wi-fi" in d for d in descs),
-        }
-        linhas = [f"• {k.title()}: {'✅ Pago' if v else '⚠️ Não encontrado'}" for k, v in checks.items()]
-        return "🏠 <b>Status de contas básicas no mês</b>\n━━━━━━━━━━━━━━━━━━\n\n" + "\n".join(linhas)
-
-    # 5) Gastos por comportamento
-    if _contains_any(t, ["ifood", "lanche", "besteira"]):
-        inicio_mes = datetime(hoje.year, hoje.month, 1)
-        lancs = db.query(Lancamento).filter(
-            Lancamento.id_usuario == usuario_db.id,
-            Lancamento.data_transacao >= inicio_mes,
-        ).all()
-        gastos = [
-            l for l in lancs
-            if not str(l.tipo).lower().startswith("entr")
-            and any(k in str(l.descricao or "").lower() for k in ["ifood", "lanche", "snack", "delivery", "burg", "pizza"])
-        ]
-        total = sum(abs(float(l.valor or 0)) for l in gastos)
-        return (
-            "🍔 <b>Gastos com iFood/lanche no mês</b>\n"
-            "━━━━━━━━━━━━━━━━━━\n\n"
-            f"<b>Transações:</b> <code>{len(gastos)}</code>\n"
-            f"<b>Total:</b> <code>{_formatar_valor_brasileiro(total)}</code>"
-        )
-
-    if _contains_any(t, ["gastos invisiveis", "pequenos e recorrentes"]):
-        corte = datetime.combine(hoje - timedelta(days=60), datetime.min.time())
-        lancs = db.query(Lancamento).filter(
-            Lancamento.id_usuario == usuario_db.id,
-            Lancamento.data_transacao >= corte,
-        ).all()
-        saidas = [l for l in lancs if not str(l.tipo).lower().startswith("entr") and abs(float(l.valor or 0)) <= 60]
-        by_desc = defaultdict(lambda: {"count": 0, "total": 0.0})
-        for l in saidas:
-            desc = (l.descricao or "sem descricao").strip().lower()
-            by_desc[desc]["count"] += 1
-            by_desc[desc]["total"] += abs(float(l.valor or 0))
-
-        recorrentes = [(d, v) for d, v in by_desc.items() if v["count"] >= 2]
-        recorrentes = sorted(recorrentes, key=lambda x: x[1]["total"], reverse=True)[:5]
-        if not recorrentes:
-            return "🔎 Não encontrei microgastos recorrentes relevantes nos últimos 60 dias."
-
-        linhas = [
-            f"• {escape(desc[:30])} — {dados['count']}x — <code>{_formatar_valor_brasileiro(dados['total'])}</code>"
-            for desc, dados in recorrentes
-        ]
-        return "🕵️ <b>Gastos invisíveis (pequenos e recorrentes)</b>\n━━━━━━━━━━━━━━━━━━\n\n" + "\n".join(linhas)
-
-    return None
-
-
-def _montar_contexto_financeiro_detalhado(db, usuario_db: Usuario, saldo: float, entradas: float, saidas: float) -> str:
-    hoje = datetime.utcnow().date()
-    inicio_mes = datetime(hoje.year, hoje.month, 1)
-    inicio_mes_passado = (inicio_mes - timedelta(days=1)).replace(day=1)
-    fim_mes_passado = inicio_mes - timedelta(seconds=1)
-
-    lancs_mes = db.query(Lancamento).filter(
-        Lancamento.id_usuario == usuario_db.id,
-        Lancamento.data_transacao >= inicio_mes,
-    ).all()
-    lancs_mes_passado = db.query(Lancamento).filter(
-        Lancamento.id_usuario == usuario_db.id,
-        Lancamento.data_transacao >= inicio_mes_passado,
-        Lancamento.data_transacao <= fim_mes_passado,
-    ).all()
-
-    despesa_mes = sum(abs(float(l.valor or 0)) for l in lancs_mes if not str(l.tipo).lower().startswith("entr"))
-    receita_mes = sum(float(l.valor or 0) for l in lancs_mes if str(l.tipo).lower().startswith("entr"))
-    despesa_mes_passado = sum(abs(float(l.valor or 0)) for l in lancs_mes_passado if not str(l.tipo).lower().startswith("entr"))
-
-    top_categoria = defaultdict(float)
-    pagamento_count = defaultdict(int)
-    for l in lancs_mes:
-        if not str(l.tipo).lower().startswith("entr"):
-            nome_cat = (l.categoria.nome if l.categoria and l.categoria.nome else "Sem categoria")
-            top_categoria[nome_cat] += abs(float(l.valor or 0))
-        pagamento_count[_normalizar_forma_pagamento(l.forma_pagamento)] += 1
-
-    top_categoria_ordenada = sorted(top_categoria.items(), key=lambda x: x[1], reverse=True)[:4]
-    top_pagamentos = sorted(pagamento_count.items(), key=lambda x: x[1], reverse=True)[:3]
-
-    inicio_semana = hoje - timedelta(days=hoje.weekday())
-    gastos_semana = sum(
-        abs(float(l.valor or 0)) for l in lancs_mes
-        if not str(l.tipo).lower().startswith("entr") and l.data_transacao.date() >= inicio_semana
     )
 
-    fim_7_dias = hoje + timedelta(days=7)
-    ags_prox_7 = db.query(Agendamento).filter(
-        Agendamento.id_usuario == usuario_db.id,
-        Agendamento.ativo == True,
-        Agendamento.proxima_data_execucao >= hoje,
-        Agendamento.proxima_data_execucao <= fim_7_dias,
-    ).all()
-    ags_atrasados = db.query(Agendamento).filter(
-        Agendamento.id_usuario == usuario_db.id,
-        Agendamento.ativo == True,
-        Agendamento.proxima_data_execucao < hoje,
-    ).all()
 
-    metas = db.query(Objetivo).filter(Objetivo.id_usuario == usuario_db.id).all()
-    metas_resumo = [
-        f"{m.descricao}: atual R$ {float(m.valor_atual or 0):.2f} / meta R$ {float(m.valor_meta or 0):.2f}"
-        for m in metas[:3]
-    ]
+def _buscar_ultimo_lancamento_sem_futuro(db, usuario_id: int) -> Lancamento | None:
+    """
+    Regra de prioridade:
+    1) Busca o último inserido de hoje.
+    2) Se não houver, busca o último inserido de ontem.
+    3) Se não houver, busca o último inserido de qualquer dia <= hoje.
+    Nunca retorna transações futuras.
+    """
+    agora = datetime.now()
+    hoje_inicio = agora.replace(hour=0, minute=0, second=0, microsecond=0)
+    hoje_fim = agora.replace(hour=23, minute=59, second=59, microsecond=999999)
+    ontem_inicio = hoje_inicio - timedelta(days=1)
+    ontem_fim = hoje_inicio - timedelta(microseconds=1)
 
-    top_categoria_txt = ", ".join(f"{nome} (R$ {valor:.2f})" for nome, valor in top_categoria_ordenada) or "Sem dados"
-    top_pagamento_txt = ", ".join(f"{nome} ({q}x)" for nome, q in top_pagamentos) or "Sem dados"
-
-    return (
-        f"Saldo acumulado: R$ {saldo:.2f}\n"
-        f"Entradas acumuladas: R$ {entradas:.2f}\n"
-        f"Saídas acumuladas: R$ {saidas:.2f}\n"
-        f"Receita no mês atual: R$ {receita_mes:.2f}\n"
-        f"Despesa no mês atual: R$ {despesa_mes:.2f}\n"
-        f"Despesa no mês passado: R$ {despesa_mes_passado:.2f}\n"
-        f"Gasto na semana atual: R$ {gastos_semana:.2f}\n"
-        f"Top categorias do mês: {top_categoria_txt}\n"
-        f"Formas de pagamento mais usadas: {top_pagamento_txt}\n"
-        f"Agendamentos vencendo em 7 dias: {len(ags_prox_7)}\n"
-        f"Agendamentos atrasados: {len(ags_atrasados)}\n"
-        f"Resumo de metas: {', '.join(metas_resumo) if metas_resumo else 'Sem metas cadastradas'}"
+    base = (
+        db.query(Lancamento)
+        .filter(
+            Lancamento.id_usuario == usuario_id,
+            Lancamento.data_transacao <= hoje_fim,
+        )
+        .order_by(Lancamento.id.desc())
     )
+
+    hoje = base.filter(Lancamento.data_transacao >= hoje_inicio).first()
+    if hoje:
+        return hoje
+
+    ontem = base.filter(
+        Lancamento.data_transacao >= ontem_inicio,
+        Lancamento.data_transacao <= ontem_fim,
+    ).first()
+    if ontem:
+        return ontem
+
+    return base.first()
+
+
+def _formatar_metas_ativas(objetivos: list[Objetivo]) -> str:
+    if not objetivos:
+        return (
+            "🎯 <b>Metas ativas</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            "Não encontrei metas ativas no seu banco neste momento."
+        )
+
+    linhas = ["🎯 <b>Metas ativas</b>", "━━━━━━━━━━━━━━━━━━", ""]
+    for objetivo in objetivos[:8]:
+        valor_meta = float(objetivo.valor_meta or 0)
+        valor_atual = float(objetivo.valor_atual or 0)
+        progresso = 0.0 if valor_meta <= 0 else min(100.0, max(0.0, (valor_atual / valor_meta) * 100.0))
+        prazo = objetivo.data_meta.strftime("%d/%m/%Y") if objetivo.data_meta else "sem prazo"
+        linhas.append(
+            f"• <b>{escape(objetivo.descricao or 'Meta')}</b>\n"
+            f"  { _formatar_valor_brasileiro(valor_atual) } de { _formatar_valor_brasileiro(valor_meta) }"
+            f" ({progresso:.0f}%) | prazo: {escape(prazo)}"
+        )
+    return "\n".join(linhas)
 
 
 async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -761,15 +507,15 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         texto_normalizado = texto_usuario.strip().lower()
 
         if _intencao_ultimo_lancamento(texto_normalizado):
-            ultimos = buscar_lancamentos_usuario(telegram_user_id=update.effective_user.id, limit=1)
-            if not ultimos:
+            ultimo = _buscar_ultimo_lancamento_sem_futuro(db, usuario_db.id)
+            if not ultimo:
                 await update.message.reply_html(
                     "🔎 <b>Nenhum lançamento encontrado</b>\n\n"
                     "Você ainda não tem lançamentos registrados no seu banco."
                 )
                 return ConversationHandler.END
 
-            await update.message.reply_html(_formatar_lancamento_card(ultimos[0]))
+            await update.message.reply_html(_formatar_lancamento_card(ultimo))
             return ConversationHandler.END
 
         if _intencao_saldo(texto_normalizado):
@@ -783,21 +529,43 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             await update.message.reply_html(saldo_msg)
             return ConversationHandler.END
 
-        resposta_deterministica = _resposta_deterministica_financeira(db, usuario_db, texto_usuario, saldo)
-        if resposta_deterministica:
-            await update.message.reply_html(_formatar_resposta_html(resposta_deterministica))
+        if _intencao_metas(texto_normalizado):
+            objetivos_ativos = (
+                db.query(Objetivo)
+                .filter(
+                    Objetivo.id_usuario == usuario_db.id,
+                    func.coalesce(Objetivo.valor_atual, 0) < func.coalesce(Objetivo.valor_meta, 0),
+                )
+                .order_by(Objetivo.criado_em.desc(), Objetivo.id.desc())
+                .all()
+            )
+            await update.message.reply_html(_formatar_metas_ativas(objetivos_ativos))
             return ConversationHandler.END
 
         system_prompt = (
             "Você é Alfredo, um Despachante Financeiro. "
             "Sempre escolha UMA tool quando houver intenção acionável. "
             "Use responder_duvida_financeira para perguntas gerais. "
+            "Responda ESTRITAMENTE à pergunta do usuário. "
+            "Se ele perguntar de metas, fale SÓ de metas. "
+            "Use o contexto financeiro apenas como base de conhecimento silenciosa, "
+            "não repita os dados a menos que seja solicitado. "
             "Responda em português do Brasil usando HTML simples para Telegram. "
             "Nunca use markdown com asteriscos. "
+            "Suas respostas devem ser curtas, diretas e escaneáveis para dispositivos móveis. "
+            "NUNCA ultrapasse 3 parágrafos curtos. "
+            "Prefira bullet points quando estiver listando informações. "
             "Não invente valores, datas, categorias ou lançamentos ausentes. "
             "Se faltar dado no contexto ou no banco, diga claramente que não encontrou a informação. "
             "Tente deduzir a forma de pagamento da mensagem do usuário. "
-            "Se não houver indicação explícita, preencha obrigatoriamente como Nao_informado."
+            "Se não houver indicação explícita, preencha obrigatoriamente como Nao_informado. "
+            "\n### INSTRUÇÕES CRÍTICAS PARA NÚMERO E DATAS:\n"
+            "- Para VALORES MONETÁRIOS: Extraia com máxima precisão. Não confunda dígitos (32 ≠ 12). "
+            "- Para DATAS: Sempre use formato YYYY-MM-DD. Se o usuário disser '12/12/2026', converta para '2026-12-12'. "
+            "- Para FREQUÊNCIA: Se não explicit, considere 'mensal' como padrão (não 'único'). "
+            "- NUNCA aproxime números. Se está em dúvida, use o número EXATO mencionado. "
+            "- Em agendamentos e metas, confirme sempre os dados antes de persistir. "
+            "- Para receita recorrente, use a tool agendar_receita; para despesa recorrente, agendar_despesa."
         )
 
         messages = [
@@ -805,60 +573,16 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             {"role": "user", "content": texto_usuario},
         ]
 
-        intencao_registro = _intencao_registro_lancamento(texto_normalizado)
-
         try:
             completion = await _groq_chat_completion_async(messages, tools=_ALFREDO_TOOLS, tool_choice="auto")
-        except Exception as exc:
-            logger.error("Falha no Groq com tools no Alfredo: %s", exc, exc_info=True)
-
-            if intencao_registro:
-                extraido = _extrair_lancamento_do_texto(texto_usuario)
-                if extraido and extraido.get("valor", 0) > 0:
-                    _registrar_lancamento_local(db, usuario_db, extraido)
-                    await update.message.reply_text(
-                        f"✅ Lançamento de R$ {extraido['valor']:.2f} em {escape(extraido['categoria'])} registrado!"
-                    )
-                    return ConversationHandler.END
-
-            fallback_messages = [
-                {
-                    "role": "system",
-                    "content": (
-                        "Você é Alfredo. O modo de tools está indisponível agora. "
-                        "Responda sem inventar números, lançamentos ou confirmações de ações. "
-                        "Se o usuário pedir para registrar algo, peça os dados faltantes de forma objetiva."
-                    ),
-                },
-                {"role": "user", "content": texto_usuario},
-            ]
-            fallback_completion = await _groq_chat_completion_async(fallback_messages)
-            fallback_choice = ((fallback_completion or {}).get("choices") or [{}])[0]
-            fallback_message = fallback_choice.get("message") or {}
-            fallback_text = (fallback_message.get("content") or "Não consegui processar agora. Tente novamente.").strip()
-            await update.message.reply_html(_formatar_resposta_html(fallback_text))
-            return ConversationHandler.END
-
+        except requests.HTTPError as groq_err:
+            logger.warning("Falha na chamada Groq com tools; tentando fallback sem tools: %s", groq_err)
+            completion = await _groq_chat_completion_async(messages)
         choice = ((completion or {}).get("choices") or [{}])[0]
         message = choice.get("message") or {}
         tool_calls = message.get("tool_calls") or []
 
         if not tool_calls:
-            if intencao_registro:
-                extraido = _extrair_lancamento_do_texto(texto_usuario)
-                if extraido and extraido.get("valor", 0) > 0:
-                    _registrar_lancamento_local(db, usuario_db, extraido)
-                    await update.message.reply_text(
-                        f"✅ Lançamento de R$ {extraido['valor']:.2f} em {escape(extraido['categoria'])} registrado!"
-                    )
-                    return ConversationHandler.END
-
-                await update.message.reply_text(
-                    "❌ Não consegui registrar automaticamente. Me envie no formato: "
-                    "'gastei 120,50 no mercado no pix'."
-                )
-                return ConversationHandler.END
-
             resposta_direta = (message.get("content") or "Não consegui processar agora. Tente novamente.").strip()
             await update.message.reply_html(_formatar_resposta_html(resposta_direta))
             return ConversationHandler.END
@@ -873,89 +597,240 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             args = {}
 
         if fn_name == "registrar_lancamento":
-            valor = float(args.get("valor") or 0)
-            if valor == 0:
-                await update.message.reply_text("❌ Preciso de um valor maior que zero para registrar o lançamento.")
+            descricao = str(args.get("descricao") or "Lançamento").strip()
+            categoria = str(args.get("categoria") or "Outros").strip()
+            forma_pagamento = _normalizar_forma_pagamento(args.get("forma_pagamento"))
+            tipo_transacao = _inferir_tipo_lancamento(texto_usuario, categoria, args.get("tipo"))
+            data_lancamento = _normalizar_data_lancamento(args.get("data"))
+            try:
+                valor = float(str(args.get("valor") or 0).replace(",", "."))
+            except (ValueError, TypeError):
+                valor = 0.0
+
+            if valor <= 0:
+                await update.message.reply_html(
+                    "❌ <b>Valor inválido</b>\n\n"
+                    "Preciso de um valor maior que zero para preparar o lançamento."
+                )
                 return ConversationHandler.END
 
-            dados_lancamento = {
-                "descricao": str(args.get("descricao") or "Lançamento"),
-                "valor": abs(valor),
-                "tipo": str(args.get("tipo") or ("Entrada" if valor < 0 else "Saída")),
-                "categoria": str(args.get("categoria") or "Outros"),
-                "forma_pagamento": str(args.get("forma_pagamento") or "Nao_informado"),
+            dados_quick = {
+                "acao": "registrar_lancamento",
+                "descricao": descricao,
+                "valor": valor,
+                "categoria": categoria,
+                "categoria_sugerida": categoria,
+                "subcategoria_sugerida": "N/A",
+                "forma_pagamento": forma_pagamento,
+                "tipo_transacao": tipo_transacao,
+                "data": data_lancamento,
+                "origem": "alfredo",
             }
-            _registrar_lancamento_local(db, usuario_db, dados_lancamento)
-            await update.message.reply_text(
-                f"✅ Lançamento de R$ {abs(valor):.2f} em {escape(dados_lancamento['categoria'])} registrado!"
+            context.user_data["dados_quick"] = dados_quick
+            # Compatibilidade com quick_action_handler legado
+            context.user_data["quick_lancamento"] = dados_quick
+
+            preview = (
+                "🧾 <b>Confirme o lançamento</b>\n\n"
+                f"• <b>Descrição:</b> {escape(descricao)}\n"
+                f"• <b>Valor:</b> <code>{_formatar_valor_brasileiro(valor)}</code>\n"
+                f"• <b>Tipo:</b> {escape(tipo_transacao)}\n"
+                f"• <b>Data:</b> {escape(data_lancamento)}\n"
+                f"• <b>Categoria:</b> {escape(categoria)}\n"
+                f"• <b>Pagamento:</b> {escape(forma_pagamento)}"
             )
+            webapp_url = _get_webapp_url("editar", draft=dados_quick)
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Confirmar", callback_data="quick_confirm")],
+                [InlineKeyboardButton("✏️ Editar", web_app=WebAppInfo(url=webapp_url))],
+                [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")],
+            ])
+            await update.message.reply_html(preview, reply_markup=keyboard)
             return ConversationHandler.END
 
-        if fn_name == "agendar_despesa":
-            descricao = str(args.get("descricao") or "Despesa agendada")
-            valor = float(args.get("valor") or 0)
+        if fn_name in {"agendar_despesa", "agendar_receita"}:
+            eh_receita = fn_name == "agendar_receita"
+            descricao_default = "Receita agendada" if eh_receita else "Despesa agendada"
+            descricao = str(args.get("descricao") or descricao_default).strip()
+            try:
+                valor = float(str(args.get("valor") or 0).replace(",", "."))
+            except (ValueError, TypeError):
+                valor = 0.0
             data_str = str(args.get("data") or "").strip()
             frequencia = str(args.get("frequencia") or "mensal").strip().lower()
+            parcelas = args.get("parcelas")
+            try:
+                parcelas = int(parcelas) if parcelas is not None else None
+            except (ValueError, TypeError):
+                parcelas = None
 
             if valor <= 0 or not data_str:
-                await update.message.reply_text("❌ Para agendar, preciso de descrição, valor e data (YYYY-MM-DD).")
+                await update.message.reply_html(
+                    "❌ <b>Dados incompletos</b>\n\n"
+                    "Informe descrição, valor (&gt; 0) e data de início em <code>YYYY-MM-DD</code>."
+                )
                 return ConversationHandler.END
 
             try:
                 data_primeiro = datetime.fromisoformat(data_str).date()
             except ValueError:
-                await update.message.reply_text("❌ Data inválida. Use o formato YYYY-MM-DD.")
+                await update.message.reply_html(
+                    "❌ <b>Data inválida</b>\n\n"
+                    "Use <code>YYYY-MM-DD</code> (ex.: <code>2026-12-12</code>)."
+                )
                 return ConversationHandler.END
 
-            ag = Agendamento(
-                id_usuario=usuario_db.id,
-                descricao=descricao,
-                valor=valor,
-                tipo="Saída",
-                frequencia=frequencia if frequencia in {"unico", "semanal", "mensal"} else "mensal",
-                data_primeiro_evento=data_primeiro,
-                proxima_data_execucao=data_primeiro,
-                ativo=True,
-                parcela_atual=0,
+            frequencia_normalizada = frequencia if frequencia in {"unico", "semanal", "mensal"} else "mensal"
+            acao_agendamento = "agendar_receita" if eh_receita else "agendar_despesa"
+
+            dados_quick = {
+                "acao": acao_agendamento,
+                "descricao": descricao,
+                "valor": valor,
+                "data": data_str,
+                "frequencia": frequencia_normalizada,
+                "parcelas": parcelas,
+                "origem": "alfredo",
+            }
+            context.user_data["dados_quick"] = dados_quick
+
+            parcelas_texto = "indefinido" if parcelas is None else str(parcelas)
+            emoji = "💸" if eh_receita else "🗓️"
+            titulo = "Confirme o agendamento de receita" if eh_receita else "Confirme o agendamento"
+            preview = (
+                f"{emoji} <b>{titulo}</b>\n\n"
+                f"• <b>Descrição:</b> {escape(descricao)}\n"
+                f"• <b>Valor:</b> <code>{_formatar_valor_brasileiro(valor)}</code>\n"
+                f"• <b>Início:</b> {data_primeiro.strftime('%d/%m/%Y')}\n"
+                f"• <b>Frequência:</b> {escape(frequencia_normalizada)}\n"
+                f"• <b>Parcelas:</b> {escape(parcelas_texto)}"
             )
-            db.add(ag)
-            db.commit()
-            await update.message.reply_text(f"✅ Despesa '{escape(descricao)}' agendada para {data_primeiro.strftime('%d/%m/%Y')} ({ag.frequencia}).")
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Confirmar", callback_data="quick_confirm")],
+                [InlineKeyboardButton("✏️ Editar", callback_data="quick_edit")],
+                [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")],
+            ])
+            await update.message.reply_html(preview, reply_markup=keyboard)
             return ConversationHandler.END
 
         if fn_name == "criar_meta":
-            descricao = str(args.get("descricao") or "Meta")
-            valor_alvo = float(args.get("valor_alvo") or 0)
+            descricao = str(args.get("descricao") or "Meta").strip()
+            try:
+                valor_alvo = float(str(args.get("valor_alvo") or 0).replace(",", "."))
+            except (ValueError, TypeError):
+                valor_alvo = 0.0
+            data_meta_str = str(args.get("data_meta") or "").strip()
+
             if valor_alvo <= 0:
-                await update.message.reply_text("❌ Preciso de um valor alvo maior que zero para criar a meta.")
+                await update.message.reply_html(
+                    "❌ <b>Valor inválido</b>\n\n"
+                    "Preciso de um valor alvo maior que zero."
+                )
                 return ConversationHandler.END
 
-            hoje = datetime.utcnow().date()
-            meta = Objetivo(
-                id_usuario=usuario_db.id,
-                descricao=descricao,
-                valor_meta=valor_alvo,
-                valor_atual=0,
-                data_meta=datetime(hoje.year, 12, 31).date(),
+            data_meta = None
+            if data_meta_str:
+                try:
+                    data_meta = datetime.fromisoformat(data_meta_str).date()
+                except ValueError:
+                    await update.message.reply_html(
+                        "❌ <b>Prazo inválido</b>\n\n"
+                        "Use <code>YYYY-MM-DD</code> para data da meta."
+                    )
+                    return ConversationHandler.END
+
+            dados_quick = {
+                "acao": "criar_meta",
+                "descricao": descricao,
+                "valor_alvo": valor_alvo,
+                "data_meta": data_meta_str if data_meta_str else None,
+                "origem": "alfredo",
+            }
+            context.user_data["dados_quick"] = dados_quick
+
+            prazo_txt = data_meta.strftime("%d/%m/%Y") if data_meta else "Sem prazo definido"
+            preview = (
+                "🎯 <b>Confirme a meta</b>\n\n"
+                f"• <b>Descrição:</b> {escape(descricao)}\n"
+                f"• <b>Valor alvo:</b> <code>{_formatar_valor_brasileiro(valor_alvo)}</code>\n"
+                f"• <b>Prazo:</b> {escape(prazo_txt)}"
             )
-            db.add(meta)
-            db.commit()
-            await update.message.reply_text(f"🎯 Meta '{escape(descricao)}' criada com alvo de R$ {valor_alvo:.2f}.")
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Confirmar", callback_data="quick_confirm")],
+                [InlineKeyboardButton("✏️ Editar", callback_data="quick_edit")],
+                [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")],
+            ])
+            await update.message.reply_html(preview, reply_markup=keyboard)
             return ConversationHandler.END
 
         if fn_name == "responder_duvida_financeira":
             pergunta = str(args.get("pergunta") or texto_usuario)
-            contexto_detalhado = _montar_contexto_financeiro_detalhado(db, usuario_db, saldo, entradas, saidas)
+
+            ultimos_lanc = (
+                db.query(Lancamento)
+                .filter(Lancamento.id_usuario == usuario_db.id)
+                .order_by(Lancamento.id.desc())
+                .limit(5)
+                .all()
+            )
+
+            resumo_ultimos = []
+            for lanc in ultimos_lanc:
+                valor = float(lanc.valor or 0)
+                sinal = "+" if str(lanc.tipo).lower().startswith("entr") else "-"
+                resumo_ultimos.append(
+                    f"{lanc.data_transacao.strftime('%d/%m/%Y')} | {lanc.descricao or 'Lançamento'} | {sinal}R$ {abs(valor):.2f}"
+                )
+
+            categorias_saida: dict[str, float] = {}
+            for lanc in (
+                db.query(Lancamento)
+                .filter(Lancamento.id_usuario == usuario_db.id)
+                .order_by(Lancamento.id.desc())
+                .limit(120)
+                .all()
+            ):
+                if str(lanc.tipo).lower().startswith("entr"):
+                    continue
+                chave = "Sem categoria"
+                if getattr(lanc, "categoria", None) and lanc.categoria:
+                    chave = lanc.categoria.nome or chave
+                categorias_saida[chave] = categorias_saida.get(chave, 0.0) + abs(float(lanc.valor or 0))
+
+            top_categorias = sorted(categorias_saida.items(), key=lambda x: x[1], reverse=True)[:5]
+            resumo_categorias = [f"{nome}: R$ {valor:.2f}" for nome, valor in top_categorias]
+
+            metas_ativas = (
+                db.query(Objetivo)
+                .filter(
+                    Objetivo.id_usuario == usuario_db.id,
+                    func.coalesce(Objetivo.valor_atual, 0) < func.coalesce(Objetivo.valor_meta, 0),
+                )
+                .order_by(Objetivo.criado_em.desc(), Objetivo.id.desc())
+                .limit(5)
+                .all()
+            )
+            resumo_metas = [
+                f"{(m.descricao or 'Meta')} ({float(m.valor_atual or 0):.2f}/{float(m.valor_meta or 0):.2f})"
+                for m in metas_ativas
+            ]
+
             contextual_messages = [
                 {
                     "role": "system",
                     "content": (
+                        "Responda ESTRITAMENTE à pergunta do usuário. "
+                        "Se ele perguntar de metas, fale SÓ de metas. "
+                        "Use o contexto financeiro apenas como base de conhecimento silenciosa, "
+                        "não repita os dados a menos que seja solicitado. "
                         "Responda em português do Brasil, objetivo e útil. "
+                        "Seja curto e escaneável para mobile. "
+                        "NUNCA ultrapasse 3 parágrafos curtos e prefira bullet points. "
                         "Use apenas os dados informados no contexto financeiro. "
                         "Não invente números, contas ou transações. "
                         "Se um dado não estiver disponível, diga que não encontrou no banco. "
-                        "Use formatação curta amigável para Telegram em HTML simples. "
-                        "Sempre priorize conclusões quantitativas quando houver dados no contexto."
+                        "Os números no contexto abaixo são dados reais do usuário e devem ser priorizados. "
+                        "Use formatação curta amigável para Telegram em HTML simples."
                     ),
                 },
                 {
@@ -966,7 +841,9 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                         f"- Saldo: R$ {saldo:.2f}\n"
                         f"- Entradas acumuladas: R$ {entradas:.2f}\n"
                         f"- Saídas acumuladas: R$ {saidas:.2f}\n"
-                        f"- Contexto detalhado:\n{contexto_detalhado}\n"
+                        f"- Últimos lançamentos reais: {('; '.join(resumo_ultimos)) if resumo_ultimos else 'nenhum lançamento encontrado'}\n"
+                        f"- Top categorias de gasto reais: {('; '.join(resumo_categorias)) if resumo_categorias else 'sem categorias suficientes'}\n"
+                        f"- Metas ativas reais: {('; '.join(resumo_metas)) if resumo_metas else 'nenhuma meta ativa encontrada'}\n"
                     ),
                 },
             ]

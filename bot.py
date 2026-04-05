@@ -391,24 +391,8 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ),
         group=-1,
     )
-    application.add_handler(
-        MessageHandler(
-            filters.ChatType.PRIVATE & (filters.PHOTO | filters.Document.IMAGE),
-            ocr_iniciar_como_subprocesso,
-        ),
-        group=-1,
-    )
-    application.add_handler(
-        MessageHandler(
-            filters.ChatType.PRIVATE & (filters.TEXT & ~filters.COMMAND),
-            processar_mensagem_com_alfredo,
-        ),
-        group=-1,
-    )
-    application.add_handler(
-        MessageHandler(filters.ChatType.PRIVATE & filters.VOICE, processar_mensagem_com_alfredo),
-        group=-1,
-    )
+    # OCR/Alfredo NAO entram no grupo -1 para nao vazar estado de conversas ativas.
+    # Eles sao registrados ao final como fallback do grupo 0.
 
     conversation_builders = [
         ("configurar_conv", lambda: configurar_conv),
@@ -432,8 +416,6 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
     print("DEBUG: Criando lista command_builders")
     command_builders = [
         ("relatorio_handler", lambda: relatorio_handler),
-        ("/start", lambda: CommandHandler("start", start_onboarding)),
-        ("/configurar", lambda: CommandHandler("configurar", configurar_start)),
         ("/help", lambda: CommandHandler("help", help_command)),
         ("/alerta", lambda: CommandHandler("alerta", schedule_alerts)),
         ("/agendar", lambda: CommandHandler("agendar", agendamento_start)),
@@ -449,7 +431,6 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("nivel_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_NIVEL}$"), show_profile)),
         ("contato_b", lambda: MessageHandler(filters.Regex(f"^{re.escape(BOTAO_CONTATO)}$"), contact_start)),
         ("/painel", lambda: CommandHandler("painel", toggle_painel_command)),
-        ("/painel", lambda: CommandHandler("painel", toggle_painel_command)),
         ("/dashstatus", lambda: CommandHandler("dashstatus", cmd_dashstatus)),
         ("/dashboarddebug", lambda: CommandHandler("dashboarddebug", debug_dashboard)),
         ("/debugocr", lambda: CommandHandler("debugocr", debug_ocr_command)),
@@ -457,7 +438,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("/teste_assistente", lambda: teste_assistente_handler),
         ("/meu_wrapped", lambda: meu_wrapped_handler),
         # ❌ REMOVIDO: ("/importar", ...) - função importar_of não estava definida em lugar nenhum
-        # Texto/voz/PDF/foto agora são roteados no grupo -1 para evitar conflito com fluxos legados.
+        # Texto/voz/foto sao registrados como fallback no grupo 0 ao final da funcao.
         # ("confirmar_importacao_callback", lambda: CallbackQueryHandler(confirmar_callback, pattern="^confirmar_importacao$")),  # Removido: confirmar_callback não existe mais
         # ("cancelar_importacao_callback", lambda: CallbackQueryHandler(cancelar_callback, pattern="^cancelar_importacao$")),  # Removido: cancelar_callback não existe mais
     ]
@@ -495,6 +476,23 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
 
     for name, builder in callback_builders:
         build_and_add(name, builder)
+
+    # Fallbacks finais de mensagem (grupo 0): so devem rodar se nenhum ConversationHandler capturar.
+    application.add_handler(
+        MessageHandler(
+            filters.ChatType.PRIVATE & (filters.PHOTO | filters.Document.IMAGE),
+            ocr_iniciar_como_subprocesso,
+        )
+    )
+    application.add_handler(
+        MessageHandler(
+            filters.ChatType.PRIVATE & (filters.TEXT & ~filters.COMMAND),
+            processar_mensagem_com_alfredo,
+        )
+    )
+    application.add_handler(
+        MessageHandler(filters.ChatType.PRIVATE & filters.VOICE, processar_mensagem_com_alfredo)
+    )
 
     async def touch_interaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user

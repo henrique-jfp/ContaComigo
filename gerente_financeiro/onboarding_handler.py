@@ -22,7 +22,7 @@ from .analytics_utils import track_analytics
 from database.database import get_db, get_or_create_user # <-- Importação adicionada
 from models import Usuario, Conta
 from .handlers import cancel
-from .menu_botoes import obter_teclado_painel
+from .menu_botoes import obter_teclado_painel, build_miniapp_url
 from .states import (
     MENU_PRINCIPAL, ADD_CONTA_NOME, ASK_ADD_ANOTHER_CONTA,  
     ADD_CARTAO_NOME, ADD_CARTAO_FECHAMENTO, ADD_CARTAO_VENCIMENTO, ADD_CARTAO_LIMITE, ASK_ADD_ANOTHER_CARTAO, 
@@ -81,18 +81,23 @@ async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         user = get_or_create_user(db, update.effective_user.id, update.effective_user.full_name)
         user_name = user.nome_completo.split(' ')[0] if user.nome_completo else update.effective_user.first_name
         
-        base_url = os.getenv('DASHBOARD_BASE_URL', 'http://localhost:5000').rstrip('/')
-        webapp_url = f"{base_url}/webapp"
+        webapp_url = build_miniapp_url(source='start')
 
         welcome_text = (
             f"👋 <b>Olá, {user_name}!</b>\n\n"
-            "O miniapp é seu painel completo: histórico, edição, metas e gerente IA.\n\n"
-            "No chat, tudo é rápido e direto:\n"
-            "• Envie <b>áudio</b> ou <b>foto</b> e eu lanço automaticamente.\n"
-            "• Se enviar <b>PDF</b>, trato como <b>fatura</b> e importo em lote.\n"
-            "• Escreva uma frase como: <i>\"Gastei 34,90 no iFood ontem\"</i>.\n\n"
-            "✅ Vou categorizar, subcategorizar e te mostrar um resumo para confirmar.\n\n"
-            "Para configurar contas e cartões, use /configurar."
+            "Sou o <b>ContaComigo</b> e vou cuidar do seu financeiro no chat e no MiniApp.\n\n"
+            "<b>Como funciona:</b>\n"
+            "• No <b>chat</b>, você fala e eu registro, organizo e confirmo.\n"
+            "• No <b>MiniApp</b>, você acompanha gráficos, histórico, metas e edita tudo com calma.\n\n"
+            "<b>Regra de ouro para áudio:</b> seja <b>descritivo</b>.\n"
+            "Diga sempre: <b>o que foi</b> + <b>valor</b> + <b>data</b> + <b>forma de pagamento</b> (se souber).\n\n"
+            "<b>Exemplos de áudio bons:</b>\n"
+            "• <i>\"Gastei 42 reais no mercado hoje no Pix\"</i>\n"
+            "• <i>\"Recebi 2.500 de salário ontem\"</i>\n"
+            "• <i>\"Parcela da academia 89 reais no crédito\"</i>\n\n"
+            "Também funciona por <b>foto de cupom</b> e <b>PDF de fatura</b>.\n\n"
+            "✅ Eu sempre te mostro um resumo para confirmar antes de salvar quando necessário.\n\n"
+            "Toque em <b>Acessar MiniApp</b> para abrir seu painel."
         )
 
         keyboard = [[InlineKeyboardButton("🧩 Acessar Miniapp", web_app=WebAppInfo(url=webapp_url))]]

@@ -1087,27 +1087,15 @@ def _parse_filtros_lancamento(texto: str, db: Session, user_id: int) -> dict:
         filtros['data_fim'] = ultimo_dia_mes_passado.replace(hour=23, minute=59, second=59)
     # ... (outros filtros de data)
 
-    # --- LÓGICA UNIFICADA PARA CONTA E FORMA DE PAGAMENTO ---
-    filtro_conta_encontrado = False
-    contas_usuario = db.query(Conta).filter(Conta.id_usuario == user_id).all()
-    
-    for conta in contas_usuario:
-        padrao_conta = r'\b' + re.escape(conta.nome.lower()) + r'\b'
-        if re.search(padrao_conta, texto_lower):
-            filtros['id_conta'] = conta.id
-            filtro_conta_encontrado = True
-            logging.info(f"Filtro de CONTA específica detectado: '{conta.nome}' (ID: {conta.id})")
-            break 
-    
-    if not filtro_conta_encontrado:
-        for fp in formas_pagamento_comuns: # Agora a variável já existe
-            padrao_fp = r'\b' + re.escape(fp) + r'\b'
-            if fp == 'crédito' and 'cartão' not in texto_lower:
-                continue
-            if re.search(padrao_fp, texto_lower):
-                filtros['forma_pagamento'] = fp
-                logging.info(f"Filtro de FORMA DE PAGAMENTO genérica detectado: '{fp}'")
-                break
+    # --- Filtro por forma de pagamento no modelo Zero Setup ---
+    for fp in formas_pagamento_comuns:
+        padrao_fp = r'\b' + re.escape(fp) + r'\b'
+        if fp == 'crédito' and 'cartão' not in texto_lower:
+            continue
+        if re.search(padrao_fp, texto_lower):
+            filtros['forma_pagamento'] = fp
+            logging.info(f"Filtro de FORMA DE PAGAMENTO detectado: '{fp}'")
+            break
 
     # --- Filtro de CATEGORIA ---
     categorias_comuns = ['lazer', 'alimentação', 'transporte', 'moradia', 'saúde', 'receitas', 'compras']
@@ -1122,8 +1110,7 @@ def _parse_filtros_lancamento(texto: str, db: Session, user_id: int) -> dict:
     if match:
         termo_busca = match.group(1).strip()
         # A variável 'formas_pagamento_comuns' agora está sempre acessível
-        eh_fp_ou_conta = any(fp in termo_busca for fp in formas_pagamento_comuns) or \
-                         any(conta.nome.lower() in termo_busca for conta in contas_usuario)
+        eh_fp_ou_conta = any(fp in termo_busca for fp in formas_pagamento_comuns)
         
         if not eh_fp_ou_conta:
              filtros['query'] = termo_busca

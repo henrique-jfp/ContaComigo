@@ -10,66 +10,121 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
+  (function syncTelegramTheme() {
+    const tg = window.Telegram?.WebApp;
+    const root = document.documentElement;
+    const theme = tg?.themeParams || {};
+    const bgColor = theme.bg_color || '#f8fafc';
+    const textColor = theme.text_color || '#0f172a';
+    const hintColor = theme.hint_color || '#64748b';
+    const cardColor = theme.secondary_bg_color || '#ffffff';
+    const accentColor = tg?.colorScheme === 'dark' ? '#fb7185' : '#7b1e2d';
+    const accentSoft = tg?.colorScheme === 'dark' ? '#fda4af' : '#a33a51';
+    root.style.setProperty('--tg-theme-bg-color', bgColor);
+    root.style.setProperty('--tg-theme-text-color', textColor);
+    root.style.setProperty('--tg-theme-hint-color', hintColor);
+    root.style.setProperty('--tg-theme-secondary-bg-color', cardColor);
+    root.style.setProperty('--cc-brand', accentColor);
+    root.style.setProperty('--cc-brand-soft', accentSoft);
+    root.classList.toggle('dark', tg?.colorScheme === 'dark');
+  })();
+
   tailwind.config = {
     darkMode: 'class',
     theme: {
       extend: {
         fontFamily: { sans: ['Outfit', 'sans-serif'] },
-        colors: { 
-          'glass': 'rgba(255, 255, 255, 0.72)', flex: { '2': '2 2 0%' },
-          'neon-purple': '#7b1e2d', 'brand-wine': '#7b1e2d', 'carmine': '#7b1e2d'
+        colors: {
+          telegram: {
+            bg: 'var(--tg-theme-bg-color, #f8fafc)',
+            text: 'var(--tg-theme-text-color, #0f172a)',
+            hint: 'var(--tg-theme-hint-color, #64748b)',
+            card: 'var(--tg-theme-secondary-bg-color, #ffffff)',
+            separator: 'var(--tg-theme-section-separator-color, #e2e8f0)'
+          },
+          brand: {
+            DEFAULT: 'var(--cc-brand, #7b1e2d)',
+            soft: 'var(--cc-brand-soft, #a33a51)'
+          },
+          carmine: 'var(--cc-brand, #7b1e2d)',
+          flex: { '2': '2 2 0%' }
         },
-        boxShadow: { 'glow': '0 0 30px -10px rgba(123, 30, 45, 0.35)' }
+        boxShadow: {
+          soft: '0 8px 30px rgba(15, 23, 42, 0.06)',
+          lift: '0 18px 45px rgba(15, 23, 42, 0.08)'
+        }
       }
     }
   }
 </script>
 <style>
-  body { background: radial-gradient(circle at top, #ffffff 0%, #f7f1f3 38%, #f1e8ea 100%); color: #1f2937; }
-  main#app-content {
-    background-image: radial-gradient(rgba(123, 30, 45, 0.08) 1px, transparent 1px);
-    background-size: 22px 22px;
-    background-position: 0 8px;
+  body {
+    background: var(--tg-theme-bg-color, #f8fafc);
+    color: var(--tg-theme-text-color, #0f172a);
   }
-  .glass-card { 
-    background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.72));
-    backdrop-filter: blur(18px); border: 1px solid rgba(123, 30, 45, 0.12); 
-    box-shadow: 0 16px 40px rgba(123, 30, 45, 0.08);
-    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+  main#app-content {
+    position: relative;
+    min-height: 100%;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at top, rgba(123, 30, 45, 0.05) 0%, transparent 34%),
+      linear-gradient(180deg, transparent 0%, rgba(15, 23, 42, 0.015) 100%);
+  }
+  .glass-card {
+    background: color-mix(in srgb, var(--tg-theme-secondary-bg-color, #ffffff) 96%, transparent) !important;
+    background-image: none !important;
+    border: 1px solid color-mix(in srgb, var(--tg-theme-text-color, #0f172a) 10%, transparent);
+    box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, opacity 180ms ease;
   }
   .glass-card:hover {
-    transform: translateY(-2px);
-    border-color: rgba(123, 30, 45, 0.2);
-    box-shadow: 0 18px 45px rgba(123, 30, 45, 0.12);
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--cc-brand, #7b1e2d) 18%, transparent);
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
   }
   nav.glass-card:hover {
     transform: translateX(-50%);
-    border-color: rgba(123, 30, 45, 0.12);
-    box-shadow: 0 16px 40px rgba(123, 30, 45, 0.08);
   }
   .hide-scroll::-webkit-scrollbar { display: none; }
   .chat-bubble::after { content: ''; position: absolute; bottom: 0; width: 12px; height: 12px; }
   .user::after { right: -6px; background: inherit; border-bottom-left-radius: 100%; }
   .bot::after { left: -6px; background: inherit; border-bottom-right-radius: 100%; }
-  .tab-active { color: #7b1e2d; filter: drop-shadow(0 0 6px rgba(123, 30, 45, 0.22)); transform: translateY(-4px); }
-  .panel { display: none; }
-  .panel.active { display: block; animation: fadeIn 0.3s ease; }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; animation: fadeIn 0.2s ease; }
+  .tab-active { color: var(--cc-brand, #7b1e2d); transform: translateY(-2px); }
+  .panel {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(14px);
+    pointer-events: none;
+    transition: opacity 220ms ease, transform 220ms ease, visibility 0s linear 220ms;
+    overflow-y: auto;
+    padding-bottom: 8rem;
+  }
+  .panel.active {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+    transition: opacity 220ms ease, transform 220ms ease, visibility 0s linear 0s;
+  }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(2, 6, 23, 0.52); backdrop-filter: blur(10px); z-index: 100; animation: fadeIn 0.2s ease; }
   .modal-overlay.active { display: flex; align-items: flex-end; }
-  .modal-content { background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.88)); backdrop-filter: blur(18px); border: 1px solid rgba(123, 30, 45, 0.12); border-radius: 28px 28px 0 0; width: 100%; max-height: 90vh; overflow-y: auto; animation: slideUp 0.3s ease; box-shadow: 0 -16px 40px rgba(123, 30, 45, 0.08); }
+  .modal-content { background: var(--tg-theme-secondary-bg-color, #ffffff); border: 1px solid color-mix(in srgb, var(--tg-theme-text-color, #0f172a) 10%, transparent); border-radius: 28px 28px 0 0; width: 100%; max-height: 92vh; overflow-y: auto; animation: slideUp 0.3s ease; box-shadow: 0 -16px 40px rgba(15, 23, 42, 0.12); }
   @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-  .modal-header { position: sticky; top: 0; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.88)); padding: 16px 20px; border-bottom: 1px solid rgba(123, 30, 45, 0.1); display: flex; justify-content: space-between; align-items: center; }
-  .modal-close-btn { background: none; border: none; cursor: pointer; color: #7b1e2d; font-size: 24px; padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+  .modal-header { position: sticky; top: 0; background: color-mix(in srgb, var(--tg-theme-secondary-bg-color, #ffffff) 92%, transparent); padding: 18px 20px; border-bottom: 1px solid color-mix(in srgb, var(--tg-theme-text-color, #0f172a) 10%, transparent); display: flex; justify-content: space-between; align-items: center; }
+  .modal-close-btn { background: none; border: none; cursor: pointer; color: var(--cc-brand, #7b1e2d); font-size: 24px; padding: 0; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 9999px; }
+  .modal-close-btn:hover { background: color-mix(in srgb, var(--cc-brand, #7b1e2d) 10%, transparent); }
   .modal-body { padding: 20px; }
   #toastContainer { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; width: 90%; max-width: 400px; pointer-events: none; }
-  .toast { background: white; border-radius: 12px; padding: 14px 16px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); animation: toastSlideIn 0.3s ease, toastSlideOut 0.3s ease 2.7s forwards; pointer-events: auto; }
-  .toast.success { color: #059669; border-left: 4px solid #059669; background: #ecfdf5; }
-  .toast.error { color: #dc2626; border-left: 4px solid #dc2626; background: #fef2f2; }
-  .toast.warning { color: #f59e0b; border-left: 4px solid #f59e0b; background: #fffbeb; }
+  .toast { background: var(--tg-theme-secondary-bg-color, #ffffff); border: 1px solid color-mix(in srgb, var(--tg-theme-text-color, #0f172a) 10%, transparent); border-radius: 14px; padding: 14px 16px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 12px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12); animation: toastSlideIn 0.3s ease, toastSlideOut 0.3s ease 2.7s forwards; pointer-events: auto; }
+  .toast.success { color: #059669; border-left: 4px solid #059669; }
+  .toast.error { color: #dc2626; border-left: 4px solid #dc2626; }
+  .toast.warning { color: #f59e0b; border-left: 4px solid #f59e0b; }
   @keyframes toastSlideIn { from { opacity: 0; transform: translateX(50%); } to { opacity: 1; transform: translateX(0); } }
   @keyframes toastSlideOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(50%); } }
-  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(123, 30, 45, 0.2); border-top-color: #7b1e2d; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid color-mix(in srgb, var(--cc-brand, #7b1e2d) 22%, transparent); border-top-color: var(--cc-brand, #7b1e2d); border-radius: 50%; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .home-reveal {
     opacity: 0;
@@ -89,16 +144,124 @@
   .recent-item:hover {
     transform: translateY(-1px);
   }
+  .skeleton-block {
+    animation: pulse 1.4s ease-in-out infinite;
+    background: color-mix(in srgb, var(--tg-theme-text-color, #0f172a) 8%, transparent);
+    border-radius: 1rem;
+  }
+  .floating-field {
+    position: relative;
+  }
+  .floating-input,
+  .floating-select {
+    width: 100%;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, var(--tg-theme-text-color, #0f172a) 12%, transparent);
+    background: color-mix(in srgb, var(--tg-theme-secondary-bg-color, #ffffff) 96%, transparent);
+    padding: 1.1rem 1rem 0.9rem;
+    color: var(--tg-theme-text-color, #0f172a);
+    outline: none;
+    transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+  .floating-input:focus,
+  .floating-select:focus {
+    border-color: color-mix(in srgb, var(--cc-brand, #7b1e2d) 45%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--cc-brand, #7b1e2d) 12%, transparent);
+  }
+  .floating-label {
+    position: absolute;
+    left: 1rem;
+    top: 0.95rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    color: var(--tg-theme-hint-color, #64748b);
+    pointer-events: none;
+    transition: transform 180ms ease, color 180ms ease, opacity 180ms ease;
+    transform-origin: left top;
+  }
+  .floating-input:focus + .floating-label,
+  .floating-input:valid + .floating-label,
+  .floating-select:focus + .floating-label,
+  .floating-select:valid + .floating-label {
+    transform: translateY(-0.5rem) scale(0.92);
+    color: var(--cc-brand, #7b1e2d);
+  }
   @media (max-width: 768px) {
-    main#app-content {
-      background-size: 16px 16px;
-      padding-bottom: 7.5rem;
-    }
+    main#app-content { padding-bottom: 7.5rem; }
     .glass-card:hover {
       transform: none;
       box-shadow: 0 16px 40px rgba(123, 30, 45, 0.08);
     }
   }
+
+  body.device-desktop {
+    overflow: hidden;
+  }
+  body.device-desktop header {
+    padding-left: 7.25rem;
+    padding-right: 1.75rem;
+  }
+  body.device-desktop main#app-content {
+    padding: 1rem 1.5rem 1.5rem 7.25rem;
+    overflow: auto;
+  }
+  body.device-desktop .panel {
+    padding-bottom: 2rem;
+  }
+  body.device-desktop .panel > div {
+    max-width: 1220px;
+    margin: 0 auto;
+  }
+  body.device-desktop #bottomNav {
+    left: 1rem;
+    top: 50%;
+    bottom: auto;
+    width: 86px;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    border-radius: 24px;
+    padding: 0.5rem;
+  }
+  body.device-desktop #bottomNav .nav-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    padding: 0.55rem 0.25rem;
+    min-height: 60px;
+  }
+  body.device-desktop #bottomNav .nav-btn span {
+    font-size: 10px;
+    line-height: 1.05;
+    text-align: center;
+  }
+  body.device-desktop nav.glass-card:hover {
+    transform: translateY(-50%);
+  }
+  body.device-desktop #homeChartCarousel [data-home-chart-card] {
+    min-width: calc(50% - 0.5rem);
+  }
+  body.device-desktop .modal-overlay.active {
+    align-items: center;
+    justify-content: center;
+  }
+  body.device-desktop .modal-content {
+    width: min(760px, 92vw);
+    max-height: 88vh;
+    border-radius: 24px;
+  }
+  body.device-desktop #toastContainer {
+    left: auto;
+    right: 1rem;
+    top: 1rem;
+    bottom: auto;
+    transform: none;
+    width: min(360px, 92vw);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .home-reveal,
     .panel.active,
@@ -111,7 +274,7 @@
   }
 </style>
 </head>
-<body class="text-slate-900 h-screen w-screen overflow-hidden flex flex-col font-sans antialiased selection:bg-neon-purple selection:text-white">
+<body class="h-screen w-screen overflow-hidden flex flex-col font-sans antialiased selection:bg-brand selection:text-white bg-telegram-bg text-telegram-text">
 
   <!-- Header (Discreto) -->
   <header class="p-4 pt-8 pb-2 flex justify-end relative z-10">
@@ -119,117 +282,160 @@
   </header>
 
   <!-- Viewport -->
-  <main id="app-content" class="flex-1 overflow-y-auto hide-scroll p-4 pb-28 relative z-0">
+  <main id="app-content" class="flex-1 overflow-hidden hide-scroll p-4 pb-28 relative z-0">
     
     <!-- Tela 1: INÍCIO -->
     <section class="panel active" id="inicio">
       <div class="space-y-4">
-        <div class="glass-card home-reveal rounded-[28px] p-5 bg-gradient-to-br from-white via-white to-[#fff5f7] relative overflow-hidden" style="--delay: 30ms">
-          <div class="absolute -right-12 -top-12 w-40 h-40 rounded-full bg-[#7b1e2d]/10 blur-2xl"></div>
-          <div class="absolute -left-10 bottom-0 w-32 h-32 rounded-full bg-emerald-400/10 blur-2xl"></div>
+        <div class="glass-card home-reveal rounded-3xl p-6 md:p-7 relative overflow-hidden" style="--delay: 30ms">
           <div class="flex items-start justify-between gap-3 relative z-10">
             <div>
-              <p class="text-xs font-semibold uppercase tracking-[0.28em] text-[#7b1e2d]/70">Resumo do mês</p>
-              <h2 id="homeBalance" class="mt-2 text-4xl font-extrabold tracking-tight text-slate-900">R$ 0,00</h2>
-              <p id="homeBalanceHint" class="mt-1 text-sm font-semibold text-slate-500">Carregando seu fluxo...</p>
+              <p class="text-xs font-semibold uppercase tracking-[0.28em] text-brand-soft/90">Resumo do mês</p>
+              <h2 id="homeBalance" class="mt-2 text-4xl font-extrabold tracking-tight text-telegram-text">R$ 0,00</h2>
+              <p id="homeBalanceHint" class="mt-1 text-sm font-semibold text-telegram-hint">Carregando seu fluxo...</p>
             </div>
-            <div class="shrink-0 rounded-2xl bg-white/80 border border-[#7b1e2d]/10 shadow-lg p-3 w-[120px]">
-              <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500 mb-2">
+            <div class="shrink-0 rounded-2xl bg-telegram-card border border-telegram-separator shadow-soft p-3 w-[120px]">
+              <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.24em] text-telegram-hint mb-2">
                 <span>Nível</span>
                 <span id="homeStreakIcon">🔥</span>
               </div>
-              <div class="text-2xl font-extrabold text-[#7b1e2d] leading-none" id="homeLevel">1</div>
-              <div class="mt-1 text-[11px] text-slate-600"><span id="homeXp">0</span> XP</div>
-              <div class="mt-2 text-[11px] font-semibold text-slate-700">🔥 <span id="homeStreak">0</span> dias</div>
+              <div class="text-2xl font-extrabold text-brand leading-none" id="homeLevel">1</div>
+              <div class="mt-1 text-[11px] text-telegram-hint"><span id="homeXp">0</span> XP</div>
+              <div class="mt-2 text-[11px] font-semibold text-telegram-text">🔥 <span id="homeStreak">0</span> dias</div>
             </div>
           </div>
 
           <div class="mt-6 relative z-10">
-            <div class="flex items-center justify-between text-xs font-semibold text-slate-500 mb-2">
+            <div class="flex items-center justify-between text-xs font-semibold text-telegram-hint mb-2">
               <span>Receitas vs despesas</span>
               <span id="homeProgressLabel">0%</span>
             </div>
-            <div class="h-4 rounded-full bg-slate-200 overflow-hidden relative shadow-inner">
-              <div id="homeProgressGreen" class="absolute left-0 top-0 h-full rounded-full" style="background: linear-gradient(to right, #22c55e, #34d399);"></div>
-              <div id="homeProgressRed" class="absolute right-0 top-0 h-full rounded-full" style="background: linear-gradient(to left, #ef4444, #7b1e2d);"></div>
-              <div class="absolute left-1/2 top-0 h-full w-px bg-white/80"></div>
+            <div class="h-4 rounded-full bg-telegram-separator overflow-hidden relative shadow-inner">
+              <div id="homeProgressGreen" class="absolute left-0 top-0 h-full rounded-full" style="background: linear-gradient(to right, #16a34a, #34d399);"></div>
+              <div id="homeProgressRed" class="absolute right-0 top-0 h-full rounded-full" style="background: linear-gradient(to left, #ef4444, var(--cc-brand, #7b1e2d));"></div>
+              <div class="absolute left-1/2 top-0 h-full w-px bg-white/80 dark:bg-slate-900/40"></div>
             </div>
-            <div class="mt-2 flex items-center justify-between text-[11px] font-semibold text-slate-500">
+            <div class="mt-2 flex items-center justify-between text-[11px] font-semibold text-telegram-hint">
               <span id="homeReceita">Receitas: R$ 0,00</span>
               <span id="homeDespesa">Despesas: R$ 0,00</span>
             </div>
           </div>
         </div>
 
-        <div class="grid gap-4">
-          <div class="glass-card home-reveal rounded-[28px] p-5" style="--delay: 95ms">
-            <div class="flex items-center justify-between mb-4">
-              <div>
-                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-[#7b1e2d]/70">Fluxo de caixa</p>
-                <h3 class="text-lg font-extrabold text-slate-900">O pulso do dinheiro</h3>
-              </div>
-              <i data-lucide="bar-chart-3" class="w-5 h-5 text-[#7b1e2d]"></i>
-            </div>
-            <div class="h-[260px]">
-              <canvas id="homeCashflowChart"></canvas>
+        <div class="space-y-3">
+          <div class="home-reveal" style="--delay: 95ms">
+            <div class="hide-scroll flex overflow-x-auto gap-2 pb-1" id="homeChartsPills">
+              <button type="button" data-home-chart-pill="chart-patrimonio" class="rounded-full border border-brand/25 bg-brand/10 px-4 py-2 text-xs font-bold text-brand whitespace-nowrap transition">Patrimonio</button>
+              <button type="button" data-home-chart-pill="chart-fluxo" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Fluxo de Caixa</button>
+              <button type="button" data-home-chart-pill="chart-orcamento" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Orcamento vs Realizado</button>
+              <button type="button" data-home-chart-pill="chart-distribuicao" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Distribuicao</button>
+              <button type="button" data-home-chart-pill="chart-projecao" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Projecao</button>
+              <button type="button" data-home-chart-pill="chart-viloes" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Top 5 Viloes</button>
             </div>
           </div>
 
-          <div class="grid gap-4 md:grid-cols-3">
-            <div class="glass-card home-reveal rounded-[28px] p-5 border border-[#7b1e2d]/15 bg-gradient-to-br from-[#7b1e2d] via-[#9a3243] to-[#c66b7a] text-white shadow-glow" style="--delay: 145ms">
-              <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-white/80 mb-3">
-                <i data-lucide="sparkles" class="w-4 h-4"></i>
-                Alfredo em destaque
-              </div>
-              <p id="homeInsight" class="text-base leading-relaxed font-semibold">Carregando insight do Alfredo...</p>
-            </div>
-
-            <div class="glass-card home-reveal rounded-[28px] p-5 relative overflow-hidden" style="--delay: 185ms">
-              <div class="flex items-center justify-between mb-2">
+          <div id="homeChartCarousel" class="flex overflow-x-auto snap-x snap-mandatory hide-scroll gap-4 pb-4 home-reveal" style="--delay: 125ms">
+            <article id="chart-patrimonio" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+              <div class="mb-3 flex items-center justify-between">
                 <div>
-                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-[#7b1e2d]/70">Vilões e heróis</p>
-                  <h3 class="text-lg font-extrabold text-slate-900">Categorias do mês</h3>
+                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 1</p>
+                  <h3 class="text-lg font-extrabold text-telegram-text">Evolucao Patrimonial</h3>
                 </div>
-                <i data-lucide="pie-chart" class="w-5 h-5 text-[#7b1e2d]"></i>
+                <i data-lucide="line-chart" class="h-5 w-5 text-brand"></i>
               </div>
-              <div class="relative h-[250px]">
+              <div class="h-[280px]">
+                <canvas id="homePatrimonyChart"></canvas>
+              </div>
+            </article>
+
+            <article id="chart-fluxo" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+              <div class="mb-3 flex items-center justify-between">
+                <div>
+                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 2</p>
+                  <h3 class="text-lg font-extrabold text-telegram-text">Fluxo de Caixa</h3>
+                </div>
+                <i data-lucide="bar-chart-3" class="h-5 w-5 text-brand"></i>
+              </div>
+              <div class="h-[280px]">
+                <canvas id="homeCashflowChart"></canvas>
+              </div>
+            </article>
+
+            <article id="chart-orcamento" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+              <div class="mb-3 flex items-center justify-between">
+                <div>
+                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 3</p>
+                  <h3 class="text-lg font-extrabold text-telegram-text">Orcamento vs Realizado</h3>
+                </div>
+                <i data-lucide="target" class="h-5 w-5 text-brand"></i>
+              </div>
+              <div class="h-[280px]">
+                <canvas id="homeBudgetChart"></canvas>
+              </div>
+            </article>
+
+            <article id="chart-distribuicao" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+              <div class="mb-3 flex items-center justify-between">
+                <div>
+                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 4</p>
+                  <h3 class="text-lg font-extrabold text-telegram-text">Distribuicao de Despesas</h3>
+                </div>
+                <i data-lucide="pie-chart" class="h-5 w-5 text-brand"></i>
+              </div>
+              <div class="h-[280px]">
                 <canvas id="homeCategoryChart"></canvas>
-                <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div class="rounded-full bg-white/90 border border-[#7b1e2d]/10 px-5 py-4 text-center shadow-lg min-w-[140px]">
-                    <div class="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500">Selecionado</div>
-                    <div id="homeCategoryValue" class="mt-1 text-xl font-extrabold text-[#7b1e2d]">R$ 0,00</div>
-                    <div id="homeCategoryLabel" class="text-xs font-semibold text-slate-500">Nenhuma fatia</div>
-                  </div>
+              </div>
+              <div class="mt-3 inline-flex max-w-full items-center gap-2 rounded-2xl border border-telegram-separator bg-telegram-card px-3 py-2">
+                <div class="h-2.5 w-2.5 shrink-0 rounded-full bg-brand"></div>
+                <div class="min-w-0">
+                  <div id="homeCategoryValue" class="text-sm font-extrabold text-brand leading-none">R$ 0,00</div>
+                  <div id="homeCategoryLabel" class="truncate text-xs font-semibold text-telegram-hint">Nenhuma fatia</div>
                 </div>
               </div>
-            </div>
+            </article>
 
-            <div class="glass-card home-reveal rounded-[28px] p-5 relative overflow-hidden" style="--delay: 200ms">
-              <div class="flex items-center justify-between mb-2">
+            <article id="chart-projecao" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+              <div class="mb-3 flex items-center justify-between">
                 <div>
-                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-[#7b1e2d]/70">Meios mais usados</p>
-                  <h3 class="text-lg font-extrabold text-slate-900">Formas de pagamento</h3>
+                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 5</p>
+                  <h3 class="text-lg font-extrabold text-telegram-text">Projecao de Saldo</h3>
                 </div>
-                <i data-lucide="credit-card" class="w-5 h-5 text-[#7b1e2d]"></i>
+                <i data-lucide="trending-up" class="h-5 w-5 text-brand"></i>
               </div>
-              <div class="relative h-[250px]">
-                <canvas id="homePaymentChart"></canvas>
-                <div class="absolute right-2 top-2 rounded-xl bg-white/90 border border-[#7b1e2d]/10 px-3 py-2 text-right shadow-sm pointer-events-none">
-                  <div class="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500">Top</div>
-                  <div id="homePaymentValue" class="mt-1 text-lg font-extrabold text-[#7b1e2d]">0x</div>
-                  <div id="homePaymentLabel" class="text-xs font-semibold text-slate-500">Sem dados</div>
+              <div class="h-[280px]">
+                <canvas id="homeProjectionChart"></canvas>
+              </div>
+            </article>
+
+            <article id="chart-viloes" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+              <div class="mb-3 flex items-center justify-between">
+                <div>
+                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 6</p>
+                  <h3 class="text-lg font-extrabold text-telegram-text">Top 5 Viloes</h3>
                 </div>
+                <i data-lucide="alert-triangle" class="h-5 w-5 text-brand"></i>
               </div>
-            </div>
+              <div class="h-[280px]">
+                <canvas id="homeVillainsChart"></canvas>
+              </div>
+            </article>
           </div>
 
-          <div class="glass-card home-reveal rounded-[28px] p-5" style="--delay: 235ms">
+          <div class="glass-card home-reveal rounded-3xl p-6 border border-slate-800/10 bg-slate-950 text-white dark:border-slate-700/40 dark:bg-slate-900" style="--delay: 165ms">
+            <div class="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-white/75">
+              <i data-lucide="sparkles" class="h-4 w-4"></i>
+              Alfredo em destaque
+            </div>
+            <p id="homeInsight" class="text-base font-semibold leading-relaxed text-white/95">Carregando insight do Alfredo...</p>
+          </div>
+
+          <div class="glass-card home-reveal rounded-3xl p-6" style="--delay: 235ms">
             <div class="flex items-center justify-between mb-4">
               <div>
-                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-[#7b1e2d]/70">Últimas movimentações</p>
-                <h3 class="text-lg font-extrabold text-slate-900">Atalho para ajustes rápidos</h3>
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Últimas movimentações</p>
+                <h3 class="text-lg font-extrabold text-telegram-text">Atalho para ajustes rápidos</h3>
               </div>
-              <button id="homeRecentRefresh" class="text-[#7b1e2d] hover:text-[#b85d6e] transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+              <button id="homeRecentRefresh" class="text-brand hover:text-brand-soft transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
             </div>
             <div id="homeRecentList" class="space-y-3"></div>
           </div>
@@ -239,29 +445,42 @@
 
     <!-- Tela 2: HISTÓRICO -->
     <section class="panel" id="historico">
-      <div class="glass-card rounded-[24px] p-5">
-        <h2 class="text-sm font-semibold text-slate-700 mb-4 flex items-center justify-between">
+      <div class="glass-card rounded-3xl p-6">
+        <h2 class="text-sm font-semibold text-telegram-text mb-4 flex items-center justify-between">
           <span>Histórico de Movimentações</span>
-          <button id="historyRefresh" class="text-[#7b1e2d] hover:text-[#b85d6e] transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+          <button id="historyRefresh" class="text-brand hover:text-brand-soft transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
         </h2>
 
+        <div class="mb-4 grid grid-cols-1 sm:grid-cols-4 gap-2">
+          <select id="historyTipo" class="rounded-xl border border-telegram-separator bg-telegram-card px-3 py-2 text-xs text-telegram-text">
+            <option value="">Todos</option>
+            <option value="Entrada">So Entrada</option>
+            <option value="Saída">So Saida</option>
+          </select>
+          <select id="historyOrder" class="rounded-xl border border-telegram-separator bg-telegram-card px-3 py-2 text-xs text-telegram-text">
+            <option value="added_desc">Por adicao (mais recente)</option>
+            <option value="date_desc">Por data (mais recente)</option>
+            <option value="date_asc">Por data (mais antiga)</option>
+          </select>
+          <input id="historyDate" type="date" class="rounded-xl border border-telegram-separator bg-telegram-card px-3 py-2 text-xs text-telegram-text" />
+          <button id="historyClearFilters" class="rounded-xl border border-telegram-separator bg-telegram-card px-3 py-2 text-xs font-semibold text-telegram-text hover:bg-brand/5 transition">Limpar filtros</button>
+        </div>
         <input id="historyQuery" type="hidden" value="" />
-        <input id="historyTipo" type="hidden" value="" />
 
         <p id="historyStatus" class="text-xs text-slate-500 mb-3"></p>
         <div id="historyList" class="space-y-3"></div>
-        <button id="historyLoadMore" class="w-full mt-4 py-2 border border-[#7b1e2d]/15 rounded-xl text-xs text-slate-600 hover:bg-[#7b1e2d]/5 transition">Carregar mais</button>
+        <button id="historyLoadMore" class="w-full mt-4 py-2 border border-telegram-separator rounded-xl text-xs text-telegram-text hover:bg-brand/5 transition">Carregar mais</button>
       </div>
     </section>
 
     <!-- Tela 3: METAS -->
     <section class="panel" id="metas">
-      <div class="glass-card rounded-[24px] p-5">
-        <h2 class="text-sm font-semibold text-slate-700 mb-4 flex items-center justify-between">
-          <span class="flex items-center"><i data-lucide="target" class="w-4 h-4 mr-2 text-[#7b1e2d]"></i> Metas em andamento</span>
+      <div class="glass-card rounded-3xl p-6">
+        <h2 class="text-sm font-semibold text-telegram-text mb-4 flex items-center justify-between">
+          <span class="flex items-center"><i data-lucide="target" class="w-4 h-4 mr-2 text-brand"></i> Metas em andamento</span>
           <div class="flex items-center gap-2">
-            <button id="metaNew" class="rounded-lg border border-[#7b1e2d]/20 px-2 py-1 text-xs font-semibold text-[#7b1e2d] hover:bg-[#7b1e2d]/10 transition">Nova</button>
-            <button id="metaRefresh" class="text-[#7b1e2d] hover:text-[#b85d6e] transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+            <button id="metaNew" class="rounded-lg border border-brand/20 px-2 py-1 text-xs font-semibold text-brand hover:bg-brand/10 transition">Nova</button>
+            <button id="metaRefresh" class="text-brand hover:text-brand-soft transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
           </div>
         </h2>
         <p id="metaStatus" class="text-xs text-slate-500 mb-3"></p>
@@ -271,23 +490,23 @@
 
     <!-- Tela 4: EDITAR LANCAMENTOS -->
     <section class="panel" id="editar">
-      <div class="glass-card rounded-[24px] p-5 space-y-4">
-        <h2 class="text-sm font-semibold text-slate-700 flex items-center">
-          <span class="flex items-center"><i data-lucide="pencil-line" class="w-4 h-4 mr-2 text-[#7b1e2d]"></i> Edição de lançamentos</span>
+      <div class="glass-card rounded-3xl p-6 space-y-4">
+        <h2 class="text-sm font-semibold text-telegram-text flex items-center">
+          <span class="flex items-center"><i data-lucide="pencil-line" class="w-4 h-4 mr-2 text-brand"></i> Edição de lançamentos</span>
         </h2>
-        <p class="text-sm text-slate-600">Abra um lançamento no <b>Histórico</b> ou em <b>Últimas movimentações</b> para editar no modal com os campos preenchidos.</p>
-        <button class="rounded-xl bg-[#7b1e2d] py-3 px-4 text-sm font-semibold text-white w-full" onclick="switchTabByName('historico')">Ir para Histórico</button>
+        <p class="text-sm text-telegram-hint">Abra um lançamento no <b>Histórico</b> ou em <b>Últimas movimentações</b> para editar no modal com os campos preenchidos.</p>
+        <button class="rounded-xl bg-brand py-3 px-4 text-sm font-semibold text-white w-full" onclick="switchTabByName('historico')">Ir para Histórico</button>
       </div>
     </section>
 
     <!-- Tela 5: AGENDAMENTOS -->
     <section class="panel" id="agendamentos">
-      <div class="glass-card rounded-[24px] p-5">
-        <h2 class="text-sm font-semibold text-slate-700 mb-4 flex items-center justify-between">
-          <span class="flex items-center"><i data-lucide="calendar-clock" class="w-4 h-4 mr-2 text-[#7b1e2d]"></i> Agendamentos futuros</span>
+      <div class="glass-card rounded-3xl p-6">
+        <h2 class="text-sm font-semibold text-telegram-text mb-4 flex items-center justify-between">
+          <span class="flex items-center"><i data-lucide="calendar-clock" class="w-4 h-4 mr-2 text-brand"></i> Agendamentos futuros</span>
           <div class="flex gap-2">
-            <button id="agendamentoNew" class="text-[#7b1e2d] hover:text-[#b85d6e] transition" title="Novo agendamento"><i data-lucide="plus" class="w-4 h-4"></i></button>
-            <button id="agendamentoRefresh" class="text-[#7b1e2d] hover:text-[#b85d6e] transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+            <button id="agendamentoNew" class="text-brand hover:text-brand-soft transition" title="Novo agendamento"><i data-lucide="plus" class="w-4 h-4"></i></button>
+            <button id="agendamentoRefresh" class="text-brand hover:text-brand-soft transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
           </div>
         </h2>
         <p id="agendamentoStatus" class="text-xs text-slate-500 mb-3"></p>
@@ -304,59 +523,61 @@
   <div class="modal-overlay" id="newAgendamentoModal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
-          <i data-lucide="plus-circle" class="w-5 h-5 text-[#7b1e2d]"></i> Novo Agendamento
+        <h2 class="text-lg font-bold text-telegram-text flex items-center gap-2">
+          <i data-lucide="plus-circle" class="w-5 h-5 text-brand"></i> Novo Agendamento
         </h2>
         <button class="modal-close-btn" onclick="closeNewAgendamentoModal()"><i data-lucide="x" class="w-6 h-6"></i></button>
       </div>
       <div class="modal-body space-y-4">
-        <div>
-          <label class="text-xs font-semibold text-slate-600 block mb-2">Descrição</label>
-          <input id="newAgendDescricao" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50" placeholder="Ex: Aluguel, Netflix, Seguro...">
+        <div class="floating-field">
+          <input id="newAgendDescricao" class="floating-input peer" placeholder=" " inputmode="text" required>
+          <label for="newAgendDescricao" class="floating-label">Descrição</label>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs font-semibold text-slate-600 block mb-2">Valor</label>
-            <input id="newAgendValor" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50" placeholder="0,00">
+          <div class="floating-field">
+            <input id="newAgendValor" class="floating-input peer" placeholder=" " inputmode="decimal" required>
+            <label for="newAgendValor" class="floating-label">Valor</label>
           </div>
-          <div>
-            <label class="text-xs font-semibold text-slate-600 block mb-2">Tipo</label>
-            <select id="newAgendTipo" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50">
+          <div class="floating-field">
+            <select id="newAgendTipo" class="floating-select peer" required>
               <option value="Saída">Saída</option>
               <option value="Entrada">Entrada</option>
             </select>
+            <label for="newAgendTipo" class="floating-label">Tipo</label>
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs font-semibold text-slate-600 block mb-2">Frequência</label>
-            <select id="newAgendFrequencia" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50">
+          <div class="floating-field">
+            <select id="newAgendFrequencia" class="floating-select peer" required>
               <option value="unico">Única vez</option>
               <option value="semanal">Semanal</option>
               <option value="mensal">Mensal</option>
             </select>
+            <label for="newAgendFrequencia" class="floating-label">Frequência</label>
           </div>
-          <div>
-            <label class="text-xs font-semibold text-slate-600 block mb-2">Primeira execução</label>
-            <input id="newAgendData" type="date" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50">
+          <div class="floating-field">
+            <input id="newAgendData" type="date" class="floating-input peer" placeholder=" " required>
+            <label for="newAgendData" class="floating-label">Primeira execução</label>
           </div>
         </div>
 
-        <label class="flex items-center gap-2 rounded-xl border border-[#7b1e2d]/10 bg-white px-3 py-2 text-sm text-slate-700">
-          <input id="newAgendInfinito" type="checkbox" class="h-4 w-4 accent-[#7b1e2d]">
+        <label class="flex items-center gap-2 rounded-2xl border border-telegram-separator bg-telegram-card px-4 py-3 text-sm text-telegram-text shadow-soft">
+          <input id="newAgendInfinito" type="checkbox" class="h-4 w-4 accent-brand">
           Recorrente infinita (sem quantidade de parcelas)
         </label>
 
         <div id="parcelasGroup" class="hidden">
-          <label class="text-xs font-semibold text-slate-600 block mb-2">Quantidade de parcelas</label>
-          <input id="newAgendParcelas" type="number" min="1" max="360" value="12" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50">
+          <div class="floating-field">
+            <input id="newAgendParcelas" type="number" min="1" max="360" value="12" class="floating-input peer" placeholder=" " inputmode="numeric">
+            <label for="newAgendParcelas" class="floating-label">Quantidade de parcelas</label>
+          </div>
         </div>
 
         <div class="flex gap-3 pt-4">
-          <button id="newAgendSave" class="flex-1 rounded-xl bg-[#7b1e2d] py-3 text-sm font-semibold text-white hover:bg-[#9a3243] active:scale-95 transition flex items-center justify-center gap-2"><span class="save-text">Criar agendamento</span></button>
-          <button id="newAgendCancel" class="flex-1 rounded-xl border border-[#7b1e2d]/15 bg-white py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 active:scale-95 transition" onclick="closeNewAgendamentoModal()">Cancelar</button>
+          <button id="newAgendSave" class="flex-1 rounded-xl bg-brand py-3 text-sm font-semibold text-white hover:bg-brand-soft active:scale-95 transition flex items-center justify-center gap-2 shadow-soft"><span class="save-text">Criar agendamento</span></button>
+          <button id="newAgendCancel" class="flex-1 rounded-xl border border-telegram-separator bg-telegram-card py-3 text-sm font-semibold text-telegram-text hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition" onclick="closeNewAgendamentoModal()">Cancelar</button>
         </div>
       </div>
     </div>
@@ -366,37 +587,37 @@
   <div class="modal-overlay" id="metaModal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
-          <i data-lucide="target" class="w-5 h-5 text-[#7b1e2d]"></i>
+        <h2 class="text-lg font-bold text-telegram-text flex items-center gap-2">
+          <i data-lucide="target" class="w-5 h-5 text-brand"></i>
           <span id="metaModalTitle">Nova Meta</span>
         </h2>
         <button class="modal-close-btn" onclick="closeMetaModal()"><i data-lucide="x" class="w-6 h-6"></i></button>
       </div>
       <div class="modal-body space-y-4">
-        <div>
-          <label class="text-xs font-semibold text-slate-600 block mb-2">Descrição</label>
-          <input id="metaDescricao" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50" placeholder="Ex: Viagem, Reserva, Carro...">
+        <div class="floating-field">
+          <input id="metaDescricao" class="floating-input peer" placeholder=" " inputmode="text" required>
+          <label for="metaDescricao" class="floating-label">Descrição</label>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs font-semibold text-slate-600 block mb-2">Valor da meta</label>
-            <input id="metaValorMeta" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50" placeholder="0,00">
+          <div class="floating-field">
+            <input id="metaValorMeta" class="floating-input peer" placeholder=" " inputmode="decimal" required>
+            <label for="metaValorMeta" class="floating-label">Valor da meta</label>
           </div>
-          <div>
-            <label class="text-xs font-semibold text-slate-600 block mb-2">Valor atual</label>
-            <input id="metaValorAtual" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50" placeholder="0,00">
+          <div class="floating-field">
+            <input id="metaValorAtual" class="floating-input peer" placeholder=" " inputmode="decimal" required>
+            <label for="metaValorAtual" class="floating-label">Valor atual</label>
           </div>
         </div>
 
-        <div>
-          <label class="text-xs font-semibold text-slate-600 block mb-2">Data alvo</label>
-          <input id="metaData" type="date" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50">
+        <div class="floating-field">
+          <input id="metaData" type="date" class="floating-input peer" placeholder=" " required>
+          <label for="metaData" class="floating-label">Data alvo</label>
         </div>
 
         <div class="flex gap-3 pt-4">
-          <button id="metaSave" class="flex-1 rounded-xl bg-[#7b1e2d] py-3 text-sm font-semibold text-white hover:bg-[#9a3243] active:scale-95 transition flex items-center justify-center gap-2"><span class="save-text">Salvar meta</span></button>
-          <button class="flex-1 rounded-xl border border-[#7b1e2d]/15 bg-white py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 active:scale-95 transition" onclick="closeMetaModal()">Cancelar</button>
+          <button id="metaSave" class="flex-1 rounded-xl bg-brand py-3 text-sm font-semibold text-white hover:bg-brand-soft active:scale-95 transition flex items-center justify-center gap-2 shadow-soft"><span class="save-text">Salvar meta</span></button>
+          <button class="flex-1 rounded-xl border border-telegram-separator bg-telegram-card py-3 text-sm font-semibold text-telegram-text hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition" onclick="closeMetaModal()">Cancelar</button>
         </div>
       </div>
     </div>
@@ -406,67 +627,68 @@
   <div class="modal-overlay" id="editModal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
-          <i data-lucide="pencil-line" class="w-5 h-5 text-[#7b1e2d]"></i> Editar Lançamento
+        <h2 class="text-lg font-bold text-telegram-text flex items-center gap-2">
+          <i data-lucide="pencil-line" class="w-5 h-5 text-brand"></i> Editar Lançamento
         </h2>
         <button class="modal-close-btn" onclick="closeEditModal()"><i data-lucide="x" class="w-6 h-6"></i></button>
       </div>
       <div class="modal-body space-y-4">
-        <div id="editModalBadge" class="rounded-full bg-[#7b1e2d]/10 text-[#7b1e2d] px-3 py-2 text-xs font-semibold w-fit"></div>
-        <div id="editDraftInfo" class="hidden rounded-2xl bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-600"></div>
+        <div id="editModalBadge" class="rounded-full bg-brand/10 text-brand px-3 py-2 text-xs font-semibold w-fit"></div>
+        <div id="editDraftInfo" class="hidden rounded-2xl bg-telegram-bg border border-telegram-separator px-3 py-2 text-xs text-telegram-hint"></div>
 
-        <div>
-          <label class="text-xs font-semibold text-slate-600 block mb-2">Descrição</label>
-          <input id="editDescricao" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50" placeholder="Descrição do lançamento">
+        <div class="floating-field">
+          <input id="editDescricao" class="floating-input peer" placeholder=" " inputmode="text" required>
+          <label for="editDescricao" class="floating-label">Descrição</label>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs font-semibold text-slate-600 block mb-2">Valor</label>
-            <input id="editValor" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50" placeholder="0,00">
+          <div class="floating-field">
+            <input id="editValor" class="floating-input peer" placeholder=" " inputmode="decimal" required>
+            <label for="editValor" class="floating-label">Valor</label>
           </div>
-          <div>
-            <label class="text-xs font-semibold text-slate-600 block mb-2">Tipo</label>
-            <select id="editTipo" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50">
+          <div class="floating-field">
+            <select id="editTipo" class="floating-select peer" required>
               <option value="Saída">Saída</option>
               <option value="Entrada">Entrada</option>
             </select>
+            <label for="editTipo" class="floating-label">Tipo</label>
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs font-semibold text-slate-600 block mb-2">Data</label>
-            <input id="editData" type="date" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50">
+          <div class="floating-field">
+            <input id="editData" type="date" class="floating-input peer" placeholder=" " required>
+            <label for="editData" class="floating-label">Data</label>
           </div>
         </div>
 
-        <div>
-          <label class="text-xs font-semibold text-slate-600 block mb-2">Forma de pagamento</label>
-          <select id="editForma" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50">
-            <option value="Nao_informado">Não informado</option>
+        <div class="floating-field">
+          <select id="editForma" class="floating-select peer" required>
+            <option value="">Selecione a forma</option>
             <option value="Pix">Pix</option>
             <option value="Crédito">Crédito</option>
             <option value="Débito">Débito</option>
             <option value="Boleto">Boleto</option>
             <option value="Dinheiro">Dinheiro</option>
+            <option value="Nao_informado">Não informado</option>
           </select>
+          <label for="editForma" class="floating-label">Forma de pagamento</label>
         </div>
 
         <div class="flex gap-3 pt-4">
-          <button id="editSave" class="flex-1 rounded-xl bg-[#7b1e2d] py-3 text-sm font-semibold text-white hover:bg-[#9a3243] active:scale-95 transition flex items-center justify-center gap-2"><span class="save-text">Salvar alteração</span></button>
-          <button id="editCancel" class="flex-1 rounded-xl border border-[#7b1e2d]/15 bg-white py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 active:scale-95 transition" onclick="closeEditModal()">Cancelar</button>
+          <button id="editSave" class="flex-1 rounded-xl bg-brand py-3 text-sm font-semibold text-white hover:bg-brand-soft active:scale-95 transition flex items-center justify-center gap-2 shadow-soft"><span class="save-text">Salvar alteração</span></button>
+          <button id="editCancel" class="flex-1 rounded-xl border border-telegram-separator bg-telegram-card py-3 text-sm font-semibold text-telegram-text hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition" onclick="closeEditModal()">Cancelar</button>
         </div>
       </div>
     </div>
   </div>
 
   <!-- Bottom Tab Bar Premium -->
-  <nav class="fixed bottom-5 left-1/2 -translate-x-1/2 w-[94%] glass-card rounded-[28px] px-3 py-2 grid grid-cols-4 gap-1 z-50 shadow-2xl backdrop-blur-3xl border border-[#7b1e2d]/15">
-    <button class="nav-btn tab-active text-[#7b1e2d] flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="inicio" onclick="switchTab(this)"><i data-lucide="sparkles" class="w-5 h-5"></i><span>Início</span></button>
-    <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="metas" onclick="switchTab(this)"><i data-lucide="target" class="w-5 h-5"></i><span>Metas</span></button>
-    <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="agendamentos" onclick="switchTab(this)"><i data-lucide="calendar" class="w-5 h-5"></i><span>Agendamento</span></button>
-    <button class="nav-btn text-slate-500 hover:text-[#7b1e2d] transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="historico" onclick="switchTab(this)"><i data-lucide="history" class="w-5 h-5"></i><span>Histórico</span></button>
+  <nav id="bottomNav" class="fixed bottom-5 left-1/2 -translate-x-1/2 w-[94%] glass-card rounded-[28px] px-3 py-2 grid grid-cols-4 gap-1 z-50 shadow-soft border border-telegram-separator bg-telegram-card/95">
+    <button class="nav-btn tab-active text-brand flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="inicio" onclick="switchTab(this)"><i data-lucide="sparkles" class="w-5 h-5"></i><span>Início</span></button>
+    <button class="nav-btn text-telegram-hint hover:text-brand transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="metas" onclick="switchTab(this)"><i data-lucide="target" class="w-5 h-5"></i><span>Metas</span></button>
+    <button class="nav-btn text-telegram-hint hover:text-brand transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="agendamentos" onclick="switchTab(this)"><i data-lucide="calendar" class="w-5 h-5"></i><span>Agenda</span></button>
+    <button class="nav-btn text-telegram-hint hover:text-brand transition flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="historico" onclick="switchTab(this)"><i data-lucide="history" class="w-5 h-5"></i><span>Histórico</span></button>
   </nav>
 
   <script>
@@ -474,6 +696,8 @@
 
     // DOM Elements
     const panels = document.querySelectorAll('.panel');
+    const appBody = document.body;
+    const htmlRoot = document.documentElement;
     const mainStatus = document.getElementById('mainStatus');
     const homeBalance = document.getElementById('homeBalance');
     const homeBalanceHint = document.getElementById('homeBalanceHint');
@@ -488,19 +712,27 @@
     const homeInsight = document.getElementById('homeInsight');
     const homeRecentList = document.getElementById('homeRecentList');
     const homeRecentRefresh = document.getElementById('homeRecentRefresh');
+    const homeChartsPills = document.getElementById('homeChartsPills');
+    const homeChartCarousel = document.getElementById('homeChartCarousel');
+    const homeChartPills = Array.from(document.querySelectorAll('[data-home-chart-pill]'));
+    const homeChartCards = Array.from(document.querySelectorAll('[data-home-chart-card]'));
+    const homePatrimonyChartEl = document.getElementById('homePatrimonyChart');
     const homeCashflowChartEl = document.getElementById('homeCashflowChart');
+    const homeBudgetChartEl = document.getElementById('homeBudgetChart');
     const homeCategoryChartEl = document.getElementById('homeCategoryChart');
-    const homePaymentChartEl = document.getElementById('homePaymentChart');
+    const homeProjectionChartEl = document.getElementById('homeProjectionChart');
+    const homeVillainsChartEl = document.getElementById('homeVillainsChart');
     const homeCategoryValue = document.getElementById('homeCategoryValue');
     const homeCategoryLabel = document.getElementById('homeCategoryLabel');
-    const homePaymentValue = document.getElementById('homePaymentValue');
-    const homePaymentLabel = document.getElementById('homePaymentLabel');
     const historyList = document.getElementById('historyList');
     const historyStatus = document.getElementById('historyStatus');
     const historyQuery = document.getElementById('historyQuery');
     const historyTipo = document.getElementById('historyTipo');
+    const historyOrder = document.getElementById('historyOrder');
     const historyRefresh = document.getElementById('historyRefresh');
     const historyLoadMore = document.getElementById('historyLoadMore');
+    const historyDate = document.getElementById('historyDate');
+    const historyClearFilters = document.getElementById('historyClearFilters');
     
     const agendamentoList = document.getElementById('agendamentoList');
     const agendamentoStatus = document.getElementById('agendamentoStatus');
@@ -540,6 +772,13 @@
     const editSave = document.getElementById('editSave');
     const editCancel = document.getElementById('editCancel');
 
+    const configRefresh = document.getElementById('configRefresh');
+    const perfilInvestidor = document.getElementById('perfilInvestidor');
+    const horarioNotificacao = document.getElementById('horarioNotificacao');
+    const alertaGastosAtivo = document.getElementById('alertaGastosAtivo');
+    const configSave = document.getElementById('configSave');
+    const configFinish = document.getElementById('configFinish');
+
     let sessionId = null;
     let telegramInitData = null;
     let reauthInFlight = null;
@@ -551,28 +790,76 @@
     let selectedMeta = null;
     let selectedLancamentoIsDraft = false;
     let pendingDraftLaunch = null;
-    let homeCashflowChart = null;
-    let homeCategoryChart = null;
-    let homePaymentChart = null;
+    let homeCharts = {};
+    let homeChartsObserver = null;
+    let deviceProfile = '';
+    let deviceResizeTimer = null;
     let homeRecentCache = [];
     const urlParams = new URLSearchParams(window.location.search);
     const initialTabFromUrl = urlParams.get('tab') || '';
     const rawDraftFromUrl = urlParams.get('draft') || '';
 
+    function detectDeviceProfile() {
+      const tgPlatform = String(window.Telegram?.WebApp?.platform || '').toLowerCase();
+      const width = window.innerWidth || 0;
+      const hasHover = window.matchMedia('(hover: hover)').matches;
+      const finePointer = window.matchMedia('(pointer: fine)').matches;
+      const touchPoints = navigator.maxTouchPoints || 0;
+      const mobileUserAgent = /Android|iPhone|iPad|iPod|Windows Phone|Opera Mini|IEMobile/i.test(navigator.userAgent || '');
+      const desktopPlatforms = new Set(['tdesktop', 'macos', 'web', 'weba', 'webk']);
+
+      if (desktopPlatforms.has(tgPlatform) && !mobileUserAgent) {
+        return 'desktop';
+      }
+
+      if (width >= 860 && (hasHover || finePointer) && !mobileUserAgent && touchPoints <= 2) {
+        return 'desktop';
+      }
+      return 'mobile';
+    }
+
+    function applyAdaptiveLayout() {
+      const nextProfile = detectDeviceProfile();
+      if (nextProfile === deviceProfile) return;
+
+      deviceProfile = nextProfile;
+      appBody.classList.remove('device-mobile', 'device-desktop');
+      appBody.classList.add(`device-${nextProfile}`);
+      htmlRoot.classList.toggle('desktop-layout', nextProfile === 'desktop');
+
+      if (sessionId && Object.keys(homeCharts).length) {
+        loadHomeOverview();
+      }
+    }
+
+    function bindAdaptiveLayoutListeners() {
+      applyAdaptiveLayout();
+      window.addEventListener('resize', () => {
+        clearTimeout(deviceResizeTimer);
+        deviceResizeTimer = setTimeout(applyAdaptiveLayout, 120);
+      });
+      window.addEventListener('orientationchange', () => {
+        clearTimeout(deviceResizeTimer);
+        deviceResizeTimer = setTimeout(applyAdaptiveLayout, 120);
+      });
+    }
+
     // Navigation
     const switchTab = (el) => {
       if(!el.dataset.tab) return;
       document.querySelectorAll('.nav-btn').forEach(b => { 
-        b.classList.remove('tab-active', 'text-[#7b1e2d]'); 
-        b.classList.add('text-slate-500'); 
+        b.classList.remove('tab-active', 'text-brand'); 
+        b.classList.add('text-telegram-hint'); 
       });
       if(el.classList.contains('nav-btn')) {
-        el.classList.add('tab-active', 'text-[#7b1e2d]'); 
-        el.classList.remove('text-slate-500');
+        el.classList.add('tab-active', 'text-brand'); 
+        el.classList.remove('text-telegram-hint');
       }
       panels.forEach(p => p.classList.remove('active'));
-      const targetPanel = document.getElementById(el.dataset.tab);
-      if (targetPanel) targetPanel.classList.add('active');
+      document.getElementById(el.dataset.tab).classList.add('active');
+      if (el.dataset.tab === 'inicio' && sessionId) {
+        loadHomeOverview();
+      }
     };
 
     const switchTabByName = (tabName) => {
@@ -598,6 +885,14 @@
         .replace(/,00$/, '');
       const prefix = isEntradaTipo(tipo, numeric) ? '+' : '-';
       return `${prefix} R$${abs}`;
+    }
+
+    function formatCurrency(value) {
+      return (Number(value) || 0).toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+        minimumFractionDigits: 2,
+      });
     }
 
     function formatDateForInput(value) {
@@ -655,10 +950,10 @@
     function applyDraftDetails(item) {
       if (!item) return;
       const categoria = [item.categoria_sugerida, item.subcategoria_sugerida].filter(Boolean).join(' / ');
-      const contaLabel = item.conta_nome || item.forma_pagamento || 'Pagamento não definido';
+      const contaLabel = item.conta_nome || item.forma_pagamento || 'Conta não definida';
       editDraftInfo.innerHTML = `
         <div><b>Pré-preenchido:</b> ${item.descricao || 'Lançamento'}</div>
-        <div><b>Pagamento:</b> ${contaLabel}</div>
+        <div><b>Conta:</b> ${contaLabel}</div>
         <div><b>Categoria:</b> ${categoria || 'N/A'}</div>
       `;
       editDraftInfo.classList.remove('hidden');
@@ -683,7 +978,7 @@
         editValor.value = '';
         editTipo.value = 'Saída';
         editData.value = '';
-        editForma.value = 'Nao_informado';
+        editForma.value = '';
         return;
       }
       editModalBadge.textContent = item.id ? `Editando: ${item.descricao || 'Lançamento'}` : `Pré-edição: ${item.descricao || 'Lançamento'}`;
@@ -691,7 +986,7 @@
       editValor.value = item.valor != null ? String(item.valor).replace('.', ',') : '';
       editTipo.value = item.tipo || 'Saída';
       editData.value = formatDateForInput(item.data);
-      editForma.value = item.forma_pagamento || 'Nao_informado';
+      editForma.value = item.forma_pagamento || '';
       if (item.id) {
         editDraftInfo.classList.add('hidden');
         editDraftInfo.innerHTML = '';
@@ -765,53 +1060,46 @@
       return `R$ ${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
 
-    function destroyHomeCharts() {
-      if (homeCashflowChart) {
-        homeCashflowChart.destroy();
-        homeCashflowChart = null;
-      }
-      if (homeCategoryChart) {
-        homeCategoryChart.destroy();
-        homeCategoryChart = null;
-      }
-      if (homePaymentChart) {
-        homePaymentChart.destroy();
-        homePaymentChart = null;
-      }
-    }
-
     function sourceBadgeConfig(origem) {
-      const source = String(origem || 'miniapp').toLowerCase();
+      const sourceRaw = String(origem || 'manual').trim();
+      const source = sourceRaw.toLowerCase();
       const mapping = {
-        manual: ['Manual', 'bg-slate-100 text-slate-700 border-slate-200'],
-        texto: ['Texto', 'bg-amber-100 text-amber-800 border-amber-200'],
-        audio: ['Áudio', 'bg-cyan-100 text-cyan-800 border-cyan-200'],
-        ocr: ['OCR', 'bg-violet-100 text-violet-800 border-violet-200'],
-        miniapp: ['MiniApp', 'bg-[#7b1e2d]/10 text-[#7b1e2d] border-[#7b1e2d]/15'],
+        manual: ['Manual', 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700'],
+        texto: ['Manual', 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700'],
+        miniapp: ['Manual', 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700'],
+        alfredo: ['Manual', 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700'],
+        'por voz': ['Por voz', 'bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-900/40 dark:text-cyan-200 dark:border-cyan-800'],
+        audio: ['Por voz', 'bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-900/40 dark:text-cyan-200 dark:border-cyan-800'],
+        voz: ['Por voz', 'bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-900/40 dark:text-cyan-200 dark:border-cyan-800'],
+        ocr: ['OCR', 'bg-violet-100 text-violet-800 border-violet-200 dark:bg-violet-900/40 dark:text-violet-200 dark:border-violet-800'],
+        fatura: ['Fatura', 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/40 dark:text-amber-200 dark:border-amber-800'],
       };
-      return mapping[source] || [source.charAt(0).toUpperCase() + source.slice(1), 'bg-slate-100 text-slate-700 border-slate-200'];
+      if (source.startsWith('fatura') || source.startsWith('extrato')) {
+        return mapping.fatura;
+      }
+      return mapping[source] || [sourceRaw || 'Manual', 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700'];
     }
 
     function renderHomeRecent(items = []) {
       if (!items.length) {
-        homeRecentList.innerHTML = '<div class="rounded-2xl border border-dashed border-[#7b1e2d]/15 bg-white/70 p-4 text-sm text-slate-500">Sem movimentações recentes por enquanto.</div>';
+        homeRecentList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint">Sem movimentações recentes por enquanto.</div>';
         return;
       }
 
       homeRecentList.innerHTML = items.map((item) => {
         const numericValue = Number(item.valor) || 0;
         const isReceita = isEntradaTipo(item.tipo, numericValue);
-        const [badgeLabel, badgeClass] = sourceBadgeConfig(item.origem);
+        const [badgeLabel, badgeClass] = sourceBadgeConfig(item.origem_label || item.origem);
         return `
-          <button class="recent-item w-full text-left rounded-2xl border border-[#7b1e2d]/10 bg-white/80 p-4 hover:bg-[#7b1e2d]/5 transition" data-action="edit" data-id="${item.id}">
+          <button class="recent-item w-full text-left rounded-2xl border border-telegram-separator bg-telegram-card p-4 hover:bg-brand/5 transition shadow-soft" data-action="edit" data-id="${item.id}">
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
-                  <p class="font-semibold text-sm text-slate-900 truncate max-w-[190px]">${item.descricao || 'Lançamento'}</p>
+                  <p class="font-semibold text-sm text-telegram-text truncate max-w-[190px]">${item.descricao || 'Lançamento'}</p>
                   <span class="text-[10px] font-bold uppercase tracking-[0.16em] rounded-full border px-2 py-1 ${badgeClass}">${badgeLabel}</span>
                 </div>
-                <p class="text-xs text-slate-500 mt-1">${new Date(item.data).toLocaleDateString('pt-BR')} • ${item.forma_pagamento || '-'}</p>
-                <p class="text-xs text-slate-400 mt-1">${item.categoria_nome ? `${item.categoria_nome}${item.subcategoria_nome ? ` / ${item.subcategoria_nome}` : ''}` : 'Sem categoria'}</p>
+                <p class="text-xs text-telegram-hint mt-1">${new Date(item.data).toLocaleDateString('pt-BR')} • ${item.forma_pagamento || '-'}</p>
+                <p class="text-xs text-telegram-hint mt-1">${item.categoria_nome ? `${item.categoria_nome}${item.subcategoria_nome ? ` / ${item.subcategoria_nome}` : ''}` : 'Sem categoria'}</p>
               </div>
               <span class="shrink-0 font-extrabold ${isReceita ? 'text-emerald-600' : 'text-rose-600'}">${formatMoney(item.valor, item.tipo)}</span>
             </div>
@@ -820,8 +1108,91 @@
       }).join('');
     }
 
+    function renderHistorySkeleton(count = 5) {
+      historyStatus.textContent = '';
+      historyList.innerHTML = Array.from({ length: count }).map(() => `
+        <div class="flex items-center justify-between gap-3 rounded-2xl border border-telegram-separator bg-telegram-card p-4 shadow-soft animate-pulse">
+          <div class="flex items-center gap-3 min-w-0 flex-1">
+            <div class="h-10 w-10 rounded-full skeleton-block"></div>
+            <div class="min-w-0 flex-1 space-y-2">
+              <div class="h-4 w-2/3 skeleton-block"></div>
+              <div class="h-3 w-1/2 skeleton-block"></div>
+            </div>
+          </div>
+          <div class="h-8 w-24 rounded-xl skeleton-block"></div>
+        </div>
+      `).join('');
+    }
+
+    function renderMetaSkeleton(count = 3) {
+      metaStatus.textContent = '';
+      metaList.innerHTML = Array.from({ length: count }).map(() => `
+        <div class="rounded-3xl border border-telegram-separator bg-telegram-card p-5 shadow-soft animate-pulse space-y-3">
+          <div class="h-4 w-1/3 skeleton-block"></div>
+          <div class="h-5 w-2/3 skeleton-block"></div>
+          <div class="h-3 w-1/2 skeleton-block"></div>
+          <div class="flex gap-2 pt-2">
+            <div class="h-8 w-20 rounded-xl skeleton-block"></div>
+            <div class="h-8 w-20 rounded-xl skeleton-block"></div>
+            <div class="h-8 w-24 rounded-xl skeleton-block"></div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderAgendamentoSkeleton(count = 3) {
+      agendamentoStatus.textContent = '';
+      agendamentoList.innerHTML = Array.from({ length: count }).map(() => `
+        <div class="flex items-center justify-between gap-3 rounded-2xl border border-telegram-separator bg-telegram-card p-4 shadow-soft animate-pulse">
+          <div class="space-y-2 flex-1 min-w-0">
+            <div class="h-4 w-2/3 skeleton-block"></div>
+            <div class="h-3 w-1/2 skeleton-block"></div>
+          </div>
+          <div class="h-8 w-20 rounded-xl skeleton-block"></div>
+        </div>
+      `).join('');
+    }
+
     function canUseChartMotion() {
       return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    function canUseUiMotion() {
+      return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    function animateMetaProgressBars() {
+      const progressBars = metaList.querySelectorAll('[data-meta-progress]');
+      if (!progressBars.length) return;
+
+      if (!canUseUiMotion()) {
+        progressBars.forEach((bar) => {
+          const target = Number(bar.dataset.metaProgress || 0);
+          bar.style.width = `${Math.max(0, Math.min(100, target))}%`;
+        });
+        return;
+      }
+
+      progressBars.forEach((bar) => {
+        const target = Number(bar.dataset.metaProgress || 0);
+        bar.style.width = '0%';
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            bar.style.width = `${Math.max(0, Math.min(100, target))}%`;
+          });
+        });
+      });
+    }
+
+    async function resolveTelegramInitData(maxRetries = 8, intervalMs = 120) {
+      for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+        const current = Telegram?.WebApp?.initData;
+        if (current) return current;
+        if (attempt < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, intervalMs));
+        }
+      }
+      return '';
     }
 
     function getChartRuntime() {
@@ -835,24 +1206,115 @@
       };
     }
 
-    function compactCashflow(cashflow, targetPoints) {
-      if (!Array.isArray(cashflow) || cashflow.length <= targetPoints) return cashflow || [];
-      const chunkSize = Math.ceil(cashflow.length / targetPoints);
-      const compacted = [];
+    function monthLabels(count) {
+      const baseDate = new Date();
+      const labels = [];
+      for (let i = count - 1; i >= 0; i -= 1) {
+        const d = new Date(baseDate.getFullYear(), baseDate.getMonth() - i, 1);
+        labels.push(d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''));
+      }
+      return labels;
+    }
 
-      for (let i = 0; i < cashflow.length; i += chunkSize) {
-        const chunk = cashflow.slice(i, i + chunkSize);
-        const first = chunk[0];
-        const last = chunk[chunk.length - 1];
-        const label = first === last ? first.label : `${first.label}-${last.label}`;
-        compacted.push({
-          label,
-          entrada: chunk.reduce((acc, item) => acc + Number(item.entrada || 0), 0),
-          saida: chunk.reduce((acc, item) => acc + Number(item.saida || 0), 0),
+    function setActiveHomeChartPill(targetId) {
+      homeChartPills.forEach((pill) => {
+        const isActive = pill.dataset.homeChartPill === targetId;
+        pill.classList.toggle('bg-brand/10', isActive);
+        pill.classList.toggle('border-brand/25', isActive);
+        pill.classList.toggle('text-brand', isActive);
+        pill.classList.toggle('font-bold', isActive);
+        pill.classList.toggle('bg-telegram-card', !isActive);
+        pill.classList.toggle('border-telegram-separator', !isActive);
+        pill.classList.toggle('text-telegram-hint', !isActive);
+        pill.classList.toggle('font-semibold', !isActive);
+      });
+    }
+
+    function setupHomeChartsCarousel() {
+      if (!homeChartsPills || !homeChartCarousel || !homeChartPills.length || !homeChartCards.length) return;
+
+      homeChartPills.forEach((pill) => {
+        pill.addEventListener('click', () => {
+          const targetId = pill.dataset.homeChartPill;
+          const targetCard = document.getElementById(targetId);
+          if (!targetCard) return;
+          targetCard.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+          setActiveHomeChartPill(targetId);
         });
+      });
+
+      if (homeChartsObserver) homeChartsObserver.disconnect();
+      if ('IntersectionObserver' in window) {
+        homeChartsObserver = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting && entry.intersectionRatio > 0.58) {
+              setActiveHomeChartPill(entry.target.id);
+            }
+          });
+        }, {
+          root: homeChartCarousel,
+          threshold: [0.58, 0.78],
+        });
+
+        homeChartCards.forEach((card) => homeChartsObserver.observe(card));
       }
 
-      return compacted;
+      setActiveHomeChartPill(homeChartCards[0].id);
+    }
+
+    function buildChartDataFromSummary(summary) {
+      const receita = Number(summary?.receita || 0);
+      const despesa = Number(summary?.despesa || 0);
+      const categories = (Array.isArray(summary?.categories) ? summary.categories : []).slice(0, 5);
+      const monthlyCashflow = Array.isArray(summary?.cashflow_monthly) ? summary.cashflow_monthly : [];
+      const patrimonySeries = Array.isArray(summary?.patrimony_series) ? summary.patrimony_series : [];
+      const budgetItems = Array.isArray(summary?.budget_vs_realizado) ? summary.budget_vs_realizado : [];
+      const projectionSeries = Array.isArray(summary?.projection_series) ? summary.projection_series : [];
+      const topVillains = Array.isArray(summary?.top_villains) ? summary.top_villains : [];
+
+      const sixMonths = monthlyCashflow.length ? monthlyCashflow.map((item) => item.label || '') : [];
+      const fluxoEntradas = monthlyCashflow.map((item) => Number(item.entrada || 0));
+      const fluxoSaidas = monthlyCashflow.map((item) => Number(item.saida || 0));
+
+      const patrimonyMonths = patrimonySeries.map((item) => item.label || '');
+      const patrimonyValues = patrimonySeries.map((item) => Number(item.value || 0));
+
+      const budgetLabels = budgetItems.map((item) => item.label || 'Categoria');
+      const budgetCap = budgetItems.map((item) => Number(item.orcamento || 0));
+      const budgetRealized = budgetItems.map((item) => Number(item.realizado || 0));
+
+      const distroLabels = categories.map((item) => item.label || 'Categoria');
+      const distroValues = categories.map((item) => Math.max(0, Number(item.value || 0)));
+
+      const projectionLabels = projectionSeries.map((item) => item.label || '');
+      const projectionHistory = projectionSeries.map((item) => item.historico == null ? null : Number(item.historico || 0));
+      const projectionFuture = projectionSeries.map((item) => item.futuro == null ? null : Number(item.futuro || 0));
+
+      const villains = topVillains.map((item) => [item.label || 'Sem nome', Number(item.value || 0)]);
+
+      return {
+        sixMonths,
+        patrimonyMonths,
+        patrimonyValues,
+        fluxoEntradas,
+        fluxoSaidas,
+        budgetLabels,
+        budgetCap,
+        budgetRealized,
+        distroLabels,
+        distroValues,
+        projectionLabels,
+        projectionHistory,
+        projectionFuture,
+        villains,
+      };
+    }
+
+    function destroyHomeCharts() {
+      Object.values(homeCharts).forEach((chart) => {
+        if (chart && typeof chart.destroy === 'function') chart.destroy();
+      });
+      homeCharts = {};
     }
 
     function renderHomeOverview(summary) {
@@ -875,79 +1337,138 @@
       homeDespesa.textContent = `Despesas: ${formatCurrencyBR(despesa)}`;
       homeInsight.textContent = summary?.insight || 'Carregando insight do Alfredo...';
 
-      const cashflow = Array.isArray(summary?.cashflow) ? summary.cashflow : [];
-      const categories = Array.isArray(summary?.categories) ? summary.categories : [];
-      const paymentMethods = Array.isArray(summary?.payment_methods) ? summary.payment_methods : [];
       homeRecentCache = Array.isArray(summary?.recent) ? summary.recent : [];
+      const categories = Array.isArray(summary?.categories) ? summary.categories : [];
       const chartRuntime = getChartRuntime();
-      const cashflowDisplay = compactCashflow(cashflow, chartRuntime.isMobile ? 12 : 31);
+      const chartData = buildChartDataFromSummary(summary);
 
       destroyHomeCharts();
 
-      if (homeCashflowChartEl && cashflowDisplay.length) {
-        const labels = cashflowDisplay.map((item) => item.label);
-        homeCashflowChart = new Chart(homeCashflowChartEl, {
+      const commonAnimation = chartRuntime.enableMotion ? { duration: 520, easing: 'easeOutQuart' } : false;
+      const commonLegend = {
+        position: 'bottom',
+        labels: {
+          usePointStyle: true,
+          boxWidth: 8,
+          boxHeight: 8,
+          font: { size: chartRuntime.legendFont },
+        },
+      };
+
+      if (homePatrimonyChartEl) {
+        homeCharts.patrimony = new Chart(homePatrimonyChartEl, {
+          type: 'line',
+          data: {
+            labels: chartData.patrimonyMonths,
+            datasets: [{
+              label: 'Patrimonio',
+              data: chartData.patrimonyValues,
+              fill: true,
+              tension: 0.4,
+              borderWidth: 2,
+              borderColor: 'rgba(59, 130, 246, 0.95)',
+              backgroundColor: 'rgba(59, 130, 246, 0.14)',
+              pointRadius: 2,
+              pointHoverRadius: 4,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: commonAnimation,
+            plugins: {
+              legend: commonLegend,
+              tooltip: { callbacks: { label: (ctx) => `Patrimonio: ${formatCurrencyBR(ctx.raw)}` } },
+            },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: '#64748b', maxTicksLimit: chartRuntime.maxTicks } },
+              y: { grid: { color: 'rgba(59, 130, 246, 0.12)' }, ticks: { color: '#64748b', callback: (v) => `R$ ${Number(v).toLocaleString('pt-BR')}` } },
+            },
+          },
+        });
+      }
+
+      if (homeCashflowChartEl) {
+        homeCharts.cashflow = new Chart(homeCashflowChartEl, {
           type: 'bar',
           data: {
-            labels,
+            labels: chartData.sixMonths,
             datasets: [
               {
                 label: 'Entradas',
-                data: cashflowDisplay.map((item) => item.entrada || 0),
-                backgroundColor: 'rgba(22, 163, 74, 0.75)',
-                borderColor: 'rgba(22, 163, 74, 1)',
-                borderWidth: 1,
-                minBarLength: 2,
+                data: chartData.fluxoEntradas,
                 borderRadius: 10,
                 borderSkipped: false,
-                barThickness: chartRuntime.barThickness,
-                maxBarThickness: chartRuntime.barThickness + 2,
+                backgroundColor: 'rgba(22, 163, 74, 0.84)',
+                borderColor: 'rgba(22, 163, 74, 1)',
+                barThickness: chartRuntime.barThickness + 2,
               },
               {
-                label: 'Saídas',
-                data: cashflowDisplay.map((item) => item.saida || 0),
-                backgroundColor: 'rgba(123, 30, 45, 0.82)',
-                borderColor: 'rgba(123, 30, 45, 1)',
-                borderWidth: 1,
-                minBarLength: 2,
+                label: 'Saidas',
+                data: chartData.fluxoSaidas,
                 borderRadius: 10,
                 borderSkipped: false,
-                barThickness: chartRuntime.barThickness,
-                maxBarThickness: chartRuntime.barThickness + 2,
+                backgroundColor: 'rgba(239, 68, 68, 0.82)',
+                borderColor: 'rgba(239, 68, 68, 1)',
+                barThickness: chartRuntime.barThickness + 2,
               },
             ],
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            normalized: true,
-            animation: chartRuntime.enableMotion ? { duration: 520, easing: 'easeOutQuart' } : false,
+            animation: commonAnimation,
             interaction: { mode: 'index', intersect: false },
             plugins: {
-              legend: {
-                position: 'bottom',
-                labels: {
-                  usePointStyle: true,
-                  boxWidth: 8,
-                  boxHeight: 8,
-                  font: { size: chartRuntime.legendFont },
-                },
-              },
-              tooltip: {
-                callbacks: {
-                  label: (ctx) => `${ctx.dataset.label}: ${formatCurrencyBR(ctx.raw)}`,
-                },
-              },
+              legend: commonLegend,
+              tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatCurrencyBR(ctx.raw)}` } },
             },
             scales: {
-              x: {
-                grid: { display: false },
-                ticks: { color: '#64748b', maxTicksLimit: chartRuntime.maxTicks },
+              x: { grid: { display: false }, ticks: { color: '#64748b' } },
+              y: { grid: { color: 'rgba(123, 30, 45, 0.08)' }, ticks: { color: '#64748b', callback: (v) => `R$ ${Number(v).toLocaleString('pt-BR')}` } },
+            },
+          },
+        });
+      }
+
+      if (homeBudgetChartEl) {
+        homeCharts.budget = new Chart(homeBudgetChartEl, {
+          type: 'bar',
+          data: {
+            labels: chartData.budgetLabels,
+            datasets: [
+              {
+                label: 'Orcamento',
+                data: chartData.budgetCap,
+                borderRadius: 14,
+                borderSkipped: false,
+                backgroundColor: 'rgba(148, 163, 184, 0.35)',
+                barPercentage: 0.85,
+                categoryPercentage: 0.8,
               },
-              y: {
-                grid: { color: 'rgba(123, 30, 45, 0.08)' },
-                ticks: { color: '#64748b', callback: (v) => `R$ ${Number(v).toLocaleString('pt-BR')}` },
+              {
+                label: 'Realizado',
+                data: chartData.budgetRealized,
+                borderRadius: 14,
+                borderSkipped: false,
+                backgroundColor: chartData.budgetRealized.map((value, idx) => value > chartData.budgetCap[idx] ? 'rgba(239, 68, 68, 0.85)' : 'rgba(245, 158, 11, 0.82)'),
+                barPercentage: 0.55,
+                categoryPercentage: 0.62,
               },
+            ],
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: commonAnimation,
+            plugins: {
+              legend: commonLegend,
+              tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatCurrencyBR(ctx.raw)}` } },
+            },
+            scales: {
+              x: { grid: { color: 'rgba(148, 163, 184, 0.14)' }, ticks: { color: '#64748b', callback: (v) => `R$ ${Number(v).toLocaleString('pt-BR')}` } },
+              y: { grid: { display: false }, ticks: { color: '#475569' } },
             },
           },
         });
@@ -955,110 +1476,113 @@
 
       if (homeCategoryChartEl) {
         const hasCategories = categories.length > 0;
-        homeCategoryChart = new Chart(homeCategoryChartEl, {
+        const palette = ['#2563eb', '#f97316', '#8b5cf6', '#0ea5e9', '#14b8a6'];
+        homeCharts.category = new Chart(homeCategoryChartEl, {
           type: 'doughnut',
           data: {
-            labels: hasCategories ? categories.map((item) => item.label) : ['Sem dados'],
+            labels: chartData.distroLabels.slice(0, 5),
             datasets: [{
-              data: hasCategories ? categories.map((item) => item.value || 0) : [1],
-              backgroundColor: hasCategories ? categories.map((item) => item.color || '#7b1e2d') : ['#e2e8f0'],
+              data: chartData.distroValues.slice(0, 5),
+              backgroundColor: chartData.distroLabels.slice(0, 5).map((_, idx) => categories[idx]?.color || palette[idx % palette.length]),
               borderWidth: 0,
+              hoverOffset: 6,
             }],
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            normalized: true,
-            animation: chartRuntime.enableMotion ? { duration: 420, easing: 'easeOutQuad' } : false,
-            cutout: '68%',
+            animation: commonAnimation,
+            cutout: '70%',
             plugins: {
-              legend: {
-                position: 'bottom',
-                labels: {
-                  usePointStyle: true,
-                  boxWidth: 8,
-                  boxHeight: 8,
-                  padding: chartRuntime.isMobile ? 10 : 14,
-                  font: { size: chartRuntime.legendFont },
-                },
-              },
-              tooltip: {
-                callbacks: {
-                  label: (ctx) => `${ctx.label}: ${formatCurrencyBR(ctx.raw)}`,
-                },
-              },
+              legend: commonLegend,
+              tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${formatCurrencyBR(ctx.raw)}` } },
             },
             onClick: (_, elements) => {
-              if (!elements.length || !hasCategories) return;
+              if (!elements.length) return;
               const index = elements[0].index;
-              const selected = categories[index];
-              if (!selected) return;
-              homeCategoryValue.textContent = formatCurrencyBR(selected.value);
-              homeCategoryLabel.textContent = selected.label;
+              homeCategoryValue.textContent = formatCurrencyBR(chartData.distroValues[index] || 0);
+              homeCategoryLabel.textContent = chartData.distroLabels[index] || 'Categoria';
             },
           },
         });
 
-        if (hasCategories) {
-          homeCategoryValue.textContent = formatCurrencyBR(categories[0].value);
-          homeCategoryLabel.textContent = categories[0].label;
-        } else {
-          homeCategoryValue.textContent = formatCurrencyBR(0);
-          homeCategoryLabel.textContent = 'Sem categoria';
-        }
+        homeCategoryValue.textContent = formatCurrencyBR(chartData.distroValues[0] || 0);
+        homeCategoryLabel.textContent = chartData.distroLabels[0] || (hasCategories ? 'Categoria' : 'Sem categoria');
       }
 
-      if (homePaymentChartEl) {
-        const hasPaymentMethods = paymentMethods.length > 0;
-        homePaymentChart = new Chart(homePaymentChartEl, {
+      if (homeProjectionChartEl) {
+        homeCharts.projection = new Chart(homeProjectionChartEl, {
+          type: 'line',
+          data: {
+            labels: chartData.projectionLabels,
+            datasets: [
+              {
+                label: 'Historico',
+                data: chartData.projectionHistory,
+                tension: 0.35,
+                borderColor: 'rgba(30, 64, 175, 0.92)',
+                backgroundColor: 'rgba(30, 64, 175, 0.08)',
+                borderWidth: 2,
+                fill: false,
+                pointRadius: 2,
+              },
+              {
+                label: 'Futuro estimado',
+                data: chartData.projectionFuture,
+                tension: 0.35,
+                borderColor: 'rgba(249, 115, 22, 0.92)',
+                backgroundColor: 'rgba(249, 115, 22, 0.08)',
+                borderWidth: 2,
+                fill: false,
+                pointRadius: 2,
+                borderDash: [6, 6],
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: commonAnimation,
+            plugins: {
+              legend: commonLegend,
+              tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatCurrencyBR(ctx.raw)}` } },
+            },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: '#64748b' } },
+              y: { grid: { color: 'rgba(148, 163, 184, 0.14)' }, ticks: { color: '#64748b', callback: (v) => `R$ ${Number(v).toLocaleString('pt-BR')}` } },
+            },
+          },
+        });
+      }
+
+      if (homeVillainsChartEl) {
+        homeCharts.villains = new Chart(homeVillainsChartEl, {
           type: 'bar',
           data: {
-            labels: hasPaymentMethods ? paymentMethods.map((item) => item.label) : ['Sem dados'],
+            labels: chartData.villains.map((item) => item[0]),
             datasets: [{
-              label: 'Usos no mês',
-              data: hasPaymentMethods ? paymentMethods.map((item) => item.count || 0) : [0],
-              backgroundColor: hasPaymentMethods ? paymentMethods.map((item) => item.color || '#7b1e2d') : ['#e2e8f0'],
-              borderRadius: 10,
+              label: 'Gasto',
+              data: chartData.villains.map((item) => item[1]),
+              borderRadius: 12,
               borderSkipped: false,
-              barThickness: chartRuntime.isMobile ? 16 : 20,
-              maxBarThickness: chartRuntime.isMobile ? 20 : 24,
+              backgroundColor: ['#dc2626', '#ef4444', '#f97316', '#f59e0b', '#fb7185'],
             }],
           },
           options: {
             indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
-            normalized: true,
-            animation: chartRuntime.enableMotion ? { duration: 420, easing: 'easeOutQuad' } : false,
+            animation: commonAnimation,
             plugins: {
               legend: { display: false },
-              tooltip: {
-                callbacks: {
-                  label: (ctx) => `${ctx.raw} uso(s)`,
-                },
-              },
+              tooltip: { callbacks: { label: (ctx) => `Total: ${formatCurrencyBR(ctx.raw)}` } },
             },
             scales: {
-              x: {
-                beginAtZero: true,
-                grid: { color: 'rgba(123, 30, 45, 0.08)' },
-                ticks: { color: '#64748b', precision: 0 },
-              },
-              y: {
-                grid: { display: false },
-                ticks: { color: '#334155', font: { size: chartRuntime.legendFont } },
-              },
+              x: { grid: { display: false }, ticks: { color: '#64748b', callback: (v) => `R$ ${Number(v).toLocaleString('pt-BR')}` } },
+              y: { grid: { display: false }, ticks: { color: '#475569' } },
             },
           },
         });
-
-        if (hasPaymentMethods) {
-          homePaymentValue.textContent = `${paymentMethods[0].count || 0}x`;
-          homePaymentLabel.textContent = paymentMethods[0].label || 'Sem dados';
-        } else {
-          homePaymentValue.textContent = '0x';
-          homePaymentLabel.textContent = 'Sem dados';
-        }
       }
 
       renderHomeRecent(summary?.recent || []);
@@ -1076,7 +1600,7 @@
         homeBalance.textContent = 'R$ 0,00';
         homeBalanceHint.textContent = 'Não foi possível carregar o resumo agora.';
         homeInsight.textContent = 'O Alfredo não conseguiu montar o resumo agora. Tente atualizar em instantes.';
-        homeRecentList.innerHTML = '<div class="rounded-2xl border border-dashed border-[#7b1e2d]/15 bg-white/70 p-4 text-sm text-slate-500">Resumo indisponível no momento.</div>';
+        homeRecentList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint">Resumo indisponível no momento.</div>';
       }
     }
 
@@ -1161,6 +1685,39 @@
         saveBtn.querySelector('.save-text').textContent = originalText;
         saveBtn.disabled = false;
       }
+    }
+
+    async function loadConfiguracoes() {
+      if (!sessionId || !perfilInvestidor || !horarioNotificacao || !alertaGastosAtivo) return;
+      try {
+        const response = await fetchWithSession('/api/miniapp/configuracoes');
+        const data = await response.json();
+        if (!data.ok) return;
+        perfilInvestidor.value = data.usuario?.perfil_investidor || '';
+        horarioNotificacao.value = data.usuario?.horario_notificacao || '09:00';
+        alertaGastosAtivo.checked = Boolean(data.usuario?.alerta_gastos_ativo);
+      } catch (e) {}
+    }
+
+    async function saveConfiguracoes() {
+      if (!sessionId || !perfilInvestidor || !horarioNotificacao || !alertaGastosAtivo) return;
+      try {
+        const response = await fetch('/api/miniapp/configuracoes', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
+          body: JSON.stringify({
+            perfil_investidor: perfilInvestidor.value,
+            horario_notificacao: horarioNotificacao.value,
+            alerta_gastos_ativo: alertaGastosAtivo.checked,
+          }),
+        });
+        const data = await response.json();
+        if (data.ok) {
+          mainStatus.textContent = 'Configurações salvas';
+          mainStatus.className = 'font-bold text-transparent bg-clip-text bg-gradient-to-r from-brand to-brand-soft';
+          await loadConfiguracoes();
+        }
+      } catch (e) {}
     }
 
     async function saveLancamentoEdit() {
@@ -1273,12 +1830,13 @@
       Telegram.WebApp.ready();
       Telegram.WebApp.expand();
 
-      const initData = Telegram.WebApp.initData;
+      const initData = await resolveTelegramInitData();
       if (!initData) {
-        mainStatus.textContent = 'Ambiente Local (Sem TG)';
-        mainStatus.className = "text-gray-400 font-bold";
-        // Local mode block can go here if needed.
-        switchTabByName(initialTabFromUrl || 'inicio');
+        mainStatus.textContent = 'Telegram nao enviou sessao';
+        mainStatus.className = 'text-amber-500 font-bold';
+        homeBalanceHint.textContent = 'Abra pelo bot novamente para sincronizar sua sessao.';
+        homeInsight.textContent = 'Se abriu pelo teclado e travou, toque em /start e abra pelo bot para renovar o acesso.';
+        switchTabByName('inicio');
         return;
       }
 
@@ -1292,8 +1850,11 @@
         });
         const data = await response.json();
         if (!data.ok) {
-          mainStatus.textContent = 'Falha Auth';
+          mainStatus.textContent = 'Falha de sessao';
           mainStatus.className = "text-carmine font-bold";
+          homeBalanceHint.textContent = 'Sua sessao do Telegram expirou.';
+          homeInsight.textContent = 'Feche este MiniApp e abra novamente pelo bot para sincronizar os dados.';
+          switchTabByName('inicio');
           return;
         }
         sessionId = data.session_id;
@@ -1313,6 +1874,7 @@
         // Carrega o essencial em paralelo sem bloquear a abertura do miniapp.
         loadHomeOverview();
         loadHistory(true);
+        loadConfiguracoes();
 
         // Carregamentos não críticos ficam assíncronos após a primeira pintura.
         setTimeout(() => {
@@ -1320,22 +1882,40 @@
           loadMetas();
         }, 80);
 
-        setInterval(() => loadHistory(true), 25000); // Polling slower 25s
+        setInterval(() => {
+          if (document.hidden || !sessionId) return;
+          loadHistory(true);
+          loadHomeOverview();
+        }, 20000);
       } catch(e) {
         mainStatus.textContent = 'Erro Conexão';
+        mainStatus.className = 'text-carmine font-bold';
+        homeBalanceHint.textContent = 'Nao foi possivel autenticar o MiniApp agora.';
+        homeInsight.textContent = 'Verifique a conexao e tente abrir novamente pelo bot.';
       }
     }
 
     async function loadHistory(reset = false) {
       if (!sessionId) return;
-      if (reset) { historyOffset = 0; historyList.innerHTML = ''; }
-      const params = new URLSearchParams({ limit: historyLimit, offset: historyOffset, query: historyQuery.value || '', tipo: historyTipo.value || '' });
+      if (reset) { historyOffset = 0; renderHistorySkeleton(6); }
+      const params = new URLSearchParams({
+        limit: historyLimit,
+        offset: historyOffset,
+        query: historyQuery.value || '',
+        tipo: historyTipo.value || '',
+        order: historyOrder.value || 'added_desc'
+      });
+      if (historyDate?.value) {
+        params.set('start_date', historyDate.value);
+        params.set('end_date', historyDate.value);
+      }
       try {
         const response = await fetchWithSession(`/api/miniapp/history?${params.toString()}`);
         const data = await response.json();
         if (!data.ok) return;
         historyStatus.textContent = '';
         if (reset) historyCache = [];
+        if (reset) historyList.innerHTML = '';
         data.items.forEach(item => {
           historyCache.push(item);
           const numericValue = Number(item.valor) || 0;
@@ -1343,26 +1923,26 @@
           const valueText = formatMoney(item.valor, item.tipo);
           
           const div = document.createElement('div');
-          div.className = 'flex items-center justify-between gap-3 p-3 rounded-xl hover:bg-[#7b1e2d]/5 transition border border-transparent';
+          div.className = 'flex items-center justify-between gap-3 p-4 rounded-2xl hover:bg-brand/5 transition border border-transparent';
           div.innerHTML = `
             <div class="flex items-center gap-4">
-              <div class="w-10 h-10 rounded-full ${isReceita ? 'bg-[#dcfce7] text-[#16a34a]' : 'bg-[#fee2e2] text-[#dc2626]'} flex items-center justify-center shrink-0">
+              <div class="w-10 h-10 rounded-full ${isReceita ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300'} flex items-center justify-center shrink-0">
                 <i data-lucide="${isReceita ? 'briefcase' : 'credit-card'}" class="w-5 h-5"></i>
               </div>
               <div>
-                <p class="font-semibold text-sm max-w-[150px] truncate text-[#7b1e2d]">${item.descricao || 'Lançamento'}</p>
-                <p class="text-xs text-gray-500">${new Date(item.data).toLocaleDateString('pt-BR')} • ${item.forma_pagamento || '-'}</p>
+                <p class="font-semibold text-sm max-w-[150px] truncate text-telegram-text">${item.descricao || 'Lançamento'}</p>
+                <p class="text-xs text-telegram-hint">${new Date(item.data).toLocaleDateString('pt-BR')} • ${item.forma_pagamento || '-'}</p>
               </div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-              <span class="font-bold ${isReceita ? 'text-[#16a34a]' : 'text-[#dc2626]'} text-sm whitespace-nowrap">${valueText}</span>
-              <button class="history-edit-btn rounded-lg border border-[#7b1e2d]/10 px-3 py-1 text-xs font-semibold text-slate-600" data-action="edit" data-id="${item.id}">Editar</button>
-              <button class="history-delete-btn rounded-lg border border-[#7b1e2d]/10 px-3 py-1 text-xs font-semibold text-carmine" data-action="delete" data-id="${item.id}">Excluir</button>
+              <span class="font-bold ${isReceita ? 'text-emerald-600' : 'text-rose-600'} text-sm whitespace-nowrap">${valueText}</span>
+              <button class="history-edit-btn rounded-lg border border-telegram-separator bg-telegram-card px-3 py-1 text-xs font-semibold text-telegram-text" data-action="edit" data-id="${item.id}">Editar</button>
+              <button class="history-delete-btn rounded-lg border border-telegram-separator bg-telegram-card px-3 py-1 text-xs font-semibold text-brand" data-action="delete" data-id="${item.id}">Excluir</button>
             </div>
           `;
-          historyList.insertBefore(div, reset ? historyList.firstChild : null);
+          historyList.appendChild(div);
         });
-        if(reset) {} else { historyOffset += data.items.length; }
+        historyOffset = reset ? data.items.length : historyOffset + data.items.length;
         lucide.createIcons();
       } catch(e){}
     }
@@ -1482,64 +2062,90 @@
 
     async function loadMetas() {
       if (!sessionId) return;
-      metaStatus.textContent = 'Carregando...';
+      renderMetaSkeleton(3);
       try {
         const response = await fetchWithSession('/api/miniapp/metas');
         const data = await response.json();
-        if (!data.ok || !data.items.length) { metasCache = []; metaStatus.textContent = 'Nenhuma meta.'; return; }
+        if (!data.ok || !data.items.length) { metasCache = []; metaStatus.textContent = 'Nenhuma meta.'; metaList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint">Nenhuma meta em andamento.</div>'; return; }
         metaStatus.textContent = '';
         metasCache = data.items || [];
         metaList.innerHTML = '';
         metasCache.forEach(item => {
-          const progress = item.valor_meta ? Math.round((item.valor_atual / item.valor_meta) * 100) : 0;
+          const valorMeta = Number(item.valor_meta) || 0;
+          const valorAtual = Number(item.valor_atual) || 0;
+          const faltante = Math.max(0, valorMeta - valorAtual);
+          const progress = valorMeta > 0 ? Math.round((valorAtual / valorMeta) * 100) : 0;
           const progNorm = Math.min(progress, 100);
           const confirmado = Boolean(item.confirmado_mes_atual);
+          const prazo = item.data_meta ? new Date(item.data_meta) : null;
+          const prazoValido = prazo && !Number.isNaN(prazo.getTime());
+          const hoje = new Date();
+          const diffMs = prazoValido ? (prazo.getTime() - hoje.getTime()) : 0;
+          const diasRestantes = prazoValido ? Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24))) : 0;
+          const mesesRestantes = prazoValido ? Math.max(1, Math.ceil(diasRestantes / 30)) : 1;
+          const aporteMensal = faltante > 0 ? (faltante / mesesRestantes) : 0;
+          const statusPrazo = !prazoValido
+            ? 'Sem data alvo'
+            : diasRestantes === 0
+              ? 'Prazo final chegou'
+              : `${diasRestantes} dias restantes`;
+
           const div = document.createElement('div');
-          div.className = 'flex-1 bg-white rounded-2xl p-4 border border-[#7b1e2d]/10 relative overflow-hidden group mb-2';
+          div.className = 'flex-1 bg-telegram-card rounded-3xl p-5 border border-telegram-separator relative overflow-hidden group mb-2 shadow-soft';
           div.innerHTML = `
-            <div class="absolute inset-0 bg-gradient-to-r from-[#7b1e2d]/20 to-transparent opacity-50 transition-all duration-500" style="width: ${progNorm}%"></div>
             <div class="relative z-10 flex justify-between items-start gap-3">
               <div class="min-w-0">
-                <p class="text-xs text-slate-500">${item.descricao}</p>
-                <p class="text-lg font-bold mt-1 text-slate-900">${progNorm}% <span class="text-xs text-slate-500 font-normal ml-1">de R$ ${item.valor_meta.toFixed(2)}</span></p>
-                <p class="text-xs mt-1 ${confirmado ? 'text-emerald-700' : 'text-slate-500'}">${confirmado ? '✓ Mês confirmado' : 'Mês ainda não confirmado'}</p>
+                <p class="text-sm font-semibold text-telegram-text">${item.descricao}</p>
+                <p class="text-lg font-bold mt-1 text-telegram-text">${progNorm}% <span class="text-xs text-telegram-hint font-normal ml-1">de ${formatCurrency(valorMeta)}</span></p>
+                <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200/80">
+                  <div
+                    class="h-full rounded-full transition-[width] duration-700 ease-out"
+                    data-meta-progress="${progNorm}"
+                    style="width: 0%; background: linear-gradient(90deg, #7b1e2d 0%, #b85d6e 100%);"
+                  ></div>
+                </div>
+                <p class="text-xs mt-1 text-telegram-hint">Faltam <b>${formatCurrency(faltante)}</b> para concluir</p>
+                <p class="text-xs mt-1 text-brand">Aporte mensal sugerido: <b>${formatCurrency(aporteMensal)}</b></p>
+                <p class="text-xs mt-1 text-telegram-hint">Prazo: ${prazoValido ? prazo.toLocaleDateString('pt-BR') : '-'} • ${statusPrazo}</p>
+                <p class="text-xs mt-1 ${confirmado ? 'text-emerald-600' : 'text-telegram-hint'}">${confirmado ? '✓ Mês confirmado' : 'Mês ainda não confirmado'}</p>
               </div>
-              <span class="text-sm font-semibold text-[#7b1e2d] shrink-0">R$ ${item.valor_atual.toFixed(2)}</span>
+              <span class="text-sm font-semibold text-brand shrink-0">${formatCurrency(valorAtual)}</span>
             </div>
             <div class="relative z-10 mt-3 flex flex-wrap gap-2">
-              <button class="rounded-lg border border-[#7b1e2d]/15 px-3 py-1 text-xs font-semibold text-slate-700" data-meta-action="edit" data-id="${item.id}">Editar</button>
-              <button class="rounded-lg border border-[#7b1e2d]/15 px-3 py-1 text-xs font-semibold text-carmine" data-meta-action="delete" data-id="${item.id}">Excluir</button>
+              <button class="rounded-lg border border-telegram-separator px-3 py-1 text-xs font-semibold text-telegram-text bg-telegram-card" data-meta-action="edit" data-id="${item.id}">Editar</button>
+              <button class="rounded-lg border border-telegram-separator px-3 py-1 text-xs font-semibold text-brand bg-telegram-card" data-meta-action="delete" data-id="${item.id}">Excluir</button>
               <button class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700" data-meta-action="confirm" data-id="${item.id}">${confirmado ? 'Atualizar confirmação' : 'Confirmar mês'}</button>
             </div>
           `;
           metaList.appendChild(div);
         });
+        animateMetaProgressBars();
         lucide.createIcons();
       } catch(e){}
     }
 
     async function loadAgendamentos() {
       if (!sessionId) return;
-      agendamentoStatus.textContent = 'Carregando...';
+      renderAgendamentoSkeleton(3);
       try {
         const response = await fetchWithSession('/api/miniapp/agendamentos');
         const data = await response.json();
-        if (!data.ok || !data.items.length) { agendamentoStatus.textContent = 'Nenhum agendamento.'; return; }
+        if (!data.ok || !data.items.length) { agendamentoStatus.textContent = 'Nenhum agendamento.'; agendamentoList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint">Nenhum agendamento futuro.</div>'; return; }
         agendamentoStatus.textContent = '';
         agendamentoList.innerHTML = '';
         data.items.forEach(item => {
           const isReceita = formatMoney(item.valor, item.tipo).startsWith('+');
           const valueText = formatMoney(item.valor, item.tipo);
           const div = document.createElement('div');
-          div.className = 'flex items-center justify-between p-2 rounded-xl bg-white border border-[#7b1e2d]/10 mb-2';
+          div.className = 'flex items-center justify-between p-4 rounded-2xl bg-telegram-card border border-telegram-separator mb-2 shadow-soft';
           div.innerHTML = `
             <div>
-              <p class="font-semibold text-sm text-slate-900">${item.descricao}</p>
-              <p class="text-xs text-slate-500 mt-0.5"><i data-lucide="clock" class="inline w-3 h-3 mr-1"></i>${item.frequencia} • ${new Date(item.proxima_data_execucao).toLocaleDateString('pt-BR')}</p>
+              <p class="font-semibold text-sm text-telegram-text">${item.descricao}</p>
+              <p class="text-xs text-telegram-hint mt-0.5"><i data-lucide="clock" class="inline w-3 h-3 mr-1"></i>${item.frequencia} • ${new Date(item.proxima_data_execucao).toLocaleDateString('pt-BR')}</p>
             </div>
             <div class="flex items-center gap-2">
-              <span class="font-bold text-[#7b1e2d] text-sm">${valueText}</span>
-              <button class="agendamento-delete-btn rounded-lg border border-[#7b1e2d]/10 px-2 py-1 text-[11px] font-semibold text-carmine" data-action="delete" data-id="${item.id}">Excluir</button>
+              <span class="font-bold text-brand text-sm">${valueText}</span>
+              <button class="agendamento-delete-btn rounded-lg border border-telegram-separator bg-telegram-card px-2 py-1 text-[11px] font-semibold text-brand" data-action="delete" data-id="${item.id}">Excluir</button>
             </div>
           `;
           agendamentoList.appendChild(div);
@@ -1551,15 +2157,27 @@
     // Refresh and Modal binds
     historyRefresh.addEventListener('click', () => loadHistory(true));
     historyLoadMore.addEventListener('click', () => loadHistory(false));
+    historyTipo.addEventListener('change', () => loadHistory(true));
+    historyOrder.addEventListener('change', () => loadHistory(true));
+    historyDate.addEventListener('change', () => loadHistory(true));
+    historyClearFilters.addEventListener('click', () => {
+      historyTipo.value = '';
+      historyOrder.value = 'added_desc';
+      historyDate.value = '';
+      loadHistory(true);
+    });
     agendamentoRefresh.addEventListener('click', loadAgendamentos);
     agendamentoNew.addEventListener('click', openNewAgendamentoModal);
     metaRefresh.addEventListener('click', loadMetas);
     metaNew.addEventListener('click', () => openMetaModal(null));
     metaSave.addEventListener('click', saveMeta);
+    if (configRefresh) configRefresh.addEventListener('click', loadConfiguracoes);
     editSave.addEventListener('click', saveLancamentoEdit);
     newAgendSave.addEventListener('click', createAgendamento);
     newAgendFrequencia.addEventListener('change', updateParcelasVisibility);
     newAgendInfinito.addEventListener('change', updateParcelasVisibility);
+    if (configSave) configSave.addEventListener('click', saveConfiguracoes);
+    if (configFinish) configFinish.addEventListener('click', saveConfiguracoes);
     editModal.addEventListener('click', (e) => {
       if (e.target === editModal) closeEditModal();
     });
@@ -1621,6 +2239,8 @@
       deleteAgendamentoById(Number(id));
     });
 
+    bindAdaptiveLayoutListeners();
+    setupHomeChartsCarousel();
     authTelegram();
   </script>
 </body>

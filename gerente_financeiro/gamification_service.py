@@ -170,7 +170,7 @@ async def award_xp(db: Session, user_id: int, action: str, context, custom_amoun
     if streak_bonus > 0:
         notification += f"\n🔥 +{streak_bonus} XP bonus de streak ({usuario.streak_dias} dias)!"
     
-    async def _send_temp_message(text: str, parse_mode: str | None = None) -> None:
+    async def _send_temp_message(text: str, parse_mode: str | None = None, ttl_seconds: float = 0.7) -> None:
         try:
             msg = await context.bot.send_message(
                 chat_id=user_id,
@@ -183,7 +183,7 @@ async def award_xp(db: Session, user_id: int, action: str, context, custom_amoun
 
         async def _delete_later():
             try:
-                await asyncio.sleep(2)
+                await asyncio.sleep(max(ttl_seconds, 0.2))
                 await context.bot.delete_message(chat_id=user_id, message_id=msg.message_id)
             except Exception:
                 return
@@ -192,7 +192,7 @@ async def award_xp(db: Session, user_id: int, action: str, context, custom_amoun
 
     # Enviar notificação de XP (silenciosa e temporária)
     try:
-        await _send_temp_message(notification)
+        await _send_temp_message(notification, ttl_seconds=0.7)
     except Exception:
         pass
     
@@ -210,7 +210,7 @@ async def award_xp(db: Session, user_id: int, action: str, context, custom_amoun
         )
         
         try:
-            await _send_temp_message(mensagem_levelup, parse_mode='Markdown')
+            await _send_temp_message(mensagem_levelup, parse_mode='Markdown', ttl_seconds=1.2)
         except Exception:
             pass
     

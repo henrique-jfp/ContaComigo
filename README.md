@@ -183,9 +183,11 @@ Persistência no DB
 | `/api/telegram/auth` | POST | Valida `initData`, cria sessão sign | 5min |
 | `/api/miniapp/overview` | GET | Visão geral: saldo, gastos, metas | 2min |
 | `/api/miniapp/history` | GET | Histórico paginado de transações | 1min |
-| `/api/miniapp/configuracoes` | GET | Perfil, contas, câmbio | 10min |
+| `/api/miniapp/configuracoes` | GET | Perfil e preferências de notificação | 10min |
 | `/api/miniapp/metas` | GET | Metas, progresso, check-in | 5min |
 | `/api/miniapp/agendamentos` | GET | Recorrências, parecel próximas | 2min |
+
+> No modo Zero Setup, o MiniApp não expõe endpoint de contas/cartões (`/api/miniapp/contas`).
 
 #### **Performance Strategies**
 
@@ -254,7 +256,7 @@ def _get_session(session_id):
 
 ```sql
 -- Tabelas principais
-- users: ID, username, tipo de conta
+- users: ID, username, perfil e preferências
 - lancamentos: ID, user_id, valor, categoria, data, criado_em
 - transacoes_agendadas: parcelas, frequência, status
 - analytics_events: comando, sucesso, tempo_execução
@@ -338,7 +340,7 @@ def _get_session(session_id):
 4. Conforme cada requisição completa:
    - Overview: renderiza cards principais
    - History: popula tabela com transações
-   - Config: atualiza dropdown de contas
+   - Config: aplica preferências de perfil e notificação
 
 5. Usuário vê:
    - Instantâneo: Layout + menus + abas vazias
