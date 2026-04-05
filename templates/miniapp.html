@@ -467,9 +467,14 @@
 
     function formatMoney(value, tipo) {
       const numeric = Number(value) || 0;
-      const abs = Math.abs(numeric).toFixed(2).replace('.', ',');
+      const abs = Math.abs(numeric)
+        .toFixed(2)
+        .replace('.', ',')
+        .replace(/,0$/, ',0')
+        .replace(/,([1-9])0$/, ',$1')
+        .replace(/,00$/, '');
       const prefix = numeric >= 0 ? '+' : '-';
-      return `${prefix} R$ ${abs}`;
+      return `${prefix} R$${abs}`;
     }
 
     function formatDateForInput(value) {
