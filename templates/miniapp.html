@@ -251,51 +251,11 @@
     <!-- Tela 4: EDITAR LANCAMENTOS -->
     <section class="panel" id="editar">
       <div class="glass-card rounded-[24px] p-5 space-y-4">
-        <h2 class="text-sm font-semibold text-slate-700 flex items-center justify-between">
-          <span class="flex items-center"><i data-lucide="pencil-line" class="w-4 h-4 mr-2 text-[#7b1e2d]"></i> Edição visual de lançamentos</span>
-          <button id="editRefresh" class="text-[#7b1e2d] hover:text-[#b85d6e] transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+        <h2 class="text-sm font-semibold text-slate-700 flex items-center">
+          <span class="flex items-center"><i data-lucide="pencil-line" class="w-4 h-4 mr-2 text-[#7b1e2d]"></i> Edição de lançamentos</span>
         </h2>
-        <p class="text-xs text-slate-500">Toque em um item do histórico para abrir a edição no cartão abaixo.</p>
-
-        <div id="editSelectedBadge" class="hidden rounded-full bg-[#7b1e2d]/10 text-[#7b1e2d] px-3 py-1 text-xs font-semibold w-fit">Nenhum lançamento selecionado</div>
-
-        <div class="grid gap-3">
-          <label class="text-xs font-semibold text-slate-600">Descrição</label>
-          <input id="editDescricao" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900" placeholder="Descrição do lançamento">
-
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-xs font-semibold text-slate-600">Valor</label>
-              <input id="editValor" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900" placeholder="0,00">
-            </div>
-            <div>
-              <label class="text-xs font-semibold text-slate-600">Tipo</label>
-              <select id="editTipo" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900">
-                <option value="Saída">Saída</option>
-                <option value="Entrada">Entrada</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-xs font-semibold text-slate-600">Data</label>
-              <input id="editData" type="date" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900">
-            </div>
-            <div>
-              <label class="text-xs font-semibold text-slate-600">Conta</label>
-              <select id="editConta" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900"></select>
-            </div>
-          </div>
-
-          <label class="text-xs font-semibold text-slate-600">Forma de pagamento</label>
-          <input id="editForma" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900" placeholder="Pix, Crédito, Débito, Dinheiro...">
-
-          <div class="flex gap-3 pt-2">
-            <button id="editSave" class="flex-1 rounded-xl bg-[#7b1e2d] py-3 text-sm font-semibold text-white active:scale-95 transition">Salvar alteração</button>
-            <button id="editCancel" class="flex-1 rounded-xl border border-[#7b1e2d]/15 bg-white py-3 text-sm font-semibold text-slate-700 active:scale-95 transition">Cancelar</button>
-          </div>
-        </div>
+        <p class="text-sm text-slate-600">Abra um lançamento no <b>Histórico</b> ou em <b>Últimas movimentações</b> para editar no modal com os campos preenchidos.</p>
+        <button class="rounded-xl bg-[#7b1e2d] py-3 px-4 text-sm font-semibold text-white w-full" onclick="switchTabByName('historico')">Ir para Histórico</button>
       </div>
     </section>
 
@@ -1366,11 +1326,20 @@
         }
         sessionId = data.session_id;
         mainStatus.textContent = 'Sincronizado';
-        await loadHomeOverview();
-        await loadHistory(true);
-        await loadConfiguracoes();
-        await loadAgendamentos();
-        await loadMetas();
+
+        // Carrega o essencial em paralelo para abrir o miniapp mais rápido.
+        await Promise.allSettled([
+          loadHomeOverview(),
+          loadHistory(true),
+          loadConfiguracoes(),
+        ]);
+
+        // Carregamentos não críticos ficam assíncronos após a primeira pintura.
+        setTimeout(() => {
+          loadAgendamentos();
+          loadMetas();
+        }, 80);
+
         switchTabByName(initialTabFromUrl || (pendingDraftLaunch ? 'editar' : 'inicio'));
         if (pendingDraftLaunch) {
           const draft = normalizeDraftLancamento(pendingDraftLaunch);
