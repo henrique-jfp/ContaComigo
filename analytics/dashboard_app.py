@@ -66,7 +66,7 @@ static_dir = os.path.join(parent_dir, 'static')
 sys.path.insert(0, parent_dir)
 import config
 from database.database import get_db, buscar_lancamentos_usuario
-from models import Usuario, Lancamento, Agendamento, Objetivo, Conta, Categoria, Subcategoria
+from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Conta, Categoria, Subcategoria
 from gerente_financeiro.prompts import PROMPT_ALFREDO
 from gerente_financeiro.services import preparar_contexto_financeiro_completo
 import google.generativeai as genai
@@ -994,6 +994,18 @@ def miniapp_metas():
             return jsonify({"ok": False, "error": "user_not_found"}), 404
 
         if request.method == 'GET':
+            now = datetime.utcnow()
+            confirmacoes_mes = (
+                db.query(MetaConfirmacao)
+                .filter(
+                    MetaConfirmacao.id_usuario == usuario.id,
+                    MetaConfirmacao.ano == now.year,
+                    MetaConfirmacao.mes == now.month,
+                )
+                .all()
+            )
+            confirmacoes_por_meta = {c.id_objetivo: c for c in confirmacoes_mes}
+
             metas = (
                 db.query(Objetivo)
                 .filter(Objetivo.id_usuario == usuario.id)
@@ -1007,6 +1019,9 @@ def miniapp_metas():
                     "valor_meta": float(meta.valor_meta),
                     "valor_atual": float(meta.valor_atual or 0),
                     "data_meta": meta.data_meta.isoformat() if meta.data_meta else None,
+                    "confirmado_mes_atual": bool(confirmacoes_por_meta.get(meta.id)),
+                    "valor_confirmado_mes": float(confirmacoes_por_meta[meta.id].valor_confirmado) if meta.id in confirmacoes_por_meta else None,
+                    "confirmado_em": confirmacoes_por_meta[meta.id].criado_em.isoformat() if meta.id in confirmacoes_por_meta and confirmacoes_por_meta[meta.id].criado_em else None,
                 }
                 for meta in metas
             ]
@@ -1065,6 +1080,65 @@ def miniapp_metas_update(meta_id: int):
             parsed = _parse_date(data.get("data_meta"))
             if parsed:
                 meta.data_meta = parsed
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/metas/<int:meta_id>/confirmar', methods=['POST'])
+def miniapp_meta_confirmar_mes(meta_id: int):
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        meta = (
+            db.query(Objetivo)
+            .filter(Objetivo.id == meta_id, Objetivo.id_usuario == usuario.id)
+            .first()
+        )
+        if not meta:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+
+        payload = request.get_json(silent=True) or {}
+        try:
+            valor_confirmado = float(str(payload.get("valor_confirmado", meta.valor_meta)).replace(",", "."))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "invalid_valor_confirmado"}), 400
+
+        agora = datetime.utcnow()
+        confirmacao = (
+            db.query(MetaConfirmacao)
+            .filter(
+                MetaConfirmacao.id_usuario == usuario.id,
+                MetaConfirmacao.id_objetivo == meta.id,
+                MetaConfirmacao.ano == agora.year,
+                MetaConfirmacao.mes == agora.month,
+            )
+            .first()
+        )
+
+        if not confirmacao:
+            confirmacao = MetaConfirmacao(
+                id_usuario=usuario.id,
+                id_objetivo=meta.id,
+                ano=agora.year,
+                mes=agora.month,
+                valor_confirmado=valor_confirmado,
+            )
+            db.add(confirmacao)
+        else:
+            confirmacao.valor_confirmado = valor_confirmado
+
+        if valor_confirmado > float(meta.valor_atual or 0):
+            meta.valor_atual = valor_confirmado
+
         db.commit()
         return jsonify({"ok": True})
     finally:
