@@ -289,6 +289,11 @@
           </div>
         </div>
 
+        <label class="flex items-center gap-2 rounded-xl border border-[#7b1e2d]/10 bg-white px-3 py-2 text-sm text-slate-700">
+          <input id="newAgendInfinito" type="checkbox" class="h-4 w-4 accent-[#7b1e2d]">
+          Recorrente infinita (sem quantidade de parcelas)
+        </label>
+
         <div id="parcelasGroup" class="hidden">
           <label class="text-xs font-semibold text-slate-600 block mb-2">Quantidade de parcelas</label>
           <input id="newAgendParcelas" type="number" min="1" max="360" value="12" class="w-full rounded-xl border border-[#7b1e2d]/15 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#7b1e2d]/50">
@@ -394,6 +399,7 @@
     const newAgendFrequencia = document.getElementById('newAgendFrequencia');
     const newAgendData = document.getElementById('newAgendData');
     const newAgendParcelas = document.getElementById('newAgendParcelas');
+    const newAgendInfinito = document.getElementById('newAgendInfinito');
     const newAgendSave = document.getElementById('newAgendSave');
     const parcelasGroup = document.getElementById('parcelasGroup');
     
@@ -530,6 +536,7 @@
       newAgendTipo.value = 'Saída';
       newAgendFrequencia.value = 'mensal';
       newAgendParcelas.value = '12';
+      newAgendInfinito.checked = false;
       const hoje = new Date().toISOString().split('T')[0];
       newAgendData.value = hoje;
       updateParcelasVisibility();
@@ -543,7 +550,12 @@
     }
 
     function updateParcelasVisibility() {
-      parcelasGroup.classList.toggle('hidden', newAgendFrequencia.value === 'unico');
+      const unico = newAgendFrequencia.value === 'unico';
+      if (unico) {
+        newAgendInfinito.checked = false;
+      }
+      newAgendInfinito.disabled = unico;
+      parcelasGroup.classList.toggle('hidden', unico || newAgendInfinito.checked);
     }
 
     async function createAgendamento() {
@@ -554,7 +566,8 @@
       const tipo = newAgendTipo.value;
       const frequencia = newAgendFrequencia.value;
       const data = newAgendData.value;
-      const parcelas = frequencia === 'unico' ? 1 : parseInt(newAgendParcelas.value) || 1;
+      const recorrenciaInfinita = frequencia !== 'unico' && newAgendInfinito.checked;
+      const parcelas = frequencia === 'unico' ? 1 : (recorrenciaInfinita ? null : (parseInt(newAgendParcelas.value, 10) || 1));
 
       if (!descricao || !valor || !data) {
         showToast('Preencha todos os campos obrigatórios', 'error');
@@ -936,6 +949,7 @@
     editSave.addEventListener('click', saveLancamentoEdit);
     newAgendSave.addEventListener('click', createAgendamento);
     newAgendFrequencia.addEventListener('change', updateParcelasVisibility);
+    newAgendInfinito.addEventListener('change', updateParcelasVisibility);
     configSave.addEventListener('click', saveConfiguracoes);
     configFinish.addEventListener('click', saveConfiguracoes);
     novaContaSalvar.addEventListener('click', createConta);
