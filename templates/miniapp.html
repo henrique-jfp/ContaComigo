@@ -465,17 +465,10 @@
       gerenteChat.scrollTop = gerenteChat.scrollHeight;
     }
 
-    function isEntradaTipo(tipo, value) {
-      const tipoNorm = String(tipo || '').toLowerCase();
-      if (tipoNorm.includes('entrada') || tipoNorm.includes('receita')) return true;
-      if (tipoNorm.includes('saída') || tipoNorm.includes('saida') || tipoNorm.includes('despesa')) return false;
-      return Number(value) >= 0;
-    }
-
     function formatMoney(value, tipo) {
       const numeric = Number(value) || 0;
       const abs = Math.abs(numeric).toFixed(2).replace('.', ',');
-      const prefix = isEntradaTipo(tipo, numeric) ? '+' : '-';
+      const prefix = numeric >= 0 ? '+' : '-';
       return `${prefix} R$ ${abs}`;
     }
 
@@ -852,23 +845,24 @@
         if (reset) historyCache = [];
         data.items.forEach(item => {
           historyCache.push(item);
-          const isReceita = isEntradaTipo(item.tipo, item.valor);
+          const numericValue = Number(item.valor) || 0;
+          const isReceita = numericValue >= 0;
           const valueText = formatMoney(item.valor, item.tipo);
           
           const div = document.createElement('div');
           div.className = 'flex items-center justify-between gap-3 p-3 rounded-xl hover:bg-[#7b1e2d]/5 transition border border-transparent';
           div.innerHTML = `
             <div class="flex items-center gap-4">
-              <div class="w-10 h-10 rounded-full ${isReceita ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'} flex items-center justify-center shrink-0">
+              <div class="w-10 h-10 rounded-full ${isReceita ? 'bg-[#dcfce7] text-[#16a34a]' : 'bg-[#fee2e2] text-[#dc2626]'} flex items-center justify-center shrink-0">
                 <i data-lucide="${isReceita ? 'briefcase' : 'credit-card'}" class="w-5 h-5"></i>
               </div>
               <div>
-                <p class="font-semibold text-sm max-w-[150px] truncate text-slate-900">${item.descricao || 'Lançamento'}</p>
+                <p class="font-semibold text-sm max-w-[150px] truncate text-[#7b1e2d]">${item.descricao || 'Lançamento'}</p>
                 <p class="text-xs text-gray-500">${new Date(item.data).toLocaleDateString('pt-BR')} • ${item.forma_pagamento || '-'}</p>
               </div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-              <span class="font-bold ${isReceita ? 'text-emerald-600' : 'text-red-600'} text-sm whitespace-nowrap">${valueText}</span>
+              <span class="font-bold ${isReceita ? 'text-[#16a34a]' : 'text-[#dc2626]'} text-sm whitespace-nowrap">${valueText}</span>
               <button class="history-edit-btn rounded-lg border border-[#7b1e2d]/10 px-3 py-1 text-xs font-semibold text-slate-600" data-action="edit" data-id="${item.id}">Editar</button>
               <button class="history-delete-btn rounded-lg border border-[#7b1e2d]/10 px-3 py-1 text-xs font-semibold text-carmine" data-action="delete" data-id="${item.id}">Excluir</button>
             </div>
