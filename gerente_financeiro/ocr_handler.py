@@ -8,6 +8,7 @@ import io
 import traceback
 from pathlib import Path
 
+from urllib.parse import quote
 from pdf2image import convert_from_bytes
 from PIL import Image
 import google.generativeai as genai
@@ -108,11 +109,16 @@ async def _generate_with_groq(prompt: str) -> str | None:
         return None
 
 
-def _get_webapp_url(tab: str | None = None) -> str:
+def _get_webapp_url(tab: str | None = None, draft: dict | None = None) -> str:
     base_url = os.getenv("DASHBOARD_BASE_URL", "http://localhost:5000").rstrip("/")
     url = f"{base_url}/webapp"
+    params = []
     if tab:
-        url = f"{url}?tab={tab}"
+        params.append(f"tab={quote(tab, safe='')}")
+    if draft:
+        params.append(f"draft={quote(json.dumps(draft, ensure_ascii=False), safe='')}")
+    if params:
+        url = f"{url}?{'&'.join(params)}"
     return url
 
 # Decorator para logging EXTREMAMENTE detalhado de funções OCR
@@ -378,7 +384,7 @@ async def _reply_with_summary(update_or_query, context: ContextTypes.DEFAULT_TYP
     keyboard = [
         [InlineKeyboardButton("✅ Confirmar e Salvar", callback_data="ocr_salvar")],
         [InlineKeyboardButton("❌ Cancelar", callback_data="ocr_cancelar")],
-        [InlineKeyboardButton("✍️ Editar no Miniapp", web_app=WebAppInfo(url=_get_webapp_url("editar")))]
+        [InlineKeyboardButton("✍️ Editar no Miniapp", web_app=WebAppInfo(url=_get_webapp_url("editar", draft=dados_ia)))]
     ]
 
     if hasattr(update_or_query, 'edit_message_text'):
