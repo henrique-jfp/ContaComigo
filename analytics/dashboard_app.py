@@ -30,6 +30,7 @@ _cache = {}
 CACHE_TTL = 300  # 5 minutos
 _miniapp_sessions = {}
 MINIAPP_SESSION_TTL = 60 * 60
+MINIAPP_AI_INSIGHT_ENABLED = os.getenv("MINIAPP_AI_INSIGHT_ENABLED", "0").lower() in ("1", "true", "yes", "on")
 
 def cache_key(*args):
     """Gera chave de cache baseada nos argumentos"""
@@ -379,23 +380,24 @@ def _build_miniapp_insight(usuario: Usuario, balance: float, receita: float, des
         "Se houver economia, destaque isso. Se houver alerta, seja direto."
     )
 
-    resposta = None
-    if config.GEMINI_API_KEY:
-        try:
-            genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'\"").strip())
-            model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
-            response = model.generate_content(prompt)
-            resposta = _sanitize_response(response.text or "")
-        except Exception as exc:
-            logger.warning("Gemini falhou no insight do MiniApp: %s", exc, exc_info=True)
+    if MINIAPP_AI_INSIGHT_ENABLED:
+        resposta = None
+        if config.GEMINI_API_KEY:
+            try:
+                genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'\"").strip())
+                model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
+                response = model.generate_content(prompt)
+                resposta = _sanitize_response(response.text or "")
+            except Exception as exc:
+                logger.warning("Gemini falhou no insight do MiniApp: %s", exc, exc_info=True)
 
-    if not resposta:
-        resposta = _run_async(_generate_with_groq(prompt)) if config.GROQ_API_KEY else None
+        if not resposta:
+            resposta = _run_async(_generate_with_groq(prompt)) if config.GROQ_API_KEY else None
+            if resposta:
+                resposta = _sanitize_response(resposta)
+
         if resposta:
-            resposta = _sanitize_response(resposta)
-
-    if resposta:
-        return resposta
+            return resposta
 
     if balance >= 0:
         return f"Você fechou o mês no azul com R$ {abs(balance):.2f}. O Alfredo está de olho para manter esse ritmo."
@@ -577,7 +579,8 @@ def miniapp_history():
         if end_date:
             base_query = base_query.filter(Lancamento.data_transacao <= datetime.combine(end_date, datetime.max.time()))
 
-        total = base_query.count()
+        # O frontend nao usa o total atualmente; remover count evita query pesada em bases grandes.
+        total = None
         lancamentos = (
             base_query.options(
                 joinedload(Lancamento.categoria),
