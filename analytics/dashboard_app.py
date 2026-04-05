@@ -371,8 +371,34 @@ def _payment_method_distribution(lancamentos: list[Lancamento]) -> list[dict]:
         "Nao_informado": "Não informado",
     }
 
+    normalizer = (
+        globals().get("_normalize_forma_pagamento")
+        or globals().get("_normalize_forma_pagamento")
+        or globals().get("_normalize_payment_method")
+    )
+
+    def _fallback_normalizer(value: str | None) -> str:
+        raw = str(value or "").strip().lower()
+        mapa = {
+            "pix": "Pix",
+            "credito": "Crédito",
+            "crédito": "Crédito",
+            "debito": "Débito",
+            "débito": "Débito",
+            "boleto": "Boleto",
+            "dinheiro": "Dinheiro",
+            "nao informado": "Nao_informado",
+            "não informado": "Nao_informado",
+            "nao_informado": "Nao_informado",
+            "n/a": "Nao_informado",
+            "": "Nao_informado",
+        }
+        return mapa.get(raw, "Nao_informado")
+
+    normalize_fn = normalizer if callable(normalizer) else _fallback_normalizer
+
     for lanc in lancamentos:
-        forma = _normalize_forma_pagamento(getattr(lanc, "forma_pagamento", None))
+        forma = normalize_fn(getattr(lanc, "forma_pagamento", None))
         counts[forma] = counts.get(forma, 0) + 1
 
     if not counts:
