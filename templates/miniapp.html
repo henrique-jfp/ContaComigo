@@ -769,6 +769,26 @@
       }
     }
 
+    async function deleteAgendamentoById(id) {
+      if (!sessionId) return;
+      if (!confirm('Tem certeza que deseja excluir este agendamento?')) return;
+      try {
+        const response = await fetch(`/api/miniapp/agendamentos/${id}`, {
+          method: 'DELETE',
+          headers: { 'X-Session-Id': sessionId },
+        });
+        const data = await response.json();
+        if (data.ok) {
+          showToast('✓ Agendamento excluido com sucesso!', 'success');
+          await loadAgendamentos();
+        } else {
+          showToast('Erro ao excluir agendamento', 'error');
+        }
+      } catch (e) {
+        showToast('Erro de conexao ao excluir agendamento', 'error');
+      }
+    }
+
     // Logic
     async function authTelegram() {
       if (!window.Telegram || !Telegram.WebApp) {
@@ -900,7 +920,10 @@
               <p class="font-semibold text-sm text-slate-900">${item.descricao}</p>
               <p class="text-xs text-slate-500 mt-0.5"><i data-lucide="clock" class="inline w-3 h-3 mr-1"></i>${item.frequencia} • ${new Date(item.proxima_data_execucao).toLocaleDateString('pt-BR')}</p>
             </div>
-            <span class="font-bold text-[#7b1e2d] text-sm">${valueText}</span>
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-[#7b1e2d] text-sm">${valueText}</span>
+              <button class="agendamento-delete-btn rounded-lg border border-[#7b1e2d]/10 px-2 py-1 text-[11px] font-semibold text-carmine" data-action="delete" data-id="${item.id}">Excluir</button>
+            </div>
           `;
           agendamentoList.appendChild(div);
         });
@@ -972,6 +995,13 @@
       if (target.dataset.action === 'delete') {
         deleteLancamentoById(Number(id));
       }
+    });
+
+    agendamentoList.addEventListener('click', (event) => {
+      const target = event.target;
+      const id = target?.dataset?.id;
+      if (!id || target.dataset.action !== 'delete') return;
+      deleteAgendamentoById(Number(id));
     });
 
     authTelegram();
