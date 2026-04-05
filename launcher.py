@@ -248,10 +248,16 @@ def main() -> None:
     elif settings.mode == ExecutionMode.DASHBOARD:
         start_dashboard()
     elif settings.mode == ExecutionMode.LOCAL_DEV:
-        logger.info("🔄 Modo LOCAL: Iniciando dashboard em thread e bot no processo principal.")
-        dashboard_thread = Thread(target=start_dashboard, daemon=True)
-        dashboard_thread.start()
-        start_telegram_bot(enable_health_server=False)
+        logger.info("🔄 Modo HIBRIDO: Iniciando bot em thread e dashboard no processo principal.")
+        # Em plataformas como Railway, manter o web server no processo principal
+        # evita o cenário onde o bot continua vivo, mas a aplicação web cai.
+        bot_thread = Thread(
+            target=start_telegram_bot,
+            kwargs={"enable_health_server": False},
+            daemon=True,
+        )
+        bot_thread.start()
+        start_dashboard()
     else:
         logger.error(f"❌ Modo de execução desconhecido: {settings.mode}. Encerrando.")
         sys.exit(1)
