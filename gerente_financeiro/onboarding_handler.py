@@ -1,3 +1,4 @@
+from gerente_financeiro.monetization import gerar_link_pagamento_mercadopago, PLAN_PREMIUM_MONTHLY
 import os
 # gerente_financeiro/onboarding_handler.py
 import logging
