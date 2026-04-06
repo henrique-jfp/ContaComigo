@@ -23,6 +23,7 @@ from sqlalchemy import and_, extract, func
 from database.database import get_db, get_or_create_user
 from models import Lancamento, Usuario, Categoria, Agendamento, Objetivo
 import config
+from gerente_financeiro.services import _categorizar_com_mapa_inteligente
 
 try:
     from .analises_ia import get_analisador
@@ -406,6 +407,128 @@ def _intencao_metas(texto: str) -> bool:
     )
 
 
+def _intencao_categorizar_sem_categoria(texto: str) -> bool:
+    texto = (texto or "").lower()
+    gatilhos = [
+        "categorize todos",
+        "categoriza todos",
+        "categorizar todos",
+        "categorizar os lançamentos",
+        "categorizar os lancamentos",
+        "sem categoria",
+        "lançamentos sem categoria",
+        "lancamentos sem categoria",
+    ]
+    return ("categoriz" in texto) and any(g in texto for g in gatilhos)
+
+
+def _intencao_categoria_mais_gasto(texto: str) -> bool:
+    texto = (texto or "").lower()
+    return (
+        ("categoria" in texto and "gasto" in texto and "mais" in texto)
+        or "categoria eu mais" in texto
+        or "categoria de gasto mais alta" in texto
+    )
+
+
+def _intencao_forma_pagamento_mais_usada(texto: str) -> bool:
+    texto = (texto or "").lower()
+    sinais_pagamento = ["forma de pagamento", "pagamento", "crédito", "credito", "pix", "débito", "debito"]
+    sinais_uso = ["mais", "utilizo", "uso", "utilizada", "utilizo"]
+    return any(s in texto for s in sinais_pagamento) and any(s in texto for s in sinais_uso)
+
+
+def _intencao_resumo_mes(texto: str) -> bool:
+    texto = (texto or "").lower()
+    return any(s in texto for s in ["resumo do meu mes", "resumo do meu mês", "resumo do mês", "resumo mes", "fechamento do mês", "fechamento do mes"])
+
+
+def _intencao_agendamentos(texto: str) -> bool:
+    texto = (texto or "").lower()
+    return any(s in texto for s in ["agendamentos", "lancamentos programados", "lançamentos programados", "recorrente", "recorrentes", "para pagar de forma recorrente"])
+
+
+def _intencao_score_financeiro(texto: str) -> bool:
+    texto = (texto or "").lower()
+    return "score" in texto and any(s in texto for s in ["financeir", "saúde financeira", "saude financeira"])
+
+
+def _intencao_cotacao_externa(texto: str) -> bool:
+    texto = (texto or "").lower()
+    return any(s in texto for s in ["valor do dolar", "valor do dólar", "cotação", "cotacao", "crypto", "criptomoeda", "bitcoin", "ethereum"])
+
+
+def _categorizar_lancamentos_sem_categoria(db, usuario_id: int) -> tuple[int, int]:
+    pendentes = (
+        db.query(Lancamento)
+        .filter(
+            Lancamento.id_usuario == usuario_id,
+            Lancamento.id_categoria.is_(None),
+        )
+        .order_by(Lancamento.id.asc())
+        .all()
+    )
+
+    atualizados = 0
+    for lanc in pendentes:
+        descricao = (lanc.descricao or "").strip().lower()
+        if not descricao:
+            continue
+        tipo_transacao = "Receita" if str(lanc.tipo).lower().startswith("entr") else "Despesa"
+        cat_id, subcat_id = _categorizar_com_mapa_inteligente(descricao, tipo_transacao, db)
+        if cat_id:
+            lanc.id_categoria = cat_id
+            lanc.id_subcategoria = subcat_id
+            atualizados += 1
+
+    if atualizados:
+        db.commit()
+    return atualizados, len(pendentes)
+
+
+def _resumo_categoria_gastos(db, usuario_id: int, limite: int = 5) -> list[tuple[str, float]]:
+    lancamentos = (
+        db.query(Lancamento)
+        .filter(Lancamento.id_usuario == usuario_id)
+        .order_by(Lancamento.id.desc())
+        .limit(300)
+        .all()
+    )
+    return _resumo_categoria_gastos_por_lancamentos(lancamentos, limite=limite)
+
+
+def _resumo_categoria_gastos_por_lancamentos(lancamentos: list[Lancamento], limite: int = 5) -> list[tuple[str, float]]:
+    categorias: dict[str, float] = {}
+    for lanc in lancamentos:
+        if str(lanc.tipo).lower().startswith("entr"):
+            continue
+        nome = lanc.categoria.nome if getattr(lanc, "categoria", None) and lanc.categoria else "Sem categoria"
+        categorias[nome] = categorias.get(nome, 0.0) + abs(float(lanc.valor or 0))
+    return sorted(categorias.items(), key=lambda x: x[1], reverse=True)[:limite]
+
+
+def _forma_pagamento_mais_usada(db, usuario_id: int) -> tuple[str | None, int, int]:
+    lancamentos = (
+        db.query(Lancamento)
+        .filter(Lancamento.id_usuario == usuario_id)
+        .order_by(Lancamento.id.desc())
+        .limit(400)
+        .all()
+    )
+    contagem: dict[str, int] = {}
+    total = 0
+    for lanc in lancamentos:
+        forma = _normalizar_forma_pagamento(lanc.forma_pagamento)
+        if forma == "Nao_informado":
+            continue
+        contagem[forma] = contagem.get(forma, 0) + 1
+        total += 1
+    if not contagem:
+        return None, 0, len(lancamentos)
+    forma_top, qtd = sorted(contagem.items(), key=lambda x: x[1], reverse=True)[0]
+    return forma_top, qtd, total
+
+
 def _buscar_ultimo_lancamento_sem_futuro(db, usuario_id: int) -> Lancamento | None:
     """
     Regra de prioridade:
@@ -540,6 +663,158 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 .all()
             )
             await update.message.reply_html(_formatar_metas_ativas(objetivos_ativos))
+            return ConversationHandler.END
+
+        if _intencao_categorizar_sem_categoria(texto_normalizado):
+            atualizados, total_pendentes = _categorizar_lancamentos_sem_categoria(db, usuario_db.id)
+            if total_pendentes == 0:
+                await update.message.reply_html(
+                    "🏷️ <b>Categorização automática</b>\n\n"
+                    "Não encontrei lançamentos pendentes sem categoria."
+                )
+                return ConversationHandler.END
+
+            nao_classificados = max(0, total_pendentes - atualizados)
+            await update.message.reply_html(
+                "🏷️ <b>Categorização automática concluída</b>\n\n"
+                f"• <b>Pendentes analisados:</b> {total_pendentes}\n"
+                f"• <b>Categorizados:</b> {atualizados}\n"
+                f"• <b>Ainda sem categoria:</b> {nao_classificados}\n\n"
+                "Se quiser, eu também posso listar os que ainda ficaram pendentes para revisão manual."
+            )
+            return ConversationHandler.END
+
+        if _intencao_categoria_mais_gasto(texto_normalizado):
+            top_categorias = _resumo_categoria_gastos(db, usuario_db.id, limite=5)
+            if not top_categorias:
+                await update.message.reply_html(
+                    "📊 <b>Categoria com maior gasto</b>\n\n"
+                    "Não encontrei despesas suficientes para calcular isso agora."
+                )
+                return ConversationHandler.END
+
+            topo_nome, topo_valor = top_categorias[0]
+            linhas = [
+                "📊 <b>Categoria com maior gasto</b>",
+                "",
+                f"• <b>Maior gasto:</b> {escape(topo_nome)} ({_formatar_valor_brasileiro(topo_valor)})",
+                "",
+                "<b>Top 5 categorias:</b>",
+            ]
+            for nome, valor in top_categorias:
+                linhas.append(f"• {escape(nome)}: {_formatar_valor_brasileiro(valor)}")
+            await update.message.reply_html("\n".join(linhas))
+            return ConversationHandler.END
+
+        if _intencao_forma_pagamento_mais_usada(texto_normalizado):
+            forma_top, qtd_top, base_util = _forma_pagamento_mais_usada(db, usuario_db.id)
+            if not forma_top:
+                await update.message.reply_html(
+                    "💳 <b>Forma de pagamento mais utilizada</b>\n\n"
+                    "Não encontrei pagamentos com forma informada no seu histórico recente."
+                )
+                return ConversationHandler.END
+
+            await update.message.reply_html(
+                "💳 <b>Forma de pagamento mais utilizada</b>\n\n"
+                f"• <b>Mais usada:</b> {escape(forma_top)}\n"
+                f"• <b>Ocorrências:</b> {qtd_top} de {base_util} lançamentos com forma informada"
+            )
+            return ConversationHandler.END
+
+        if _intencao_resumo_mes(texto_normalizado):
+            agora = datetime.now()
+            inicio_mes = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            lanc_mes = (
+                db.query(Lancamento)
+                .filter(
+                    Lancamento.id_usuario == usuario_db.id,
+                    Lancamento.data_transacao >= inicio_mes,
+                )
+                .order_by(Lancamento.id.desc())
+                .all()
+            )
+            entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith("entr"))
+            saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith("entr"))
+            saldo_mes = entradas_mes - saidas_mes
+            top_categorias_mes = _resumo_categoria_gastos_por_lancamentos(lanc_mes, limite=3)
+            ultimos = lanc_mes[:3]
+
+            linhas = [
+                "📅 <b>Resumo do mês</b>",
+                "",
+                f"• <b>Entradas:</b> {_formatar_valor_brasileiro(entradas_mes)}",
+                f"• <b>Saídas:</b> {_formatar_valor_brasileiro(saidas_mes)}",
+                f"• <b>Saldo do mês:</b> {_formatar_valor_brasileiro(saldo_mes)}",
+            ]
+            if top_categorias_mes:
+                linhas.append("")
+                linhas.append("<b>Top categorias de gasto:</b>")
+                for nome, valor in top_categorias_mes:
+                    linhas.append(f"• {escape(nome)}: {_formatar_valor_brasileiro(valor)}")
+            if ultimos:
+                linhas.append("")
+                linhas.append("<b>Últimos lançamentos:</b>")
+                for lanc in ultimos:
+                    sinal = "+" if str(lanc.tipo).lower().startswith("entr") else "-"
+                    linhas.append(
+                        f"• {escape(lanc.descricao or 'Lançamento')}: {sinal}{_formatar_valor_brasileiro(abs(float(lanc.valor or 0)))}"
+                    )
+            await update.message.reply_html("\n".join(linhas))
+            return ConversationHandler.END
+
+        if _intencao_agendamentos(texto_normalizado):
+            agendamentos = (
+                db.query(Agendamento)
+                .filter(
+                    Agendamento.id_usuario == usuario_db.id,
+                    Agendamento.ativo.is_(True),
+                )
+                .order_by(Agendamento.proxima_data_execucao.asc(), Agendamento.id.asc())
+                .limit(8)
+                .all()
+            )
+            if not agendamentos:
+                await update.message.reply_html(
+                    "🗓️ <b>Agendamentos</b>\n\n"
+                    "• Receitas previstas: Não encontrei no banco.\n"
+                    "• Despesas previstas: Não encontrei no banco.\n"
+                    "• Lançamentos programados: Não encontrei no banco."
+                )
+                return ConversationHandler.END
+
+            receitas = [a for a in agendamentos if str(a.tipo).lower().startswith("entr")]
+            despesas = [a for a in agendamentos if not str(a.tipo).lower().startswith("entr")]
+            linhas = [
+                "🗓️ <b>Agendamentos ativos</b>",
+                "",
+                f"• <b>Receitas previstas:</b> {len(receitas)}",
+                f"• <b>Despesas previstas:</b> {len(despesas)}",
+                "",
+                "<b>Próximos lançamentos programados:</b>",
+            ]
+            for ag in agendamentos[:5]:
+                data_txt = ag.proxima_data_execucao.strftime("%d/%m/%Y") if ag.proxima_data_execucao else "sem data"
+                linhas.append(
+                    f"• {escape(ag.descricao)} ({escape(ag.tipo)}): {_formatar_valor_brasileiro(float(ag.valor or 0))} em {escape(data_txt)}"
+                )
+            await update.message.reply_html("\n".join(linhas))
+            return ConversationHandler.END
+
+        if _intencao_score_financeiro(texto_normalizado):
+            await update.message.reply_html(
+                "📈 <b>Score de saúde financeira</b>\n\n"
+                "Ainda não encontrei um score calculado no seu banco. "
+                "Posso te mostrar um diagnóstico rápido com saldo, regularidade e concentração de gastos."
+            )
+            return ConversationHandler.END
+
+        if _intencao_cotacao_externa(texto_normalizado):
+            await update.message.reply_html(
+                "🌐 <b>Cotações em tempo real</b>\n\n"
+                "Não tenho integração ativa de cotação externa neste ambiente agora. "
+                "Se quiser, eu sigo com análise baseada só nos seus lançamentos internos."
+            )
             return ConversationHandler.END
 
         system_prompt = (
