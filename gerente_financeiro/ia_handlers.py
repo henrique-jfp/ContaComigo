@@ -1559,7 +1559,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         )
 
         system_prompt = PROMPT_ALFREDO_APRIMORADO.format(
-            user_name=usuario_db.nome or "usuário",
+            user_name=(usuario_db.nome_completo or update.effective_user.first_name or "usuário"),
             pergunta_usuario=texto_usuario,
             contexto_financeiro_completo=contexto_financeiro_str,
         )
