@@ -92,6 +92,8 @@
 2. **Bot Thread:**
    - `ApplicationBuilder` com Groq token
    - Registra handlers padrão (text, voice, photo, pdf, callbacks)
+   - **NOVO:** Global callbacks para handlers que iniciam fora de ConversationHandler
+     - Ex: `CallbackQueryHandler(fatura_confirm, pattern="^fatura_")` para PDF faturas
    - Inicia `app.run_polling()`
 
 3. **Main Thread:**
@@ -151,7 +153,17 @@ Validação com Gemini
 Persistência no DB
 ```
 
-#### **d) Handlers Específicos**
+#### **d) Botões MiniApp com URL Normalization**
+
+- **Instância única de verdade** para URL geração (`build_miniapp_url`, `_get_fatura_webapp_url`)
+- **Normalization robusta:**
+  - Detect env fallback: `RENDER_EXTERNAL_URL` se `DASHBOARD_BASE_URL` não houver
+  - **HTTPS enforcement** para non-localhost (Telegram WebApp requirement)
+  - Query params: cache-bust `v=timestamp` + page routing
+- **Keyboard integration:** Botões inline respeitam timeouts Telegram (<15s)
+- **Fatura edits:** Global `CallbackQueryHandler` captura callbacks mesmo fora de ConversationHandler
+
+#### **e) Handlers Específicos**
 
 - **manual_entry_handler:** Conversa passo-a-passo para registrar gastos
 - **editing_handler:** Modificação de transações (valor, categoria, data)
@@ -159,6 +171,9 @@ Persistência no DB
 - **agendamentos_handler:** Configuração de parcelas e recorrências
 - **relatorio_handler:** Geração de relatórios em PDF
 - **gamification_handler:** Cálculo de XP, levels, streaks
+  - **NEW:** Feature names em português legível (não mais technical actions)
+  - Mapeamento automático: `LANCAMENTO_CRIADO` → `Lançamentos realizados`
+  - Display no game profile com contadores de interações
 - **investment_handler:** Portfólio de investimentos e patrimônio líquido
 
 ### 2. MiniApp (`templates/miniapp.html` + `analytics/dashboard_app.py`)
@@ -221,6 +236,15 @@ Persistência no DB
    }
    ```
 
+#### **Alfredo Cards (IA Insights)**
+
+- **Visibilidade garantida:** Dark gradient background override para CSS `.glass-card`
+- **Renderização em dois lugares:**
+  - Home insight: Análise do dia (saldo, padrão de gasto)
+  - Game profile: Nota motivacional personalizada
+- **Color scheme:** Radial gradient + linear background com white text para contraste em todos os temas
+- Carregamento lazy com placeholder
+
 ### 3. Backend Flask (`analytics/dashboard_app.py`)
 
 ```python
@@ -250,6 +274,20 @@ def _get_session(session_id):
         return {'user_id': int(user_id), 'exp_ts': int(exp_ts)}
     except:
         return None
+
+# Feature Names Mapping (Gamification)
+def _friendly_feature_name(action: str):
+    """Map technical action keys to user-readable Portuguese labels"""
+    mapping = {
+        'PRIMEIRA_INTERACAO_DIA': 'Primeira interação do dia',
+        'INTERACAO_BOT': 'Uso do bot no chat',
+        'LANCAMENTO_CRIADO': 'Lançamentos realizados',
+        'LANCAMENTO_EDITADO': 'Edições de transações',
+        'MONTH_TURN_BLUE': 'Mês fechado no azul',
+        'STREAK_DIAS': 'Dias de registro consecutivo',
+        # ... (13 total mappings)
+    }
+    return mapping.get(action, action)
 ```
 
 ### 4. Analytics PostgreSQL
@@ -406,6 +444,9 @@ def _get_session(session_id):
 - [x] **PDF:** `/fatura` para importar banco (Inter)
 - [x] **Entrada Guiada:** Fluxo conversacional passo-a-passo
 - [x] **Edição:** Modificar transações criadas
+  - **NOVO:** Botões MiniApp funcionam perfeitamente (sem BOT_RESPONSE_TIMEOUT)
+  - Callback routing global para PDFs de fatura
+  - URL normalization com HTTPS support
 
 ### Análise & Inteligência
 
@@ -432,6 +473,9 @@ def _get_session(session_id):
 ### Engajamento
 
 - [x] **Gamificação:** XP, níveis, ranking, streaks
+  - **NOVO:** Feature names em português legível no game profile
+  - Display de "Top Features" com contadores de atividades
+  - Alfredo cards com motivação personalizada
 - [x] **Notificações:** Daily, check-in de metas, alertas
 - [x] **Suporte:** Fluxo de contato integrado
 
@@ -676,7 +720,46 @@ tail -f debug_logs/bot.log
 
 ---
 
-## 📈 Roadmap & Próximas Features
+## � Correções Recentes (Abril 2026)
+
+### Commit `f25dba2` - Estabilização de callbacks de fatura
+**Problema:** Botões MiniApp e botão de editar fatura não respondiam (BOT_RESPONSE_TIMEOUT)
+**Causa Raiz:** 
+- PDFs de fatura processados fora de ConversationHandler
+- Callbacks inline (`fatura_editar_inline`) não tinham rota global
+- Telegram enfileira resposta indefinidamente se handler não encontrado (~15s timeout)
+
+**Solução:**
+- Adicionado global `CallbackQueryHandler(fatura_confirm, pattern="^fatura_")` em `bot.py`
+- URL normalization robusta em `build_miniapp_url()` e `_get_fatura_webapp_url()`
+- HTTPS enforcement para non-localhost (Telegram WebApp requirement)
+- Fallback para `RENDER_EXTERNAL_URL` se `DASHBOARD_BASE_URL` não definida
+
+**Status:** ✅ Resolvido e testado
+
+### Commit `a0a25c9` - Visibilidade de Alfredo cards e feature names
+**Problema 1:** Comentários do Alfredo invisíveis em todos os lugares
+**Causa Raiz:** `.glass-card` CSS forcing light backgrounds mesmo em cards que precisam de dark theme
+
+**Solução 1:**
+- Criado `.alfredo-card` CSS variant com dark gradient background
+- Aplicado em dois cards: home insight + game profile note
+- Texto branco com contraste garantido
+
+**Problema 2:** Feature names técnicos na tela de game profile
+**Causa Raiz:** API retornava raw `XpEvent.action` keys (ex: `LANCAMENTO_CRIADO`, `INTERACAO_BOT`)
+
+**Solução 2:**
+- Adicionada função `_friendly_feature_name()` em `dashboard_app.py`
+- Mapeamento de 13+ actions para labels em português legível
+- API retorna `feature` (friendly), `raw_feature` (technical), `interactions` (count)
+- Frontend exibe nome legível ao usuário
+
+**Status:** ✅ Implementado e validado
+
+---
+
+## �📈 Roadmap & Próximas Features
 
 - [ ] Web scraping para sincronização de contas bancárias
 - [ ] Machine learning para categorização automática
