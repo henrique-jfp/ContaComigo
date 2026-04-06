@@ -174,7 +174,7 @@ from gerente_financeiro.editing_handler import edit_conv
 from gerente_financeiro.graficos import grafico_conv
 from gerente_financeiro.relatorio_handler import relatorio_handler
 from gerente_financeiro.manual_entry_handler import manual_entry_conv, manual_entry_start
-from gerente_financeiro.fatura_handler import fatura_conv, fatura_start, fatura_receive_file
+from gerente_financeiro.fatura_handler import fatura_conv, fatura_start, fatura_receive_file, fatura_confirm
 from gerente_financeiro.ocr_handler import ocr_action_processor, ocr_iniciar_como_subprocesso
 from gerente_financeiro.quick_entry_handler import quick_action_handler
 from gerente_financeiro.ia_handlers import processar_mensagem_com_alfredo
@@ -464,6 +464,8 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("analise_callback", lambda: CallbackQueryHandler(handle_action_button_callback, pattern="^analise_")),
         ("metas_delete_callback", lambda: metas_callbacks[0]),
         ("metas_confirm_callback", lambda: metas_callbacks[1]),
+        # Necessario para fluxo de fatura iniciado por handler global de PDF (fora da ConversationHandler).
+        ("fatura_callback", lambda: CallbackQueryHandler(fatura_confirm, pattern="^fatura_")),
         ("agendamento_menu_callback", lambda: CallbackQueryHandler(agendamento_menu_callback, pattern="^agendamento_")),
         ("cancelar_agendamento_callback", lambda: CallbackQueryHandler(cancelar_agendamento_callback, pattern="^ag_cancelar_")),
         ("gamificacao_callback", lambda: CallbackQueryHandler(handle_gamification_callback, pattern="^(show_rankings|show_stats|show_rewards)$")),

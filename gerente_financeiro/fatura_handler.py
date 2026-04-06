@@ -7,7 +7,7 @@ import asyncio
 import time
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlparse
 
 import pdfplumber
 from pdfminer.pdfdocument import PDFPasswordIncorrect
@@ -166,7 +166,20 @@ def parse_inter_pdf_bytes(file_bytes: bytes) -> Tuple[List[Dict], int]:
 
 
 def _get_fatura_webapp_url(page: str, token: str) -> str:
-    base_url = os.getenv("DASHBOARD_BASE_URL", "http://localhost:5000").rstrip("/")
+    base_url = os.getenv("DASHBOARD_BASE_URL") or os.getenv("RENDER_EXTERNAL_URL") or "http://localhost:5000"
+    base_url = str(base_url).strip().rstrip("/")
+
+    # Telegram exige HTTPS fora de localhost para abrir web_app.
+    if not base_url.startswith(("http://", "https://")):
+        if base_url.startswith(("localhost", "127.0.0.1")):
+            base_url = f"http://{base_url}"
+        else:
+            base_url = f"https://{base_url}"
+
+    parsed = urlparse(base_url)
+    if parsed.scheme == "http" and parsed.hostname not in ("localhost", "127.0.0.1"):
+        base_url = base_url.replace("http://", "https://", 1)
+
     params = {
         "entry": "fatura_edit",
         "page": page,
