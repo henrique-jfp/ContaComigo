@@ -24,7 +24,7 @@ from telegram.ext import (
 
 from database.database import get_db, get_or_create_user
 from models import Conta
-from .services import salvar_transacoes_generica
+from .services import salvar_transacoes_generica, limpar_cache_usuario
 from .fatura_draft_store import create_fatura_draft, set_pending_editor_token
 from .states import (
     FATURA_AWAIT_FILE,
@@ -859,6 +859,11 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         await give_xp_for_action(query.from_user.id, "LANCAMENTO_CRIADO_PDF", context)
                     except Exception:
                         logger.debug("Falha ao conceder XP da fatura (nao critico).")
+                    # Garante consistencia imediata no chat/miniapp apos importacao da fatura.
+                    try:
+                        limpar_cache_usuario(int(query.from_user.id))
+                    except Exception:
+                        logger.debug("Falha ao limpar cache do usuario apos importacao de fatura.")
                 
                 await query.edit_message_text(msg, parse_mode="HTML")
                 return ConversationHandler.END

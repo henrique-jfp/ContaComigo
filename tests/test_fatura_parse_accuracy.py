@@ -16,6 +16,10 @@ class TxSignature:
 ROOT = Path(__file__).resolve().parents[1]
 INTER_PDF = ROOT / "fatura inter-1.pdf"
 BRADESCO_PDF = ROOT / "Bradesco_Fatura.pdf"
+if not INTER_PDF.exists():
+    INTER_PDF = ROOT / "faturas_system" / "fatura inter-1.pdf"
+if not BRADESCO_PDF.exists():
+    BRADESCO_PDF = ROOT / "faturas_system" / "Bradesco_Fatura.pdf"
 
 
 # Amostras-âncora do PDF Inter para evitar regressões sem precisar listar 100+ itens.

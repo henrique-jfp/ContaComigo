@@ -48,6 +48,7 @@ _cache_financeiro = {}
 _cache_tempo = {}
 _cache_memoria = {}  # <-- Cache principal em memória
 _cache_hash_transacoes = {}  # <-- Hash das transações para invalidação automática
+_cache_user_owner = {}  # <-- Dono (user_id) de cada chave de cache
 CACHE_TTL = 30  # ⚡ 30 segundos (rápido para evitar dados desatualizados)
 CACHE_MAX_SIZE = 100  # Limite de itens no cache
 
@@ -163,6 +164,7 @@ def _salvar_no_cache(chave: str, dados: Any, db: Session = None, user_id: int = 
         _cache_financeiro.pop(chave_mais_antiga, None)
         _cache_tempo.pop(chave_mais_antiga, None)
         _cache_hash_transacoes.pop(chave_mais_antiga, None)
+        _cache_user_owner.pop(chave_mais_antiga, None)
         logger.debug(f"🗑️ Cache limpo (limite atingido): {chave_mais_antiga}")
     
     _cache_financeiro[chave] = dados
@@ -171,18 +173,21 @@ def _salvar_no_cache(chave: str, dados: Any, db: Session = None, user_id: int = 
     # ⚡ NOVO: Salva hash das transações para invalidação automática
     if db and user_id:
         _cache_hash_transacoes[chave] = _gerar_hash_transacoes(db, user_id)
+        _cache_user_owner[chave] = int(user_id)
     
     logger.debug(f"💾 Dados salvos no cache: {chave}")
     
 def limpar_cache_usuario(user_id: int) -> None:
     """Limpa todo o cache de um usuário específico"""
     chaves_para_remover = [
-        chave for chave in _cache_financeiro.keys() 
-        if str(user_id) in chave
+        chave for chave, owner_id in _cache_user_owner.items()
+        if owner_id == int(user_id)
     ]
     for chave in chaves_para_remover:
         _cache_financeiro.pop(chave, None)
         _cache_tempo.pop(chave, None)
+        _cache_hash_transacoes.pop(chave, None)
+        _cache_user_owner.pop(chave, None)
 
 logger = logging.getLogger(__name__)
 
