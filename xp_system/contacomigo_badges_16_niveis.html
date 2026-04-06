@@ -1,0 +1,252 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans)}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;padding:8px 0}
+.badge-wrap{display:flex;flex-direction:column;align-items:center;gap:6px}
+.badge-wrap svg{width:100%;max-width:120px;height:auto}
+.badge-label{font-size:11px;font-weight:500;color:var(--color-text-secondary);text-align:center;line-height:1.3}
+.badge-num{font-size:10px;color:var(--color-text-tertiary);text-align:center}
+.tier-label{font-size:11px;font-weight:500;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.07em;padding:12px 0 4px;grid-column:1/-1}
+@media(max-width:480px){.grid{grid-template-columns:repeat(3,1fr)}}
+</style>
+
+<div class="grid">
+
+<div class="tier-label">Iniciante — Faixa Bronze</div>
+
+<div class="badge-wrap">
+<svg viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="50,8 58,30 82,30 63,45 70,68 50,54 30,68 37,45 18,30 42,30" fill="#C8956C" stroke="#8B5E3C" stroke-width="1.5"/>
+  <circle cx="50" cy="42" r="16" fill="#E8B08A" stroke="#8B5E3C" stroke-width="1"/>
+  <text x="50" y="47" text-anchor="middle" font-size="16" font-weight="700" fill="#5C3317">R$</text>
+  <text x="50" y="90" text-anchor="middle" font-size="9" font-weight="600" fill="#8B5E3C">Caderneta</text>
+  <text x="50" y="102" text-anchor="middle" font-size="8" fill="#A07050">Zerada</text>
+</svg>
+<div class="badge-label">Caderneta Zerada</div>
+<div class="badge-num">Nível 1</div>
+</div>
+
+<div class="badge-wrap">
+<svg viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+  <rect x="20" y="14" width="60" height="52" rx="6" fill="#C8956C" stroke="#8B5E3C" stroke-width="1.5"/>
+  <rect x="26" y="20" width="48" height="32" rx="3" fill="#E8D5C0"/>
+  <line x1="30" y1="28" x2="70" y2="28" stroke="#8B5E3C" stroke-width="1.2"/>
+  <line x1="30" y1="34" x2="60" y2="34" stroke="#8B5E3C" stroke-width="1.2"/>
+  <line x1="30" y1="40" x2="65" y2="40" stroke="#8B5E3C" stroke-width="1.2"/>
+  <line x1="30" y1="46" x2="55" y2="46" stroke="#8B5E3C" stroke-width="1.2"/>
+  <rect x="35" y="64" width="30" height="8" rx="2" fill="#8B5E3C"/>
+  <text x="50" y="90" text-anchor="middle" font-size="9" font-weight="600" fill="#8B5E3C">Anotador</text>
+  <text x="50" y="102" text-anchor="middle" font-size="8" fill="#A07050">de Plantão</text>
+</svg>
+<div class="badge-label">Anotador de Plantão</div>
+<div class="badge-num">Nível 2</div>
+</div>
+
+<div class="badge-wrap">
+<svg viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="50" cy="38" r="26" fill="#C8956C" stroke="#8B5E3C" stroke-width="2"/>
+  <circle cx="50" cy="38" r="20" fill="#E8B08A" stroke="#8B5E3C" stroke-width="1"/>
+  <path d="M38 38 L46 46 L62 30" stroke="#5C3317" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="30" y="62" width="40" height="6" rx="3" fill="#C8956C" stroke="#8B5E3C" stroke-width="1"/>
+  <text x="50" y="90" text-anchor="middle" font-size="9" font-weight="600" fill="#8B5E3C">Controlador</text>
+  <text x="50" y="102" text-anchor="middle" font-size="8" fill="#A07050">de Gastos</text>
+</svg>
+<div class="badge-label">Controlador de Gastos</div>
+<div class="badge-num">Nível 3</div>
+</div>
+
+<div class="badge-wrap">
+<svg viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="50,6 62,20 80,20 80,58 50,70 20,58 20,20 38,20" fill="#C8956C" stroke="#8B5E3C" stroke-width="1.5"/>
+  <circle cx="50" cy="40" r="14" fill="#E8D5C0" stroke="#8B5E3C" stroke-width="1"/>
+  <text x="50" y="44" text-anchor="middle" font-size="11" font-weight="700" fill="#5C3317">Jr</text>
+  <path d="M34 58 Q50 72 66 58" stroke="#8B5E3C" stroke-width="1.2" fill="none"/>
+  <text x="50" y="90" text-anchor="middle" font-size="9" font-weight="600" fill="#8B5E3C">Orçamentário</text>
+  <text x="50" y="102" text-anchor="middle" font-size="8" fill="#A07050">Jr.</text>
+</svg>
+<div class="badge-label">Orçamentário Jr.</div>
+<div class="badge-num">Nível 4</div>
+</div>
+
+<div class="tier-label">Intermediário — Faixa Prata</div>
+
+<div class="badge-wrap">
+<svg viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="50,5 65,18 82,14 82,32 96,42 82,52 82,70 65,66 50,78 35,66 18,70 18,52 4,42 18,32 18,14 35,18" fill="#9BA8B5" stroke="#5A6872" stroke-width="1.5"/>
+  <circle cx="50" cy="42" r="18" fill="#C8D4DC" stroke="#5A6872" stroke-width="1"/>
+  <path d="M42 48 L42 36 L50 32 L58 36 L58 48" stroke="#3A4A56" stroke-width="1.5" fill="#E8F0F5"/>
+  <line x1="44" y1="42" x2="56" y2="42" stroke="#3A4A56" stroke-width="1.2"/>
+  <text x="50" y="90" text-anchor="middle" font-size="9" font-weight="600" fill="#5A6872">Caçador</text>
+  <text x="50" y="102" text-anchor="middle" font-size="8" fill="#7A8A96">de Sobras</text>
+</svg>
+<div class="badge-label">Caçador de Sobras</div>
+<div class="badge-num">Nível 5</div>
+</div>
+
+<div class="badge-wrap">
+<svg viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="50,5 65,18 82,14 82,32 96,42 82,52 82,70 65,66 50,78 35,66 18,70 18,52 4,42 18,32 18,14 35,18" fill="#9BA8B5" stroke="#5A6872" stroke-width="1.5"/>
+  <circle cx="50" cy="42" r="18" fill="#C8D4DC" stroke="#5A6872" stroke-width="1"/>
+  <rect x="37" y="33" width="26" height="18" rx="2" fill="#E8F0F5" stroke="#3A4A56" stroke-width="1"/>
+  <line x1="41" y1="39" x2="59" y2="39" stroke="#3A4A56" stroke-width="1"/>
+  <line x1="41" y1="44" x2="55" y2="44" stroke="#3A4A56" stroke-width="1"/>
+  <rect x="44" y="50" width="12" height="4" rx="1" fill="#5A6872"/>
+  <text x="50" y="90" text-anchor="middle" font-size="9" font-weight="600" fill="#5A6872">Arquivista</text>
+  <text x="50" y="102" text-anchor="middle" font-size="8" fill="#7A8A96">do Real</text>
+</svg>
+<div class="badge-label">Arquivista do Real</div>
+<div class="badge-num">Nível 6</div>
+</div>
+
+<div class="badge-wrap">
+<svg viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="50,5 65,18 82,14 82,32 96,42 82,52 82,70 65,66 50,78 35,66 18,70 18,52 4,42 18,32 18,14 35,18" fill="#9BA8B5" stroke="#5A6872" stroke-width="2"/>
+  <circle cx="50" cy="42" r="19" fill="#D8E4EC" stroke="#5A6872" stroke-width="1"/>
+  <path d="M34 50 L38 40 L44 46 L50 32 L56 42 L62 36 L66 50" stroke="#3A4A56" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="50" y="90" text-anchor="middle" font-size="9" font-weight="600" fill="#5A6872">Analista</text>
+  <text x="50" y="102" text-anchor="middle" font-size="8" fill="#7A8A96">de Bolso</text>
+</svg>
+<div class="badge-label">Analista de Bolso</div>
+<div class="badge-num">Nível 7</div>
+</div>
+
+<div class="badge-wrap">
+<svg viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="50,5 65,18 82,14 82,32 96,42 82,52 82,70 65,66 50,78 35,66 18,70 18,52 4,42 18,32 18,14 35,18" fill="#7A8A9A" stroke="#4A5A6A" stroke-width="2"/>
+  <circle cx="50" cy="42" r="19" fill="#C0CCD8" stroke="#4A5A6A" stroke-width="1.5"/>
+  <path d="M36 50 Q50 26 64 50" stroke="#2A3A4A" stroke-width="1.5" fill="#D8E8F4" stroke-linejoin="round"/>
+  <circle cx="50" cy="46" r="4" fill="#2A3A4A"/>
+  <line x1="50" y1="42" x2="50" y2="34" stroke="#2A3A4A" stroke-width="1.5"/>
+  <text x="50" y="90" text-anchor="middle" font-size="9" font-weight="600" fill="#4A5A6A">Planejador</text>
+  <text x="50" y="102" text-anchor="middle" font-size="8" fill="#6A7A8A">Ativo</text>
+</svg>
+<div class="badge-label">Planejador Ativo</div>
+<div class="badge-num">Nível 8</div>
+</div>
+
+<div class="tier-label">Avançado — Faixa Ouro</div>
+
+<div class="badge-wrap">
+<svg viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="50,4 62,16 78,10 80,28 96,34 86,48 90,66 72,66 62,80 50,70 38,80 28,66 10,66 14,48 4,34 20,28 22,10 38,16" fill="#D4A830" stroke="#8B6A10" stroke-width="1.5"/>
+  <circle cx="50" cy="42" r="21" fill="#F0D080" stroke="#8B6A10" stroke-width="1.5"/>
+  <path d="M36 54 L36 38 Q36 30 50 30 Q64 30 64 38 L64 54" stroke="#5C3A00" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <circle cx="50" cy="54" r="4" fill="#5C3A00"/>
+  <text x="50" y="90" text-anchor="middle" font-size="9" font-weight="600" fill="#8B6A10">Mestre</text>
+  <text x="50" y="102" text-anchor="middle" font-size="8" fill="#A08020">do Fluxo</text>
+</svg>
+<div class="badge-label">Mestre do Fluxo</div>
+<div class="badge-num">Nível 9</div>
+</div>
+
+<div class="badge-wrap">
+<svg viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="50,4 62,16 78,10 80,28 96,34 86,48 90,66 72,66 62,80 50,70 38,80 28,66 10,66 14,48 4,34 20,28 22,10 38,16" fill="#D4A830" stroke="#8B6A10" stroke-width="1.5"/>
+  <circle cx="50" cy="42" r="21" fill="#F0D080" stroke="#8B6A10" stroke-width="1.5"/>
+  <path d="M34 48 L34 36 L50 28 L66 36 L66 48 L50 56 Z" fill="#F8E8A0" stroke="#5C3A00" stroke-width="1.5"/>
+  <circle cx="50" cy="42" r="6" fill="#D4A830" stroke="#5C3A00" stroke-width="1"/>
+  <text x="50" y="90" text-anchor="middle" font-size="9" font-weight="600" fill="#8B6A10">Guardião do</text>
+  <text x="50" y="102" text-anchor="middle" font-size="8" fill="#A08020">Patrimônio</text>
+</svg>
+<div class="badge-label">Guardião do Patrimônio</div>
+<div class="badge-num">Nível 10</div>
+</div>
+
+<div class="badge-wrap">
+<svg viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="50,4 62,16 78,10 80,28 96,34 86,48 90,66 72,66 62,80 50,70 38,80 28,66 10,66 14,48 4,34 20,28 22,10 38,16" fill="#C09020" stroke="#7A5800" stroke-width="2"/>
+  <circle cx="50" cy="42" r="22" fill="#F0C840" stroke="#7A5800" stroke-width="2"/>
+  <rect x="36" y="34" width="28" height="20" rx="3" fill="#FFF8D8" stroke="#5C3A00" stroke-width="1.5"/>
+  <line x1="40" y1="40" x2="60" y2="40" stroke="#5C3A00" stroke-width="1.2"/>
+  <line x1="40" y1="45" x2="54" y2="45" stroke="#5C3A00" stroke-width="1.2"/>
+  <circle cx="62" cy="30" r="8" fill="#F0C840" stroke="#7A5800" stroke-width="1.5"/>
+  <text x="62" y="33" text-anchor="middle" font-size="9" font-weight="700" fill="#5C3A00">C</text>
+  <text x="50" y="90" text-anchor="middle" font-size="9" font-weight="600" fill="#7A5800">CFO</text>
+  <text x="50" y="102" text-anchor="middle" font-size="8" fill="#9A7810">Pessoal</text>
+</svg>
+<div class="badge-label">CFO Pessoal</div>
+<div class="badge-num">Nível 11</div>
+</div>
+
+<div class="badge-wrap">
+<svg viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="50,4 62,16 78,10 80,28 96,34 86,48 90,66 72,66 62,80 50,70 38,80 28,66 10,66 14,48 4,34 20,28 22,10 38,16" fill="#B07800" stroke="#6A4800" stroke-width="2"/>
+  <circle cx="50" cy="42" r="22" fill="#E8B820" stroke="#6A4800" stroke-width="2"/>
+  <polygon points="50,24 54,36 68,36 56,44 60,56 50,48 40,56 44,44 32,36 46,36" fill="#6A4800" stroke="#4A3200" stroke-width="0.8"/>
+  <text x="50" y="90" text-anchor="middle" font-size="9" font-weight="600" fill="#6A4800">Arquiteto</text>
+  <text x="50" y="102" text-anchor="middle" font-size="8" fill="#8A6010">Financeiro</text>
+</svg>
+<div class="badge-label">Arquiteto Financeiro</div>
+<div class="badge-num">Nível 12</div>
+</div>
+
+<div class="tier-label">Elite &amp; Lenda — Faixa Diamante</div>
+
+<div class="badge-wrap">
+<svg viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="50,3 63,14 78,8 82,24 96,30 88,46 94,62 78,64 70,78 54,72 50,80 46,72 30,78 22,64 6,62 12,46 4,30 18,24 22,8 37,14" fill="#7B5EA7" stroke="#4A2E7A" stroke-width="1.5"/>
+  <circle cx="50" cy="42" r="22" fill="#B09AD0" stroke="#4A2E7A" stroke-width="1.5"/>
+  <polygon points="50,24 56,34 68,34 60,44 63,56 50,50 37,56 40,44 32,34 44,34" fill="#E8D8F8" stroke="#4A2E7A" stroke-width="1"/>
+  <circle cx="50" cy="42" r="5" fill="#4A2E7A"/>
+  <text x="50" y="90" text-anchor="middle" font-size="9" font-weight="600" fill="#4A2E7A">Visionário</text>
+  <text x="50" y="102" text-anchor="middle" font-size="8" fill="#6A4E9A">de Mercado</text>
+</svg>
+<div class="badge-label">Visionário de Mercado</div>
+<div class="badge-num">Nível 13</div>
+</div>
+
+<div class="badge-wrap">
+<svg viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="50,3 63,14 78,8 82,24 96,30 88,46 94,62 78,64 70,78 54,72 50,80 46,72 30,78 22,64 6,62 12,46 4,30 18,24 22,8 37,14" fill="#5E3A8A" stroke="#3A1A60" stroke-width="2"/>
+  <circle cx="50" cy="42" r="23" fill="#9878C0" stroke="#3A1A60" stroke-width="2"/>
+  <path d="M50 24 L55 35 L68 35 L58 43 L62 55 L50 48 L38 55 L42 43 L32 35 L45 35 Z" fill="#F0E4FF" stroke="#3A1A60" stroke-width="1"/>
+  <circle cx="50" cy="38" r="6" fill="#3A1A60"/>
+  <path d="M44 56 Q50 62 56 56" stroke="#3A1A60" stroke-width="1.5" fill="none"/>
+  <text x="50" y="90" text-anchor="middle" font-size="9" font-weight="600" fill="#3A1A60">Oráculo</text>
+  <text x="50" y="102" text-anchor="middle" font-size="8" fill="#5A3A80">do Budget</text>
+</svg>
+<div class="badge-label">Oráculo do Budget</div>
+<div class="badge-num">Nível 14</div>
+</div>
+
+<div class="badge-wrap">
+<svg viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="50,2 64,12 80,6 86,22 100,28 92,46 100,62 84,66 78,82 62,76 50,84 38,76 22,82 16,66 0,62 8,46 0,28 14,22 20,6 36,12" fill="#4A28A0" stroke="#280A80" stroke-width="2"/>
+  <circle cx="50" cy="42" r="24" fill="#8060C8" stroke="#280A80" stroke-width="2"/>
+  <circle cx="50" cy="42" r="17" fill="#C8B0F0" stroke="#280A80" stroke-width="1"/>
+  <text x="50" y="37" text-anchor="middle" font-size="11" font-weight="700" fill="#280A80">AI</text>
+  <path d="M40 44 Q50 52 60 44" stroke="#280A80" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <circle cx="42" cy="40" r="2" fill="#280A80"/>
+  <circle cx="58" cy="40" r="2" fill="#280A80"/>
+  <text x="50" y="90" text-anchor="middle" font-size="8.5" font-weight="700" fill="#280A80">Alfredo</text>
+  <text x="50" y="102" text-anchor="middle" font-size="7.5" fill="#4A28A0">Humano</text>
+</svg>
+<div class="badge-label">Alfredo Humano</div>
+<div class="badge-num">Nível 15</div>
+</div>
+
+<div class="badge-wrap">
+<svg viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <polygon id="star6" points="0,-12 3.5,-5 11,-5 5.5,1 7.5,9 0,4.5 -7.5,9 -5.5,1 -11,-5 -3.5,-5"/>
+  </defs>
+  <polygon points="50,2 64,12 80,6 86,22 100,28 92,46 100,62 84,66 78,82 62,76 50,84 38,76 22,82 16,66 0,62 8,46 0,28 14,22 20,6 36,12" fill="#1A0A50" stroke="#0A0030" stroke-width="2"/>
+  <polygon points="50,2 64,12 80,6 86,22 100,28 92,46 100,62 84,66 78,82 62,76 50,84 38,76 22,82 16,66 0,62 8,46 0,28 14,22 20,6 36,12" fill="none" stroke="#8060FF" stroke-width="1" opacity="0.7"/>
+  <circle cx="50" cy="42" r="26" fill="#2A1060" stroke="#8060FF" stroke-width="2"/>
+  <circle cx="50" cy="42" r="20" fill="#4020A0" stroke="#8060FF" stroke-width="1"/>
+  <g transform="translate(50,42)">
+    <polygon points="0,-10 2.9,-4.5 9,-4 4.5,0.5 6,7 0,3.5 -6,7 -4.5,0.5 -9,-4 -2.9,-4.5" fill="#FFD700" stroke="#B8860B" stroke-width="0.5"/>
+  </g>
+  <g transform="translate(34,30)"><polygon points="0,-6 1.7,-2.5 5.4,-2.4 2.7,0.5 3.6,4.2 0,2.1 -3.6,4.2 -2.7,0.5 -5.4,-2.4 -1.7,-2.5" fill="#C0A0FF" stroke="#6040C0" stroke-width="0.5"/></g>
+  <g transform="translate(66,30)"><polygon points="0,-6 1.7,-2.5 5.4,-2.4 2.7,0.5 3.6,4.2 0,2.1 -3.6,4.2 -2.7,0.5 -5.4,-2.4 -1.7,-2.5" fill="#C0A0FF" stroke="#6040C0" stroke-width="0.5"/></g>
+  <g transform="translate(34,54)"><polygon points="0,-5 1.4,-2 4.8,-2 2.4,0.5 3,3.5 0,1.8 -3,3.5 -2.4,0.5 -4.8,-2 -1.4,-2" fill="#C0A0FF" stroke="#6040C0" stroke-width="0.5"/></g>
+  <g transform="translate(66,54)"><polygon points="0,-5 1.4,-2 4.8,-2 2.4,0.5 3,3.5 0,1.8 -3,3.5 -2.4,0.5 -4.8,-2 -1.4,-2" fill="#C0A0FF" stroke="#6040C0" stroke-width="0.5"/></g>
+  <text x="50" y="90" text-anchor="middle" font-size="8.5" font-weight="700" fill="#8060FF">Além do</text>
+  <text x="50" y="102" text-anchor="middle" font-size="7.5" fill="#6040C0">Budget</text>
+</svg>
+<div class="badge-label">Além do Budget</div>
+<div class="badge-num">Nível 16+</div>
+</div>
+
+</div>

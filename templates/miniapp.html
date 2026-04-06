@@ -537,7 +537,7 @@
               <h2 id="gameProfileName" class="mt-2 text-2xl font-extrabold">Jogador</h2>
               <p id="gameProfileTitle" class="mt-1 text-sm font-semibold text-white/85">Iniciante</p>
             </div>
-            <span id="gameProfileBadge" class="rounded-full border border-white/30 bg-white/15 px-3 py-1 text-xs font-bold">🌱 Em evolução</span>
+            <span id="gameProfileBadge" class="rounded-full border border-white/30 bg-white/15 px-3 py-1 text-xs font-bold inline-flex items-center gap-2">🌱 Em evolução</span>
           </div>
 
           <div class="mt-5">
@@ -1924,7 +1924,20 @@
 
       gameProfileName.textContent = profile.name || 'Jogador';
       gameProfileTitle.textContent = profile.title || 'Iniciante';
-      gameProfileBadge.textContent = profile.badge || '🌱 Em evolução';
+      if (profile.badge_svg) {
+        gameProfileBadge.innerHTML = `<span class="w-5 h-5 inline-flex items-center justify-center">${profile.badge_svg}</span><span>${profile.title || 'Em evolução'}</span>`;
+        const svgEl = gameProfileBadge.querySelector('svg');
+        if (svgEl) {
+          svgEl.setAttribute('width', '20');
+          svgEl.setAttribute('height', '20');
+          svgEl.style.width = '20px';
+          svgEl.style.height = '20px';
+          svgEl.style.maxWidth = '20px';
+          svgEl.style.display = 'block';
+        }
+      } else {
+        gameProfileBadge.textContent = profile.badge || '🌱 Em evolução';
+      }
       gameProfileLevelLine.textContent = `Nível ${profile.level || 1}`;
       gameProfileXpLine.textContent = `${xp.xp_in_level || 0} / ${xp.xp_needed || 1} XP`;
       gameProfileProgressBar.style.width = `${progress}%`;

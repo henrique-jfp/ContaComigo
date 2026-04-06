@@ -486,6 +486,45 @@ def _level_badge(level: int) -> str:
     return badges.get(level_num, "📒 Caderneta Zerada")
 
 
+_badge_svg_cache: dict[int, str] | None = None
+
+
+def _load_badge_svgs() -> dict[int, str]:
+    global _badge_svg_cache
+    if _badge_svg_cache is not None:
+        return _badge_svg_cache
+
+    _badge_svg_cache = {}
+    badge_file = os.path.join(parent_dir, 'xp_system', 'contacomigo_badges_16_niveis.html')
+    if not os.path.exists(badge_file):
+        return _badge_svg_cache
+
+    try:
+        with open(badge_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        pattern = re.compile(
+            r'<div class="badge-wrap">\s*(<svg[\s\S]*?</svg>)[\s\S]*?<div class="badge-num">\s*N[íi]vel\s*([0-9]+)\+?\s*</div>',
+            re.IGNORECASE,
+        )
+        for svg_markup, level_str in pattern.findall(content):
+            _badge_svg_cache[int(level_str)] = svg_markup.strip()
+    except Exception:
+        logger.exception('Falha ao carregar SVGs de badge')
+
+    return _badge_svg_cache
+
+
+def _level_badge_svg(level: int) -> str | None:
+    level_num = int(level or 1)
+    badges = _load_badge_svgs()
+    if not badges:
+        return None
+    if level_num > 16:
+        level_num = 16
+    return badges.get(level_num)
+
+
 def _canonical_level_from_xp(total_xp: int) -> int:
     xp = int(total_xp or 0)
     milestones = [
@@ -1563,6 +1602,7 @@ def miniapp_game_profile():
                 "level": canonical_level,
                 "title": level_progress.get("title") or "Caderneta Zerada",
                 "badge": _level_badge(canonical_level),
+                "badge_svg": _level_badge_svg(canonical_level),
                 "streak": int(usuario.streak_dias or 0),
                 "xp": level_progress,
                 "monthly_rank": monthly_rank,

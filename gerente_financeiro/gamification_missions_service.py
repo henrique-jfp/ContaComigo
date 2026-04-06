@@ -121,6 +121,100 @@ MISSION_TYPES = {
     'curador_portfolio': 'special',
 }
 
+CANONICAL_MISSIONS = {
+    'caffeine_tracker': {
+        'name': 'Caffeine Tracker',
+        'description': 'Registre 3 gastos hoje via texto, voz ou foto.',
+        'mission_type': 'daily',
+        'xp_reward': 30,
+        'sort_order': 10,
+    },
+    'olho_vivo': {
+        'name': 'Olho Vivo',
+        'description': 'Verifique o dashboard e leia o card do Alfredo.',
+        'mission_type': 'daily',
+        'xp_reward': 15,
+        'sort_order': 20,
+    },
+    'clique_rapido': {
+        'name': 'Clique Rápido',
+        'description': 'Registre um gasto via áudio (voz para texto).',
+        'mission_type': 'daily',
+        'xp_reward': 20,
+        'sort_order': 30,
+    },
+    'pergunta_dia': {
+        'name': 'Pergunta do Dia',
+        'description': 'Faça uma pergunta ao Alfredo sobre seus gastos ou padrões.',
+        'mission_type': 'daily',
+        'xp_reward': 18,
+        'sort_order': 40,
+    },
+    'semana_limpa': {
+        'name': 'Semana Limpa',
+        'description': 'Registre pelo menos 1 gasto em 5 dias diferentes durante a semana.',
+        'mission_type': 'weekly',
+        'xp_reward': 80,
+        'sort_order': 50,
+    },
+    'detetive_nota': {
+        'name': 'Detetive da Nota',
+        'description': 'Use OCR de foto em pelo menos 2 notas fiscais na semana.',
+        'mission_type': 'weekly',
+        'xp_reward': 60,
+        'sort_order': 60,
+    },
+    'estrategista_metas': {
+        'name': 'Estrategista de Metas',
+        'description': 'Faça check-in em pelo menos 1 meta financeira ativa.',
+        'mission_type': 'weekly',
+        'xp_reward': 50,
+        'sort_order': 70,
+    },
+    'fatura_detonada': {
+        'name': 'Fatura Detonada',
+        'description': 'Importe e categorize um extrato ou PDF de fatura.',
+        'mission_type': 'weekly',
+        'xp_reward': 90,
+        'sort_order': 80,
+    },
+    'semana_azul': {
+        'name': 'Semana Azul',
+        'description': 'Gaste menos do que entrou na semana.',
+        'mission_type': 'weekly',
+        'xp_reward': 100,
+        'sort_order': 90,
+    },
+    'primeiro_passo': {
+        'name': 'Primeiro Passo',
+        'description': 'Registre seu primeiro gasto no ContaComigo.',
+        'mission_type': 'special',
+        'xp_reward': 50,
+        'sort_order': 100,
+    },
+    'semana_sem_enrolacao': {
+        'name': 'Semana Sem Enrolação',
+        'description': 'Complete 7 dias de streak sem quebrar.',
+        'mission_type': 'special',
+        'xp_reward': 50,
+        'sort_order': 110,
+    },
+    'mes_chave_ouro': {
+        'name': 'Mês Fechado com Chave de Ouro',
+        'description': 'Feche o mês com saldo positivo e 20+ lançamentos.',
+        'mission_type': 'special',
+        'xp_reward': 250,
+        'sort_order': 120,
+    },
+    'curador_portfolio': {
+        'name': 'Curador do Portfólio',
+        'description': 'Adicione pelo menos 3 investimentos.',
+        'mission_type': 'special',
+        'xp_reward': 120,
+        'sort_order': 130,
+    },
+}
+
 DAILY_REPETITIVE_XP_CAP = 200
 
 
@@ -188,6 +282,39 @@ def _current_week_key(today: date) -> tuple[int, int]:
 
 
 def _canonical_mission_rows(db: Session) -> list:
+    # Bootstrap idempotente para garantir que o MiniApp sempre tenha missões.
+    existing_rows = db.query(Mission).all()
+    existing_by_key = {row.mission_key: row for row in existing_rows}
+    changed = False
+
+    for key, spec in CANONICAL_MISSIONS.items():
+        row = existing_by_key.get(key)
+        if not row:
+            db.add(Mission(
+                mission_key=key,
+                name=spec['name'],
+                description=spec['description'],
+                mission_type=spec['mission_type'],
+                xp_reward=int(spec['xp_reward']),
+                bonus_multiplier=1,
+                unlock_level=0,
+                sort_order=int(spec['sort_order']),
+                active=True,
+            ))
+            changed = True
+            continue
+
+        row.name = spec['name']
+        row.description = spec['description']
+        row.mission_type = spec['mission_type']
+        row.xp_reward = int(spec['xp_reward'])
+        row.sort_order = int(spec['sort_order'])
+        row.active = True
+        changed = True
+
+    if changed:
+        db.flush()
+
     rows = db.query(Mission).filter(Mission.active == True).order_by(Mission.sort_order.asc(), Mission.id.asc()).all()  # noqa: E712
     return rows
 
