@@ -5,6 +5,7 @@ from gerente_financeiro.wrapped_anual import (
     derive_lancamento_meta,
     infer_category_from_description,
     infer_payment_method,
+    resumir_itens_comprados,
 )
 
 
@@ -22,6 +23,14 @@ class DummyLancamento:
     origem: str | None = None
     valor: float = 0.0
     data_transacao: datetime = datetime.now()
+    itens: list | None = None
+
+
+@dataclass
+class DummyItem:
+    nome_item: str
+    quantidade: float = 1.0
+    valor_unitario: float = 0.0
 
 
 def test_infer_category_from_description_ifood():
@@ -49,3 +58,22 @@ def test_derive_lancamento_meta_prefers_inferred_when_categoria_receita_on_despe
     # A inferência deve reconhecer 'mercado' -> Alimentação
     assert categoria_eff == 'Alimentação'
     assert metodo.lower().startswith('cart') or metodo == 'Cartão' or metodo == 'Cartão de Crédito'
+
+
+def test_resumir_itens_comprados_gera_topos():
+    lancamentos = [
+        DummyLancamento(itens=[
+            DummyItem(nome_item='Leite', quantidade=2, valor_unitario=5.0),
+            DummyItem(nome_item='Pão', quantidade=1, valor_unitario=10.0),
+        ]),
+        DummyLancamento(itens=[
+            DummyItem(nome_item='Leite', quantidade=1, valor_unitario=5.0),
+            DummyItem(nome_item='Chocolate', quantidade=1, valor_unitario=25.0),
+        ]),
+    ]
+
+    resumo = resumir_itens_comprados(lancamentos)
+
+    assert resumo['top_por_qtd'][0]['nome'] == 'Leite'
+    assert resumo['top_por_valor'][0]['nome'] == 'Chocolate'
+    assert resumo['baratos_por_valor'][0]['nome'] == 'Pão'

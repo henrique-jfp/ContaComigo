@@ -125,6 +125,65 @@ def derive_lancamento_meta(lanc: Any) -> Tuple[str, str, str]:
     return tipo_effective, categoria_effective, pay_method
 
 
+def resumir_itens_comprados(lancamentos: List[Any]) -> Dict[str, List[Dict[str, object]] | Dict[str, object]]:
+    """Agrupa itens comprados por nome e retorna curiosidades úteis para o Wrapped."""
+    itens_count: Dict[str, Dict[str, object]] = {}
+    itens_valor: Dict[str, Dict[str, object]] = {}
+
+    def _nome_item_chave(nome: Optional[str]) -> str:
+        nome_norm = _normalize_text(nome).strip()
+        return nome_norm or 'item_desconhecido'
+
+    for lanc in lancamentos:
+        for item in getattr(lanc, 'itens', []) or []:
+            nome_item = getattr(item, 'nome_item', None)
+            chave = _nome_item_chave(nome_item)
+            quantidade = 1.0
+            valor_unit = 0.0
+
+            try:
+                quantidade = float(item.quantidade or 1)
+            except Exception:
+                quantidade = 1.0
+            try:
+                valor_unit = float(item.valor_unitario or 0)
+            except Exception:
+                valor_unit = 0.0
+
+            valor_total_item = quantidade * valor_unit
+
+            itens_count.setdefault(chave, {'qtd': 0.0, 'nome': nome_item or 'Item'})
+            itens_valor.setdefault(chave, {'total': 0.0, 'nome': nome_item or 'Item'})
+            itens_count[chave]['qtd'] = float(itens_count[chave]['qtd']) + quantidade
+            itens_valor[chave]['total'] = float(itens_valor[chave]['total']) + valor_total_item
+
+    top_por_qtd = sorted(
+        [{'chave': chave, **dados} for chave, dados in itens_count.items()],
+        key=lambda x: (float(x['qtd']), str(x['nome']).lower()),
+        reverse=True,
+    )
+    top_por_valor = sorted(
+        [{'chave': chave, **dados} for chave, dados in itens_valor.items()],
+        key=lambda x: (float(x['total']), str(x['nome']).lower()),
+        reverse=True,
+    )
+    baratos_por_valor = [
+        {'chave': chave, **dados}
+        for chave, dados in itens_valor.items()
+        if float(dados['total']) > 0
+    ]
+    baratos_por_valor = sorted(
+        baratos_por_valor,
+        key=lambda x: (float(x['total']), str(x['nome']).lower()),
+    )
+
+    return {
+        'top_por_qtd': top_por_qtd,
+        'top_por_valor': top_por_valor,
+        'baratos_por_valor': baratos_por_valor,
+    }
+
+
 
 # ============================================================================
 # CÁLCULOS DE ESTATÍSTICAS ANUAIS
@@ -475,6 +534,50 @@ def gerar_curiosidades(db, usuario_id: int, ano: int) -> List[str]:
             curiosidades.append(
                 f"📊 Sua categoria favorita: {categoria_freq.nome} ({categoria_freq.vezes} transações)"
             )
+
+        # Curiosidades sobre itens comprados (OCR / faturas)
+        itens = (
+            db.query(Lancamento)
+            .options(joinedload(Lancamento.itens))
+            .filter(
+                and_(
+                    Lancamento.id_usuario == usuario_id,
+                    Lancamento.tipo == 'Despesa',
+                    extract('year', Lancamento.data_transacao) == ano,
+                )
+            )
+            .all()
+        )
+        resumo_itens = resumir_itens_comprados(itens)
+        top_por_qtd = resumo_itens['top_por_qtd']
+        top_por_valor = resumo_itens['top_por_valor']
+        baratos_por_valor = resumo_itens['baratos_por_valor']
+
+        if top_por_qtd:
+            item_mais_comprado = top_por_qtd[0]
+            curiosidades.append(
+                f"🛒 Item mais comprado: {item_mais_comprado['nome']} ({float(item_mais_comprado['qtd']):.0f} unidades no ano)"
+            )
+
+        if top_por_valor:
+            item_mais_caro = top_por_valor[0]
+            curiosidades.append(
+                f"💎 Item mais caro: {item_mais_caro['nome']} (R$ {float(item_mais_caro['total']):,.2f} no total)"
+            )
+            top_5_itens = top_por_valor[:5]
+            itens_topo_texto = "; ".join(
+                f"{idx}. {item['nome']} (R$ {float(item['total']):,.2f})"
+                for idx, item in enumerate(top_5_itens, 1)
+            )
+            curiosidades.append(
+                f"🏷️ Top itens por valor: {itens_topo_texto}"
+            )
+
+        if baratos_por_valor:
+            item_mais_barato = baratos_por_valor[0]
+            curiosidades.append(
+                f"🪙 Item mais barato: {item_mais_barato['nome']} (R$ {float(item_mais_barato['total']):,.2f} no total)"
+            )
         
         return curiosidades
     except Exception as e:
@@ -664,6 +767,18 @@ Vamos relembrar tudo que você conquistou?
 
 """
             for curiosidade in curiosidades[:5]:  # Máximo 5
+                mensagem += f"• {curiosidade}\n"
+            mensagem += "\n"
+
+        itens_curiosos = [c for c in curiosidades if 'Item mais' in c or 'Top itens' in c]
+        if itens_curiosos:
+            mensagem += """
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🧾 <b>SEUS ITENS MAIS MARCANTES</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+"""
+            for curiosidade in itens_curiosos[:3]:
                 mensagem += f"• {curiosidade}\n"
             mensagem += "\n"
         
