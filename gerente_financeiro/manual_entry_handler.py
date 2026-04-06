@@ -503,13 +503,15 @@ async def ocr_flow_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def ocr_confirmation_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     action = query.data
-    await ocr_action_processor(update, context)
+    result = await ocr_action_processor(update, context)
     
     if action in ["ocr_salvar", "ocr_cancelar"]:
-        await query.message.delete()
-        msg = "✅ Lançamento por OCR salvo! O que vamos registrar agora?" if action == "ocr_salvar" else "Lançamento por OCR cancelado. O que deseja fazer?"
-        await show_launch_menu(update, context, message_text=msg, new_message=True)
-        return AWAITING_LAUNCH_ACTION
+        if result is True:
+            await query.message.delete()
+            msg = "✅ Lançamento por OCR salvo! O que vamos registrar agora?" if action == "ocr_salvar" else "Lançamento por OCR cancelado. O que deseja fazer?"
+            await show_launch_menu(update, context, message_text=msg, new_message=True)
+            return AWAITING_LAUNCH_ACTION
+        return OCR_CONFIRMATION_STATE
     
     return OCR_CONFIRMATION_STATE
 

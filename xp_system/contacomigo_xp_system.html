@@ -1,0 +1,407 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans); }
+.tab-bar { display: flex; gap: 6px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.tab { padding: 6px 14px; border: 0.5px solid var(--color-border-secondary); border-radius: 20px; font-size: 13px; cursor: pointer; background: var(--color-background-primary); color: var(--color-text-secondary); transition: all 0.15s; }
+.tab.active { background: #534AB7; border-color: #534AB7; color: #EEEDFE; }
+.section { display: none; }
+.section.active { display: block; }
+.card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; margin-bottom: 12px; }
+.card-title { font-size: 13px; font-weight: 500; color: var(--color-text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+.level-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 1rem; }
+.level-card { border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 12px 14px; background: var(--color-background-secondary); }
+.level-num { font-size: 11px; color: var(--color-text-tertiary); font-weight: 500; }
+.level-name { font-size: 15px; font-weight: 500; color: var(--color-text-primary); margin: 2px 0 4px; }
+.level-xp { font-size: 12px; color: var(--color-text-secondary); }
+.level-badge { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 20px; margin-top: 6px; font-weight: 500; }
+.badge-bronze { background: #F5C4B3; color: #712B13; }
+.badge-silver { background: #D3D1C7; color: #444441; }
+.badge-gold { background: #FAC775; color: #633806; }
+.badge-diamond { background: #CECBF6; color: #3C3489; }
+.badge-legend { background: #F4C0D1; color: #72243E; }
+.action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.action-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--color-background-secondary); border-radius: var(--border-radius-md); }
+.action-name { font-size: 13px; color: var(--color-text-primary); }
+.action-xp { font-size: 13px; font-weight: 500; color: #3B6D11; }
+.action-xp.special { color: #534AB7; }
+.mission-card { border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 12px 14px; margin-bottom: 8px; }
+.mission-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+.mission-name { font-size: 14px; font-weight: 500; color: var(--color-text-primary); }
+.mission-tag { font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 500; white-space: nowrap; margin-left: 8px; }
+.tag-daily { background: #EAF3DE; color: #3B6D11; }
+.tag-weekly { background: #E6F1FB; color: #185FA5; }
+.tag-special { background: #EEEDFE; color: #534AB7; }
+.mission-desc { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 8px; }
+.mission-reward { display: flex; gap: 8px; align-items: center; }
+.xp-pill { background: #EAF3DE; color: #3B6D11; border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 500; }
+.bonus-pill { background: #EEEDFE; color: #534AB7; border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 500; }
+.streak-info { font-size: 12px; color: var(--color-text-tertiary); }
+.section-label { font-size: 12px; font-weight: 500; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.06em; margin: 1.2rem 0 0.5rem; }
+.bonus-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-radius: var(--border-radius-md); margin-bottom: 6px; border: 0.5px solid var(--color-border-tertiary); }
+.bonus-label { font-size: 13px; color: var(--color-text-primary); }
+.bonus-value { font-size: 13px; font-weight: 500; }
+.mult-green { color: #3B6D11; }
+.mult-purple { color: #534AB7; }
+.mult-amber { color: #854F0B; }
+.mult-red { color: #A32D2D; }
+.highlight-box { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px 14px; margin-bottom: 10px; }
+.highlight-title { font-size: 13px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 4px; }
+.highlight-text { font-size: 12px; color: var(--color-text-secondary); line-height: 1.6; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+@media (max-width: 500px) { .action-grid, .two-col { grid-template-columns: 1fr; } .level-grid { grid-template-columns: 1fr 1fr; } }
+</style>
+
+<div style="padding: 0.5rem 0;">
+<div class="tab-bar">
+  <div class="tab active" onclick="switchTab('levels')">Níveis</div>
+  <div class="tab" onclick="switchTab('xp')">XP por ação</div>
+  <div class="tab" onclick="switchTab('missions')">Missões</div>
+  <div class="tab" onclick="switchTab('bonus')">Bônus & Multiplicadores</div>
+</div>
+
+<div id="tab-levels" class="section active">
+  <div class="card">
+    <div class="card-title">Faixa Iniciante — Aprendiz Financeiro</div>
+    <div class="level-grid">
+      <div class="level-card">
+        <div class="level-num">Nível 1</div>
+        <div class="level-name">Caderneta Zerada</div>
+        <div class="level-xp">0 – 200 XP</div>
+        <div class="level-badge badge-bronze">Iniciante</div>
+      </div>
+      <div class="level-card">
+        <div class="level-num">Nível 2</div>
+        <div class="level-name">Anotador de Plantão</div>
+        <div class="level-xp">200 – 500 XP</div>
+        <div class="level-badge badge-bronze">Iniciante</div>
+      </div>
+      <div class="level-card">
+        <div class="level-num">Nível 3</div>
+        <div class="level-name">Controlador de Gastos</div>
+        <div class="level-xp">500 – 1.000 XP</div>
+        <div class="level-badge badge-bronze">Iniciante</div>
+      </div>
+      <div class="level-card">
+        <div class="level-num">Nível 4</div>
+        <div class="level-name">Orçamentário Jr.</div>
+        <div class="level-xp">1.000 – 2.000 XP</div>
+        <div class="level-badge badge-bronze">Iniciante</div>
+      </div>
+    </div>
+
+    <div class="card-title">Faixa Intermediária — Gestor em Formação</div>
+    <div class="level-grid">
+      <div class="level-card">
+        <div class="level-num">Nível 5</div>
+        <div class="level-name">Caçador de Sobras</div>
+        <div class="level-xp">2.000 – 3.500 XP</div>
+        <div class="level-badge badge-silver">Intermediário</div>
+      </div>
+      <div class="level-card">
+        <div class="level-num">Nível 6</div>
+        <div class="level-name">Arquivista do Real</div>
+        <div class="level-xp">3.500 – 5.500 XP</div>
+        <div class="level-badge badge-silver">Intermediário</div>
+      </div>
+      <div class="level-card">
+        <div class="level-num">Nível 7</div>
+        <div class="level-name">Analista de Bolso</div>
+        <div class="level-xp">5.500 – 8.000 XP</div>
+        <div class="level-badge badge-silver">Intermediário</div>
+      </div>
+      <div class="level-card">
+        <div class="level-num">Nível 8</div>
+        <div class="level-name">Planejador Ativo</div>
+        <div class="level-xp">8.000 – 12.000 XP</div>
+        <div class="level-badge badge-silver">Intermediário</div>
+      </div>
+    </div>
+
+    <div class="card-title">Faixa Avançada — Estrategista</div>
+    <div class="level-grid">
+      <div class="level-card">
+        <div class="level-num">Nível 9</div>
+        <div class="level-name">Mestre do Fluxo</div>
+        <div class="level-xp">12.000 – 18.000 XP</div>
+        <div class="level-badge badge-gold">Avançado</div>
+      </div>
+      <div class="level-card">
+        <div class="level-num">Nível 10</div>
+        <div class="level-name">Guardião do Patrimônio</div>
+        <div class="level-xp">18.000 – 25.000 XP</div>
+        <div class="level-badge badge-gold">Avançado</div>
+      </div>
+      <div class="level-card">
+        <div class="level-num">Nível 11</div>
+        <div class="level-name">CFO Pessoal</div>
+        <div class="level-xp">25.000 – 35.000 XP</div>
+        <div class="level-badge badge-gold">Avançado</div>
+      </div>
+      <div class="level-card">
+        <div class="level-num">Nível 12</div>
+        <div class="level-name">Arquiteto Financeiro</div>
+        <div class="level-xp">35.000 – 50.000 XP</div>
+        <div class="level-badge badge-gold">Avançado</div>
+      </div>
+    </div>
+
+    <div class="card-title">Faixa Elite — Lendas do Contacomigo</div>
+    <div class="level-grid">
+      <div class="level-card">
+        <div class="level-num">Nível 13</div>
+        <div class="level-name">Visionário de Mercado</div>
+        <div class="level-xp">50.000 – 70.000 XP</div>
+        <div class="level-badge badge-diamond">Elite</div>
+      </div>
+      <div class="level-card">
+        <div class="level-num">Nível 14</div>
+        <div class="level-name">Oráculo do Budget</div>
+        <div class="level-xp">70.000 – 95.000 XP</div>
+        <div class="level-badge badge-diamond">Elite</div>
+      </div>
+      <div class="level-card">
+        <div class="level-num">Nível 15</div>
+        <div class="level-name">Alfredo Humano</div>
+        <div class="level-xp">95.000 – 130.000 XP</div>
+        <div class="level-badge badge-legend">Lenda</div>
+      </div>
+      <div class="level-card">
+        <div class="level-num">Nível 16+</div>
+        <div class="level-name">Além do Budget</div>
+        <div class="level-xp">+35k XP por nível</div>
+        <div class="level-badge badge-legend">Infinito</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="tab-xp" class="section">
+  <div class="card">
+    <div class="card-title">Ações de Registro</div>
+    <div class="action-grid">
+      <div class="action-row"><span class="action-name">Lançamento via texto</span><span class="action-xp">+10 XP</span></div>
+      <div class="action-row"><span class="action-name">Lançamento via voz</span><span class="action-xp">+18 XP</span></div>
+      <div class="action-row"><span class="action-name">Lançamento via foto/OCR</span><span class="action-xp">+25 XP</span></div>
+      <div class="action-row"><span class="action-name">Importar fatura PDF</span><span class="action-xp">+40 XP</span></div>
+      <div class="action-row"><span class="action-name">Editar transação</span><span class="action-xp">+5 XP</span></div>
+      <div class="action-row"><span class="action-name">Confirmar sugestão IA</span><span class="action-xp">+8 XP</span></div>
+    </div>
+
+    <div class="section-label" style="margin-top: 1rem;">Planejamento</div>
+    <div class="action-grid">
+      <div class="action-row"><span class="action-name">Criar meta financeira</span><span class="action-xp">+30 XP</span></div>
+      <div class="action-row"><span class="action-name">Check-in de meta</span><span class="action-xp">+20 XP</span></div>
+      <div class="action-row"><span class="action-name">Meta 100% atingida</span><span class="action-xp special">+100 XP</span></div>
+      <div class="action-row"><span class="action-name">Criar agendamento</span><span class="action-xp">+20 XP</span></div>
+      <div class="action-row"><span class="action-name">Adicionar investimento</span><span class="action-xp">+25 XP</span></div>
+      <div class="action-row"><span class="action-name">Atualizar portfólio</span><span class="action-xp">+15 XP</span></div>
+    </div>
+
+    <div class="section-label" style="margin-top: 1rem;">Insights & Análise</div>
+    <div class="action-grid">
+      <div class="action-row"><span class="action-name">Primeira interação do dia</span><span class="action-xp">+5 XP</span></div>
+      <div class="action-row"><span class="action-name">Perguntar ao Alfredo</span><span class="action-xp">+8 XP</span></div>
+      <div class="action-row"><span class="action-name">Gerar relatório PDF</span><span class="action-xp special">+35 XP</span></div>
+      <div class="action-row"><span class="action-name">Visualizar dashboard</span><span class="action-xp">+3 XP</span></div>
+      <div class="action-row"><span class="action-name">Mês fechado no azul</span><span class="action-xp special">+150 XP</span></div>
+      <div class="action-row"><span class="action-name">Wrapped anual gerado</span><span class="action-xp special">+200 XP</span></div>
+    </div>
+
+    <div class="section-label" style="margin-top: 1rem;">Engajamento</div>
+    <div class="action-grid">
+      <div class="action-row"><span class="action-name">Streak de 7 dias</span><span class="action-xp special">+50 XP</span></div>
+      <div class="action-row"><span class="action-name">Streak de 30 dias</span><span class="action-xp special">+200 XP</span></div>
+      <div class="action-row"><span class="action-name">Streak de 100 dias</span><span class="action-xp special">+500 XP</span></div>
+      <div class="action-row"><span class="action-name">Convidar amigo</span><span class="action-xp special">+80 XP</span></div>
+    </div>
+
+    <div class="highlight-box" style="margin-top: 1rem; border-left: 3px solid #534AB7;">
+      <div class="highlight-title">Limite diário anti-grind</div>
+      <div class="highlight-text">Máx. 200 XP/dia por ações repetitivas (lançamentos, edições). Bônus de streak, metas e mês no azul são ilimitados. Isso mantém o progresso honesto sem virar trabalho.</div>
+    </div>
+  </div>
+</div>
+
+<div id="tab-missions" class="section">
+  <div class="card">
+    <div class="card-title">Missões Diárias — renovam à meia-noite</div>
+
+    <div class="mission-card">
+      <div class="mission-header">
+        <div class="mission-name">Caffeine Tracker</div>
+        <div class="mission-tag tag-daily">Diária</div>
+      </div>
+      <div class="mission-desc">Registre 3 gastos hoje via texto, voz ou foto.</div>
+      <div class="mission-reward"><span class="xp-pill">+30 XP</span><span class="streak-info">Combo se repetir amanhã</span></div>
+    </div>
+
+    <div class="mission-card">
+      <div class="mission-header">
+        <div class="mission-name">Olho Vivo</div>
+        <div class="mission-tag tag-daily">Diária</div>
+      </div>
+      <div class="mission-desc">Verifique o dashboard e leia o card do Alfredo.</div>
+      <div class="mission-reward"><span class="xp-pill">+15 XP</span></div>
+    </div>
+
+    <div class="mission-card">
+      <div class="mission-header">
+        <div class="mission-name">Clique Rápido</div>
+        <div class="mission-tag tag-daily">Diária</div>
+      </div>
+      <div class="mission-desc">Registre um gasto via áudio (voz para texto).</div>
+      <div class="mission-reward"><span class="xp-pill">+20 XP</span><span class="bonus-pill">+5 XP bônus</span></div>
+    </div>
+
+    <div class="mission-card">
+      <div class="mission-header">
+        <div class="mission-name">Pergunta do Dia</div>
+        <div class="mission-tag tag-daily">Diária</div>
+      </div>
+      <div class="mission-desc">Faça uma pergunta ao Alfredo sobre seus gastos ou padrões.</div>
+      <div class="mission-reward"><span class="xp-pill">+18 XP</span></div>
+    </div>
+
+    <div class="card-title" style="margin-top: 1.2rem;">Missões Semanais — renovam na segunda-feira</div>
+
+    <div class="mission-card">
+      <div class="mission-header">
+        <div class="mission-name">Semana Limpa</div>
+        <div class="mission-tag tag-weekly">Semanal</div>
+      </div>
+      <div class="mission-desc">Registre pelo menos 1 gasto em 5 dias diferentes na semana.</div>
+      <div class="mission-reward"><span class="xp-pill">+80 XP</span><span class="bonus-pill">Multiplicador 1.2x no fim de semana</span></div>
+    </div>
+
+    <div class="mission-card">
+      <div class="mission-header">
+        <div class="mission-name">Detetive da Nota</div>
+        <div class="mission-tag tag-weekly">Semanal</div>
+      </div>
+      <div class="mission-desc">Use OCR de foto em pelo menos 2 notas fiscais na semana.</div>
+      <div class="mission-reward"><span class="xp-pill">+60 XP</span></div>
+    </div>
+
+    <div class="mission-card">
+      <div class="mission-header">
+        <div class="mission-name">Estrategista de Metas</div>
+        <div class="mission-tag tag-weekly">Semanal</div>
+      </div>
+      <div class="mission-desc">Faça check-in em pelo menos 1 meta financeira ativa.</div>
+      <div class="mission-reward"><span class="xp-pill">+50 XP</span></div>
+    </div>
+
+    <div class="mission-card">
+      <div class="mission-header">
+        <div class="mission-name">Fatura Detonada</div>
+        <div class="mission-tag tag-weekly">Semanal</div>
+      </div>
+      <div class="mission-desc">Importe e categorize um extrato ou PDF de fatura.</div>
+      <div class="mission-reward"><span class="xp-pill">+90 XP</span></div>
+    </div>
+
+    <div class="mission-card">
+      <div class="mission-header">
+        <div class="mission-name">Semana Azul</div>
+        <div class="mission-tag tag-weekly">Semanal</div>
+      </div>
+      <div class="mission-desc">Gaste menos do que entrou na semana (Alfredo verifica automaticamente).</div>
+      <div class="mission-reward"><span class="xp-pill">+100 XP</span><span class="bonus-pill">Insígnia especial</span></div>
+    </div>
+
+    <div class="card-title" style="margin-top: 1.2rem;">Missões Especiais — únicas ou sazonais</div>
+
+    <div class="mission-card">
+      <div class="mission-header">
+        <div class="mission-name">Primeiro Passo</div>
+        <div class="mission-tag tag-special">Única</div>
+      </div>
+      <div class="mission-desc">Registre seu primeiro gasto no ContaComigo.</div>
+      <div class="mission-reward"><span class="xp-pill">+50 XP</span><span class="bonus-pill">Título: Caderneta Aberta</span></div>
+    </div>
+
+    <div class="mission-card">
+      <div class="mission-header">
+        <div class="mission-name">Semana Sem Enrolação</div>
+        <div class="mission-tag tag-special">Conquista</div>
+      </div>
+      <div class="mission-desc">7 dias de streak sem quebrar.</div>
+      <div class="mission-reward"><span class="xp-pill">+50 XP</span><span class="bonus-pill">Multiplicador permanente +0.05x</span></div>
+    </div>
+
+    <div class="mission-card">
+      <div class="mission-header">
+        <div class="mission-name">Mês Fechado com Chave de Ouro</div>
+        <div class="mission-tag tag-special">Mensal</div>
+      </div>
+      <div class="mission-desc">Feche o mês com saldo positivo E com 20+ lançamentos registrados.</div>
+      <div class="mission-reward"><span class="xp-pill">+250 XP</span><span class="bonus-pill">Insígnia dourada</span></div>
+    </div>
+
+    <div class="mission-card">
+      <div class="mission-header">
+        <div class="mission-name">Curador do Portfólio</div>
+        <div class="mission-tag tag-special">Conquista</div>
+      </div>
+      <div class="mission-desc">Adicione pelo menos 3 investimentos e visualize o patrimônio líquido.</div>
+      <div class="mission-reward"><span class="xp-pill">+120 XP</span><span class="bonus-pill">Acesso ao ranking de investidores</span></div>
+    </div>
+  </div>
+</div>
+
+<div id="tab-bonus" class="section">
+  <div class="card">
+    <div class="card-title">Multiplicadores de Streak</div>
+    <div class="bonus-row"><span class="bonus-label">1–6 dias seguidos</span><span class="bonus-value mult-green">1.0x (base)</span></div>
+    <div class="bonus-row"><span class="bonus-label">7–13 dias seguidos</span><span class="bonus-value mult-green">1.15x todo XP ganho</span></div>
+    <div class="bonus-row"><span class="bonus-label">14–29 dias seguidos</span><span class="bonus-value mult-green">1.25x todo XP ganho</span></div>
+    <div class="bonus-row"><span class="bonus-label">30–99 dias seguidos</span><span class="bonus-value mult-purple">1.40x todo XP ganho</span></div>
+    <div class="bonus-row"><span class="bonus-label">100+ dias seguidos</span><span class="bonus-value mult-purple">1.60x + insígnia especial</span></div>
+
+    <div class="card-title" style="margin-top: 1.2rem;">Bônus por Performance Financeira</div>
+    <div class="highlight-box">
+      <div class="highlight-title">Mês no Azul</div>
+      <div class="highlight-text">Encerrou o mês gastando menos do que recebeu? +150 XP automático + multiplicador 1.3x na semana seguinte.</div>
+    </div>
+    <div class="highlight-box">
+      <div class="highlight-title">Meta Batida</div>
+      <div class="highlight-text">100% de uma meta financeira atingida: +100 XP. Se bateu antes do prazo: +50 XP bônus adicional.</div>
+    </div>
+    <div class="highlight-box">
+      <div class="highlight-title">Redução de Gastos em Categoria</div>
+      <div class="highlight-text">Gastou menos em uma categoria que o mês anterior? +40 XP por categoria (máx. 2 categorias/mês).</div>
+    </div>
+    <div class="highlight-box">
+      <div class="highlight-title">Crescimento de Patrimônio</div>
+      <div class="highlight-text">Patrimônio líquido cresceu vs. mês anterior? +80 XP mensal. Crescimento de 10%+? +120 XP.</div>
+    </div>
+
+    <div class="card-title" style="margin-top: 1.2rem;">Multiplicadores de Nível</div>
+    <div class="two-col">
+      <div class="bonus-row"><span class="bonus-label">Nível 1–4</span><span class="bonus-value">1.0x (base)</span></div>
+      <div class="bonus-row"><span class="bonus-label">Nível 5–8</span><span class="bonus-value mult-green">1.05x</span></div>
+      <div class="bonus-row"><span class="bonus-label">Nível 9–12</span><span class="bonus-value mult-green">1.10x</span></div>
+      <div class="bonus-row"><span class="bonus-label">Nível 13–15</span><span class="bonus-value mult-purple">1.15x</span></div>
+      <div class="bonus-row"><span class="bonus-label">Nível 16+</span><span class="bonus-value mult-purple">1.20x</span></div>
+    </div>
+    <div class="highlight-text" style="font-size: 12px; padding: 4px 2px; color: var(--color-text-secondary);">Os multiplicadores de nível são aplicados por cima do streak. Eles se somam (não se multiplicam entre si) para evitar que virem exploits.</div>
+
+    <div class="card-title" style="margin-top: 1.2rem;">Eventos Especiais (futuros — planeje já)</div>
+    <div class="bonus-row"><span class="bonus-label">Janeiro "Detox Financeiro"</span><span class="bonus-value mult-amber">2x XP na semana 1</span></div>
+    <div class="bonus-row"><span class="bonus-label">Novembro "Black Friday Inverso"</span><span class="bonus-value mult-amber">Bônus por economizar</span></div>
+    <div class="bonus-row"><span class="bonus-label">Fim de mês (dias 28–31)</span><span class="bonus-value mult-green">+20% em missões semanais</span></div>
+    <div class="bonus-row"><span class="bonus-label">Aniversário no app</span><span class="bonus-value mult-red">+200 XP únicos por ano</span></div>
+  </div>
+</div>
+</div>
+
+<script>
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  const tabs = ['levels','xp','missions','bonus'];
+  document.querySelectorAll('.tab')[tabs.indexOf(name)].classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+</script>

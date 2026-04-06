@@ -281,35 +281,68 @@ def _normalize_search_text(text: str) -> str:
     return re.sub(r"\s+", "", normalized).lower()
 
 
+def _extract_money_values(text: str) -> List[float]:
+    values: List[float] = []
+    if not text:
+        return values
+    for raw in re.findall(r"\d{1,3}(?:\.\d{3})*,\d{2}", text):
+        try:
+            values.append(float(raw.replace(".", "").replace(",", ".")))
+        except ValueError:
+            continue
+    return values
+
+
+def _find_value_in_line_window(lines: List[str], idx: int, window: int = 2) -> Optional[float]:
+    max_idx = min(len(lines), idx + window + 1)
+    for j in range(idx, max_idx):
+        vals = _extract_money_values(lines[j])
+        if vals:
+            return vals[0]
+    return None
+
+
 def _extract_statement_total(file_bytes: bytes, origem_label: str) -> Optional[float]:
     lines = _extract_pdf_text_lines(file_bytes)
     if not lines:
         return None
 
-    compact = _normalize_search_text("\n".join(lines))
-    patterns: List[str]
+    labels = [_normalize_search_text(l) for l in lines]
+    origem = (origem_label or "").lower()
 
-    if origem_label.lower().startswith("bradesco"):
-        patterns = [
-            r"totaldefatura.*?r\$([\d\.]+,\d{2})",
-            r"totaldafaturaemreal.*?([\d\.]+,\d{2})",
-        ]
-    elif origem_label.lower().startswith("inter"):
-        patterns = [
-            r"totaldasuafatura.*?r\$([\d\.]+,\d{2})",
-            r"faturaatual.*?r\$([\d\.]+,\d{2})",
-            r"despesasdomes.*?r\$([\d\.]+,\d{2})",
-        ]
-    else:
-        patterns = [r"total(?:da|de)fatura.*?r\$([\d\.]+,\d{2})"]
+    if origem.startswith("inter"):
+        # No layout do Inter, "Total da sua fatura" pode apontar para limite total,
+        # então priorizamos explicitamente os campos de valor devido.
+        for i, lab in enumerate(labels):
+            if "faturaatual" in lab:
+                value = _find_value_in_line_window(lines, i, window=2)
+                if value is not None:
+                    return value
+        for i, lab in enumerate(labels):
+            if "despesasdomes" in lab:
+                value = _find_value_in_line_window(lines, i, window=2)
+                if value is not None:
+                    return value
+        return None
 
-    for pattern in patterns:
-        match = re.search(pattern, compact)
-        if match:
-            try:
-                return float(match.group(1).replace(".", "").replace(",", "."))
-            except ValueError:
-                continue
+    if origem.startswith("bradesco"):
+        for i, lab in enumerate(labels):
+            if "totaldafaturaemreal" in lab:
+                value = _find_value_in_line_window(lines, i, window=3)
+                if value is not None:
+                    return value
+        for i, lab in enumerate(labels):
+            if "totaldefatura" in lab:
+                value = _find_value_in_line_window(lines, i, window=2)
+                if value is not None:
+                    return value
+        return None
+
+    for i, lab in enumerate(labels):
+        if "totaldafatura" in lab or "totaldefatura" in lab:
+            value = _find_value_in_line_window(lines, i, window=2)
+            if value is not None:
+                return value
     return None
 
 
@@ -730,31 +763,32 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     db = next(get_db())
     try:
-        usuario_db = get_or_create_user(db, update.effective_user.id, update.effective_user.full_name)
-        contas_cartao = db.query(Conta).filter(
-            Conta.id_usuario == usuario_db.id,
-            Conta.tipo.ilike("%cartao%")
-        ).all()
+        # Modo Zero Setup: não depende mais de conta/cartão cadastrado.
+        context.user_data["fatura_conta_id"] = 0
 
-        contas = contas_cartao or db.query(Conta).filter(
-            Conta.id_usuario == usuario_db.id
-        ).all()
-
-        if not contas:
-            await update.message.reply_text(
-                "Nenhuma conta/cartao cadastrado. Use /configurar primeiro."
-            )
-            return ConversationHandler.END
-
-        # Use first available account automatically
-        primeira_conta = contas[0]
-        context.user_data["fatura_conta_id"] = primeira_conta.id
+        total_pdf = context.user_data.get("fatura_valor_total_pdf")
+        total_debito_extraido = sum(-float(t["valor"]) for t in transacoes if float(t["valor"]) < 0)
+        ajuste_pdf = 0.0
+        if isinstance(total_pdf, (int, float)):
+            ajuste_pdf = round(float(total_pdf) - float(total_debito_extraido), 2)
+            if abs(ajuste_pdf) >= 0.01:
+                data_ajuste = max((t["data_transacao"] for t in transacoes), default=datetime.now())
+                transacoes.append({
+                    "data_transacao": data_ajuste,
+                    "descricao": "AJUSTE FATURA (valor nao detalhado no PDF)",
+                    "valor": -abs(ajuste_pdf),
+                    "forma_pagamento": "Crédito",
+                    "origem": "fatura_ajuste_pdf",
+                })
+                context.user_data["fatura_ajuste_pdf"] = abs(ajuste_pdf)
+                context.user_data["fatura_transacoes"] = transacoes
         
         # Show summary directly with Confirm/Edit/Cancel buttons
         total = len(transacoes)
         total_debito = sum(-t["valor"] for t in transacoes if t["valor"] < 0)
         total_credito = sum(t["valor"] for t in transacoes if t["valor"] > 0)
         total_pdf = context.user_data.get("fatura_valor_total_pdf")
+        ajuste_pdf_abs = context.user_data.get("fatura_ajuste_pdf")
 
         preview_lines = []
         for item in transacoes[:8]:
@@ -775,8 +809,6 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
         preview_text = "\n".join(preview_lines) if preview_lines else "• Sem itens para preview"
         maiores_text = "\n".join(top_lines) if top_lines else "• Sem debitos"
         ignored_text = f"\n• Ignoradas (pagamentos/estornos): {ignoradas}" if ignoradas else ""
-        conta_text = f" na conta <b>{primeira_conta.nome}</b>"
-
         origem_label = context.user_data.get("fatura_origem_label", "Inter")
         resumo_linhas = [
             f"<b>Resumo da fatura ({origem_label})</b>",
@@ -786,13 +818,15 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
         ]
         if isinstance(total_pdf, (int, float)):
             resumo_linhas.append(f"• Total da fatura no PDF: <b>{_fmt_brl(total_pdf)}</b>")
+        if isinstance(ajuste_pdf_abs, (int, float)) and ajuste_pdf_abs >= 0.01:
+            resumo_linhas.append(f"• Ajuste automatico aplicado: <b>{_fmt_brl(ajuste_pdf_abs)}</b>")
         resumo_linhas.extend([
             "",
             f"<b>Maiores gastos detectados:</b>\n{maiores_text}",
             "",
             f"<b>Preview de lancamentos:</b>\n{preview_text}",
             "",
-            f"<b>Acao:</b> Importar{conta_text}?",
+            "<b>Acao:</b> Importar lancamentos?",
             "Toque em <b>Editar</b> para revisar e corrigir antes de salvar.",
         ])
         resumo = "\n".join(resumo_linhas)
@@ -829,6 +863,7 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if action == "fatura_cancelar":
             context.user_data.pop("fatura_transacoes", None)
             context.user_data.pop("fatura_conta_id", None)
+            context.user_data.pop("fatura_ajuste_pdf", None)
             await query.edit_message_text("❌ Importacao cancelada.")
             return ConversationHandler.END
 
@@ -838,17 +873,12 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             conta_id = context.user_data.get("fatura_conta_id")
             origem_label = context.user_data.get("fatura_origem_label", "Inter")
 
-            if not transacoes or not conta_id:
+            if not transacoes:
                 logger.warning("Dados de fatura expirados: transacoes=%s, conta_id=%s", bool(transacoes), conta_id)
                 await query.edit_message_text("❌ Dados da fatura expiraram. Envie o PDF novamente.")
                 return ConversationHandler.END
 
-            db = next(get_db())
-            try:
-                conta_obj = db.query(Conta).filter(Conta.id == conta_id).first()
-                conta_nome = conta_obj.nome if conta_obj else "Cartao de Credito"
-            finally:
-                db.close()
+            conta_nome = "Sem conta"
 
             token = create_fatura_draft(
                 telegram_user_id=query.from_user.id,
@@ -886,8 +916,8 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         if action == "fatura_salvar":
             transacoes = context.user_data.get("fatura_transacoes", [])
-            conta_id = context.user_data.get("fatura_conta_id")
-            if not transacoes or not conta_id:
+            conta_id = context.user_data.get("fatura_conta_id", 0)
+            if not transacoes:
                 await query.edit_message_text("❌ Dados da fatura perdidos. Tente novamente.")
                 return ConversationHandler.END
 
@@ -920,6 +950,7 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 db.close()
                 context.user_data.pop("fatura_transacoes", None)
                 context.user_data.pop("fatura_conta_id", None)
+                context.user_data.pop("fatura_ajuste_pdf", None)
                 context.user_data.pop("fatura_origem_label", None)
                 context.user_data.pop("fatura_pending_edit", None)
 

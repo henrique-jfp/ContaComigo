@@ -828,6 +828,56 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
             
         return ConversationHandler.END
 
+def _to_float_safe(value, default: float = 0.0) -> float:
+    try:
+        return float(str(value if value is not None else default).replace(',', '.'))
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _normalize_ocr_tipo(raw_tipo: str) -> str:
+    base = str(raw_tipo or '').strip().lower()
+    if base in {'entrada', 'receita', 'income'}:
+        return 'Receita'
+    return 'Despesa'
+
+
+def _normalize_forma_pagamento(value) -> str:
+    raw = str(value or '').strip().lower()
+    if raw in {'pix'}:
+        return 'Pix'
+    if raw in {'credito', 'crédito', 'cartao de credito', 'cartão de crédito', 'cartao', 'cartão'}:
+        return 'Crédito'
+    if raw in {'debito', 'débito', 'cartao de debito', 'cartão de débito'}:
+        return 'Débito'
+    if raw in {'boleto'}:
+        return 'Boleto'
+    if raw in {'dinheiro', 'especie', 'espécie'}:
+        return 'Dinheiro'
+    return 'Nao_informado'
+
+
+def _sanitize_ocr_payload(dados: dict) -> dict:
+    payload = dict(dados or {})
+    payload['valor_total'] = _to_float_safe(payload.get('valor_total'), 0.0)
+    payload['forma_pagamento'] = _normalize_forma_pagamento(payload.get('forma_pagamento'))
+    payload['tipo_transacao'] = _normalize_ocr_tipo(payload.get('tipo_transacao'))
+
+    itens_sanitizados = []
+    for item in payload.get('itens', []) or []:
+        nome = str(item.get('nome_item') or 'Item desconhecido').strip()
+        qtd = _to_float_safe(item.get('quantidade', 1), 1.0)
+        valor_unit = _to_float_safe(item.get('valor_unitario', 0), 0.0)
+        itens_sanitizados.append({
+            'nome_item': nome,
+            'quantidade': qtd,
+            'valor_unitario': valor_unit,
+        })
+    payload['itens'] = itens_sanitizados
+
+    return payload
+
+
 async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Processa a ação do botão de confirmação do OCR.
@@ -838,18 +888,25 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
     dados = context.user_data.get('dados_ocr')
     if not dados and action != 'ocr_cancelar':
         await query.answer("Erro: Dados da sessão perdidos.", show_alert=True)
-        return
+        return False
 
     if action == "ocr_toggle_type":
-        dados['tipo_transacao'] = 'Entrada' if dados.get('tipo_transacao') == 'Saída' else 'Saída'
+        dados['tipo_transacao'] = 'Receita' if _normalize_ocr_tipo(dados.get('tipo_transacao')) == 'Despesa' else 'Despesa'
         context.user_data['dados_ocr'] = dados
         await _reply_with_summary(query, context)
-        return  # Permanece no mesmo estado, apenas atualiza a mensagem
+        return None  # Permanece no mesmo estado, apenas atualiza a mensagem
+
+    if action == "ocr_cancelar":
+        context.user_data.pop('dados_ocr', None)
+        return True
 
     if action == "ocr_salvar":
         await query.edit_message_text("💾 Verificando e salvando no banco de dados...")
         db: Session = next(get_db())
         try:
+            dados = _sanitize_ocr_payload(dados)
+            context.user_data['dados_ocr'] = dados
+
             # Lógica de verificação de duplicidade e salvamento (sem alterações)
             user_info = query.from_user
             usuario_db = get_or_create_user(db, user_info.id, user_info.full_name)
@@ -872,7 +929,7 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
             ).first()
             if existing_lancamento:
                 await query.edit_message_text("⚠️ Transação Duplicada! Operação cancelada.", parse_mode='Markdown')
-                return
+                return False
 
             # Lógica de encontrar categoria/subcategoria (sem alterações)
             id_categoria, id_subcategoria = None, None
@@ -892,8 +949,8 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
                 data_transacao=data_obj,
                 descricao=dados.get('nome_estabelecimento'),
                 valor=dados.get('valor_total'),
-                tipo=dados.get('tipo_transacao', 'Saída'),
-                forma_pagamento=dados.get('forma_pagamento'),
+                tipo=dados.get('tipo_transacao', 'Despesa'),
+                forma_pagamento=dados.get('forma_pagamento', 'Nao_informado'),
                 documento_fiscal=doc_fiscal,
                 id_categoria=id_categoria,
                 id_subcategoria=id_subcategoria,
@@ -919,13 +976,16 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
                 logger.debug("Falha ao conceder XP do OCR (nao critico).")
 
             # Mensagem de sucesso será enviada pelo handler principal
+            context.user_data.pop('dados_ocr', None)
+            return True
         except Exception as e:
             db.rollback()
             logger.error(f"Erro ao salvar no banco (ocr_action_handler): {e}", exc_info=True)
             await query.edit_message_text("❌ Falha ao salvar no banco de dados. O erro foi registrado.")
+            return False
         finally:
             db.close()
-            context.user_data.pop('dados_ocr', None)
+    return None
 
 # 🚨 MÉTODO FALLBACK MELHORADO - OCR com Gemini Vision
 async def ocr_fallback_gemini(image_content):
