@@ -5,6 +5,7 @@ import re
 import uuid
 import asyncio
 import time
+import unicodedata
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 from urllib.parse import quote, urlencode, urlparse
@@ -272,6 +273,44 @@ def _parse_fatura_pipeline(file_bytes: bytes) -> Tuple[List[Dict], int, str]:
         return transacoes, ignoradas, bank_name or "Outros"
 
     return [], 0, "Inter"
+
+
+def _normalize_search_text(text: str) -> str:
+    normalized = unicodedata.normalize("NFKD", text or "")
+    normalized = normalized.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"\s+", "", normalized).lower()
+
+
+def _extract_statement_total(file_bytes: bytes, origem_label: str) -> Optional[float]:
+    lines = _extract_pdf_text_lines(file_bytes)
+    if not lines:
+        return None
+
+    compact = _normalize_search_text("\n".join(lines))
+    patterns: List[str]
+
+    if origem_label.lower().startswith("bradesco"):
+        patterns = [
+            r"totaldefatura.*?r\$([\d\.]+,\d{2})",
+            r"totaldafaturaemreal.*?([\d\.]+,\d{2})",
+        ]
+    elif origem_label.lower().startswith("inter"):
+        patterns = [
+            r"totaldasuafatura.*?r\$([\d\.]+,\d{2})",
+            r"faturaatual.*?r\$([\d\.]+,\d{2})",
+            r"despesasdomes.*?r\$([\d\.]+,\d{2})",
+        ]
+    else:
+        patterns = [r"total(?:da|de)fatura.*?r\$([\d\.]+,\d{2})"]
+
+    for pattern in patterns:
+        match = re.search(pattern, compact)
+        if match:
+            try:
+                return float(match.group(1).replace(".", "").replace(",", "."))
+            except ValueError:
+                continue
+    return None
 
 
 def _is_bradesco_pdf(lines: List[str]) -> bool:
@@ -687,6 +726,7 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
     context.user_data["fatura_transacoes"] = transacoes
     context.user_data["fatura_ignoradas"] = ignoradas
     context.user_data["fatura_origem_label"] = origem_label
+    context.user_data["fatura_valor_total_pdf"] = _extract_statement_total(bytes(file_bytes), origem_label)
 
     db = next(get_db())
     try:
@@ -714,6 +754,7 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
         total = len(transacoes)
         total_debito = sum(-t["valor"] for t in transacoes if t["valor"] < 0)
         total_credito = sum(t["valor"] for t in transacoes if t["valor"] > 0)
+        total_pdf = context.user_data.get("fatura_valor_total_pdf")
 
         preview_lines = []
         for item in transacoes[:8]:
@@ -737,16 +778,24 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
         conta_text = f" na conta <b>{primeira_conta.nome}</b>"
 
         origem_label = context.user_data.get("fatura_origem_label", "Inter")
-        resumo = (
-            f"<b>Resumo da fatura ({origem_label})</b>\n"
-            f"• Transacoes detectadas: <b>{total}</b>{ignored_text}\n"
-            f"• Total debitos: <b>{_fmt_brl(total_debito)}</b>\n"
-            f"• Total creditos: {_fmt_brl(total_credito)}\n\n"
-            f"<b>Maiores gastos detectados:</b>\n{maiores_text}\n\n"
-            f"<b>Preview de lancamentos:</b>\n{preview_text}\n\n"
-            f"<b>Acao:</b> Importar{conta_text}?\n"
-            "Toque em <b>Editar</b> para revisar e corrigir antes de salvar."
-        )
+        resumo_linhas = [
+            f"<b>Resumo da fatura ({origem_label})</b>",
+            f"• Transacoes detectadas: <b>{total}</b>{ignored_text}",
+            f"• Total debitos: <b>{_fmt_brl(total_debito)}</b>",
+            f"• Total creditos: {_fmt_brl(total_credito)}",
+        ]
+        if isinstance(total_pdf, (int, float)):
+            resumo_linhas.append(f"• Total da fatura no PDF: <b>{_fmt_brl(total_pdf)}</b>")
+        resumo_linhas.extend([
+            "",
+            f"<b>Maiores gastos detectados:</b>\n{maiores_text}",
+            "",
+            f"<b>Preview de lancamentos:</b>\n{preview_text}",
+            "",
+            f"<b>Acao:</b> Importar{conta_text}?",
+            "Toque em <b>Editar</b> para revisar e corrigir antes de salvar.",
+        ])
+        resumo = "\n".join(resumo_linhas)
 
         keyboard = [
             [InlineKeyboardButton("✅ Confirmar e Salvar", callback_data="fatura_salvar")],
