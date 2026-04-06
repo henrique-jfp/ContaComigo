@@ -161,7 +161,7 @@ class TestAlfredoRouter(unittest.IsolatedAsyncioTestCase):
             ]
         )
         texto = ia_handlers._resumo_contas_local(db, usuario_id=1)
-        self.assertIn("Contas e compromissos", texto)
+        self.assertTrue("vencendo" in texto.lower() or "não tem conta vencendo" in texto.lower() or "nao tem conta vencendo" in texto.lower())
         self.assertIn("Internet", texto)
 
     def test_resumo_semana_local_funciona(self):
@@ -172,8 +172,19 @@ class TestAlfredoRouter(unittest.IsolatedAsyncioTestCase):
             ]
         )
         texto = ia_handlers._resumo_semana_local(db, usuario_id=1)
-        self.assertIn("Resumo da semana", texto)
-        self.assertIn("Saldo", texto)
+        self.assertIn("semana", texto.lower())
+        self.assertIn("insight", texto.lower())
+
+    def test_resumo_alerta_local_evita_titulo_de_relatorio(self):
+        db = _FakeDB(
+            rows=[
+                SimpleNamespace(id=1, descricao="Mercado", valor=150.0, tipo="Saída", data_transacao=datetime.now(), categoria=SimpleNamespace(nome="Alimentação")),
+                SimpleNamespace(id=2, descricao="Salário", valor=1000.0, tipo="Entrada", data_transacao=datetime.now(), categoria=SimpleNamespace(nome="Receita")),
+            ]
+        )
+        texto = ia_handlers._resumo_alerta_local(db, usuario_id=1)
+        self.assertNotIn("Diagnóstico de risco", texto)
+        self.assertIn("Insight", texto)
 
     async def test_processar_mensagem_rotea_categorizacao_sem_groq(self):
         update = _DummyUpdate("Categorize todos os lançamentos sem categoria")
@@ -237,6 +248,52 @@ class TestAlfredoRouter(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Busca de compras", resposta)
         self.assertIn("Arroz integral", resposta)
         self.assertTrue(fake_db.closed)
+
+    async def test_processar_mensagem_prioriza_resposta_local_sem_groq(self):
+        prompts = [
+            "Tô gastando mais do que deveria?",
+            "Quanto eu gastei essa semana?",
+            "Meu padrão de gastos tá saudável?",
+            "Posso continuar gastando hoje?",
+            "Se você fosse meu gerente, o que eu deveria fazer agora?",
+        ]
+
+        for prompt in prompts:
+            update = _DummyUpdate(prompt)
+            context = _DummyContext()
+            fake_db = _FakeDB(
+                rows=[
+                    SimpleNamespace(
+                        id=1,
+                        descricao="Mercado",
+                        valor=120.0,
+                        tipo="Saída",
+                        data_transacao=datetime.now(),
+                        categoria=SimpleNamespace(nome="Alimentação"),
+                        itens=[],
+                    ),
+                    SimpleNamespace(
+                        id=2,
+                        descricao="Salário",
+                        valor=3000.0,
+                        tipo="Entrada",
+                        data_transacao=datetime.now(),
+                        categoria=SimpleNamespace(nome="Receita"),
+                        itens=[],
+                    ),
+                ]
+            )
+
+            with patch.object(ia_handlers.config, "GROQ_API_KEY", "fake-key"), \
+                 patch.object(ia_handlers, "get_db", return_value=iter([fake_db])), \
+                 patch.object(ia_handlers, "_usuario_e_saldo", return_value=(SimpleNamespace(id=1), 1000.0, 3000.0, 2000.0)), \
+                 patch.object(ia_handlers, "_groq_chat_completion_async", side_effect=AssertionError("Nao deveria chamar LLM")):
+                result = await ia_handlers.processar_mensagem_com_alfredo(update, context)
+
+            self.assertEqual(result, ia_handlers.ConversationHandler.END)
+            resposta = "\n".join(update.message.html_replies)
+            self.assertTrue(len(resposta) > 0)
+            self.assertTrue(fake_db.closed)
 
 
 if __name__ == "__main__":

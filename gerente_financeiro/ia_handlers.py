@@ -463,25 +463,10 @@ def _montar_resposta_local_alfredo(texto_usuario: str, texto_normalizado: str, d
             return _formatar_lancamento_card(ultimo)
 
     if _intencao_saldo(texto_normalizado):
-        return (
-            "💰 <b>Seu saldo atual</b>\n"
-            "━━━━━━━━━━━━━━━━━━\n\n"
-            f"<b>Saldo:</b> <code>{_formatar_valor_brasileiro(saldo)}</code>\n"
-            f"<b>Entradas acumuladas:</b> <code>{_formatar_valor_brasileiro(entradas)}</code>\n"
-            f"<b>Saídas acumuladas:</b> <code>{_formatar_valor_brasileiro(saidas)}</code>"
-        )
+        return _resumo_saldo_local(saldo, entradas, saidas)
 
     if _intencao_metas(texto_normalizado):
-        objetivos_ativos = (
-            db.query(Objetivo)
-            .filter(
-                Objetivo.id_usuario == usuario_db.id,
-                func.coalesce(Objetivo.valor_atual, 0) < func.coalesce(Objetivo.valor_meta, 0),
-            )
-            .order_by(Objetivo.criado_em.desc(), Objetivo.id.desc())
-            .all()
-        )
-        return _formatar_metas_ativas(objetivos_ativos)
+        return _resumo_metas_local(db, usuario_db.id)
 
     if _intencao_categoria_mais_gasto(texto_normalizado):
         top_categorias = _resumo_categoria_gastos(db, usuario_db.id, limite=5)
@@ -510,44 +495,7 @@ def _montar_resposta_local_alfredo(texto_usuario: str, texto_normalizado: str, d
         return _resumo_semana_local(db, usuario_db.id)
 
     if _intencao_resumo_mes(texto_normalizado):
-        agora = datetime.now()
-        inicio_mes = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        lanc_mes = (
-            db.query(Lancamento)
-            .filter(
-                Lancamento.id_usuario == usuario_db.id,
-                Lancamento.data_transacao >= inicio_mes,
-            )
-            .order_by(Lancamento.id.desc())
-            .all()
-        )
-        entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith("entr"))
-        saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith("entr"))
-        saldo_mes = entradas_mes - saidas_mes
-        top_categorias_mes = _resumo_categoria_gastos_por_lancamentos(lanc_mes, limite=3)
-        ultimos = lanc_mes[:3]
-
-        linhas = [
-            "📅 <b>Resumo do mês</b>",
-            "",
-            f"• <b>Entradas:</b> {_formatar_valor_brasileiro(entradas_mes)}",
-            f"• <b>Saídas:</b> {_formatar_valor_brasileiro(saidas_mes)}",
-            f"• <b>Saldo do mês:</b> {_formatar_valor_brasileiro(saldo_mes)}",
-        ]
-        if top_categorias_mes:
-            linhas.append("")
-            linhas.append("<b>Top categorias de gasto:</b>")
-            for nome, valor in top_categorias_mes:
-                linhas.append(f"• {escape(nome)}: {_formatar_valor_brasileiro(valor)}")
-        if ultimos:
-            linhas.append("")
-            linhas.append("<b>Últimos lançamentos:</b>")
-            for lanc in ultimos:
-                sinal = "+" if str(lanc.tipo).lower().startswith("entr") else "-"
-                linhas.append(
-                    f"• {escape(lanc.descricao or 'Lançamento')}: {sinal}{_formatar_valor_brasileiro(abs(float(lanc.valor or 0)))}"
-                )
-        return "\n".join(linhas)
+        return _resumo_mes_local(db, usuario_db.id)
 
     return (
         "🤖 <b>Alfredo no modo local</b>\n\n"
@@ -588,22 +536,29 @@ def _resumo_contas_local(db, usuario_id: int) -> str:
         elif hoje < data_ag <= fim_semana:
             semana_itens.append(item)
 
-    linhas = ["🧾 <b>Contas e compromissos</b>", ""]
-    if hoje_itens:
-        linhas.append("<b>Vencem hoje:</b>")
-        linhas.extend(f"• {item}" for item in hoje_itens[:5])
-    else:
-        linhas.append("<b>Vencem hoje:</b> nada encontrado no banco.")
-    if semana_itens:
-        linhas.append("")
-        linhas.append("<b>Até o fim da semana:</b>")
-        linhas.extend(f"• {item}" for item in semana_itens[:5])
-    if vencidas:
-        linhas.append("")
-        linhas.append("<b>Em atraso:</b>")
-        linhas.extend(f"• {item}" for item in vencidas[:5])
     if not agendamentos:
-        linhas.append("Não encontrei contas fixas ou agendamentos ativos.")
+        return (
+            "✅ Hoje você está tranquilo: não encontrei contas fixas ativas no seu banco.\n\n"
+            "👉 Insight: vale cadastrar as contas recorrentes para evitar susto de vencimento."
+        )
+
+    if hoje_itens:
+        linhas = [
+            f"⚠️ Sim, você tem {len(hoje_itens)} conta(s) vencendo hoje.",
+            "\n".join(f"• {item}" for item in hoje_itens[:3]),
+        ]
+    else:
+        linhas = ["✅ Hoje não tem conta vencendo."]
+
+    if vencidas:
+        linhas.append(f"⚠️ Tem {len(vencidas)} conta(s) em atraso, priorize isso primeiro.")
+    elif semana_itens:
+        linhas.append(f"📅 Até o fim da semana você ainda tem {len(semana_itens)} compromisso(s).")
+
+    if semana_itens:
+        linhas.append("👉 Insight: já separa esse valor agora para não apertar seu caixa no fim da semana.")
+    else:
+        linhas.append("👉 Insight: sem compromissos próximos, você ganha margem para focar nas metas.")
     return "\n".join(linhas)
 
 
@@ -636,19 +591,23 @@ def _resumo_comparacao_local(db, usuario_id: int) -> str:
     delta_pct = 0.0 if total_anterior <= 0 else (delta / total_anterior) * 100.0
     sinal = "aumentou" if delta > 0 else "caiu" if delta < 0 else "ficou igual"
 
+    if total_atual > total_anterior:
+        primeira = "⚠️ Sim, este mês você está gastando mais que no mês passado."
+    elif total_atual < total_anterior:
+        primeira = "✅ Você melhorou: este mês está gastando menos que no mês passado."
+    else:
+        primeira = "➡️ Seu gasto está praticamente igual ao mês passado."
+
     linhas = [
-        "📊 <b>Comparação com o mês anterior</b>",
-        "",
-        f"• <b>Mês atual:</b> {_formatar_valor_brasileiro(total_atual)}",
-        f"• <b>Mês anterior:</b> {_formatar_valor_brasileiro(total_anterior)}",
-        f"• <b>Variação:</b> {sinal} {_formatar_valor_brasileiro(abs(delta))} ({delta_pct:+.1f}%)",
+        primeira,
+        f"Hoje: {_formatar_valor_brasileiro(total_atual)} | Mês passado: {_formatar_valor_brasileiro(total_anterior)} ({delta_pct:+.1f}%).",
     ]
     if total_atual > total_anterior:
-        linhas.append("")
-        linhas.append("<b>Leitura rápida:</b> você está gastando mais do que no mês passado.")
+        linhas.append("👉 Insight: se cortar 10% agora, você já volta para o patamar do mês anterior.")
     elif total_atual < total_anterior:
-        linhas.append("")
-        linhas.append("<b>Leitura rápida:</b> você reduziu gastos em relação ao mês passado.")
+        linhas.append("👉 Insight: mantenha esse ritmo por mais 2 semanas para consolidar o ganho.")
+    else:
+        linhas.append("👉 Insight: o próximo salto vem de atacar sua categoria mais cara, não de cortes pequenos.")
     return "\n".join(linhas)
 
 
@@ -670,22 +629,22 @@ def _resumo_alerta_local(db, usuario_id: int) -> str:
     top_categorias = _resumo_categoria_gastos_por_lancamentos(lanc_mes, limite=3)
     risco = "alto" if saldo_mes < 0 else "moderado" if saidas_mes > entradas_mes * 0.85 else "baixo"
 
+    if risco == "alto":
+        primeira = "⚠️ Sim, agora você está gastando acima do saudável."
+    elif risco == "moderado":
+        primeira = "⚠️ Você está no limite, então vale frear um pouco já."
+    else:
+        primeira = "✅ Por enquanto, você não está gastando acima do que deveria."
+
     linhas = [
-        "🚨 <b>Diagnóstico de risco</b>",
-        "",
-        f"• <b>Risco atual:</b> {risco}",
-        f"• <b>Saldo do mês:</b> {_formatar_valor_brasileiro(saldo_mes)}",
-        f"• <b>Gastos do mês:</b> {_formatar_valor_brasileiro(saidas_mes)}",
-        f"• <b>Entradas do mês:</b> {_formatar_valor_brasileiro(entradas_mes)}",
+        primeira,
+        f"Seu mês está em {_formatar_valor_brasileiro(saldo_mes)} (entradas {_formatar_valor_brasileiro(entradas_mes)} vs saídas {_formatar_valor_brasileiro(saidas_mes)}).",
     ]
     if top_categorias:
-        linhas.append("")
-        linhas.append("<b>Principais fontes de gasto:</b>")
-        for nome, valor in top_categorias:
-            linhas.append(f"• {escape(nome)}: {_formatar_valor_brasileiro(valor)}")
-    if saldo_mes < 0:
-        linhas.append("")
-        linhas.append("<b>Alerta:</b> você está gastando mais do que entra no mês atual.")
+        nome_top, valor_top = top_categorias[0]
+        linhas.append(f"👉 Insight: seu maior peso está em {escape(nome_top)} ({_formatar_valor_brasileiro(valor_top)}).")
+    else:
+        linhas.append("👉 Insight: mesmo sem categoria dominante, controlar gasto diário já melhora seu fechamento do mês.")
     return "\n".join(linhas)
 
 
@@ -711,20 +670,18 @@ def _resumo_previsao_local(db, usuario_id: int, saldo: float, entradas: float, s
     base_disponivel = saldo if saldo > 0 else entradas_mes - saidas_mes
     limite_diario = max(0.0, base_disponivel / dias_restantes)
 
-    linhas = [
-        "🔮 <b>Previsão do mês</b>",
-        "",
-        f"• <b>Saída média diária:</b> {_formatar_valor_brasileiro(media_diaria_saida)}",
-        f"• <b>Saída projetada no mês:</b> {_formatar_valor_brasileiro(proj_saida)}",
-        f"• <b>Saldo projetado:</b> {_formatar_valor_brasileiro(saldo_projetado)}",
-        f"• <b>Limite diário seguro:</b> {_formatar_valor_brasileiro(limite_diario)}",
-    ]
     if saldo_projetado < 0:
-        linhas.append("")
-        linhas.append("<b>Leitura rápida:</b> seguindo esse ritmo, o mês tende a fechar no vermelho.")
+        primeira = f"⚠️ Nesse ritmo, você tende a fechar o mês no vermelho em {_formatar_valor_brasileiro(abs(saldo_projetado))}."
     elif saldo_projetado > 0:
-        linhas.append("")
-        linhas.append("<b>Leitura rápida:</b> há chance de fechar o mês no positivo se o ritmo se mantiver.")
+        primeira = f"✅ Nesse ritmo, você deve fechar o mês no positivo em {_formatar_valor_brasileiro(saldo_projetado)}."
+    else:
+        primeira = "➡️ Nesse ritmo, o mês deve fechar no zero a zero."
+
+    linhas = [
+        primeira,
+        f"Seu limite seguro diário agora é {_formatar_valor_brasileiro(limite_diario)}.",
+        f"👉 Insight: sua média diária está em {_formatar_valor_brasileiro(media_diaria_saida)}; baixar isso um pouco já muda o fechamento.",
+    ]
     return "\n".join(linhas)
 
 
@@ -743,43 +700,45 @@ def _resumo_analise_gastos_local(db, usuario_id: int) -> str:
     top_recorrentes = [item for item in recorrentes.most_common(3) if item[1] > 1]
     maior = max(saidas_lanc, key=lambda l: abs(float(l.valor or 0)), default=None)
 
-    linhas = ["💸 <b>Análise de gastos</b>", ""]
     if top_categorias:
-        linhas.append("<b>Onde você mais gasta:</b>")
-        for nome, valor in top_categorias:
-            linhas.append(f"• {escape(nome)}: {_formatar_valor_brasileiro(valor)}")
-    if top_recorrentes:
-        linhas.append("")
-        linhas.append("<b>Gastos invisíveis recorrentes:</b>")
-        for nome, qtd in top_recorrentes:
-            linhas.append(f"• {escape(nome)} — {qtd}x")
+        nome_top, valor_top = top_categorias[0]
+        linhas = [
+            f"💸 Seu principal ralo hoje está em {escape(nome_top)} ({_formatar_valor_brasileiro(valor_top)}).",
+        ]
+    else:
+        linhas = ["💸 Seu padrão ainda está pouco categorizado, mas dá para ajustar rápido."]
+
     if maior:
-        linhas.append("")
         linhas.append(
-            f"<b>Maior gasto recente:</b> {escape(maior.descricao or 'Lançamento')} — {_formatar_valor_brasileiro(abs(float(maior.valor or 0)))}"
+            f"O maior gasto recente foi {escape(maior.descricao or 'Lançamento')} em {_formatar_valor_brasileiro(abs(float(maior.valor or 0)))}."
         )
+
+    if top_recorrentes:
+        nome_rec, qtd_rec = top_recorrentes[0]
+        linhas.append(f"👉 Insight: {escape(nome_rec)} aparece {qtd_rec}x em gastos pequenos e recorrentes.")
+    else:
+        linhas.append("👉 Insight: cortar a categoria mais alta em 10% costuma dar resultado mais rápido que vários cortes pequenos.")
     return "\n".join(linhas)
 
 
 def _resumo_consultoria_local(db, usuario_id: int, saldo: float, entradas: float, saidas: float) -> str:
     top_categorias = _resumo_categoria_gastos(db, usuario_id, limite=3)
-    linhas = [
-        "🧭 <b>Consulta do Alfredo</b>",
-        "",
-        f"• <b>Status geral:</b> {'positivo' if saldo >= 0 else 'negativo'}",
-        f"• <b>Risco:</b> {'baixo' if saidas <= entradas else 'alto'}",
-    ]
-    if saldo < 0:
-        linhas.append("• Corte primeiro as 3 maiores categorias de gasto.")
-        linhas.append("• Evite compras grandes até o saldo voltar a ficar positivo.")
+    if saldo < 0 or saidas > entradas:
+        linhas = [
+            "⚠️ Meu direcionamento direto: corta gastos variáveis agora e protege seu caixa esta semana.",
+            "Comece travando compras não essenciais até voltar para margem positiva.",
+        ]
     else:
-        linhas.append("• Seu próximo passo é manter consistência e guardar uma parte do excedente.")
-        linhas.append("• Se quiser evoluir, transforme o saldo positivo em meta.")
+        linhas = [
+            "✅ Você está no controle, então a jogada certa agora é consistência e acúmulo.",
+            "Reserve parte do saldo positivo antes de aumentar gasto de estilo de vida.",
+        ]
+
     if top_categorias:
-        linhas.append("")
-        linhas.append("<b>Maiores categorias hoje:</b>")
-        for nome, valor in top_categorias:
-            linhas.append(f"• {escape(nome)}: {_formatar_valor_brasileiro(valor)}")
+        nome_top, valor_top = top_categorias[0]
+        linhas.append(f"👉 Insight: sua maior alavanca hoje é {escape(nome_top)} ({_formatar_valor_brasileiro(valor_top)}).")
+    else:
+        linhas.append("👉 Insight: o maior ganho agora vem de categorizar melhor seus lançamentos para cortar com precisão.")
     return "\n".join(linhas)
 
 
@@ -801,17 +760,91 @@ def _resumo_semana_local(db, usuario_id: int) -> str:
     top_categorias = _resumo_categoria_gastos_por_lancamentos(lancamentos, limite=3)
 
     linhas = [
-        "📅 <b>Resumo da semana</b>",
-        "",
-        f"• <b>Entradas:</b> {_formatar_valor_brasileiro(entradas_sem)}",
-        f"• <b>Saídas:</b> {_formatar_valor_brasileiro(saidas_sem)}",
-        f"• <b>Saldo:</b> {_formatar_valor_brasileiro(saldo_sem)}",
+        f"📊 Nessa semana você gastou {_formatar_valor_brasileiro(saidas_sem)} e entrou {_formatar_valor_brasileiro(entradas_sem)}.",
+        f"Seu saldo semanal ficou em {_formatar_valor_brasileiro(saldo_sem)}.",
     ]
     if top_categorias:
-        linhas.append("")
-        linhas.append("<b>Principais gastos da semana:</b>")
-        for nome, valor in top_categorias:
-            linhas.append(f"• {escape(nome)}: {_formatar_valor_brasileiro(valor)}")
+        nome_top, valor_top = top_categorias[0]
+        linhas.append(f"👉 Insight: {escape(nome_top)} foi a categoria que mais pesou na semana ({_formatar_valor_brasileiro(valor_top)}).")
+    else:
+        linhas.append("👉 Insight: com mais lançamentos categorizados, seus cortes ficam muito mais assertivos.")
+    return "\n".join(linhas)
+
+
+def _resumo_saldo_local(saldo: float, entradas: float, saidas: float) -> str:
+    if saldo < 0:
+        primeira = f"⚠️ Hoje você está no negativo em {_formatar_valor_brasileiro(abs(saldo))}."
+    else:
+        primeira = f"✅ Hoje você tem {_formatar_valor_brasileiro(saldo)} disponível."
+
+    return (
+        f"{primeira}\n"
+        f"Entrou {_formatar_valor_brasileiro(entradas)} e saiu {_formatar_valor_brasileiro(saidas)} no acumulado.\n"
+        "👉 Insight: manter seu saldo positivo depende mais de controlar as maiores categorias do que dos gastos pequenos."
+    )
+
+
+def _resumo_metas_local(db, usuario_id: int) -> str:
+    objetivos_ativos = (
+        db.query(Objetivo)
+        .filter(
+            Objetivo.id_usuario == usuario_id,
+            func.coalesce(Objetivo.valor_atual, 0) < func.coalesce(Objetivo.valor_meta, 0),
+        )
+        .order_by(Objetivo.criado_em.desc(), Objetivo.id.desc())
+        .all()
+    )
+
+    if not objetivos_ativos:
+        return (
+            "📌 Hoje você ainda não tem meta ativa com progresso pendente.\n"
+            "👉 Insight: criar uma meta com valor mensal automático aumenta muito sua chance de concluir."
+        )
+
+    objetivo = objetivos_ativos[0]
+    valor_atual = float(objetivo.valor_atual or 0)
+    valor_meta = float(objetivo.valor_meta or 0)
+    faltante = max(0.0, valor_meta - valor_atual)
+    percentual = 0 if valor_meta <= 0 else int((valor_atual / valor_meta) * 100)
+
+    return (
+        f"🎯 Você está no caminho da meta <b>{escape(objetivo.descricao or objetivo.nome or 'Meta')}</b>: {percentual}% concluído.\n"
+        f"Faltam {_formatar_valor_brasileiro(faltante)} para bater o alvo de {_formatar_valor_brasileiro(valor_meta)}.\n"
+        "👉 Insight: definir um aporte fixo semanal acelera mais do que tentar compensar no fim do mês."
+    )
+
+
+def _resumo_mes_local(db, usuario_id: int) -> str:
+    agora = datetime.now()
+    inicio_mes = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    lanc_mes = (
+        db.query(Lancamento)
+        .filter(
+            Lancamento.id_usuario == usuario_id,
+            Lancamento.data_transacao >= inicio_mes,
+        )
+        .order_by(Lancamento.id.desc())
+        .all()
+    )
+    entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith("entr"))
+    saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith("entr"))
+    saldo_mes = entradas_mes - saidas_mes
+    top_categorias_mes = _resumo_categoria_gastos_por_lancamentos(lanc_mes, limite=1)
+
+    if saldo_mes >= 0:
+        primeira = f"✅ Seu mês está positivo em {_formatar_valor_brasileiro(saldo_mes)}."
+    else:
+        primeira = f"⚠️ Seu mês está negativo em {_formatar_valor_brasileiro(abs(saldo_mes))}."
+
+    linhas = [
+        primeira,
+        f"Entradas {_formatar_valor_brasileiro(entradas_mes)} vs saídas {_formatar_valor_brasileiro(saidas_mes)}.",
+    ]
+    if top_categorias_mes:
+        nome_top, valor_top = top_categorias_mes[0]
+        linhas.append(f"👉 Insight: {escape(nome_top)} é o principal peso do mês ({_formatar_valor_brasileiro(valor_top)}).")
+    else:
+        linhas.append("👉 Insight: categorizando melhor os lançamentos, você descobre rápido onde cortar.")
     return "\n".join(linhas)
 
 
@@ -1373,27 +1406,12 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             return ConversationHandler.END
 
         if _intencao_saldo(texto_normalizado):
-            saldo_msg = (
-                "💰 <b>Seu saldo atual</b>\n"
-                "━━━━━━━━━━━━━━━━━━\n\n"
-                f"<b>Saldo:</b> <code>{_formatar_valor_brasileiro(saldo)}</code>\n"
-                f"<b>Entradas acumuladas:</b> <code>{_formatar_valor_brasileiro(entradas)}</code>\n"
-                f"<b>Saídas acumuladas:</b> <code>{_formatar_valor_brasileiro(saidas)}</code>"
-            )
+            saldo_msg = _resumo_saldo_local(saldo, entradas, saidas)
             await update.message.reply_html(saldo_msg)
             return ConversationHandler.END
 
         if _intencao_metas(texto_normalizado):
-            objetivos_ativos = (
-                db.query(Objetivo)
-                .filter(
-                    Objetivo.id_usuario == usuario_db.id,
-                    func.coalesce(Objetivo.valor_atual, 0) < func.coalesce(Objetivo.valor_meta, 0),
-                )
-                .order_by(Objetivo.criado_em.desc(), Objetivo.id.desc())
-                .all()
-            )
-            await update.message.reply_html(_formatar_metas_ativas(objetivos_ativos))
+            await update.message.reply_html(_resumo_metas_local(db, usuario_db.id))
             return ConversationHandler.END
 
         if _intencao_categorizar_sem_categoria(texto_normalizado):
@@ -1454,44 +1472,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             return ConversationHandler.END
 
         if _intencao_resumo_mes(texto_normalizado):
-            agora = datetime.now()
-            inicio_mes = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            lanc_mes = (
-                db.query(Lancamento)
-                .filter(
-                    Lancamento.id_usuario == usuario_db.id,
-                    Lancamento.data_transacao >= inicio_mes,
-                )
-                .order_by(Lancamento.id.desc())
-                .all()
-            )
-            entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith("entr"))
-            saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith("entr"))
-            saldo_mes = entradas_mes - saidas_mes
-            top_categorias_mes = _resumo_categoria_gastos_por_lancamentos(lanc_mes, limite=3)
-            ultimos = lanc_mes[:3]
-
-            linhas = [
-                "📅 <b>Resumo do mês</b>",
-                "",
-                f"• <b>Entradas:</b> {_formatar_valor_brasileiro(entradas_mes)}",
-                f"• <b>Saídas:</b> {_formatar_valor_brasileiro(saidas_mes)}",
-                f"• <b>Saldo do mês:</b> {_formatar_valor_brasileiro(saldo_mes)}",
-            ]
-            if top_categorias_mes:
-                linhas.append("")
-                linhas.append("<b>Top categorias de gasto:</b>")
-                for nome, valor in top_categorias_mes:
-                    linhas.append(f"• {escape(nome)}: {_formatar_valor_brasileiro(valor)}")
-            if ultimos:
-                linhas.append("")
-                linhas.append("<b>Últimos lançamentos:</b>")
-                for lanc in ultimos:
-                    sinal = "+" if str(lanc.tipo).lower().startswith("entr") else "-"
-                    linhas.append(
-                        f"• {escape(lanc.descricao or 'Lançamento')}: {sinal}{_formatar_valor_brasileiro(abs(float(lanc.valor or 0)))}"
-                    )
-            await update.message.reply_html("\n".join(linhas))
+            await update.message.reply_html(_resumo_mes_local(db, usuario_db.id))
             return ConversationHandler.END
 
         if _intencao_agendamentos(texto_normalizado):
@@ -1546,6 +1527,29 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 "Não tenho integração ativa de cotação externa neste ambiente agora. "
                 "Se quiser, eu sigo com análise baseada só nos seus lançamentos internos."
             )
+            return ConversationHandler.END
+
+        # Para perguntas analíticas e consultivas, prioriza sempre resposta local
+        # com dados reais do banco e evita deriva para resposta genérica do LLM.
+        if (
+            _intencao_contas(texto_normalizado)
+            or _intencao_comparacao_financeira(texto_normalizado)
+            or _intencao_alerta_financeiro(texto_normalizado)
+            or _intencao_previsao_financeira(texto_normalizado)
+            or _intencao_analise_gastos(texto_normalizado)
+            or _intencao_consultoria_financeira(texto_normalizado)
+            or _intencao_resumo_semana(texto_normalizado)
+        ):
+            resposta_local = _montar_resposta_local_alfredo(
+                texto_usuario,
+                texto_normalizado,
+                db,
+                usuario_db,
+                saldo,
+                entradas,
+                saidas,
+            )
+            await _enviar_resposta_html_segura(update.message, resposta_local)
             return ConversationHandler.END
 
         system_prompt = (
