@@ -1925,6 +1925,21 @@
       }
     }
 
+    async function tryOpenPendingFaturaEditor() {
+      if (!sessionId || currentFaturaToken) return;
+      try {
+        const response = await fetchWithSession('/api/miniapp/fatura-editor-pending');
+        const data = await response.json();
+        if (!data.ok || !data.has_pending || !data.token) return;
+
+        currentFaturaToken = data.token;
+        openPanel('fatura-editor-panel', true);
+        await loadFaturaEditor();
+      } catch (_) {
+        // Silencioso: abertura pendente é opcional.
+      }
+    }
+
     function renderFaturaEditor(transacoes = []) {
       if (!transacoes.length) {
         faturaEditList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-center text-xs text-telegram-hint">Nenhum lançamento para editar.</div>';
@@ -2285,6 +2300,7 @@
           loadMetas();
           loadGameProfile();
           loadMonthlyRanking();
+          tryOpenPendingFaturaEditor();
           
           // Verifica se há fatura pendente de edição
           if (initialPageFromUrl === 'fatura_editor') {

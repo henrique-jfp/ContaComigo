@@ -72,7 +72,11 @@ from gerente_financeiro.prompts import PROMPT_ALFREDO
 from gerente_financeiro.services import preparar_contexto_financeiro_completo
 from gerente_financeiro.services import salvar_transacoes_generica
 from gerente_financeiro.gamification_service import get_level_progress_payload, award_xp
-from gerente_financeiro.fatura_draft_store import get_fatura_draft, pop_fatura_draft
+from gerente_financeiro.fatura_draft_store import (
+    get_fatura_draft,
+    pop_fatura_draft,
+    pop_pending_editor_token,
+)
 import google.generativeai as genai
 from types import SimpleNamespace
 
@@ -1545,6 +1549,21 @@ def miniapp_fatura_editor():
         "origem": draft.get("origem_label", "Fatura"),
         "conta": draft.get("conta_nome", "Cartao de Credito"),
         "transacoes": payload,
+    })
+
+
+@app.route('/api/miniapp/fatura-editor-pending', methods=['GET'])
+def miniapp_fatura_editor_pending():
+    """Consome token pendente de editor de fatura para abertura automática no miniapp."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    token = pop_pending_editor_token(session["user_id"])
+    return jsonify({
+        "ok": True,
+        "has_pending": bool(token),
+        "token": token or "",
     })
 
 

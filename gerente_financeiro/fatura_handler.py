@@ -25,7 +25,7 @@ from telegram.ext import (
 from database.database import get_db, get_or_create_user
 from models import Conta
 from .services import salvar_transacoes_generica
-from .fatura_draft_store import create_fatura_draft
+from .fatura_draft_store import create_fatura_draft, set_pending_editor_token
 from .states import (
     FATURA_AWAIT_FILE,
     FATURA_CONFIRMATION_STATE,
@@ -724,6 +724,7 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             transacoes=transacoes,
             origem_label=origem_label,
         )
+        set_pending_editor_token(query.from_user.id, token)
 
         webapp_url = _get_fatura_webapp_url("fatura_editor", token)
         logger.info("URL do editor de fatura gerada para user=%s token=%s", query.from_user.id, token)
@@ -735,7 +736,8 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
         await query.message.reply_text(
             "📱 <b>Editar lancamentos da fatura</b>\n\n"
-            "Toque no botao abaixo para abrir o editor.",
+            "Toque no botao abaixo para abrir o editor.\n"
+            "Se o Telegram nao abrir por esse botao, toque em <b>🚀 Abrir o App</b> no teclado que o editor abre automaticamente.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("✏️ Abrir Editor da Fatura", web_app=WebAppInfo(url=webapp_url))],
