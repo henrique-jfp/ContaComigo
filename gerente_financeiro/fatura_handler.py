@@ -705,21 +705,27 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
-    await query.answer()
+    try:
+        await query.answer(timeout=5)
+    except Exception as e:
+        logger.warning("Falha ao responder callback imediatamente: %s", e)
 
-    action = query.data
-    if action == "fatura_cancelar":
+    try:
+        action = query.data
+        if action == "fatura_cancelar":
         context.user_data.pop("fatura_transacoes", None)
         context.user_data.pop("fatura_conta_id", None)
         await query.edit_message_text("❌ Importacao cancelada.")
         return ConversationHandler.END
 
     if action == "fatura_editar_inline":
+        logger.info("Processando fatura_editar_inline para user=%s", query.from_user.id)
         transacoes = context.user_data.get("fatura_transacoes", [])
         conta_id = context.user_data.get("fatura_conta_id")
         origem_label = context.user_data.get("fatura_origem_label", "Inter")
 
         if not transacoes or not conta_id:
+            logger.warning("Dados de fatura expirados: transacoes=%s, conta_id=%s", bool(transacoes), conta_id)
             await query.edit_message_text("❌ Dados da fatura expiraram. Envie o PDF novamente.")
             return ConversationHandler.END
 
@@ -739,14 +745,19 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
         set_pending_editor_token(query.from_user.id, token)
 
-        webapp_url = _get_fatura_webapp_url("fatura_editor", token)
-        logger.info("URL do editor de fatura gerada para user=%s token=%s", query.from_user.id, token)
+        try:
+            webapp_url = _get_fatura_webapp_url("fatura_editor", token)
+            logger.info("URL do editor gerada: %s (truncado)", webapp_url[:80])
+        except Exception as e:
+            logger.error("Falha ao gerar webapp_url: %s", e, exc_info=True)
+            raise
 
         # Evita problemas em alguns clientes ao tentar substituir o teclado inline por um botão web_app.
         await query.edit_message_text(
             "✅ Rascunho preparado. Vou te enviar o botao para abrir o editor no MiniApp.",
             parse_mode="HTML",
         )
+        logger.info("Enviando botão de editor para user=%s com webapp_url", query.from_user.id)
         await query.message.reply_text(
             "📱 <b>Editar lancamentos da fatura</b>\n\n"
             "Toque no botao abaixo para abrir o editor.\n"
@@ -756,6 +767,7 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 [InlineKeyboardButton("✏️ Abrir Editor da Fatura", web_app=WebAppInfo(url=webapp_url))],
             ]),
         )
+        logger.info("Botão de editor enviado com sucesso")
         return FATURA_CONFIRMATION_STATE
 
     if action == "fatura_salvar":
@@ -792,9 +804,17 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             context.user_data.pop("fatura_origem_label", None)
             context.user_data.pop("fatura_pending_edit", None)
 
-    # Unknown action
-    await query.answer("Acao invalida")
-    return FATURA_CONFIRMATION_STATE
+        # Unknown action
+        await query.answer("Acao invalida")
+        return FATURA_CONFIRMATION_STATE
+        
+    except Exception as e:
+        logger.error("ERRO NO FATURA_CONFIRM: action=%s, error=%s", query.data, str(e), exc_info=True)
+        try:
+            await query.answer(f"Erro: {str(e)[:50]}", show_alert=True)
+        except:
+            pass
+        return FATURA_CONFIRMATION_STATE
 
 
 async def fatura_training_consent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

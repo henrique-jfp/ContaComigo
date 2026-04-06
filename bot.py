@@ -475,9 +475,15 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
     ]
     
 
+    # Debug: log ALL callbacks
+    async def debug_all_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        logger.warning("DEBUG_CALLBACK: data=%s from_user=%s", update.callback_query.data, update.callback_query.from_user.id)
 
     for name, builder in callback_builders:
         build_and_add(name, builder)
+    
+    # Add debug handler at the END to catch unmatched callbacks
+    application.add_handler(CallbackQueryHandler(debug_all_callbacks))
 
     # Fallbacks finais de mensagem (grupo 0): so devem rodar se nenhum ConversationHandler capturar.
     application.add_handler(
