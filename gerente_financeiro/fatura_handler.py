@@ -286,6 +286,7 @@ def _parse_bradesco_pdf_lines(lines: List[str]) -> Tuple[List[Dict], int]:
     ignoradas = 0
     in_section = False
     saw_resume_header = False
+    saw_transactions_header = False
     year_ref = _extract_reference_year(lines)
 
     for raw_line in lines:
@@ -299,6 +300,7 @@ def _parse_bradesco_pdf_lines(lines: List[str]) -> Tuple[List[Dict], int]:
 
         if "historico de lancamentos" in lower_line or "histórico de lançamentos" in lower_line:
             in_section = True
+            saw_transactions_header = True
             continue
 
         if saw_resume_header and any(token in lower_line for token in [
@@ -308,6 +310,9 @@ def _parse_bradesco_pdf_lines(lines: List[str]) -> Tuple[List[Dict], int]:
             "atendimento",
             "central de atendimento",
         ]):
+            break
+
+        if "total da fatura em real" in lower_line:
             break
 
         if not in_section:
@@ -321,14 +326,10 @@ def _parse_bradesco_pdf_lines(lines: List[str]) -> Tuple[List[Dict], int]:
                 "total utilizado",
                 "disponivel",
                 "limites",
-                "compras r$",
-                "saque r$",
                 "taxa",
                 "rotativo",
                 "pagamento minimo",
                 "pagamento mínimo",
-                "parcelamento",
-                "juros",
                 "cet",
                 "valor total",
                 "opcoes de pagamento",
@@ -343,6 +344,22 @@ def _parse_bradesco_pdf_lines(lines: List[str]) -> Tuple[List[Dict], int]:
         day = int(date_match.group(1))
         month = int(date_match.group(2))
         rest = date_match.group(3).strip()
+
+        # Algumas extrações colam dados de limite/rodapé na mesma linha.
+        # Mantemos apenas o trecho transacional antes desses marcadores.
+        cut_tokens = [
+            " compras r$",
+            " saque à vista",
+            " saque a vista",
+            " total para",
+            " taxa ao",
+            " * sobre as operações",
+            " válido para o vencimento",
+        ]
+        rest_low = rest.lower()
+        cut_positions = [rest_low.find(tok) for tok in cut_tokens if rest_low.find(tok) >= 0]
+        if cut_positions:
+            rest = rest[: min(cut_positions)].strip()
 
         value_matches = list(re.finditer(r"(\d{1,3}(?:\.\d{3})*,\d{2})(-?)", rest))
         value_match = None
@@ -368,14 +385,24 @@ def _parse_bradesco_pdf_lines(lines: List[str]) -> Tuple[List[Dict], int]:
         desc = re.sub(r"\b\d{2}/\d{2}(?:/\d{2,4})?\b", "", desc).strip()
         desc = desc.strip("- ")
 
-        if re.search(r"\b(a\.m\.|a\.a\.|%|cet|juros|parcelamento)\b", lower_line):
+        rest_low = rest.lower()
+
+        if re.search(r"\b(a\.m\.|a\.a\.|%|cet)\b", rest_low):
             continue
 
         if not desc:
             continue
 
-        if "pag boleto" in lower_line or "pagamento" in lower_line:
+        if "pag boleto" in rest_low or "pagamento" in rest_low:
             ignoradas += 1
+            continue
+
+        if saw_transactions_header and any(token in desc.lower() for token in [
+            "total para",
+            "total utilizado",
+            "disponivel",
+            "disponível",
+        ]):
             continue
 
         try:
