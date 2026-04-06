@@ -374,7 +374,8 @@ class Mission(Base):
     description = Column(Text, nullable=True)
     mission_type = Column(String, nullable=False, index=True)  # 'daily', 'weekly', 'special'
     xp_reward = Column(Integer, nullable=False)
-    bonus_multiplier = Column(Integer, default=1.0)
+    # Multiplicadores podem ser fracionários (ex.: 1.05)
+    bonus_multiplier = Column(Numeric(10, 4), default=1.0)
     unlock_level = Column(Integer, default=0)
     sort_order = Column(Integer, default=0)
     active = Column(Boolean, default=True)
@@ -414,7 +415,8 @@ class UserAchievement(Base):
     achievement_name = Column(String, nullable=False)
     achievement_description = Column(Text, nullable=True)
     xp_reward = Column(Integer, default=0)
-    permanent_multiplier = Column(Integer, default=0.0)  # Ex: +0.05x multiplicador permanente
+    # Bônus permanente pode ser fracionário (ex.: +0.05x)
+    permanent_multiplier = Column(Numeric(10, 4), default=0.0)
     badges = Column(JSON, nullable=True)  # JSON array de badges/insígnias
     unlocked_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
