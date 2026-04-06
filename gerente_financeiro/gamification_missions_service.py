@@ -587,8 +587,10 @@ def get_user_active_missions(db: Session, usuario_id: int) -> list:
 
 
 def get_level_progress_payload(usuario: Usuario) -> dict:
-    level = int(usuario.level or 1)
     xp_total = int(usuario.xp or 0)
+    # O nível canônico vem sempre do XP acumulado para evitar inconsistências
+    # em usuários migrados do modelo legado.
+    level = _calculate_level_from_xp(xp_total)
     current_info = get_level_info(level)
     next_info = get_level_info(level + 1)
     current_floor = int(current_info.get('required_xp', 0))

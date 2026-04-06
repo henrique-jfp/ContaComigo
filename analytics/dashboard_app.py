@@ -486,29 +486,69 @@ def _level_badge(level: int) -> str:
     return badges.get(level_num, "📒 Caderneta Zerada")
 
 
+def _canonical_level_from_xp(total_xp: int) -> int:
+    xp = int(total_xp or 0)
+    milestones = [
+        (1, 0),
+        (2, 200),
+        (3, 500),
+        (4, 1000),
+        (5, 2000),
+        (6, 3500),
+        (7, 5500),
+        (8, 8000),
+        (9, 12000),
+        (10, 18000),
+        (11, 25000),
+        (12, 35000),
+        (13, 50000),
+        (14, 70000),
+        (15, 95000),
+        (16, 130000),
+    ]
+    level = 1
+    for lvl, threshold in milestones:
+        if xp >= threshold:
+            level = lvl
+    while level >= 16 and xp >= 130000 + (level - 16) * 35000:
+        level += 1
+    return level
+
+
 def _friendly_feature_name(action: str | None) -> str:
     key = str(action or "").strip().upper()
     mapping = {
         "PRIMEIRA_INTERACAO_DIA": "Primeira interação do dia",
         "INTERACAO_BOT": "Uso do bot no chat",
+        "CONVERSA_GERAL_BOT": "Uso do bot no chat",
         "MONTH_TURN_BLUE": "Mês fechado no azul",
         "LANCAMENTO_CRIADO": "Lançamentos realizados",
+        "LANCAMENTO_MANUAL": "Lançamento via texto",
         "LANCAMENTO_CRIADO_TEXTO": "Lançamento via texto",
+        "LANCAMENTO_AUDIO": "Lançamento via voz",
         "LANCAMENTO_CRIADO_VOZ": "Lançamento via voz",
+        "LANCAMENTO_FOTO": "Lançamento via foto/OCR",
         "LANCAMENTO_CRIADO_OCR": "Lançamento via foto/OCR",
+        "PDF_PROCESSADO": "Importação de fatura PDF",
         "LANCAMENTO_CRIADO_PDF": "Importação de fatura PDF",
-        "LANCAMENTO_EDITADO": "Edições de lançamentos",
+        "TRANSACAO_EDITADA": "Edição de transação",
+        "LANCAMENTO_EDITADO": "Edição de transação",
         "CONFIRMACAO_IA": "Confirmação de sugestão da IA",
+        "META_CRIADA_FINANCEIRA": "Criação de meta financeira",
         "META_CRIADA": "Metas criadas",
+        "META_CHECKIN_MENSAL": "Check-in de meta",
         "META_CHECKIN": "Check-in de metas",
+        "META_CONCLUIDA_100": "Meta 100% atingida",
         "META_ATINGIDA": "Metas atingidas",
+        "META_CONCLUIDA_ANTES_PRAZO": "Meta atingida antes do prazo",
         "META_ATINGIDA_ANTES_PRAZO": "Meta batida antes do prazo",
+        "AGENDAMENTO_NOVO": "Criação de agendamento",
         "AGENDAMENTO_CRIADO": "Agendamentos criados",
         "DASHBOARD_VISUALIZADO": "Abertura do MiniApp",
-        "DASHBOARD_VISUALIZADO": "Visualização do dashboard",
-        "LANCAMENTO_CRIADO_PDF": "Importação de fatura",
+        "INVESTIMENTO_ADICIONADO_MANUAL": "Adição de investimento",
         "OCR_PROCESSADO": "Leituras por OCR",
         "AUDIO_PROCESSADO": "Lançamentos por voz",
+        "PERGUNTA_ALFREDO_IA": "Pergunta ao Alfredo",
         "PERGUNTA_ALFREDO": "Perguntas ao Alfredo",
         "RELATORIO_GERADO": "Relatórios gerados",
         "CONVITE_ACEITO": "Convites aceitos",
@@ -1510,14 +1550,19 @@ def miniapp_game_profile():
         level_progress = get_level_progress_payload(usuario)
         top_feature_name = top_features[0]["feature"] if top_features else None
 
+        canonical_level = int(level_progress.get("level") or 1)
+        if int(usuario.level or 1) != canonical_level:
+            usuario.level = canonical_level
+            db.commit()
+
         return jsonify({
             "ok": True,
             "profile": {
                 "name": usuario.nome_completo or "Jogador",
                 "telegram_id": int(usuario.telegram_id),
-                "level": int(usuario.level or 1),
-                "title": level_progress.get("title"),
-                "badge": _level_badge(int(usuario.level or 1)),
+                "level": canonical_level,
+                "title": level_progress.get("title") or "Caderneta Zerada",
+                "badge": _level_badge(canonical_level),
                 "streak": int(usuario.streak_dias or 0),
                 "xp": level_progress,
                 "monthly_rank": monthly_rank,
@@ -1651,7 +1696,7 @@ def miniapp_ranking_monthly():
             db.query(
                 Usuario.nome_completo,
                 Usuario.telegram_id,
-                Usuario.level,
+                Usuario.xp,
                 func.sum(XpEvent.xp_gained).label('monthly_xp'),
                 func.count(XpEvent.id).label('interactions'),
             )
@@ -1669,7 +1714,7 @@ def miniapp_ranking_monthly():
             ranking.append({
                 "position": idx,
                 "name": nome,
-                "level": int(row.level or 1),
+                "level": _canonical_level_from_xp(int(row.xp or 0)),
                 "monthly_xp": int(row.monthly_xp or 0),
                 "interactions": int(row.interactions or 0),
                 "is_current_user": int(row.telegram_id or 0) == int(session["user_id"]),
