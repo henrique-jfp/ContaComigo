@@ -463,15 +463,27 @@ def _serialize_miniapp_lancamento(lanc: Lancamento) -> dict:
 
 def _level_badge(level: int) -> str:
     level_num = int(level or 1)
-    if level_num >= 14:
-        return "👑 Coroa de Platina"
-    if level_num >= 11:
-        return "🏆 Elite Financeira"
-    if level_num >= 8:
-        return "⚔️ Mestre Competitivo"
-    if level_num >= 5:
-        return "🛡️ Guardião das Metas"
-    return "🌱 Em evolução"
+    badges = {
+        1: "📒 Caderneta Zerada",
+        2: "📝 Anotador de Plantão",
+        3: "🧮 Controlador de Gastos",
+        4: "📊 Orçamentário Jr.",
+        5: "🕵️ Caçador de Sobras",
+        6: "🗂️ Arquivista do Real",
+        7: "🔎 Analista de Bolso",
+        8: "🎯 Planejador Ativo",
+        9: "🌊 Mestre do Fluxo",
+        10: "🛡️ Guardião do Patrimônio",
+        11: "💼 CFO Pessoal",
+        12: "🏗️ Arquiteto Financeiro",
+        13: "🔮 Visionário de Mercado",
+        14: "🧿 Oráculo do Budget",
+        15: "🤖 Alfredo Humano",
+        16: "🚀 Além do Budget",
+    }
+    if level_num > 16:
+        return f"♾️ Além do Budget +{level_num - 16}"
+    return badges.get(level_num, "📒 Caderneta Zerada")
 
 
 def _friendly_feature_name(action: str | None) -> str:
@@ -481,15 +493,28 @@ def _friendly_feature_name(action: str | None) -> str:
         "INTERACAO_BOT": "Uso do bot no chat",
         "MONTH_TURN_BLUE": "Mês fechado no azul",
         "LANCAMENTO_CRIADO": "Lançamentos realizados",
+        "LANCAMENTO_CRIADO_TEXTO": "Lançamento via texto",
+        "LANCAMENTO_CRIADO_VOZ": "Lançamento via voz",
+        "LANCAMENTO_CRIADO_OCR": "Lançamento via foto/OCR",
+        "LANCAMENTO_CRIADO_PDF": "Importação de fatura PDF",
         "LANCAMENTO_EDITADO": "Edições de lançamentos",
+        "CONFIRMACAO_IA": "Confirmação de sugestão da IA",
         "META_CRIADA": "Metas criadas",
+        "META_CHECKIN": "Check-in de metas",
         "META_ATINGIDA": "Metas atingidas",
+        "META_ATINGIDA_ANTES_PRAZO": "Meta batida antes do prazo",
         "AGENDAMENTO_CRIADO": "Agendamentos criados",
         "DASHBOARD_ACESSADO": "Abertura do MiniApp",
+        "DASHBOARD_VISUALIZADO": "Visualização do dashboard",
         "FATURA_PROCESSADA": "Importação de fatura",
         "OCR_PROCESSADO": "Leituras por OCR",
         "AUDIO_PROCESSADO": "Lançamentos por voz",
+        "PERGUNTA_ALFREDO": "Perguntas ao Alfredo",
+        "RELATORIO_GERADO": "Relatórios gerados",
+        "CONVITE_ACEITO": "Convites aceitos",
+        "CONQUISTA_DESBLOQUEADA": "Conquistas desbloqueadas",
         "WRAPPED_ACESSADO": "Consulta de Wrapped",
+        "WRAPPED_ANUAL": "Wrapped anual gerado",
     }
     if key in mapping:
         return mapping[key]
@@ -1537,9 +1562,8 @@ def miniapp_mission_claim():
 
         mission_reward = int(user_mission.mission.xp_reward or 0)
         usuario.xp = int(usuario.xp or 0) + mission_reward
-        from gerente_financeiro.gamification_service import get_level_progress_payload
-        new_level_data = get_level_progress_payload(usuario)
-        usuario.level = int(new_level_data.get('level', usuario.level or 1))
+        from gerente_financeiro.gamification_missions_service import _calculate_level_from_xp
+        usuario.level = int(_calculate_level_from_xp(int(usuario.xp or 0)))
 
         user_mission.status = 'claimed'
         user_mission.claimed_at = datetime.utcnow()

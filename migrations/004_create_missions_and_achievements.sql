@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS missions (
 
 CREATE TABLE IF NOT EXISTS user_missions (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL UNIQUE COMPOSITE KEY WITH mission_id,
+    user_id INTEGER NOT NULL,
     mission_id INTEGER NOT NULL REFERENCES missions(id) ON DELETE CASCADE,
     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP,
@@ -27,12 +27,13 @@ CREATE TABLE IF NOT EXISTS user_missions (
     claimed_at TIMESTAMP,
     status VARCHAR(20) DEFAULT 'active', -- 'active', 'completed', 'claimed', 'reset'
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, mission_id)
 );
 
 CREATE TABLE IF NOT EXISTS user_achievements (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL UNIQUE COMPOSITE KEY WITH achievement_key,
+    user_id INTEGER NOT NULL,
     achievement_key VARCHAR(50) NOT NULL,
     achievement_name VARCHAR(100) NOT NULL,
     achievement_description TEXT,
@@ -40,7 +41,8 @@ CREATE TABLE IF NOT EXISTS user_achievements (
     permanent_multiplier FLOAT DEFAULT 0.0, -- Ex: +0.05x multiplicador permanente
     badges TEXT, -- JSON array de insígnias
     unlocked_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, achievement_key)
 );
 
 CREATE TABLE IF NOT EXISTS xp_level_definitions (

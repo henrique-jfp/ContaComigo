@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from models import (
-    Usuario, XpEvent, XpDailyCounter, MonthlyGamificationAward,
+    Usuario, Lancamento, PatrimonySnapshot, XpEvent, XpDailyCounter, MonthlyGamificationAward,
     Mission, UserMission, UserAchievement, XpLevelDefinition
 )
 
@@ -494,13 +494,23 @@ SPEC_XP_ACTIONS = {
     'PATRIMONIO_CRESCIMENTO': 80,
     'ECONOMIA_META_ATINGIDA': 60,
     'EVENTO_SAZONAL': 0,
+    'CONQUISTA_DESBLOQUEADA': 50,
 }
 
 ACTION_ALIASES = {
     'LANCAMENTO_TEXTO': 'LANCAMENTO_CRIADO_TEXTO',
+    'LANCAMENTO_MANUAL': 'LANCAMENTO_CRIADO_TEXTO',
+    'LANCAMENTO_CRIADO': 'LANCAMENTO_CRIADO_TEXTO',
     'LANCAMENTO_AUDIO': 'LANCAMENTO_CRIADO_VOZ',
+    'LANCAMENTO_VOZ': 'LANCAMENTO_CRIADO_VOZ',
     'LANCAMENTO_FOTO': 'LANCAMENTO_CRIADO_OCR',
+    'LANCAMENTO_OCR': 'LANCAMENTO_CRIADO_OCR',
+    'OCR_PROCESSADO': 'LANCAMENTO_CRIADO_OCR',
     'FATURA_PROCESSADA': 'LANCAMENTO_CRIADO_PDF',
+    'FATURA_PDF': 'LANCAMENTO_CRIADO_PDF',
+    'LANCAMENTO_CRIADO_PDF': 'LANCAMENTO_CRIADO_PDF',
+    'EDICAO_LANCAMENTO': 'LANCAMENTO_EDITADO',
+    'EXCLUSAO_LANCAMENTO': 'LANCAMENTO_EDITADO',
     'IA_CONFIRMADA': 'CONFIRMACAO_IA',
     'ALFREDO_PERGUNTA': 'PERGUNTA_ALFREDO',
     'PERGUNTA_IA_SIMPLES': 'PERGUNTA_ALFREDO',
@@ -509,10 +519,13 @@ ACTION_ALIASES = {
     'META_CONCLUIDA_100': 'META_ATINGIDA',
     'CONVERSA_IA_LONGA': 'PERGUNTA_ALFREDO',
     'RELATORIO_MENSAL': 'RELATORIO_GERADO',
+    'RELATORIO_PERSONALIZADO': 'RELATORIO_GERADO',
     'GRAFICO_GERADO': 'DASHBOARD_VISUALIZADO',
     'RANKING_VISUALIZADO': 'DASHBOARD_VISUALIZADO',
     'PERFIL_VISUALIZADO': 'DASHBOARD_VISUALIZADO',
+    'DASHBOARD_ACESSADO': 'DASHBOARD_VISUALIZADO',
     'SEQUENCIA_MANTIDA': 'STREAK_DIAS_7',
+    'CONQUISTA_DESBLOQUEADA': 'CONQUISTA_DESBLOQUEADA',
 }
 
 REPETITIVE_ACTIONS = {
@@ -675,14 +688,14 @@ def _ensure_user_missions(db: Session, usuario: Usuario) -> list[UserMission]:
     return list(existing.values()) + created
 
 
-def _mission_progress_can_increment(um: UserMission, current_date: date) -> bool:
-    if um.mission.mission_type == 'daily':
-        return not um.updated_at or um.updated_at.date() != current_date
-    if um.mission.mission_type == 'weekly':
-        if not um.updated_at:
-            return True
-        return _current_week_key(um.updated_at.date()) != _current_week_key(current_date)
-    return True
+def _week_bounds(current_date: date) -> tuple[datetime, datetime]:
+    start = current_date - timedelta(days=current_date.weekday())
+    end = start + timedelta(days=6)
+    return datetime.combine(start, datetime.min.time()), datetime.combine(end, datetime.max.time())
+
+
+def _day_bounds(current_date: date) -> tuple[datetime, datetime]:
+    return datetime.combine(current_date, datetime.min.time()), datetime.combine(current_date, datetime.max.time())
 
 
 async def _unlock_achievements(db: Session, usuario: Usuario, current_date: date) -> list[dict]:
@@ -736,13 +749,108 @@ async def _update_mission_progress(db: Session, usuario: Usuario, action: str, c
 
     from models import Lancamento, Investment
 
-    def mark_progress(um: UserMission, increment: int = 1, max_count: int | None = None):
-        if not _mission_progress_can_increment(um, current_date):
-            return
-        if max_count is not None:
-            um.current_value = min(max_count, int(um.current_value or 0) + increment)
-        else:
-            um.current_value = int(um.current_value or 0) + increment
+    day_start, day_end = _day_bounds(current_date)
+    week_start, week_end = _week_bounds(current_date)
+
+    launch_actions = ['LANCAMENTO_CRIADO_TEXTO', 'LANCAMENTO_CRIADO_VOZ', 'LANCAMENTO_CRIADO_OCR', 'LANCAMENTO_CRIADO_PDF']
+
+    launches_today = db.query(func.count(XpEvent.id)).filter(
+        XpEvent.id_usuario == usuario.id,
+        XpEvent.action.in_(launch_actions),
+        XpEvent.created_at >= day_start,
+        XpEvent.created_at <= day_end,
+    ).scalar() or 0
+
+    voice_today = db.query(func.count(XpEvent.id)).filter(
+        XpEvent.id_usuario == usuario.id,
+        XpEvent.action == 'LANCAMENTO_CRIADO_VOZ',
+        XpEvent.created_at >= day_start,
+        XpEvent.created_at <= day_end,
+    ).scalar() or 0
+
+    questions_today = db.query(func.count(XpEvent.id)).filter(
+        XpEvent.id_usuario == usuario.id,
+        XpEvent.action == 'PERGUNTA_ALFREDO',
+        XpEvent.created_at >= day_start,
+        XpEvent.created_at <= day_end,
+    ).scalar() or 0
+
+    dashboard_today = db.query(func.count(XpEvent.id)).filter(
+        XpEvent.id_usuario == usuario.id,
+        XpEvent.action == 'DASHBOARD_VISUALIZADO',
+        XpEvent.created_at >= day_start,
+        XpEvent.created_at <= day_end,
+    ).scalar() or 0
+
+    weekly_unique_days = db.query(func.count(func.distinct(func.date(XpEvent.created_at)))).filter(
+        XpEvent.id_usuario == usuario.id,
+        XpEvent.action.in_(launch_actions),
+        XpEvent.created_at >= week_start,
+        XpEvent.created_at <= week_end,
+    ).scalar() or 0
+
+    weekly_ocr = db.query(func.count(XpEvent.id)).filter(
+        XpEvent.id_usuario == usuario.id,
+        XpEvent.action == 'LANCAMENTO_CRIADO_OCR',
+        XpEvent.created_at >= week_start,
+        XpEvent.created_at <= week_end,
+    ).scalar() or 0
+
+    weekly_checkins = db.query(func.count(XpEvent.id)).filter(
+        XpEvent.id_usuario == usuario.id,
+        XpEvent.action == 'META_CHECKIN',
+        XpEvent.created_at >= week_start,
+        XpEvent.created_at <= week_end,
+    ).scalar() or 0
+
+    weekly_pdf = db.query(func.count(XpEvent.id)).filter(
+        XpEvent.id_usuario == usuario.id,
+        XpEvent.action == 'LANCAMENTO_CRIADO_PDF',
+        XpEvent.created_at >= week_start,
+        XpEvent.created_at <= week_end,
+    ).scalar() or 0
+
+    weekly_entries = db.query(func.coalesce(func.sum(Lancamento.valor), 0)).filter(
+        Lancamento.id_usuario == usuario.id,
+        Lancamento.data_transacao >= week_start,
+        Lancamento.data_transacao <= week_end,
+        func.lower(Lancamento.tipo).like('entr%'),
+    ).scalar() or 0
+
+    weekly_outputs = db.query(func.coalesce(func.sum(Lancamento.valor), 0)).filter(
+        Lancamento.id_usuario == usuario.id,
+        Lancamento.data_transacao >= week_start,
+        Lancamento.data_transacao <= week_end,
+        ~func.lower(Lancamento.tipo).like('entr%'),
+    ).scalar() or 0
+
+    month_start = datetime(current_date.year, current_date.month, 1)
+    month_end = datetime(current_date.year + (1 if current_date.month == 12 else 0), 1 if current_date.month == 12 else current_date.month + 1, 1) - timedelta(seconds=1)
+    month_entries = db.query(func.coalesce(func.sum(Lancamento.valor), 0)).filter(
+        Lancamento.id_usuario == usuario.id,
+        Lancamento.data_transacao >= month_start,
+        Lancamento.data_transacao <= month_end,
+        func.lower(Lancamento.tipo).like('entr%'),
+    ).scalar() or 0
+    month_outputs = db.query(func.coalesce(func.sum(Lancamento.valor), 0)).filter(
+        Lancamento.id_usuario == usuario.id,
+        Lancamento.data_transacao >= month_start,
+        Lancamento.data_transacao <= month_end,
+        ~func.lower(Lancamento.tipo).like('entr%'),
+    ).scalar() or 0
+    month_launch_count = db.query(func.count(Lancamento.id)).filter(
+        Lancamento.id_usuario == usuario.id,
+        Lancamento.data_transacao >= month_start,
+        Lancamento.data_transacao <= month_end,
+    ).scalar() or 0
+
+    total_lancamentos = db.query(func.count(Lancamento.id)).filter(Lancamento.id_usuario == usuario.id).scalar() or 0
+    total_investments = db.query(func.count(Investment.id)).filter(Investment.id_usuario == usuario.id).scalar() or 0
+
+    def set_progress(um: UserMission, current_value: int, target: int | None = None):
+        if target is not None:
+            um.target_value = int(target)
+        um.current_value = max(0, int(current_value or 0))
         target = int(um.target_value or 1)
         um.progress = min(100, int((int(um.current_value or 0) / max(target, 1)) * 100))
         if um.current_value >= target and um.status != 'claimed':
@@ -758,37 +866,36 @@ async def _update_mission_progress(db: Session, usuario: Usuario, action: str, c
             'status': um.status,
         })
 
-    # Diário
     for um in missions:
         key = um.mission.mission_key
-        if key == 'caffeine_tracker' and action in {'LANCAMENTO_CRIADO_TEXTO', 'LANCAMENTO_CRIADO_VOZ', 'LANCAMENTO_CRIADO_OCR'}:
-            mark_progress(um, 1)
-        elif key == 'olho_vivo' and action == 'DASHBOARD_VISUALIZADO':
-            mark_progress(um, 1)
-        elif key == 'clique_rapido' and action == 'LANCAMENTO_CRIADO_VOZ':
-            mark_progress(um, 1)
-        elif key == 'pergunta_dia' and action == 'PERGUNTA_ALFREDO':
-            mark_progress(um, 1)
-        elif key == 'semana_limpa' and action in {'LANCAMENTO_CRIADO_TEXTO', 'LANCAMENTO_CRIADO_VOZ', 'LANCAMENTO_CRIADO_OCR', 'LANCAMENTO_CRIADO_PDF', 'LANCAMENTO_EDITADO', 'CONFIRMACAO_IA'}:
-            mark_progress(um, 1)
-        elif key == 'detetive_nota' and action == 'LANCAMENTO_CRIADO_OCR':
-            mark_progress(um, 1)
-        elif key == 'estrategista_metas' and action == 'META_CHECKIN':
-            mark_progress(um, 1)
-        elif key == 'fatura_detonada' and action == 'LANCAMENTO_CRIADO_PDF':
-            mark_progress(um, 1)
-        elif key == 'primeiro_passo' and action in {'LANCAMENTO_CRIADO_TEXTO', 'LANCAMENTO_CRIADO_VOZ', 'LANCAMENTO_CRIADO_OCR', 'LANCAMENTO_CRIADO_PDF'}:
-            mark_progress(um, 1)
-        elif key == 'semana_sem_enrolacao' and action in {'LANCAMENTO_CRIADO_TEXTO', 'LANCAMENTO_CRIADO_VOZ', 'LANCAMENTO_CRIADO_OCR', 'LANCAMENTO_CRIADO_PDF', 'DASHBOARD_VISUALIZADO', 'PERGUNTA_ALFREDO'}:
-            # Conta dias distintos com ao menos uma interação relevante
-            mark_progress(um, 1, max_count=7)
+        if key == 'caffeine_tracker':
+            set_progress(um, launches_today, target=3)
+        elif key == 'olho_vivo':
+            set_progress(um, 1 if dashboard_today > 0 else 0, target=1)
+        elif key == 'clique_rapido':
+            set_progress(um, 1 if voice_today > 0 else 0, target=1)
+        elif key == 'pergunta_dia':
+            set_progress(um, 1 if questions_today > 0 else 0, target=1)
+        elif key == 'semana_limpa':
+            set_progress(um, weekly_unique_days, target=5)
+        elif key == 'detetive_nota':
+            set_progress(um, weekly_ocr, target=2)
+        elif key == 'estrategista_metas':
+            set_progress(um, weekly_checkins, target=1)
+        elif key == 'fatura_detonada':
+            set_progress(um, weekly_pdf, target=1)
+        elif key == 'semana_azul':
+            weekly_balance_ok = 1 if float(weekly_entries or 0) > float(abs(weekly_outputs or 0)) else 0
+            set_progress(um, weekly_balance_ok, target=1)
+        elif key == 'primeiro_passo':
+            set_progress(um, 1 if total_lancamentos >= 1 else 0, target=1)
+        elif key == 'semana_sem_enrolacao':
+            set_progress(um, min(int(usuario.streak_dias or 0), 7), target=7)
         elif key == 'mes_chave_ouro':
-            # Verificação mensal; mantém atualizado sem incrementar por ação.
-            continue
+            month_ok = 1 if (float(month_entries or 0) > float(abs(month_outputs or 0)) and int(month_launch_count or 0) >= 20) else 0
+            set_progress(um, month_ok, target=1)
         elif key == 'curador_portfolio':
-            total_investments = db.query(func.count(Investment.id)).filter(Investment.id_usuario == usuario.id).scalar() or 0
-            if total_investments >= 3:
-                mark_progress(um, 3, max_count=3)
+            set_progress(um, min(int(total_investments or 0), 3), target=3)
 
     return progress_list
 
@@ -813,6 +920,15 @@ def calculate_xp_for_action(db: Session, usuario: Usuario, action: str, custom_a
     total_multiplier = get_total_multiplier(usuario, db)
     xp_ganho = int(xp_base * total_multiplier)
     motivo = 'normal'
+    seasonal_multiplier = 1.0
+
+    # Evento sazonal: Detox Financeiro (1a semana de janeiro) => 2x em lancamentos.
+    if current_date.month == 1 and current_date.day <= 7 and canonical_action in {
+        'LANCAMENTO_CRIADO_TEXTO', 'LANCAMENTO_CRIADO_VOZ', 'LANCAMENTO_CRIADO_OCR', 'LANCAMENTO_CRIADO_PDF'
+    }:
+        seasonal_multiplier = 2.0
+        xp_ganho = int(xp_ganho * seasonal_multiplier)
+        motivo = 'evento_sazonal_detox'
 
     if canonical_action in REPETITIVE_ACTIONS:
         today_total = db.query(func.coalesce(func.sum(XpDailyCounter.xp_gained), 0)).filter(
@@ -825,7 +941,14 @@ def calculate_xp_for_action(db: Session, usuario: Usuario, action: str, custom_a
         if xp_ganho <= 0:
             motivo = 'limite_diario_atingido'
 
-    return {'xp_base': xp_base, 'xp_ganho': xp_ganho, 'motivo': motivo, 'multiplier': total_multiplier, 'action': canonical_action}
+    return {
+        'xp_base': xp_base,
+        'xp_ganho': xp_ganho,
+        'motivo': motivo,
+        'multiplier': total_multiplier,
+        'seasonal_multiplier': seasonal_multiplier,
+        'action': canonical_action,
+    }
 
 
 async def award_xp_with_missions(db: Session, usuario: Usuario, action: str, custom_amount: int = None) -> dict:
@@ -864,6 +987,28 @@ async def award_xp_with_missions(db: Session, usuario: Usuario, action: str, cus
         db.add(counter)
     counter.count += 1
     counter.xp_gained += xp_ganho
+
+    db.flush()
+
+    # Evento sazonal: aniversário no app (+200 XP, 1x por ano)
+    if usuario.criado_em and usuario.criado_em.month == current_date.month and usuario.criado_em.day == current_date.day:
+        birthday_exists = db.query(XpEvent.id).filter(
+            XpEvent.id_usuario == usuario.id,
+            XpEvent.action == 'EVENTO_SAZONAL',
+            XpEvent.created_at >= datetime.combine(current_date, datetime.min.time()),
+            XpEvent.created_at <= datetime.combine(current_date, datetime.max.time()),
+        ).first()
+        if not birthday_exists:
+            usuario.xp = int(usuario.xp or 0) + 200
+            db.add(XpEvent(
+                id_usuario=usuario.id,
+                action='EVENTO_SAZONAL',
+                xp_base=200,
+                xp_gained=200,
+                details={'event': 'anniversary', 'description': 'Aniversário no app'},
+            ))
+            new_level = _calculate_level_from_xp(int(usuario.xp or 0))
+            usuario.level = new_level
 
     missions_progress = await _update_mission_progress(db, usuario, canonical_action, current_date)
     achievements = await _unlock_achievements(db, usuario, current_date)
@@ -933,3 +1078,145 @@ def get_level_progress_payload(usuario: Usuario) -> dict:
         'level_name': current_info.get('name', 'ContaComigo'),
         'tier': current_info.get('tier', 'bronze'),
     }
+
+
+def reset_daily_missions_for_all_users(db: Session, reference_date: date | None = None) -> int:
+    """Reseta missões diárias para todos os usuários."""
+    reference_date = reference_date or date.today()
+    daily_keys = [k for k, t in MISSION_TYPES.items() if t == 'daily']
+    if not daily_keys:
+        return 0
+
+    rows = db.query(UserMission).join(Mission).filter(Mission.mission_key.in_(daily_keys)).all()
+    for um in rows:
+        um.progress = 0
+        um.current_value = 0
+        um.status = 'active'
+        um.completed_at = None
+        um.claimed_at = None
+        um.updated_at = datetime.utcnow()
+    db.commit()
+    return len(rows)
+
+
+def reset_weekly_missions_for_all_users(db: Session, reference_date: date | None = None) -> int:
+    """Reseta missões semanais para todos os usuários."""
+    reference_date = reference_date or date.today()
+    weekly_keys = [k for k, t in MISSION_TYPES.items() if t == 'weekly']
+    if not weekly_keys:
+        return 0
+
+    rows = db.query(UserMission).join(Mission).filter(Mission.mission_key.in_(weekly_keys)).all()
+    for um in rows:
+        um.progress = 0
+        um.current_value = 0
+        um.status = 'active'
+        um.completed_at = None
+        um.claimed_at = None
+        um.updated_at = datetime.utcnow()
+    db.commit()
+    return len(rows)
+
+
+def apply_monthly_performance_awards(db: Session, reference_date: date | None = None) -> int:
+    """Aplica bônus mensais principais da especificação para todos os usuários."""
+    reference_date = reference_date or date.today()
+    if reference_date.day != 1:
+        return 0
+
+    last_month_end = reference_date.replace(day=1) - timedelta(days=1)
+    last_month_start = last_month_end.replace(day=1)
+    start_dt = datetime.combine(last_month_start, datetime.min.time())
+    end_dt = datetime.combine(last_month_end, datetime.max.time())
+
+    prev_month_end = last_month_start - timedelta(days=1)
+    prev_month_start = prev_month_end.replace(day=1)
+    prev_start_dt = datetime.combine(prev_month_start, datetime.min.time())
+    prev_end_dt = datetime.combine(prev_month_end, datetime.max.time())
+
+    users = db.query(Usuario).all()
+    total_awarded = 0
+    for usuario in users:
+        entries = db.query(func.coalesce(func.sum(Lancamento.valor), 0)).filter(
+            Lancamento.id_usuario == usuario.id,
+            Lancamento.data_transacao >= start_dt,
+            Lancamento.data_transacao <= end_dt,
+            func.lower(Lancamento.tipo).like('entr%'),
+        ).scalar() or 0
+        outputs = db.query(func.coalesce(func.sum(Lancamento.valor), 0)).filter(
+            Lancamento.id_usuario == usuario.id,
+            Lancamento.data_transacao >= start_dt,
+            Lancamento.data_transacao <= end_dt,
+            ~func.lower(Lancamento.tipo).like('entr%'),
+        ).scalar() or 0
+
+        if float(entries or 0) > float(abs(outputs or 0)):
+            usuario.xp = int(usuario.xp or 0) + int(SPEC_XP_ACTIONS['MONTH_TURN_BLUE'])
+            db.add(XpEvent(
+                id_usuario=usuario.id,
+                action='MONTH_TURN_BLUE',
+                xp_base=int(SPEC_XP_ACTIONS['MONTH_TURN_BLUE']),
+                xp_gained=int(SPEC_XP_ACTIONS['MONTH_TURN_BLUE']),
+                details={'month_start': start_dt.isoformat(), 'month_end': end_dt.isoformat(), 'reason': 'monthly_blue'},
+            ))
+            total_awarded += 1
+
+        # Redução de gastos por categoria (+40 por categoria, max 2)
+        current_cat_rows = db.query(
+            Lancamento.id_categoria,
+            func.coalesce(func.sum(func.abs(Lancamento.valor)), 0).label('sum_val'),
+        ).filter(
+            Lancamento.id_usuario == usuario.id,
+            Lancamento.data_transacao >= start_dt,
+            Lancamento.data_transacao <= end_dt,
+            ~func.lower(Lancamento.tipo).like('entr%'),
+            Lancamento.id_categoria.isnot(None),
+        ).group_by(Lancamento.id_categoria).all()
+        prev_cat_rows = db.query(
+            Lancamento.id_categoria,
+            func.coalesce(func.sum(func.abs(Lancamento.valor)), 0).label('sum_val'),
+        ).filter(
+            Lancamento.id_usuario == usuario.id,
+            Lancamento.data_transacao >= prev_start_dt,
+            Lancamento.data_transacao <= prev_end_dt,
+            ~func.lower(Lancamento.tipo).like('entr%'),
+            Lancamento.id_categoria.isnot(None),
+        ).group_by(Lancamento.id_categoria).all()
+
+        current_by_cat = {int(row.id_categoria): float(row.sum_val or 0) for row in current_cat_rows if row.id_categoria is not None}
+        prev_by_cat = {int(row.id_categoria): float(row.sum_val or 0) for row in prev_cat_rows if row.id_categoria is not None}
+        reduced_categories = [cid for cid, prev_val in prev_by_cat.items() if prev_val > 0 and current_by_cat.get(cid, 0.0) < prev_val]
+        reduced_categories = reduced_categories[:2]
+        for cid in reduced_categories:
+            usuario.xp = int(usuario.xp or 0) + int(SPEC_XP_ACTIONS['CATEGORIA_REDUCAO'])
+            db.add(XpEvent(
+                id_usuario=usuario.id,
+                action='CATEGORIA_REDUCAO',
+                xp_base=int(SPEC_XP_ACTIONS['CATEGORIA_REDUCAO']),
+                xp_gained=int(SPEC_XP_ACTIONS['CATEGORIA_REDUCAO']),
+                details={'category_id': cid, 'month': start_dt.strftime('%Y-%m')},
+            ))
+            total_awarded += 1
+
+        # Crescimento patrimonial (+80 ou +120 se >=10%)
+        patrimony_rows = db.query(PatrimonySnapshot).filter(
+            PatrimonySnapshot.id_usuario == usuario.id
+        ).order_by(PatrimonySnapshot.mes_referencia.desc()).limit(2).all()
+        if len(patrimony_rows) == 2:
+            latest = float(patrimony_rows[0].total_patrimonio or 0)
+            previous = float(patrimony_rows[1].total_patrimonio or 0)
+            if previous > 0 and latest > previous:
+                growth_pct = (latest - previous) / previous
+                patrimony_xp = 120 if growth_pct >= 0.10 else 80
+                usuario.xp = int(usuario.xp or 0) + patrimony_xp
+                db.add(XpEvent(
+                    id_usuario=usuario.id,
+                    action='PATRIMONIO_CRESCIMENTO',
+                    xp_base=patrimony_xp,
+                    xp_gained=patrimony_xp,
+                    details={'growth_pct': round(growth_pct, 4), 'latest': latest, 'previous': previous},
+                ))
+                total_awarded += 1
+
+    db.commit()
+    return total_awarded
