@@ -62,6 +62,18 @@ _MONTH_MAP = {
 }
 
 
+def _fmt_brl(value: float) -> str:
+    normalized = f"{abs(float(value)):.2f}".replace(".", ",")
+    return f"R$ {normalized}"
+
+
+def _compact_desc(text: str, max_len: int = 42) -> str:
+    clean = re.sub(r"\s+", " ", (text or "")).strip()
+    if len(clean) <= max_len:
+        return clean
+    return clean[: max_len - 1].rstrip() + "..."
+
+
 def _parse_inter_transaction_line(line: str) -> Optional[Dict]:
     raw = (line or "").strip()
     if not raw:
@@ -628,24 +640,36 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
         total_credito = sum(t["valor"] for t in transacoes if t["valor"] > 0)
 
         preview_lines = []
-        for item in transacoes[:15]:
+        for item in transacoes[:8]:
             data = item["data_transacao"].strftime("%d/%m")
-            valor = abs(item["valor"])
-            preview_lines.append(f"• {data} {item['descricao']} - R$ {valor:.2f}")
+            valor_label = _fmt_brl(item["valor"])
+            desc = _compact_desc(item.get("descricao", ""))
+            preview_lines.append(f"• {data} | {desc} | {valor_label}")
 
-        preview_text = "\n".join(preview_lines)
-        ignored_text = f"\n- Ignoradas (pagamentos/estornos): {ignoradas}" if ignoradas else ""
+        top_debitos = sorted(
+            [t for t in transacoes if float(t.get("valor", 0)) < 0],
+            key=lambda t: abs(float(t.get("valor", 0))),
+            reverse=True,
+        )[:3]
+        top_lines = []
+        for item in top_debitos:
+            top_lines.append(f"• {_compact_desc(item.get('descricao', ''), 34)} ({_fmt_brl(item['valor'])})")
+
+        preview_text = "\n".join(preview_lines) if preview_lines else "• Sem itens para preview"
+        maiores_text = "\n".join(top_lines) if top_lines else "• Sem debitos"
+        ignored_text = f"\n• Ignoradas (pagamentos/estornos): {ignoradas}" if ignoradas else ""
         conta_text = f" na conta <b>{primeira_conta.nome}</b>"
 
         origem_label = context.user_data.get("fatura_origem_label", "Inter")
         resumo = (
             f"<b>Resumo da fatura ({origem_label})</b>\n"
-            f"- Transacoes detectadas: {total}{ignored_text}\n"
-            f"- Total debitos: <b>R$ {total_debito:.2f}</b>\n"
-            f"- Total creditos: R$ {total_credito:.2f}\n\n"
-            f"<b>Exemplos (primeiras 15):</b>\n{preview_text}\n\n"
-            f"<b>Acao:</b> Importar{conta_text}?\n\n"
-            "Use <b>Editar</b> para revisar/corrigir os lancamentos antes de salvar."
+            f"• Transacoes detectadas: <b>{total}</b>{ignored_text}\n"
+            f"• Total debitos: <b>{_fmt_brl(total_debito)}</b>\n"
+            f"• Total creditos: {_fmt_brl(total_credito)}\n\n"
+            f"<b>Maiores gastos detectados:</b>\n{maiores_text}\n\n"
+            f"<b>Preview de lancamentos:</b>\n{preview_text}\n\n"
+            f"<b>Acao:</b> Importar{conta_text}?\n"
+            "Toque em <b>Editar</b> para revisar e corrigir antes de salvar."
         )
 
         keyboard = [
