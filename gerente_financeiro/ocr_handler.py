@@ -914,7 +914,7 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
             db.add(novo_lancamento)
             db.commit()
             try:
-                await give_xp_for_action(query.from_user.id, "LANCAMENTO_OCR", context)
+                await give_xp_for_action(query.from_user.id, "LANCAMENTO_CRIADO_OCR", context)
             except Exception:
                 logger.debug("Falha ao conceder XP do OCR (nao critico).")
 

@@ -835,7 +835,7 @@ def _preparar_dados_lancamento(transacao_data: dict, user_id: int, conta_id: int
         'descricao': transacao_data.get('descricao', '').strip(),
         'data_transacao': transacao_data.get('data_transacao'),
         'tipo': tipo_transacao, # Usa o tipo definido pela regra de ouro
-        'forma_pagamento': transacao_data.get('forma_pagamento', 'Nao_informado'),
+        'forma_pagamento': _normalizar_forma_pagamento(transacao_data.get('forma_pagamento')),
         'origem': transacao_data.get('origem', 'manual')
     }
     
@@ -858,6 +858,29 @@ def _preparar_dados_lancamento(transacao_data: dict, user_id: int, conta_id: int
     # ... (o resto da função, como extração de itens e forma de pagamento, pode permanecer) ...
     
     return dados
+
+
+def _normalizar_forma_pagamento(value: Any) -> str:
+    """Normaliza forma_pagamento para o conjunto aceito no CHECK do banco."""
+    raw = str(value or '').strip().lower()
+    if raw in {'pix'}:
+        return 'Pix'
+    if raw in {'credito', 'crédito', 'cartao de credito', 'cartão de crédito', 'cartao', 'cartão'}:
+        return 'Crédito'
+    if raw in {'debito', 'débito', 'cartao de debito', 'cartão de débito'}:
+        return 'Débito'
+    if raw in {'boleto'}:
+        return 'Boleto'
+    if raw in {'dinheiro', 'especie', 'espécie'}:
+        return 'Dinheiro'
+    if raw in {'nao informado', 'não informado', 'nao_informado', 'não_informado', 'n/a', ''}:
+        return 'Nao_informado'
+
+    # Bancos e contas usados como "forma" em fluxos legados de fatura/extrato.
+    if any(token in raw for token in {'inter', 'bradesco', 'itau', 'itaú', 'nubank', 'visa', 'master'}):
+        return 'Crédito'
+
+    return 'Nao_informado'
 
 def _get_all_categories_and_subcategories(db: Session) -> Tuple[Dict[str, int], Dict[str, int]]:
     """Busca e cacheia todas as categorias e subcategorias do banco."""

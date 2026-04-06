@@ -38,7 +38,8 @@ def _get_webapp_url(tab: str | None = None, draft: dict | None = None) -> str:
     """Gera URL do miniapp com parâmetros de rascunho para edição."""
     base_url = os.getenv("DASHBOARD_BASE_URL", "http://localhost:5000").rstrip("/")
     url = f"{base_url}/webapp"
-    params: list[str] = []
+    version_tag = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    params: list[str] = [f"v={quote(version_tag, safe='')}"]
     if tab:
         params.append(f"tab={quote(tab, safe='')}")
     if draft:
@@ -460,7 +461,7 @@ async def manual_confirmation_handler(update: Update, context: ContextTypes.DEFA
         db.commit()
         
         try:
-            await give_xp_for_action(update.effective_user.id, "LANCAMENTO_MANUAL", context)
+            await give_xp_for_action(update.effective_user.id, "LANCAMENTO_CRIADO_TEXTO", context)
         except Exception:
             logger.debug("Falha ao conceder XP do lancamento manual (nao critico).")
         

@@ -41,7 +41,8 @@ def _normalizar_tipo(tipo: str) -> str:
 def _get_webapp_url(tab: str | None = None, draft: dict | None = None) -> str:
     base_url = os.getenv("DASHBOARD_BASE_URL", "http://localhost:5000").rstrip("/")
     url = f"{base_url}/webapp"
-    params: list[str] = []
+    version_tag = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    params: list[str] = [f"v={quote(version_tag, safe='')}"]
     if tab:
         params.append(f"tab={quote(tab, safe='')}")
     if draft:
@@ -316,7 +317,7 @@ async def audio_action_processor(update: Update, context: ContextTypes.DEFAULT_T
             db.add(novo_lancamento)
             db.commit()
             try:
-                await give_xp_for_action(query.from_user.id, "LANCAMENTO_AUDIO", context)
+                await give_xp_for_action(query.from_user.id, "LANCAMENTO_CRIADO_VOZ", context)
             except Exception:
                 logger.debug("Falha ao conceder XP do lancamento por audio (nao critico).")
             

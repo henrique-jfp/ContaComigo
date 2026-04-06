@@ -625,10 +625,9 @@ async def metas_confirmacao_callback(update: Update, context: ContextTypes.DEFAU
         await query.edit_message_text(mensagem, parse_mode="HTML")
 
         if acao == "confirm":
-            await give_xp_for_action(query.from_user.id, "META_CHECKIN_MENSAL", context)
+            await give_xp_for_action(query.from_user.id, "META_CHECKIN", context)
             if float(objetivo.valor_atual or 0) >= float(objetivo.valor_meta):
                 await give_xp_for_action(query.from_user.id, "META_ATINGIDA", context)
-                await give_xp_for_action(query.from_user.id, "META_CONCLUIDA_100", context)
     finally:
         db.close()
 

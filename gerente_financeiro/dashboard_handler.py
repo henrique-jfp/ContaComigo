@@ -127,7 +127,8 @@ async def cmd_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         
-        webapp_url = f"{dashboard_handler.dashboard_url}/webapp"
+        version_tag = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        webapp_url = f"{dashboard_handler.dashboard_url}/webapp?v={version_tag}"
         keyboard = [
             [InlineKeyboardButton("🧩 Abrir Miniapp", web_app=WebAppInfo(url=webapp_url))],
             [InlineKeyboardButton("❌ Fechar", callback_data="delete_message")]
@@ -143,7 +144,7 @@ async def cmd_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
         try:
-            await give_xp_for_action(user_id, "DASHBOARD_ACESSADO", context)
+            await give_xp_for_action(user_id, "DASHBOARD_VISUALIZADO", context)
         except Exception:
             logger.debug("Falha ao conceder XP do dashboard (nao critico).")
         logger.info("Comando /dashboard executado com sucesso")

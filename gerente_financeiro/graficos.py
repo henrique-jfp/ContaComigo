@@ -271,7 +271,7 @@ async def chart_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 parse_mode='HTML'
             )
             try:
-                await give_xp_for_action(user_id, "GRAFICO_GERADO", context)
+                await give_xp_for_action(user_id, "DASHBOARD_VISUALIZADO", context)
             except Exception:
                 logger.debug("Falha ao conceder XP do grafico (nao critico).")
             

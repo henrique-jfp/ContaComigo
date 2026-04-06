@@ -387,7 +387,7 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
             )
 
             try:
-                await give_xp_for_action(update.effective_user.id, "RELATORIO_MENSAL", context)
+                await give_xp_for_action(update.effective_user.id, "RELATORIO_GERADO", context)
             except Exception:
                 logger.debug("Falha ao conceder XP do relatorio (nao critico).")
             

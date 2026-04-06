@@ -15,12 +15,12 @@ async def give_xp_for_action(user_id: int, action: str, context, custom_amount: 
     
     Args:
         user_id (int): ID do usuário no Telegram
-        action (str): Ação realizada (ver XP_ACTIONS no gamification_service.py)
+        action (str): Ação realizada (ver SPEC_XP_ACTIONS no gamification_missions_service.py)
         context: Context do Telegram
         custom_amount (int, optional): Quantidade personalizada de XP
     
     Usage:
-        await give_xp_for_action(user_id, "LANCAMENTO_MANUAL", context)
+        await give_xp_for_action(user_id, "LANCAMENTO_CRIADO_TEXTO", context)
         await give_xp_for_action(user_id, "META_ATINGIDA", context, 200)  # XP customizado
     """
     db: Session = next(get_db())
@@ -95,7 +95,7 @@ def track_xp(action: str, custom_amount: int = None):
     Decorator para automaticamente dar XP em funções de handler.
     
     Usage:
-        @track_xp("LANCAMENTO_MANUAL")
+        @track_xp("LANCAMENTO_CRIADO_TEXTO")
         async def handle_transaction(update, context):
             # Sua função normal
             pass
@@ -193,7 +193,7 @@ async def check_achievements(user_id: int, context):
 # No manual_entry_handler.py:
 from .gamification_utils import give_xp_for_action, track_xp
 
-@track_xp("LANCAMENTO_MANUAL")
+@track_xp("LANCAMENTO_CRIADO_TEXTO")
 async def process_manual_entry(update, context):
     # Sua lógica de lançamento manual
     pass
@@ -204,11 +204,11 @@ async def some_function(update, context):
     # Sua lógica...
     
     # Dar XP no final
-    await give_xp_for_action(user_id, "GRAFICO_GERADO", context)
+    await give_xp_for_action(user_id, "DASHBOARD_VISUALIZADO", context)
 
 # No fatura_handler.py:
-await give_xp_for_action(user_id, "FATURA_PROCESSADA", context)
+await give_xp_for_action(user_id, "LANCAMENTO_CRIADO_PDF", context)
 
 # No handlers.py (para IA):
-await give_xp_for_action(user_id, "PERGUNTA_IA_COMPLEXA", context)
+await give_xp_for_action(user_id, "PERGUNTA_ALFREDO", context)
 """

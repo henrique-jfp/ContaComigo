@@ -898,7 +898,7 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
         dados = await obter_dados_externos(flag_dado_externo)
         await enviar_texto_em_blocos(context.bot, chat_id, dados.get("texto_html", "Não encontrei a informação."))
         try:
-            await give_xp_for_action(user_id, "PERGUNTA_IA_SIMPLES", context)
+            await give_xp_for_action(user_id, "PERGUNTA_ALFREDO", context)
         except Exception:
             logger.debug("Falha ao conceder XP de IA simples (nao critico).")
         return AWAIT_GERENTE_QUESTION
@@ -1020,7 +1020,7 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
                     logger.warning(f"IA tentou chamar uma função desconhecida: {nome_funcao}")
                     await context.bot.send_message(chat_id, "A IA tentou uma ação que não conheço.")
                 try:
-                    await give_xp_for_action(user_id, "PERGUNTA_IA_SIMPLES", context)
+                    await give_xp_for_action(user_id, "PERGUNTA_ALFREDO", context)
                 except Exception:
                     logger.debug("Falha ao conceder XP de IA simples (nao critico).")
             else:
@@ -1033,7 +1033,7 @@ async def handle_natural_language(update: Update, context: ContextTypes.DEFAULT_
             await enviar_texto_em_blocos(context.bot, chat_id, resposta_texto, reply_markup=reply_markup)
             contexto_conversa.adicionar_interacao(user_question, resposta_texto, tipo="alfredo_analise")
             try:
-                await give_xp_for_action(user_id, "PERGUNTA_IA_COMPLEXA", context)
+                await give_xp_for_action(user_id, "PERGUNTA_ALFREDO", context)
             except Exception:
                 logger.debug("Falha ao conceder XP de IA complexa (nao critico).")
 

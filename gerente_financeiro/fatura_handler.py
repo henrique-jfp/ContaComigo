@@ -130,7 +130,7 @@ def _parse_inter_transaction_line(line: str) -> Optional[Dict]:
         "descricao": desc,
         "valor": sign * value,
         "data_transacao": date_obj,
-        "forma_pagamento": "Cartao de Credito",
+        "forma_pagamento": "Crédito",
         "origem": "fatura_pdf_inter",
     }
 
@@ -262,6 +262,9 @@ def _parse_fatura_pipeline(file_bytes: bytes) -> Tuple[List[Dict], int, str]:
         transacoes, ignoradas = _parse_bradesco_pdf_lines(text_lines)
         if transacoes:
             return transacoes, ignoradas, "Bradesco"
+        # Evita fallback genérico para Bradesco quando o parser dedicado falha,
+        # pois o parser genérico tende a capturar linhas de "opções de pagamento".
+        return [], 0, "Bradesco"
 
     bank_name, _score = _match_bank_from_samples(text_lines)
     transacoes, ignoradas = _parse_generic_transactions(text_lines, bank_name)
@@ -282,15 +285,30 @@ def _parse_bradesco_pdf_lines(lines: List[str]) -> Tuple[List[Dict], int]:
     transacoes: List[Dict] = []
     ignoradas = 0
     in_section = False
+    saw_resume_header = False
     year_ref = _extract_reference_year(lines)
 
     for raw_line in lines:
         line = raw_line.strip()
         lower_line = line.lower()
 
+        if "resumo da fatura" in lower_line:
+            saw_resume_header = True
+            in_section = True
+            continue
+
         if "historico de lancamentos" in lower_line or "histórico de lançamentos" in lower_line:
             in_section = True
             continue
+
+        if saw_resume_header and any(token in lower_line for token in [
+            "mensagens importantes",
+            "informacoes importantes",
+            "informações importantes",
+            "atendimento",
+            "central de atendimento",
+        ]):
+            break
 
         if not in_section:
             continue
@@ -307,6 +325,14 @@ def _parse_bradesco_pdf_lines(lines: List[str]) -> Tuple[List[Dict], int]:
                 "saque r$",
                 "taxa",
                 "rotativo",
+                "pagamento minimo",
+                "pagamento mínimo",
+                "parcelamento",
+                "juros",
+                "cet",
+                "valor total",
+                "opcoes de pagamento",
+                "opções de pagamento",
             ]):
                 continue
 
@@ -342,6 +368,9 @@ def _parse_bradesco_pdf_lines(lines: List[str]) -> Tuple[List[Dict], int]:
         desc = re.sub(r"\b\d{2}/\d{2}(?:/\d{2,4})?\b", "", desc).strip()
         desc = desc.strip("- ")
 
+        if re.search(r"\b(a\.m\.|a\.a\.|%|cet|juros|parcelamento)\b", lower_line):
+            continue
+
         if not desc:
             continue
 
@@ -359,7 +388,7 @@ def _parse_bradesco_pdf_lines(lines: List[str]) -> Tuple[List[Dict], int]:
                 "descricao": desc,
                 "valor": sign * value,
                 "data_transacao": date_obj,
-                "forma_pagamento": "Cartao de Credito",
+                "forma_pagamento": "Crédito",
                 "origem": "fatura_pdf_bradesco",
             }
         )
@@ -500,7 +529,7 @@ def _parse_generic_transactions(lines: List[str], bank_name: Optional[str]) -> T
                 "descricao": desc,
                 "valor": sign * value,
                 "data_transacao": date_obj,
-                "forma_pagamento": "Cartao de Credito",
+                "forma_pagamento": "Crédito",
                 "origem": origem,
             }
         )
@@ -712,7 +741,7 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     # Responder ao callback imediatamente
     try:
-        await query.answer(timeout=5)
+        await query.answer()
     except Exception as e:
         logger.warning("Falha ao responder callback imediatamente: %s", e)
 
@@ -791,7 +820,7 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 conta_obj = db.query(Conta).filter(Conta.id == conta_id).first()
                 conta_nome = conta_obj.nome if conta_obj else "Cartao de Credito"
                 for item in transacoes:
-                    item["forma_pagamento"] = conta_nome
+                    item["forma_pagamento"] = "Crédito"
 
                 usuario_db = get_or_create_user(db, query.from_user.id, query.from_user.full_name)
                 tipo_origem = transacoes[0].get("origem", "fatura_pdf_generic") if transacoes else "fatura_pdf_generic"
@@ -800,7 +829,7 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 )
                 if ok:
                     try:
-                        await give_xp_for_action(query.from_user.id, "FATURA_PROCESSADA", context)
+                        await give_xp_for_action(query.from_user.id, "LANCAMENTO_CRIADO_PDF", context)
                     except Exception:
                         logger.debug("Falha ao conceder XP da fatura (nao critico).")
                 

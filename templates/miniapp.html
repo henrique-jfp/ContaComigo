@@ -1080,10 +1080,10 @@
       if (!keepNav) {
         setActiveNav(tabName);
       }
+      if (tabName === 'missoes' && sessionId) {
+        loadMissions();
+      }
       if (tabName === 'inicio' && sessionId) {
-              if (tabName === 'missoes' && sessionId) {
-                loadMissions();
-              }
         loadHomeOverview();
       }
     }
@@ -2520,6 +2520,7 @@
         setTimeout(() => {
           loadAgendamentos();
           loadMetas();
+          loadMissions();
           loadGameProfile();
           loadMonthlyRanking();
           tryOpenPendingFaturaEditor();
@@ -2527,7 +2528,6 @@
         return;
       }
 
-  loadMissions();
       telegramInitData = initData;
 
       try {
@@ -2569,6 +2569,7 @@
         setTimeout(() => {
           loadAgendamentos();
           loadMetas();
+          loadMissions();
           loadGameProfile();
           loadMonthlyRanking();
           tryOpenPendingFaturaEditor();

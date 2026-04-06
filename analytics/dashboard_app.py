@@ -17,7 +17,7 @@ import requests
 from urllib.parse import parse_qsl
 from functools import wraps
 from sqlalchemy import and_, func, desc
-from flask import Flask, render_template, jsonify, request, g
+from flask import Flask, render_template, jsonify, request, g, make_response
 from sqlalchemy.orm import joinedload
 from datetime import datetime, timedelta, date
 
@@ -504,9 +504,9 @@ def _friendly_feature_name(action: str | None) -> str:
         "META_ATINGIDA": "Metas atingidas",
         "META_ATINGIDA_ANTES_PRAZO": "Meta batida antes do prazo",
         "AGENDAMENTO_CRIADO": "Agendamentos criados",
-        "DASHBOARD_ACESSADO": "Abertura do MiniApp",
+        "DASHBOARD_VISUALIZADO": "Abertura do MiniApp",
         "DASHBOARD_VISUALIZADO": "Visualização do dashboard",
-        "FATURA_PROCESSADA": "Importação de fatura",
+        "LANCAMENTO_CRIADO_PDF": "Importação de fatura",
         "OCR_PROCESSADO": "Leituras por OCR",
         "AUDIO_PROCESSADO": "Lançamentos por voz",
         "PERGUNTA_ALFREDO": "Perguntas ao Alfredo",
@@ -662,7 +662,11 @@ def dashboard():
 @app.route('/webapp')
 def miniapp_shell():
     """Shell do miniapp Telegram"""
-    return render_template('miniapp.html')
+    response = make_response(render_template('miniapp.html'))
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 
 @app.route('/api/telegram/auth', methods=['POST'])
@@ -1424,13 +1428,12 @@ def miniapp_meta_confirmar_mes(meta_id: int):
             meta.valor_atual = valor_confirmado
 
         # Concede XP por check-in mensal da meta.
-        _award_xp_from_miniapp(db, session["user_id"], "META_CHECKIN_MENSAL")
+        _award_xp_from_miniapp(db, session["user_id"], "META_CHECKIN")
 
         # Bonus grande ao atingir a meta pela primeira vez.
         atingiu_agora = valor_meta_alvo > 0 and valor_atual_antes < valor_meta_alvo and float(meta.valor_atual or 0) >= valor_meta_alvo
         if atingiu_agora:
             _award_xp_from_miniapp(db, session["user_id"], "META_ATINGIDA")
-            _award_xp_from_miniapp(db, session["user_id"], "META_CONCLUIDA_100")
 
         db.commit()
         return jsonify({"ok": True})
@@ -1750,7 +1753,7 @@ def miniapp_fatura_editor_save():
     if not edited_rows:
         return jsonify({"ok": False, "error": "no_transactions"}), 400
 
-    draft = pop_fatura_draft(token, session["user_id"])
+    draft = get_fatura_draft(token, session["user_id"])
     if not draft:
         return jsonify({"ok": False, "error": "draft_not_found"}), 404
 
@@ -1770,14 +1773,18 @@ def miniapp_fatura_editor_save():
                 descricao = str(t.get("descricao", "")).strip()
                 if not descricao:
                     continue
-                valor = float(t.get("valor", 0))
+                valor_str = str(t.get("valor", "0")).strip()
+                if "," in valor_str:
+                    valor = float(valor_str.replace(".", "").replace(",", "."))
+                else:
+                    valor = float(valor_str)
                 data_iso = str(t.get("data_transacao", "")).strip()
                 data_tx = datetime.fromisoformat(data_iso)
                 transacoes.append({
                     "descricao": descricao,
                     "valor": valor,
                     "data_transacao": data_tx,
-                    "forma_pagamento": draft.get("conta_nome", "Cartao de Credito"),
+                    "forma_pagamento": _normalize_forma_pagamento("Crédito"),
                     "origem": "fatura_pdf_editado",
                 })
             except Exception:
@@ -1798,6 +1805,9 @@ def miniapp_fatura_editor_save():
         if not ok:
             db.rollback()
             return jsonify({"ok": False, "error": "save_failed", "message": msg}), 400
+
+        # Só consome o rascunho após persistir com sucesso.
+        pop_fatura_draft(token, session["user_id"])
 
         return jsonify({
             "ok": True,
