@@ -4,9 +4,10 @@ import os
 import re
 import uuid
 import asyncio
+import time
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import pdfplumber
 from pdfminer.pdfdocument import PDFPasswordIncorrect
@@ -166,7 +167,13 @@ def parse_inter_pdf_bytes(file_bytes: bytes) -> Tuple[List[Dict], int]:
 
 def _get_fatura_webapp_url(page: str, token: str) -> str:
     base_url = os.getenv("DASHBOARD_BASE_URL", "http://localhost:5000").rstrip("/")
-    return f"{base_url}/webapp?page={quote(page, safe='')}&fatura_token={quote(token, safe='')}"
+    params = {
+        "entry": "fatura_edit",
+        "page": page,
+        "fatura_token": token,
+        "v": str(int(time.time())),
+    }
+    return f"{base_url}/webapp?{urlencode(params)}"
 
 
 def io_bytes_to_pdf(file_bytes: bytes):
@@ -719,15 +726,20 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
 
         webapp_url = _get_fatura_webapp_url("fatura_editor", token)
+        logger.info("URL do editor de fatura gerada para user=%s token=%s", query.from_user.id, token)
 
+        # Evita problemas em alguns clientes ao tentar substituir o teclado inline por um botão web_app.
         await query.edit_message_text(
-            "📱 <b>Abrindo editor de transacoes...</b>\n\n"
-            "Clique no botao abaixo para abrir o MiniApp e revisar cada lancamento antes de salvar.",
+            "✅ Rascunho preparado. Vou te enviar o botao para abrir o editor no MiniApp.",
+            parse_mode="HTML",
+        )
+        await query.message.reply_text(
+            "📱 <b>Editar lancamentos da fatura</b>\n\n"
+            "Toque no botao abaixo para abrir o editor.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📋 Abrir Editor de Transacoes", 
-                    web_app=WebAppInfo(url=webapp_url))],
-            ])
+                [InlineKeyboardButton("✏️ Abrir Editor da Fatura", web_app=WebAppInfo(url=webapp_url))],
+            ]),
         )
         return FATURA_CONFIRMATION_STATE
 
