@@ -493,3 +493,70 @@ async def check_and_update_streak(db: Session, user_id: int, context) -> None:
     
     usuario.ultimo_login = hoje
     db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Canonical spec wrappers (override legacy behavior above)
+# ---------------------------------------------------------------------------
+
+from .gamification_missions_service import (  # noqa: E402
+    SPEC_XP_ACTIONS as XP_ACTIONS,
+    LEVEL_REQUIREMENTS,
+    get_level_progress as _spec_get_level_progress,
+    get_level_progress_payload as _spec_get_level_progress_payload,
+    award_xp_with_missions as _spec_award_xp_with_missions,
+)
+
+LEVELS = {
+    level: {
+        'xp_necessario': xp_req,
+        'titulo': name,
+        'multiplicador': {1: 1.0, 2: 1.0, 3: 1.0, 4: 1.0, 5: 1.05, 6: 1.05, 7: 1.05, 8: 1.05, 9: 1.10, 10: 1.10, 11: 1.10, 12: 1.10, 13: 1.15, 14: 1.15, 15: 1.15, 16: 1.20}.get(level, 1.20),
+    }
+    for level, (xp_req, name, _tier) in LEVEL_REQUIREMENTS.items()
+}
+
+
+def _spec_get_level_info(level: int) -> dict:
+    if level > 16:
+        return {
+            'level': level,
+            'titulo': f'Além do Budget +{level - 16}',
+            'multiplicador': 1.20,
+            'xp_necessario': 130000 + (level - 16) * 35000,
+        }
+    xp_req, name, _tier = LEVEL_REQUIREMENTS.get(level, LEVEL_REQUIREMENTS[1])
+    return {'level': level, 'titulo': name, 'multiplicador': {1:1.0,2:1.0,3:1.0,4:1.0,5:1.05,6:1.05,7:1.05,8:1.05,9:1.10,10:1.10,11:1.10,12:1.10,13:1.15,14:1.15,15:1.15,16:1.20}.get(level, 1.20), 'xp_necessario': xp_req}
+
+
+async def award_xp(db: Session, user_id: int, action: str, context, custom_amount: int = None) -> dict:
+    from models import Usuario
+    usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
+    if not usuario:
+        return {"xp_gained": 0, "level_up": False, "new_level": 0, "streak_bonus": 0}
+    return await _spec_award_xp_with_missions(db, usuario, action, custom_amount)
+
+
+async def check_and_update_streak(db: Session, user_id: int, context) -> None:
+    from models import Usuario
+    usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
+    if not usuario:
+        return
+
+    hoje = date.today()
+    if usuario.ultimo_login == hoje:
+        return
+    if usuario.ultimo_login == hoje - timedelta(days=1):
+        usuario.streak_dias = int(usuario.streak_dias or 0) + 1
+    else:
+        usuario.streak_dias = 1
+    usuario.ultimo_login = hoje
+    db.commit()
+
+
+def get_level_progress_payload(usuario: Usuario) -> dict:
+    return _spec_get_level_progress_payload(usuario)
+
+
+def get_level_progress(usuario: Usuario) -> dict:
+    return _spec_get_level_progress(usuario)

@@ -5,7 +5,7 @@ Importe essas funções nos handlers que precisam dar XP.
 """
 
 from database.database import get_db
-from .gamification_service import award_xp, check_and_update_streak
+from .gamification_missions_service import award_xp_with_missions, get_total_multiplier, get_level_progress
 import asyncio
 from sqlalchemy.orm import Session
 
@@ -25,12 +25,11 @@ async def give_xp_for_action(user_id: int, action: str, context, custom_amount: 
     """
     db: Session = next(get_db())
     try:
-        # Atualizar streak diário (se necessário)
-        await check_and_update_streak(db, user_id, context)
-        
-        # Conceder XP pela ação
-        result = await award_xp(db, user_id, action, context, custom_amount)
-        return result
+        from models import Usuario
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
+        if not usuario:
+            return {"xp_gained": 0, "level_up": False, "new_level": 0}
+        return await award_xp_with_missions(db, usuario, action, custom_amount)
     finally:
         db.close()
 
@@ -42,23 +41,21 @@ async def give_xp_silent(user_id: int, action: str, context, custom_amount: int 
     try:
         # Só dar XP, sem notificação
         from models import Usuario
-        from .gamification_service import XP_ACTIONS, LEVELS
-        
-        base_xp = custom_amount or XP_ACTIONS.get(action, 0)
-        if base_xp == 0:
-            return
-            
+        from .gamification_missions_service import SPEC_XP_ACTIONS, normalize_action
+
         usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
         if not usuario:
             return
-            
-        # Aplicar multiplicadores
-        level_info = LEVELS.get(usuario.level, {"multiplicador": 1.0})
-        final_xp = int(base_xp * level_info.get("multiplicador", 1.0))
-        
+
+        base_xp = int(custom_amount if custom_amount is not None else SPEC_XP_ACTIONS.get(normalize_action(action), 0))
+        if base_xp <= 0:
+            return
+
+        multiplier = get_total_multiplier(usuario, db)
+        final_xp = int(base_xp * multiplier)
         usuario.xp += final_xp
         db.commit()
-        
+
         return {"xp_gained": final_xp}
     finally:
         db.close()
@@ -68,19 +65,26 @@ async def check_daily_streak(user_id: int, context):
     Verificar e atualizar streak diário do usuário.
     Chame esta função no início de cada handler principal.
     """
-    db: Session = next(get_db())
-    try:
-        await check_and_update_streak(db, user_id, context)
-    finally:
-        db.close()
+    return
 
 
 async def touch_user_interaction(user_id: int, context) -> None:
     """Atualiza streak e registra interacao geral (XP limitado por regra diaria)."""
     db: Session = next(get_db())
     try:
-        await check_and_update_streak(db, user_id, context)
-        await award_xp(db, user_id, "INTERACAO_BOT", context)
+        from datetime import date
+        from models import Usuario, XpDailyCounter
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
+        if not usuario:
+            return
+        hoje = date.today()
+        already = db.query(XpDailyCounter.id).filter(
+            XpDailyCounter.id_usuario == usuario.id,
+            XpDailyCounter.action == 'PRIMEIRA_INTERACAO_DIA',
+            XpDailyCounter.day_ref == hoje,
+        ).first()
+        if not already:
+            await award_xp_with_missions(db, usuario, "PRIMEIRA_INTERACAO_DIA")
     finally:
         db.close()
 

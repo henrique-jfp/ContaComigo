@@ -67,11 +67,12 @@ static_dir = os.path.join(parent_dir, 'static')
 sys.path.insert(0, parent_dir)
 import config
 from database.database import get_db, buscar_lancamentos_usuario
-from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Categoria, Subcategoria, XpEvent, UserMission
+from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Categoria, Subcategoria, XpEvent, UserMission, UserAchievement
 from gerente_financeiro.prompts import PROMPT_ALFREDO
 from gerente_financeiro.services import preparar_contexto_financeiro_completo
 from gerente_financeiro.services import salvar_transacoes_generica
 from gerente_financeiro.gamification_service import get_level_progress_payload, award_xp
+from gerente_financeiro.gamification_missions_service import get_user_active_missions
 from gerente_financeiro.fatura_draft_store import (
     get_fatura_draft,
     pop_fatura_draft,
@@ -1476,27 +1477,7 @@ def miniapp_game_profile():
                 monthly_rank = idx
                 break
 
-        # NOVO: Carregar missões do usuário
-        user_missions_raw = (
-            db.query(UserMission)
-            .filter(UserMission.id_usuario == usuario.id)
-            .filter(UserMission.status.in_(['active', 'completed']))
-            .all()
-        )
-        user_missions = []
-        for um in user_missions_raw:
-            user_missions.append({
-                'id': um.id,
-                'mission_key': um.mission.mission_key,
-                'name': um.mission.name,
-                'description': um.mission.description,
-                'type': um.mission.mission_type,
-                'xp_reward': um.mission.xp_reward,
-                'progress': um.progress,
-                'current_value': um.current_value,
-                'target_value': um.target_value,
-                'status': um.status,
-            })
+        user_missions = get_user_active_missions(db, usuario.id)
 
         level_progress = get_level_progress_payload(usuario)
         top_feature_name = top_features[0]["feature"] if top_features else None
@@ -1515,7 +1496,7 @@ def miniapp_game_profile():
                 "interactions_total": int(total_interactions),
                 "interactions_week": int(week_interactions),
                 "top_features": top_features,
-                "missions": user_missions,  # NOVO
+                "missions": user_missions,
                 "alfredo_note": _alfredo_profile_note(int(level_progress.get("progress_pct", 0)), int(week_interactions), top_feature_name),
             },
         })
@@ -1574,6 +1555,57 @@ def miniapp_mission_claim():
         db.rollback()
         logger.exception("Erro ao resgatar missão: %s", exc)
         return jsonify({"ok": False, "error": "mission_claim_failed"}), 500
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/missions')
+def miniapp_missions():
+    """Retorna missões ativas e seu progresso atual."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        missions = get_user_active_missions(db, usuario.id)
+        return jsonify({"ok": True, "missions": missions})
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/achievements')
+def miniapp_achievements():
+    """Retorna conquistas desbloqueadas e bônus permanentes do usuário."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        rows = db.query(UserAchievement).filter(UserAchievement.id_usuario == usuario.id).order_by(UserAchievement.unlocked_at.desc()).all()
+        achievements = []
+        total_multiplier = 0.0
+        for row in rows:
+            total_multiplier += float(row.permanent_multiplier or 0.0)
+            achievements.append({
+                "achievement_key": row.achievement_key,
+                "name": row.achievement_name,
+                "description": row.achievement_description,
+                "xp_reward": int(row.xp_reward or 0),
+                "permanent_multiplier": float(row.permanent_multiplier or 0.0),
+                "unlocked_at": row.unlocked_at.isoformat() if row.unlocked_at else None,
+            })
+
+        return jsonify({"ok": True, "achievements": achievements, "total_permanent_multiplier": total_multiplier})
     finally:
         db.close()
 

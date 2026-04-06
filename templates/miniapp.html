@@ -2205,11 +2205,11 @@
     async function loadMissions() {
       if (!sessionId) return;
       try {
-        const response = await fetchWithSession('/api/miniapp/game-profile');
+        const response = await fetchWithSession('/api/miniapp/missions');
         const data = await response.json();
-        if (!data.ok) throw new Error(data.error || 'profile_error');
+        if (!data.ok) throw new Error(data.error || 'missions_error');
 
-        missionsCache = Array.isArray(data.profile?.missions) ? data.profile.missions : [];
+        missionsCache = Array.isArray(data.missions) ? data.missions : [];
         renderMissions(missionsCache);
       } catch (error) {
         missoesList.innerHTML = `
