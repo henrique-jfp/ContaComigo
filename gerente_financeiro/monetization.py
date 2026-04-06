@@ -1,3 +1,57 @@
+# === GERAR LINK DE PAGAMENTO MERCADO PAGO ===
+def gerar_link_pagamento_mercadopago(user_id: int, plano: str) -> str:
+    """
+    Gera um link de pagamento Mercado Pago para o usuário e plano informados.
+    O link é único por usuário/plano e pode ser usado para upgrade automático.
+    """
+    import os
+    import uuid
+    mp_access_token = os.environ.get("MERCADOPAGO_ACCESS_TOKEN")
+    if not mp_access_token:
+        raise RuntimeError("MERCADOPAGO_ACCESS_TOKEN não configurado nas variáveis de ambiente!")
+    sdk = mercadopago.SDK(mp_access_token)
+
+    # Definições do produto
+    if plano == PLAN_PREMIUM_MONTHLY:
+        title = "Premium Mensal Maestro Financeiro"
+        price = PLAN_PRICES[PLAN_PREMIUM_MONTHLY]
+        plan_id = "premium_mensal"
+    elif plano == PLAN_PREMIUM_ANNUAL:
+        title = "Premium Anual Maestro Financeiro"
+        price = PLAN_PRICES[PLAN_PREMIUM_ANNUAL]
+        plan_id = "premium_anual"
+    else:
+        raise ValueError(f"Plano inválido: {plano}")
+
+    # Preferência de pagamento
+    preference_data = {
+        "items": [
+            {
+                "id": plan_id,
+                "title": title,
+                "quantity": 1,
+                "currency_id": "BRL",
+                "unit_price": float(price),
+                "description": f"Upgrade para {title} (Telegram ID: {user_id})"
+            }
+        ],
+        "external_reference": f"telegram_{user_id}_{plano}_{uuid.uuid4().hex[:8]}",
+        "notification_url": os.environ.get("MERCADOPAGO_WEBHOOK_URL", ""),
+        "payer": {
+            "name": str(user_id)
+        },
+        "back_urls": {
+            "success": os.environ.get("MERCADOPAGO_SUCCESS_URL", "https://t.me/ContaComigoBot"),
+            "failure": os.environ.get("MERCADOPAGO_FAILURE_URL", "https://t.me/ContaComigoBot"),
+            "pending": os.environ.get("MERCADOPAGO_PENDING_URL", "https://t.me/ContaComigoBot")
+        },
+        "auto_return": "approved"
+    }
+
+    preference_response = sdk.preference().create(preference_data)
+    if not preference_response["status"] == 201:
+        raise RuntimeError(f"Erro ao criar link Mercado Pago: {preference_response}")
+    return preference_response["response"]["init_point"]
 def _to_utc_aware(dt):
     if dt is None:
         return None
