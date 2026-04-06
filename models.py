@@ -2,7 +2,7 @@
 # models.py
 from datetime import datetime, timezone, time
 from sqlalchemy import (
-    Column, Integer, String, Numeric, DateTime, ForeignKey, BigInteger, Boolean, Date, Time, JSON, Text
+    Column, Integer, String, Numeric, DateTime, ForeignKey, BigInteger, Boolean, Date, Time, JSON, Text, UniqueConstraint
 )
 from sqlalchemy.orm import relationship, declarative_base
 
@@ -26,6 +26,10 @@ class Usuario(Base):
     level = Column(Integer, default=1, nullable=False)
     streak_dias = Column(Integer, default=0, nullable=False)
     ultimo_login = Column(Date, default=lambda: datetime.now(timezone.utc).date())
+    plan = Column(String(20), default='trial', nullable=False)
+    trial_expires_at = Column(DateTime, nullable=True)
+    premium_expires_at = Column(DateTime, nullable=True)
+    subscription_id = Column(String(100), nullable=True)
     
     lancamentos = relationship("Lancamento", back_populates="usuario", cascade="all, delete-orphan")
     contas = relationship("Conta", back_populates="usuario", cascade="all, delete-orphan")
@@ -38,6 +42,25 @@ class Usuario(Base):
     xp_events = relationship("XpEvent", back_populates="usuario", cascade="all, delete-orphan")
     xp_daily_counters = relationship("XpDailyCounter", back_populates="usuario", cascade="all, delete-orphan")
     monthly_gamification_awards = relationship("MonthlyGamificationAward", back_populates="usuario", cascade="all, delete-orphan")
+    plan_usage_monthly = relationship("UserPlanUsageMonthly", back_populates="usuario", cascade="all, delete-orphan")
+
+
+class UserPlanUsageMonthly(Base):
+    __tablename__ = 'user_plan_usage_monthly'
+    __table_args__ = (
+        UniqueConstraint('id_usuario', 'ano', 'mes', name='uq_user_plan_usage_monthly_user_period'),
+    )
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id'), nullable=False, index=True)
+    ano = Column(Integer, nullable=False, index=True)
+    mes = Column(Integer, nullable=False, index=True)
+    lancamentos_count = Column(Integer, default=0, nullable=False)
+    ocr_count = Column(Integer, default=0, nullable=False)
+    ia_questions_count = Column(Integer, default=0, nullable=False)
+    criado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    atualizado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    usuario = relationship("Usuario", back_populates="plan_usage_monthly")
 
 class Conquista(Base):
     __tablename__ = 'conquistas'

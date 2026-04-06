@@ -188,6 +188,7 @@ from gerente_financeiro.dashboard_handler import (
 )
 from gerente_financeiro.gamification_handler import show_profile, show_rankings, handle_gamification_callback
 from gerente_financeiro.gamification_utils import touch_user_interaction
+from gerente_financeiro.monetization import handle_plan_choice_callback
 
 # 📈 INVESTMENT HANDLER
 from gerente_financeiro.investment_handler import get_investment_handlers
@@ -475,6 +476,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("dashboard_callback", lambda: CallbackQueryHandler(dashboard_callback_handler, pattern="^dashboard_")),
         ("quick_callback", lambda: CallbackQueryHandler(quick_action_handler, pattern="^quick_")),
         ("ocr_callback", lambda: CallbackQueryHandler(ocr_action_processor, pattern="^ocr_")),
+        ("plan_choice_callback", lambda: CallbackQueryHandler(handle_plan_choice_callback, pattern="^plan_choose_")),
     ]
     
 

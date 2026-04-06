@@ -14,6 +14,11 @@ from models import Categoria, Lancamento, Subcategoria
 from .gamification_utils import give_xp_for_action, touch_user_interaction
 import config
 from .states import AUDIO_FORMA_PAGAMENTO_STATE, AUDIO_CONFIRMATION_STATE
+from .monetization import (
+    plan_allows_feature,
+    ensure_user_plan_state,
+    upgrade_prompt_for_feature,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +174,18 @@ async def handle_audio_expense(update: Update, context: ContextTypes.DEFAULT_TYP
     """Recebe o áudio (VOICE), envia para o Gemini 2.5 Flash, e processa."""
     logger.info("🎙️ Iniciando processamento de áudio para lançamento...")
     await touch_user_interaction(update.effective_user.id, context)
+
+    db = next(get_db())
+    try:
+        usuario_db = get_or_create_user(db, update.effective_user.id, update.effective_user.full_name)
+        ensure_user_plan_state(db, usuario_db, commit=True)
+        gate = plan_allows_feature(db, usuario_db, "voice_input")
+        if not gate.allowed:
+            text, keyboard = upgrade_prompt_for_feature("voice_input")
+            await update.message.reply_html(text, reply_markup=keyboard)
+            return ConversationHandler.END
+    finally:
+        db.close()
     
     if not config.GEMINI_API_KEY:
         await update.message.reply_text("❌ A Chave do Gemini não está configurada.")
@@ -289,6 +306,13 @@ async def audio_action_processor(update: Update, context: ContextTypes.DEFAULT_T
         try:
             db: Session = next(get_db())
             usuario_db = get_or_create_user(db, query.from_user.id, query.from_user.full_name)
+            ensure_user_plan_state(db, usuario_db, commit=True)
+
+            gate_lanc = plan_allows_feature(db, usuario_db, "lancamentos")
+            if not gate_lanc.allowed:
+                text, keyboard = upgrade_prompt_for_feature("lancamentos")
+                await query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboard)
+                return ConversationHandler.END
             
             data_str = dados.get('data', datetime.now().strftime('%d/%m/%Y'))
             try:
@@ -328,7 +352,7 @@ async def audio_action_processor(update: Update, context: ContextTypes.DEFAULT_T
             await query.edit_message_text("❌ Erro interno ao salvar o lançamento no banco de dados. Tente usar o /lancamento manual.")
         finally:
             # Em sqlalchemy scoped session com next(get_db()), o finally lá do generator cuidaria disso.
-            pass
+            db.close()
             
         context.user_data.pop('dados_audio', None)
         return ConversationHandler.END

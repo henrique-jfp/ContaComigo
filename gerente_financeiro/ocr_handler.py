@@ -28,6 +28,12 @@ from database.database import get_or_create_user, get_db
 from models import Lancamento, ItemLancamento, Categoria, Subcategoria, Usuario
 from .gamification_utils import give_xp_for_action
 from .states import OCR_CONFIRMATION_STATE
+from .monetization import (
+    consume_feature_quota,
+    ensure_user_plan_state,
+    plan_allows_feature,
+    upgrade_prompt_for_feature,
+)
 
 # Configurar logging específico para OCR com arquivo dedicado
 def setup_ocr_logging():
@@ -408,6 +414,28 @@ async def ocr_iniciar_como_subprocesso(update: Update, context: ContextTypes.DEF
     logger.info(f"🔧 [LANCAMENTO-DEBUG] Google Vision Creds: {'✅' if os.getenv('GOOGLE_APPLICATION_CREDENTIALS') else '❌'}")
     logger.info(f"🔧 [LANCAMENTO-DEBUG] Gemini API: {'✅' if config.GEMINI_API_KEY else '❌'}")
     
+    db_plan = next(get_db())
+    try:
+        usuario_db = get_or_create_user(db_plan, user_id, update.effective_user.full_name)
+        ensure_user_plan_state(db_plan, usuario_db, commit=True)
+
+        if update.message and update.message.document and update.message.document.mime_type == "application/pdf":
+            gate_pdf = plan_allows_feature(db_plan, usuario_db, "pdf_import")
+            if not gate_pdf.allowed:
+                text, keyboard = upgrade_prompt_for_feature("pdf_import")
+                await update.message.reply_html(text, reply_markup=keyboard)
+                return ConversationHandler.END
+
+        gate_ocr = plan_allows_feature(db_plan, usuario_db, "ocr")
+        if not gate_ocr.allowed:
+            text, keyboard = upgrade_prompt_for_feature("ocr")
+            await update.message.reply_html(text, reply_markup=keyboard)
+            return ConversationHandler.END
+
+        consume_feature_quota(db_plan, usuario_db, "ocr", amount=1)
+    finally:
+        db_plan.close()
+
     if update.message and update.message.document and update.message.document.mime_type == "application/pdf":
         await update.message.reply_text(
             "📄 PDF detectado! Vou tratar como <b>fatura</b> e importar os lancamentos em lote.",
@@ -910,6 +938,14 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
             # Lógica de verificação de duplicidade e salvamento (sem alterações)
             user_info = query.from_user
             usuario_db = get_or_create_user(db, user_info.id, user_info.full_name)
+            ensure_user_plan_state(db, usuario_db, commit=True)
+
+            gate_lanc = plan_allows_feature(db, usuario_db, "lancamentos")
+            if not gate_lanc.allowed:
+                text, keyboard = upgrade_prompt_for_feature("lancamentos")
+                await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+                return False
+
             data_str = dados.get('data', datetime.now().strftime('%d/%m/%Y'))
             hora_str = dados.get('hora', '00:00:00')
             try:

@@ -15,6 +15,12 @@ from gerente_financeiro.gamification_missions_service import (
     apply_monthly_performance_awards,
 )
 from database.database import get_db
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from gerente_financeiro.monetization import (
+    build_trial_usage_summary,
+    downgrade_expired_trials_to_free,
+    trial_users_expiring_in,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +112,59 @@ def configurar_jobs(job_queue):
             time=time(hour=0, minute=15),
             name="gamification_monthly_awards"
         )
+
+        async def job_trial_monetizacao(context: ContextTypes.DEFAULT_TYPE):
+            db = next(get_db())
+            try:
+                users_expiring_tomorrow = trial_users_expiring_in(db, days=1)
+                for user in users_expiring_tomorrow:
+                    resumo = build_trial_usage_summary(db, user)
+                    try:
+                        await context.bot.send_message(
+                            chat_id=user.telegram_id,
+                            parse_mode="HTML",
+                            text=(
+                                "⏳ <b>Seu trial premium acaba amanhã.</b>\n\n"
+                                "Nestes 15 dias você:\n"
+                                f"• Registrou {resumo['lancamentos']} lançamentos\n"
+                                f"• Criou {resumo['metas']} metas\n"
+                                f"• Usou o Alfredo {resumo['ia_questions']} vezes\n\n"
+                                "Amanhã você escolhe: continua com tudo por R$ 19,90/mês "
+                                "ou segue no free tier. Seus dados ficam intactos."
+                            ),
+                        )
+                    except Exception as send_err:
+                        logger.warning("Falha ao enviar aviso de trial para %s: %s", user.telegram_id, send_err)
+
+                users_expired = downgrade_expired_trials_to_free(db)
+                for user in users_expired:
+                    try:
+                        keyboard = InlineKeyboardMarkup(
+                            [
+                                [InlineKeyboardButton("💎 Premium Mensal — R$ 19,90/mês", callback_data="plan_choose_premium_monthly")],
+                                [InlineKeyboardButton("📅 Premium Anual — R$ 159,90/ano", callback_data="plan_choose_premium_annual")],
+                                [InlineKeyboardButton("Continuar no Free Tier", callback_data="plan_choose_free")],
+                            ]
+                        )
+                        await context.bot.send_message(
+                            chat_id=user.telegram_id,
+                            parse_mode="HTML",
+                            text=(
+                                "📊 <b>Seu trial encerrou. Como quer continuar?</b>\n\n"
+                                "Escolha seu plano para seguir com o ContaComigo:"
+                            ),
+                            reply_markup=keyboard,
+                        )
+                    except Exception as send_err:
+                        logger.warning("Falha ao enviar escolha de plano para %s: %s", user.telegram_id, send_err)
+            finally:
+                db.close()
+
+        job_queue.run_daily(
+            job_trial_monetizacao,
+            time=time(hour=9, minute=0),
+            name="trial_monetizacao_diario"
+        )
         
         logger.info("✅ Jobs agendados configurados com sucesso:")
         logger.info("   📅 Notificações diárias: 01:00")
@@ -116,6 +175,7 @@ def configurar_jobs(job_queue):
         logger.info("   🧭 Gamificação diário: 00:05")
         logger.info("   🗓️ Gamificação semanal: 00:10")
         logger.info("   📈 Gamificação mensal: dia 1, 00:15")
+        logger.info("   💰 Monetização trial: 09:00")
         
     except Exception as e:
         logger.error(f"❌ Erro ao configurar jobs: {e}")

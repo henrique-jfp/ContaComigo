@@ -35,6 +35,7 @@ from .menu_botoes import (
     BOTAO_NIVEL,
     BOTAO_RANKING,
 )
+from .monetization import ensure_user_plan_state, plan_allows_feature
 
 logger = logging.getLogger(__name__)
 
@@ -419,6 +420,15 @@ async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 return
 
             if acao == "criar_meta":
+                ensure_user_plan_state(db, usuario_db, commit=True)
+                gate_meta = plan_allows_feature(db, usuario_db, "metas_ativas")
+                if not gate_meta.allowed:
+                    await query.edit_message_text(
+                        "🔒 Free Tier permite apenas 1 meta ativa. Faça upgrade para liberar metas ilimitadas.",
+                        parse_mode="HTML",
+                    )
+                    return
+
                 try:
                     valor_alvo = float(str(dados.get("valor_alvo", "0")).replace(",", "."))
                 except (ValueError, TypeError):
@@ -458,6 +468,15 @@ async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 valor_float = float(str(dados.get("valor", "0")).replace(",", "."))
             except (ValueError, TypeError):
                 valor_float = 0.0
+
+            ensure_user_plan_state(db, usuario_db, commit=True)
+            gate_lanc = plan_allows_feature(db, usuario_db, "lancamentos")
+            if not gate_lanc.allowed:
+                await query.edit_message_text(
+                    "🔒 Free Tier permite ate 30 lancamentos por mes. Faça upgrade para liberar ilimitado.",
+                    parse_mode="HTML",
+                )
+                return
 
             id_categoria, id_subcategoria = _resolve_categoria_ids(db, dados)
             novo_lancamento = Lancamento(

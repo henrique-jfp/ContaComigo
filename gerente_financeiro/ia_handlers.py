@@ -27,6 +27,12 @@ from models import Lancamento, Usuario, Categoria, Agendamento, Objetivo, ItemLa
 import config
 from gerente_financeiro.services import _categorizar_com_mapa_inteligente
 from gerente_financeiro.prompts import PROMPT_ALFREDO_APRIMORADO
+from gerente_financeiro.monetization import (
+    consume_feature_quota,
+    ensure_user_plan_state,
+    plan_allows_feature,
+    upgrade_prompt_for_feature,
+)
 
 try:
     from .analises_ia import get_analisador
@@ -1391,6 +1397,15 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
     db = next(get_db())
     try:
         usuario_db, saldo, entradas, saidas = _usuario_e_saldo(db, update.effective_user)
+        ensure_user_plan_state(db, usuario_db, commit=True)
+
+        gate_ia = plan_allows_feature(db, usuario_db, "ia_questions")
+        if not gate_ia.allowed:
+            text, keyboard = upgrade_prompt_for_feature("ia_questions")
+            await update.message.reply_html(text, reply_markup=keyboard)
+            return ConversationHandler.END
+
+        consume_feature_quota(db, usuario_db, "ia_questions", amount=1)
 
         texto_normalizado = texto_usuario.strip().lower()
 
@@ -1603,6 +1618,12 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                     "❌ <b>Valor inválido</b>\n\n"
                     "Preciso de um valor maior que zero para preparar o lançamento."
                 )
+                return ConversationHandler.END
+
+            gate_lanc = plan_allows_feature(db, usuario_db, "lancamentos")
+            if not gate_lanc.allowed:
+                text, keyboard = upgrade_prompt_for_feature("lancamentos")
+                await update.message.reply_html(text, reply_markup=keyboard)
                 return ConversationHandler.END
 
             dados_quick = {

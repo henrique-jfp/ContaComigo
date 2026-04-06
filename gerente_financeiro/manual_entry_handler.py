@@ -28,6 +28,7 @@ from .states import (
     AWAITING_LAUNCH_ACTION, ASK_DESCRIPTION, ASK_VALUE, ASK_FORMA_PAGAMENTO,
     ASK_CATEGORY, ASK_SUBCATEGORY, ASK_DATA, MANUAL_CONFIRMATION_STATE, OCR_CONFIRMATION_STATE
 )
+from .monetization import ensure_user_plan_state, plan_allows_feature, upgrade_prompt_for_feature
 
 logger = logging.getLogger(__name__)
 
@@ -454,6 +455,14 @@ async def manual_confirmation_handler(update: Update, context: ContextTypes.DEFA
     try:
         user_info = update.effective_user
         usuario_db = get_or_create_user(db, user_info.id, user_info.full_name)
+        ensure_user_plan_state(db, usuario_db, commit=True)
+
+        gate_lanc = plan_allows_feature(db, usuario_db, "lancamentos")
+        if not gate_lanc.allowed:
+            text, keyboard = upgrade_prompt_for_feature("lancamentos")
+            await query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboard)
+            return ConversationHandler.END
+
         dados = context.user_data['novo_lancamento']
         
         novo_lancamento = Lancamento(id_usuario=usuario_db.id, origem="manual", **dados)

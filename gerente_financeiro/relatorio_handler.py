@@ -36,6 +36,8 @@ from .services import (
 )
 from . import services as services_module
 from .gamification_utils import give_xp_for_action, touch_user_interaction
+from database.database import get_or_create_user
+from .monetization import ensure_user_plan_state, plan_allows_feature, upgrade_prompt_for_feature
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +210,14 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
     user_id = update.effective_user.id
     
     try:
+        usuario_db = get_or_create_user(db, user_id, update.effective_user.full_name)
+        ensure_user_plan_state(db, usuario_db, commit=True)
+        gate = plan_allows_feature(db, usuario_db, "relatorio_pdf")
+        if not gate.allowed:
+            text, keyboard = upgrade_prompt_for_feature("relatorio_pdf")
+            await update.message.reply_html(text, reply_markup=keyboard)
+            return
+
         # 1. Desativar temporariamente o sistema de cache para garantir dados sempre frescos
         old_cache_ttl = getattr(services_module, 'CACHE_TTL', None)
         old_cache_max = getattr(services_module, 'CACHE_MAX_SIZE', None)

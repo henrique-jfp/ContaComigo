@@ -34,6 +34,7 @@ from .states import (
     FATURA_TRAIN_BANK,
 )
 from .gamification_utils import give_xp_for_action, touch_user_interaction
+from .monetization import ensure_user_plan_state, plan_allows_feature, upgrade_prompt_for_feature
 
 logger = logging.getLogger(__name__)
 
@@ -663,6 +664,19 @@ def _clear_training_context(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def fatura_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await touch_user_interaction(update.effective_user.id, context)
+
+    db = next(get_db())
+    try:
+        usuario_db = get_or_create_user(db, update.effective_user.id, update.effective_user.full_name)
+        ensure_user_plan_state(db, usuario_db, commit=True)
+        gate = plan_allows_feature(db, usuario_db, "pdf_import")
+        if not gate.allowed:
+            text, keyboard = upgrade_prompt_for_feature("pdf_import")
+            await update.message.reply_html(text, reply_markup=keyboard)
+            return ConversationHandler.END
+    finally:
+        db.close()
+
     await update.message.reply_text(
         "Envie a fatura do Banco Inter em PDF para importar os lancamentos.\n"
         f"Limite de tamanho: {MAX_PDF_SIZE_MB}MB."
@@ -671,6 +685,18 @@ async def fatura_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
 
 async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    db_plan = next(get_db())
+    try:
+        usuario_db = get_or_create_user(db_plan, update.effective_user.id, update.effective_user.full_name)
+        ensure_user_plan_state(db_plan, usuario_db, commit=True)
+        gate = plan_allows_feature(db_plan, usuario_db, "pdf_import")
+        if not gate.allowed:
+            text, keyboard = upgrade_prompt_for_feature("pdf_import")
+            await update.message.reply_html(text, reply_markup=keyboard)
+            return ConversationHandler.END
+    finally:
+        db_plan.close()
+
     document = update.message.document
     if not document or document.mime_type != "application/pdf":
         await update.message.reply_text("Envie um arquivo PDF valido.")

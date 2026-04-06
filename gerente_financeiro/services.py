@@ -39,6 +39,7 @@ from models import (
 )
 import config
 from . import external_data
+from .monetization import ensure_user_plan_state, plan_allows_feature
 from dateutil.relativedelta import relativedelta
 import numpy as np 
 from scipy.interpolate import make_interp_spline
@@ -724,6 +725,22 @@ async def salvar_transacoes_generica(db: Session, usuario_db, transacoes: list,
         tuple: (sucesso: bool, mensagem: str, estatisticas: dict)
     """
     try:
+        ensure_user_plan_state(db, usuario_db, commit=True)
+
+        gate_lanc = plan_allows_feature(db, usuario_db, "lancamentos")
+        if not gate_lanc.allowed:
+            return False, (
+                "🔒 <b>Limite do Free Tier atingido</b>\n\n"
+                "Você chegou ao limite de 30 lançamentos no mês. "
+                "Faça upgrade para continuar importando em lote."
+            ), {
+                "total_enviadas": len(transacoes),
+                "salvas": 0,
+                "duplicadas": 0,
+                "erro": 0,
+                "valor_total": 0.0,
+            }
+
         # Estatísticas de processamento
         stats = {
             'total_enviadas': len(transacoes),

@@ -25,6 +25,8 @@ from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ContextTypes
 from .gamification_utils import give_xp_for_action, touch_user_interaction
+from database.database import get_db, get_or_create_user
+from .monetization import ensure_user_plan_state, plan_allows_feature, upgrade_prompt_for_feature
 
 # Configurar logging detalhado
 logging.basicConfig(
@@ -91,6 +93,18 @@ async def cmd_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         chat_id = update.effective_chat.id
         await touch_user_interaction(user_id, context)
+
+        db = next(get_db())
+        try:
+            usuario_db = get_or_create_user(db, user_id, update.effective_user.full_name)
+            ensure_user_plan_state(db, usuario_db, commit=True)
+            gate = plan_allows_feature(db, usuario_db, "dashboard_full")
+            if not gate.allowed:
+                text, keyboard = upgrade_prompt_for_feature("dashboard_full")
+                await update.effective_message.reply_html(text, reply_markup=keyboard)
+                return
+        finally:
+            db.close()
         
         # Enviar mensagem de carregamento - usar effective_message para compatibilidade
         try:

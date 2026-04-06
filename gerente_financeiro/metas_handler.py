@@ -40,6 +40,7 @@ from gerente_financeiro.states import (
     ASK_OBJETIVO_VALOR,
 )
 from models import Categoria, Lancamento, MetaConfirmacao, Objetivo, Usuario
+from .monetization import ensure_user_plan_state, plan_allows_feature, upgrade_prompt_for_feature
 
 logger = logging.getLogger(__name__)
 
@@ -334,6 +335,13 @@ async def metas_criar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         db = next(get_db())
         try:
             usuario_db = get_or_create_user(db, user.id, user.full_name)
+            ensure_user_plan_state(db, usuario_db, commit=True)
+            gate_meta = plan_allows_feature(db, usuario_db, "metas_ativas")
+            if not gate_meta.allowed:
+                text, keyboard = upgrade_prompt_for_feature("metas_ativas")
+                await update.message.reply_html(text, reply_markup=keyboard)
+                context.user_data.clear()
+                return ConversationHandler.END
         finally:
             db.close()
 

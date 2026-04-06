@@ -158,7 +158,27 @@ def get_or_create_user(db_session: Session, telegram_id: int, full_name: str) ->
     user = db_session.query(Usuario).filter(Usuario.telegram_id == telegram_id).first()
     if not user:
         logging.info(f"Criando novo usuário para telegram_id: {telegram_id}")
-        user = Usuario(telegram_id=telegram_id, nome_completo=full_name)
+        now = datetime.now()
+        user = Usuario(
+            telegram_id=telegram_id,
+            nome_completo=full_name,
+            plan="trial",
+            trial_expires_at=now + timedelta(days=15),
+        )
+        db_session.add(user)
+        db_session.commit()
+        db_session.refresh(user)
+        return user
+
+    # Backfill defensivo para usuários legados criados antes do freemium.
+    changed = False
+    if not getattr(user, "plan", None):
+        user.plan = "trial"
+        changed = True
+    if user.plan == "trial" and not getattr(user, "trial_expires_at", None):
+        user.trial_expires_at = datetime.now() + timedelta(days=15)
+        changed = True
+    if changed:
         db_session.add(user)
         db_session.commit()
         db_session.refresh(user)
