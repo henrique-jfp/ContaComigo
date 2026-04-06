@@ -6,11 +6,12 @@ import uuid
 import asyncio
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
+from urllib.parse import quote
 
 import pdfplumber
 from pdfminer.pdfdocument import PDFPasswordIncorrect
 from pdfplumber.utils.exceptions import PdfminerException
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from telegram.ext import (
     ContextTypes,
     ConversationHandler,
@@ -23,9 +24,9 @@ from telegram.ext import (
 from database.database import get_db, get_or_create_user
 from models import Conta
 from .services import salvar_transacoes_generica
+from .fatura_draft_store import create_fatura_draft
 from .states import (
     FATURA_AWAIT_FILE,
-    FATURA_ASK_FORMA_PAGAMENTO,
     FATURA_CONFIRMATION_STATE,
     FATURA_TRAIN_CONSENT,
     FATURA_TRAIN_BANK,
@@ -62,39 +63,44 @@ _MONTH_MAP = {
 
 
 def _parse_inter_transaction_line(line: str) -> Optional[Dict]:
-    pattern = re.compile(r"^(\d{1,2}) de ([A-Za-z]{3})\.? (\d{4}) (.+)$")
-    match = pattern.match(line.strip())
+    raw = (line or "").strip()
+    if not raw:
+        return None
+
+    # Limpa glifos comuns do PDF e normaliza espaços
+    compact = re.sub(r"[\ue000-\uf8ff]", " ", raw)
+    compact = re.sub(r"\s+", " ", compact).strip()
+
+    # Inter costuma vir sem espaços no início: 10denov.2025 ...
+    pattern = re.compile(
+        r"^(\d{1,2})\s*de\s*([A-Za-z]{3})\.?\s*(\d{4})\s+(.+?)\s*([+-])?\s*R\$\s*([\d\.]+,\d{2})$",
+        re.IGNORECASE,
+    )
+    match = pattern.match(compact)
     if not match:
         return None
 
-    if "****" in line:
+    if "****" in compact:
         return None
 
     day = int(match.group(1))
     month_token = match.group(2).lower()
     year = int(match.group(3))
-    rest = match.group(4).strip()
+    desc = match.group(4).strip(" -+")
+    explicit_sign = (match.group(5) or "").strip()
+    value_str = match.group(6)
 
     month = _MONTH_MAP.get(month_token)
     if not month:
         return None
 
-    value_matches = list(re.finditer(r"R\$\s*([\d\.]+,\d{2})", rest))
-    if not value_matches:
-        return None
-
-    last_match = value_matches[-1]
-    value_str = last_match.group(1)
     value = float(value_str.replace(".", "").replace(",", "."))
 
     sign = -1.0
-    if "+ R$" in rest or "+R$" in rest:
+    if explicit_sign == "+":
         sign = 1.0
-    elif " - R$" in rest or "- R$" in rest:
+    elif explicit_sign == "-":
         sign = -1.0
-
-    desc_part = rest[: last_match.start()].strip()
-    desc = desc_part.strip(" -+")
 
     if not desc:
         return None
@@ -119,19 +125,36 @@ def _parse_inter_transaction_line(line: str) -> Optional[Dict]:
 def parse_inter_pdf_bytes(file_bytes: bytes) -> Tuple[List[Dict], int]:
     transacoes: List[Dict] = []
     ignoradas = 0
+    in_section = False
     with pdfplumber.open(io_bytes_to_pdf(file_bytes)) as pdf:
         for page in pdf.pages:
             text = page.extract_text() or ""
             for line in text.splitlines():
-                lower_line = line.lower()
-                if "despesas da fatura" in lower_line or "data moviment" in lower_line:
+                lower_line = re.sub(r"\s+", "", line.lower())
+                if "despesasdafatura" in lower_line:
+                    in_section = True
+                    continue
+                if not in_section:
+                    continue
+                if "datamoviment" in lower_line:
                     continue
                 item = _parse_inter_transaction_line(line)
                 if item:
                     transacoes.append(item)
                 elif "pagamento" in lower_line or "estorno" in lower_line:
                     ignoradas += 1
-    return transacoes, ignoradas
+
+    # Remove duplicados por descricao+data+valor
+    unique: Dict[Tuple[str, str, float], Dict] = {}
+    for item in transacoes:
+        key = (item["descricao"], item["data_transacao"].strftime("%Y-%m-%d"), float(item["valor"]))
+        unique[key] = item
+    return list(unique.values()), ignoradas
+
+
+def _get_fatura_webapp_url(page: str, token: str) -> str:
+    base_url = os.getenv("DASHBOARD_BASE_URL", "http://localhost:5000").rstrip("/")
+    return f"{base_url}/webapp?page={quote(page, safe='')}&fatura_token={quote(token, safe='')}"
 
 
 def io_bytes_to_pdf(file_bytes: bytes):
@@ -288,6 +311,10 @@ def _parse_bradesco_pdf_lines(lines: List[str]) -> Tuple[List[Dict], int]:
         desc = desc.strip("- ")
 
         if not desc:
+            continue
+
+        if "pag boleto" in lower_line or "pagamento" in lower_line:
+            ignoradas += 1
             continue
 
         try:
@@ -644,17 +671,38 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return ConversationHandler.END
 
     if action == "fatura_editar_inline":
-        # Store transaction data for later access in miniapp
-        context.user_data["fatura_pending_edit"] = True
+        transacoes = context.user_data.get("fatura_transacoes", [])
         conta_id = context.user_data.get("fatura_conta_id")
-        
+        origem_label = context.user_data.get("fatura_origem_label", "Inter")
+
+        if not transacoes or not conta_id:
+            await query.edit_message_text("❌ Dados da fatura expiraram. Envie o PDF novamente.")
+            return ConversationHandler.END
+
+        db = next(get_db())
+        try:
+            conta_obj = db.query(Conta).filter(Conta.id == conta_id).first()
+            conta_nome = conta_obj.nome if conta_obj else "Cartao de Credito"
+        finally:
+            db.close()
+
+        token = create_fatura_draft(
+            telegram_user_id=query.from_user.id,
+            conta_id=conta_id,
+            conta_nome=conta_nome,
+            transacoes=transacoes,
+            origem_label=origem_label,
+        )
+
+        webapp_url = _get_fatura_webapp_url("fatura_editor", token)
+
         await query.edit_message_text(
             "📱 <b>Abrindo editor de transacoes...</b>\n\n"
-            "Clique no botao aqui embaixo para acessar o MiniApp onde voca pode revisar e editar cada lancamento antes de salvar.",
+            "Clique no botao abaixo para abrir o MiniApp e revisar cada lancamento antes de salvar.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("📋 Abrir Editor de Transacoes", 
-                    url="https://t.me/conta_comigo_bot/webapp?page=fatura_editor")],
+                    web_app=WebAppInfo(url=webapp_url))],
             ])
         )
         return FATURA_CONFIRMATION_STATE

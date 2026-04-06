@@ -70,7 +70,9 @@ from database.database import get_db, buscar_lancamentos_usuario
 from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Categoria, Subcategoria, XpEvent
 from gerente_financeiro.prompts import PROMPT_ALFREDO
 from gerente_financeiro.services import preparar_contexto_financeiro_completo
+from gerente_financeiro.services import salvar_transacoes_generica
 from gerente_financeiro.gamification_service import get_level_progress_payload, award_xp
+from gerente_financeiro.fatura_draft_store import get_fatura_draft, pop_fatura_draft
 import google.generativeai as genai
 from types import SimpleNamespace
 
@@ -1511,65 +1513,112 @@ def miniapp_ranking_monthly():
 
 @app.route('/api/miniapp/fatura-editor', methods=['GET'])
 def miniapp_fatura_editor():
-    """Retorna lançamentos pendentes de edição de fatura"""
+    """Retorna rascunho de lançamentos da fatura para edição no miniapp."""
     session = _require_session()
     if not session:
         return jsonify({"ok": False, "error": "unauthorized"}), 401
 
-    # Simulated data from context - in real app, would come from session storage
-    # This is a placeholder that returns an empty list
-    # The actual data will be populated when showFaturaSummary is called
+    token = (request.args.get("token") or "").strip()
+    if not token:
+        return jsonify({"ok": False, "error": "missing_token"}), 400
+
+    draft = get_fatura_draft(token, session["user_id"])
+    if not draft:
+        return jsonify({"ok": False, "error": "draft_not_found"}), 404
+
+    payload = []
+    for idx, item in enumerate(draft.get("transacoes", [])):
+        data_tx = item.get("data_transacao")
+        if isinstance(data_tx, datetime):
+            data_iso = data_tx.date().isoformat()
+        else:
+            data_iso = str(data_tx)[:10]
+        payload.append({
+            "id": idx,
+            "descricao": item.get("descricao", ""),
+            "valor": float(item.get("valor", 0)),
+            "data_transacao": data_iso,
+        })
+
     return jsonify({
         "ok": True,
-        "transacoes": [],
-        "conta": "Cartão de Crédito",
+        "origem": draft.get("origem_label", "Fatura"),
+        "conta": draft.get("conta_nome", "Cartao de Credito"),
+        "transacoes": payload,
     })
 
 
 @app.route('/api/miniapp/fatura-editor-save', methods=['POST'])
 def miniapp_fatura_editor_save():
-    """Salva as edições dos lançamentos da fatura"""
+    """Salva as edições dos lançamentos da fatura usando o mesmo pipeline de importação."""
     session = _require_session()
     if not session:
         return jsonify({"ok": False, "error": "unauthorized"}), 401
 
     data = request.get_json(silent=True) or {}
-    transacoes = data.get("transacoes", [])
-    
-    if not transacoes:
+    token = (data.get("token") or "").strip()
+    edited_rows = data.get("transacoes", [])
+
+    if not token:
+        return jsonify({"ok": False, "error": "missing_token"}), 400
+    if not edited_rows:
         return jsonify({"ok": False, "error": "no_transactions"}), 400
+
+    draft = pop_fatura_draft(token, session["user_id"])
+    if not draft:
+        return jsonify({"ok": False, "error": "draft_not_found"}), 404
 
     db = next(get_db())
     try:
-        # Save the edited transactions
         usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
         if not usuario:
             return jsonify({"ok": False, "error": "user_not_found"}), 404
 
-        saved_count = 0
-        for t in transacoes:
-            # Create Lancamento record
+        conta_id = int(draft.get("conta_id") or 0)
+        if conta_id <= 0:
+            return jsonify({"ok": False, "error": "invalid_account"}), 400
+
+        transacoes = []
+        for t in edited_rows:
             try:
-                lancamento = Lancamento(
-                    id_usuario=usuario.id,
-                    descricao=t.get("descricao", ""),
-                    valor=float(t.get("valor", 0)),
-                    data_transacao=datetime.fromisoformat(t.get("data_transacao", datetime.utcnow().isoformat())),
-                    origem="fatura_pdf_editado",
-                )
-                db.add(lancamento)
-                saved_count += 1
+                descricao = str(t.get("descricao", "")).strip()
+                if not descricao:
+                    continue
+                valor = float(t.get("valor", 0))
+                data_iso = str(t.get("data_transacao", "")).strip()
+                data_tx = datetime.fromisoformat(data_iso)
+                transacoes.append({
+                    "descricao": descricao,
+                    "valor": valor,
+                    "data_transacao": data_tx,
+                    "forma_pagamento": draft.get("conta_nome", "Cartao de Credito"),
+                    "origem": "fatura_pdf_editado",
+                })
             except Exception:
                 continue
 
-        db.commit()
-        
+        if not transacoes:
+            return jsonify({"ok": False, "error": "invalid_rows"}), 400
+
+        ok, msg, stats = _run_async(
+            salvar_transacoes_generica(
+                db,
+                usuario,
+                transacoes,
+                conta_id,
+                tipo_origem="fatura_pdf_editado",
+            )
+        )
+        if not ok:
+            db.rollback()
+            return jsonify({"ok": False, "error": "save_failed", "message": msg}), 400
+
         return jsonify({
             "ok": True,
-            "message": f"✅ {saved_count} lançamentos salvos com sucesso!",
-            "saved_count": saved_count,
+            "message": msg,
+            "saved_count": int((stats or {}).get("importadas") or len(transacoes)),
         })
-    except Exception as e:
+    except Exception:
         db.rollback()
         logger.exception("Erro ao salvar edições de fatura")
         return jsonify({"ok": False, "error": "save_failed"}), 500

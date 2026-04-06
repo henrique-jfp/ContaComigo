@@ -931,6 +931,8 @@
     const urlParams = new URLSearchParams(window.location.search);
     const initialTabFromUrl = urlParams.get('tab') || '';
     const rawDraftFromUrl = urlParams.get('draft') || '';
+    const initialPageFromUrl = urlParams.get('page') || '';
+    let currentFaturaToken = urlParams.get('fatura_token') || '';
 
     function detectDeviceProfile() {
       const tgPlatform = String(window.Telegram?.WebApp?.platform || '').toLowerCase();
@@ -939,10 +941,14 @@
       const finePointer = window.matchMedia('(pointer: fine)').matches;
       const touchPoints = navigator.maxTouchPoints || 0;
       const mobileUserAgent = /Android|iPhone|iPad|iPod|Windows Phone|Opera Mini|IEMobile/i.test(navigator.userAgent || '');
-      const desktopPlatforms = new Set(['tdesktop', 'macos', 'web', 'weba', 'webk']);
+      const desktopPlatforms = new Set(['tdesktop', 'macos']);
 
       if (desktopPlatforms.has(tgPlatform) && !mobileUserAgent) {
         return 'desktop';
+      }
+
+      if (tgPlatform === 'ios' || tgPlatform === 'android') {
+        return 'mobile';
       }
 
       if (width >= 860 && (hasHover || finePointer) && !mobileUserAgent && touchPoints <= 2) {
@@ -1895,9 +1901,14 @@
 
     async function loadFaturaEditor() {
       if (!sessionId) return;
+      if (!currentFaturaToken) {
+        faturaHeaderInfo.innerHTML = '<p class="text-red-500 text-xs">Token da fatura não encontrado. Reabra pelo botão Editar da fatura.</p>';
+        faturaEditList.innerHTML = '';
+        return;
+      }
       try {
         faturaHeaderInfo.innerHTML = '<div class="text-xs text-telegram-hint"><div class="spinner inline mr-2"></div> Carregando lançamentos...</div>';
-        const response = await fetchWithSession('/api/miniapp/fatura-editor');
+        const response = await fetchWithSession(`/api/miniapp/fatura-editor?token=${encodeURIComponent(currentFaturaToken)}`);
         const data = await response.json();
         if (!data.ok) throw new Error(data.error || 'fatura_error');
         
@@ -1958,7 +1969,7 @@
         const response = await fetchWithSession('/api/miniapp/fatura-editor-save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transacoes: items })
+          body: JSON.stringify({ token: currentFaturaToken, transacoes: items })
         });
 
         const data = await response.json();
@@ -2276,8 +2287,7 @@
           loadMonthlyRanking();
           
           // Verifica se há fatura pendente de edição
-          const urlParams = new URLSearchParams(window.location.search);
-          if (urlParams.get('page') === 'fatura_editor') {
+          if (initialPageFromUrl === 'fatura_editor') {
             openPanel('fatura-editor-panel', true);
             loadFaturaEditor();
           }
