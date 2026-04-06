@@ -808,25 +808,30 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         preview_text = "\n".join(preview_lines) if preview_lines else "• Sem itens para preview"
         maiores_text = "\n".join(top_lines) if top_lines else "• Sem debitos"
-        ignored_text = f"\n• Ignoradas (pagamentos/estornos): {ignoradas}" if ignoradas else ""
         origem_label = context.user_data.get("fatura_origem_label", "Inter")
+
         resumo_linhas = [
-            f"<b>Resumo da fatura ({origem_label})</b>",
-            f"• Transacoes detectadas: <b>{total}</b>{ignored_text}",
-            f"• Total debitos: <b>{_fmt_brl(total_debito)}</b>",
-            f"• Total creditos: {_fmt_brl(total_credito)}",
+            f"🧾 <b>Resumo da Fatura ({origem_label})</b>",
+            "",
+            f"📌 <b>Transacoes detectadas:</b> <code>{total}</code>",
+            f"↩️ <b>Ignoradas (pagamentos/estornos):</b> <code>{ignoradas}</code>",
+            f"💸 <b>Total debitos:</b> <code>{_fmt_brl(total_debito)}</code>",
+            f"💰 <b>Total creditos:</b> <code>{_fmt_brl(total_credito)}</code>",
         ]
         if isinstance(total_pdf, (int, float)):
-            resumo_linhas.append(f"• Total da fatura no PDF: <b>{_fmt_brl(total_pdf)}</b>")
+            resumo_linhas.append(f"🧮 <b>Total no PDF:</b> <code>{_fmt_brl(total_pdf)}</code>")
         if isinstance(ajuste_pdf_abs, (int, float)) and ajuste_pdf_abs >= 0.01:
-            resumo_linhas.append(f"• Ajuste automatico aplicado: <b>{_fmt_brl(ajuste_pdf_abs)}</b>")
+            resumo_linhas.append(f"⚖️ <b>Ajuste automatico aplicado:</b> <code>{_fmt_brl(ajuste_pdf_abs)}</code>")
         resumo_linhas.extend([
             "",
-            f"<b>Maiores gastos detectados:</b>\n{maiores_text}",
+            "🔥 <b>Maiores gastos detectados</b>",
+            maiores_text,
             "",
-            f"<b>Preview de lancamentos:</b>\n{preview_text}",
+            "👀 <b>Preview de lancamentos</b>",
+            preview_text,
             "",
-            "<b>Acao:</b> Importar lancamentos?",
+            "━━━━━━━━━━━━━━━━━━",
+            "✅ <b>Acao:</b> Importar lancamentos?",
             "Toque em <b>Editar</b> para revisar e corrigir antes de salvar.",
         ])
         resumo = "\n".join(resumo_linhas)
