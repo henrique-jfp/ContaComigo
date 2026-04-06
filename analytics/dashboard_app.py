@@ -473,6 +473,32 @@ def _level_badge(level: int) -> str:
     return "🌱 Em evolução"
 
 
+def _friendly_feature_name(action: str | None) -> str:
+    key = str(action or "").strip().upper()
+    mapping = {
+        "PRIMEIRA_INTERACAO_DIA": "Primeira interação do dia",
+        "INTERACAO_BOT": "Uso do bot no chat",
+        "MONTH_TURN_BLUE": "Mês fechado no azul",
+        "LANCAMENTO_CRIADO": "Lançamentos realizados",
+        "LANCAMENTO_EDITADO": "Edições de lançamentos",
+        "META_CRIADA": "Metas criadas",
+        "META_ATINGIDA": "Metas atingidas",
+        "AGENDAMENTO_CRIADO": "Agendamentos criados",
+        "DASHBOARD_ACESSADO": "Abertura do MiniApp",
+        "FATURA_PROCESSADA": "Importação de fatura",
+        "OCR_PROCESSADO": "Leituras por OCR",
+        "AUDIO_PROCESSADO": "Lançamentos por voz",
+        "WRAPPED_ACESSADO": "Consulta de Wrapped",
+    }
+    if key in mapping:
+        return mapping[key]
+
+    cleaned = key.replace("_", " ").strip().lower()
+    if not cleaned:
+        return "Atividade no app"
+    return cleaned.capitalize()
+
+
 def _alfredo_profile_note(progress_pct: int, week_interactions: int, top_feature: str | None) -> str:
     if progress_pct >= 85:
         return "Você está no sprint final para subir de nível. Mais algumas ações estratégicas e você vira o jogo."
@@ -1423,7 +1449,14 @@ def miniapp_game_profile():
             .limit(6)
             .all()
         )
-        top_features = [{"feature": row.action, "interactions": int(row.total or 0)} for row in top_features_rows]
+        top_features = [
+            {
+                "feature": _friendly_feature_name(row.action),
+                "raw_feature": row.action,
+                "interactions": int(row.total or 0),
+            }
+            for row in top_features_rows
+        ]
 
         month_start, month_end = _get_month_bounds()
         monthly_scores = (

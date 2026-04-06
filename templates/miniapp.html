@@ -82,6 +82,17 @@
     border-color: color-mix(in srgb, var(--cc-brand, #7b1e2d) 18%, transparent);
     box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
   }
+  .glass-card.alfredo-card {
+    background: radial-gradient(circle at 12% 18%, rgba(255, 255, 255, 0.13), transparent 42%), linear-gradient(135deg, #44131d 0%, #7b1e2d 52%, #1f2937 100%) !important;
+    border-color: rgba(255, 255, 255, 0.18) !important;
+    color: #f8fafc;
+  }
+  .glass-card.alfredo-card .alfredo-kicker {
+    color: rgba(255, 255, 255, 0.8) !important;
+  }
+  .glass-card.alfredo-card .alfredo-body {
+    color: rgba(255, 255, 255, 0.96) !important;
+  }
   nav.glass-card:hover {
     transform: translateX(-50%);
   }
@@ -423,12 +434,12 @@
             </article>
           </div>
 
-          <div class="glass-card home-reveal rounded-3xl p-6 border border-slate-800/10 bg-slate-950 text-white dark:border-slate-700/40 dark:bg-slate-900" style="--delay: 165ms">
-            <div class="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-white/75">
+          <div class="glass-card alfredo-card home-reveal rounded-3xl p-6" style="--delay: 165ms">
+            <div class="alfredo-kicker mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em]">
               <i data-lucide="sparkles" class="h-4 w-4"></i>
               Alfredo em destaque
             </div>
-            <p id="homeInsight" class="text-base font-semibold leading-relaxed text-white/95">Carregando insight do Alfredo...</p>
+            <p id="homeInsight" class="alfredo-body text-base font-semibold leading-relaxed">Carregando insight do Alfredo...</p>
           </div>
 
           <div class="glass-card home-reveal rounded-3xl p-6" style="--delay: 235ms">
@@ -560,9 +571,9 @@
           <div id="gameTopFeatures" class="mt-3 space-y-2"></div>
         </div>
 
-        <div class="glass-card rounded-3xl p-5 border border-slate-800/10 bg-slate-950 text-white dark:border-slate-700/40 dark:bg-slate-900">
-          <p class="text-xs font-bold uppercase tracking-[0.2em] text-white/70">Recadinho do Alfredo</p>
-          <p id="gameAlfredoNote" class="mt-2 text-sm font-semibold text-white/95">Carregando recomendação...</p>
+        <div class="glass-card alfredo-card rounded-3xl p-5">
+          <p class="alfredo-kicker text-xs font-bold uppercase tracking-[0.2em]">Recadinho do Alfredo</p>
+          <p id="gameAlfredoNote" class="alfredo-body mt-2 text-sm font-semibold">Carregando recomendação...</p>
         </div>
 
         <div class="glass-card rounded-3xl p-5">
