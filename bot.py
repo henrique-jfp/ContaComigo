@@ -173,7 +173,7 @@ from gerente_financeiro.agendamentos_handler import (
 from gerente_financeiro.metas_handler import (
     metas_conv, metas_callbacks, metas_start
 )
-from gerente_financeiro.onboarding_handler import configurar_conv, start_onboarding, configurar_start
+from gerente_financeiro.onboarding_handler import configurar_conv, start_onboarding, configurar_start, get_manual_handlers
 from gerente_financeiro.editing_handler import edit_conv
 from gerente_financeiro.graficos import grafico_conv
 from gerente_financeiro.relatorio_handler import relatorio_handler

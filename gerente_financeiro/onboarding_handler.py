@@ -82,26 +82,26 @@ async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         user_name = user.nome_completo.split(' ')[0] if user.nome_completo else update.effective_user.first_name
         
         webapp_url = build_miniapp_url(source='start')
-
-        welcome_text = (
-            f"👋 <b>Olá, {user_name}!</b>\n\n"
-            "Sou o <b>ContaComigo</b> e vou cuidar do seu financeiro no chat e no MiniApp.\n\n"
-            "<b>Como funciona:</b>\n"
-            "• No <b>chat</b>, você fala e eu registro, organizo e confirmo.\n"
-            "• No <b>MiniApp</b>, você acompanha gráficos, histórico, metas e edita tudo com calma.\n\n"
-            "<b>Regra de ouro para áudio:</b> seja <b>descritivo</b>.\n"
-            "Diga sempre: <b>o que foi</b> + <b>valor</b> + <b>data</b> + <b>forma de pagamento</b> (se souber).\n\n"
-            "<b>Exemplos de áudio bons:</b>\n"
-            "• <i>\"Gastei 42 reais no mercado hoje no Pix\"</i>\n"
-            "• <i>\"Recebi 2.500 de salário ontem\"</i>\n"
-            "• <i>\"Parcela da academia 89 reais no crédito\"</i>\n\n"
-            "Também funciona por <b>foto de cupom</b> e <b>PDF de fatura</b>.\n\n"
-            "✅ Eu sempre te mostro um resumo para confirmar antes de salvar quando necessário.\n\n"
-            "Toque em <b>Acessar MiniApp</b> para abrir seu painel."
+        link_premium = gerar_link_pagamento_mercadopago(update.effective_user.id, PLAN_PREMIUM_MONTHLY)
+        text = (
+            f"👋 <b>Bem-vindo ao Maestro Financeiro, {user_name}!</b>\n\n"
+            "O assistente financeiro inteligente que une chat e MiniApp para você controlar tudo sem planilhas.\n\n"
+            "<b>O que você pode fazer aqui:</b>\n"
+            "• Lançar gastos e receitas por texto, áudio, foto ou PDF\n"
+            "• Criar agendamentos e metas\n"
+            "• Consultar gráficos, histórico e dashboard\n"
+            "• Ganhar XP, subir de nível e completar missões\n\n"
+            "<b>Experimente o Premium: lançamentos ilimitados, IA, OCR, dashboard completo e mais!\n</b>"
         )
-
-        keyboard = [[InlineKeyboardButton("🧩 Acessar Miniapp", web_app=WebAppInfo(url=webapp_url))]]
-        await update.message.reply_html(welcome_text, reply_markup=InlineKeyboardMarkup(keyboard))
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🧩 Abrir MiniApp", web_app=WebAppInfo(url=webapp_url))],
+            [InlineKeyboardButton("💎 Pagar Premium", url=link_premium)],
+            [InlineKeyboardButton("📖 Manual do Bot", callback_data="manual_menu")],
+        ])
+        if update.message:
+            await update.message.reply_html(text, reply_markup=keyboard)
+        elif update.callback_query:
+            await update.callback_query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboard)
 
         # Atualiza o teclado persistente para a versão enxuta (2 botões).
         await update.message.reply_text(
@@ -684,3 +684,50 @@ configurar_conv = ConversationHandler(
     per_user=True,
     per_chat=True
 )
+
+# --- HANDLERS DOS BOTÕES DO MANUAL ---
+async def manual_menu_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("<b>Manual do Maestro Financeiro</b>\n\nEscolha um tema:", parse_mode='HTML', reply_markup=MANUAL_KEYBOARD)
+
+async def manual_lancamento_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(MANUAL_LANCAMENTO, parse_mode='HTML', reply_markup=MANUAL_KEYBOARD)
+
+async def manual_agendamentos_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(MANUAL_AGENDAMENTOS, parse_mode='HTML', reply_markup=MANUAL_KEYBOARD)
+
+async def manual_metas_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(MANUAL_METAS, parse_mode='HTML', reply_markup=MANUAL_KEYBOARD)
+
+async def manual_dashboard_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(MANUAL_DASHBOARD, parse_mode='HTML', reply_markup=MANUAL_KEYBOARD)
+
+async def manual_xp_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(MANUAL_XP, parse_mode='HTML', reply_markup=MANUAL_KEYBOARD)
+
+async def manual_voltar_callback(update, context):
+    await start_onboarding(update, context)
+
+# --- REGISTRO DOS HANDLERS ---
+def get_manual_handlers():
+    from telegram.ext import CallbackQueryHandler
+    return [
+        CallbackQueryHandler(manual_menu_callback, pattern="^manual_menu$"),
+        CallbackQueryHandler(manual_lancamento_callback, pattern="^manual_lancamento$"),
+        CallbackQueryHandler(manual_agendamentos_callback, pattern="^manual_agendamentos$"),
+        CallbackQueryHandler(manual_metas_callback, pattern="^manual_metas$"),
+        CallbackQueryHandler(manual_dashboard_callback, pattern="^manual_dashboard$"),
+        CallbackQueryHandler(manual_xp_callback, pattern="^manual_xp$"),
+        CallbackQueryHandler(manual_voltar_callback, pattern="^manual_voltar$"),
+    ]
