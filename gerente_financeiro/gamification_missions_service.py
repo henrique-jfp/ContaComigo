@@ -1,3 +1,64 @@
+from gerente_financeiro.monetization import PLAN_PREMIUM_MONTHLY
+from datetime import timedelta
+# === PREMIAÇÃO MENSAL DE PREMIUM PARA TOP 2 XP ===
+def get_monthly_xp_ranking(db: Session, year: int, month: int, limit: int = 2):
+    """Retorna os top usuários com mais XP ganho no mês especificado."""
+    from models import Usuario, XpEvent
+    month_start = datetime(year, month, 1)
+    if month == 12:
+        month_end = datetime(year + 1, 1, 1) - timedelta(seconds=1)
+    else:
+        month_end = datetime(year, month + 1, 1) - timedelta(seconds=1)
+    results = (
+        db.query(Usuario, func.coalesce(func.sum(XpEvent.xp_gained), 0).label('xp_mes'))
+        .join(XpEvent, XpEvent.id_usuario == Usuario.id)
+        .filter(XpEvent.created_at >= month_start, XpEvent.created_at <= month_end)
+        .group_by(Usuario.id)
+        .order_by(func.sum(XpEvent.xp_gained).desc())
+        .limit(limit)
+        .all()
+    )
+    return results
+
+def award_monthly_xp_competition_premium(db: Session, reference_date: date | None = None) -> int:
+    """Premia os 2 primeiros do ranking mensal de XP com 1 mês de premium grátis."""
+    reference_date = reference_date or date.today()
+    if reference_date.day != 1:
+        return 0
+    year = reference_date.year
+    month = reference_date.month - 1 if reference_date.month > 1 else 12
+    year = year if reference_date.month > 1 else year - 1
+    top_users = get_monthly_xp_ranking(db, year, month, limit=2)
+    premiados = 0
+    from telegram import Bot
+    import os
+    telegram_token = os.environ.get("TELEGRAM_TOKEN")
+    bot = Bot(token=telegram_token) if telegram_token else None
+    for usuario, xp_mes in top_users:
+        # Só premia se não for premium vitalício
+        if usuario.plan != PLAN_PREMIUM_MONTHLY or not usuario.premium_expires_at or usuario.premium_expires_at < reference_date:
+            # Concede 1 mês de premium
+            if not usuario.premium_expires_at or usuario.premium_expires_at < reference_date:
+                usuario.premium_expires_at = datetime.combine(reference_date, datetime.min.time()) + timedelta(days=30)
+            else:
+                usuario.premium_expires_at += timedelta(days=30)
+            usuario.plan = PLAN_PREMIUM_MONTHLY
+            db.add(usuario)
+            premiados += 1
+            # Notificação via Telegram
+            if bot:
+                try:
+                    bot.send_message(
+                        chat_id=usuario.telegram_id,
+                        text=(
+                            f"🏆 Parabéns! Você ficou entre os 2 primeiros do ranking mensal de XP do Maestro Financeiro e ganhou 1 mês de Premium grátis!\n\n"
+                            f"Continue usando o bot para manter sua liderança!"
+                        )
+                    )
+                except Exception as e:
+                    print(f"Falha ao notificar usuário {usuario.telegram_id}: {e}")
+    db.commit()
+    return premiados
 """Serviço canônico de gamificação alinhado ao contacomigo_xp_sistema.md."""
 
 import logging
