@@ -22,7 +22,21 @@ import time  # <-- Para timestamps do cache
 import google.generativeai as genai
 
 from database.database import listar_objetivos_usuario
-from models import Categoria, Lancamento, Usuario, Subcategoria, ItemLancamento
+from models import (
+    Categoria,
+    Lancamento,
+    Usuario,
+    Subcategoria,
+    ItemLancamento,
+    MetaConfirmacao,
+    Investment,
+    InvestmentGoal,
+    InvestmentSnapshot,
+    PatrimonySnapshot,
+    UserAchievement,
+    UserMission,
+    XpEvent,
+)
 import config
 from . import external_data
 from dateutil.relativedelta import relativedelta
@@ -48,19 +62,38 @@ def _gerar_hash_transacoes(db: Session, user_id: int) -> str:
     from database.database import SessionLocal
     
     try:
-        # Busca data da última modificação ou criação
-        ultima_modificacao = db.query(
-            func.max(Lancamento.data_transacao)
-        ).filter(
-            Lancamento.id_usuario == user_id
-        ).scalar()
-        
-        total_transacoes = db.query(func.count(Lancamento.id)).filter(
-            Lancamento.id_usuario == user_id
-        ).scalar()
-        
-        # Hash baseado em data + total (muda se adicionar/remover)
-        hash_data = f"{user_id}:{ultima_modificacao}:{total_transacoes}"
+        def _agg(model, user_col, id_col, updated_col=None):
+            query = db.query(
+                func.count(id_col),
+                func.max(updated_col if updated_col is not None else id_col),
+            ).filter(user_col == user_id)
+            count_v, max_v = query.first() or (0, None)
+            return f"{model.__tablename__}:{int(count_v or 0)}:{max_v}"
+
+        parts = [
+            str(user_id),
+            _agg(Lancamento, Lancamento.id_usuario, Lancamento.id, Lancamento.data_transacao),
+            _agg(Objetivo, Objetivo.id_usuario, Objetivo.id, Objetivo.criado_em),
+            _agg(MetaConfirmacao, MetaConfirmacao.id_usuario, MetaConfirmacao.id, MetaConfirmacao.criado_em),
+            _agg(Agendamento, Agendamento.id_usuario, Agendamento.id, Agendamento.criado_em),
+            _agg(Investment, Investment.id_usuario, Investment.id, Investment.updated_at),
+            _agg(InvestmentGoal, InvestmentGoal.id_usuario, InvestmentGoal.id, InvestmentGoal.updated_at),
+            _agg(PatrimonySnapshot, PatrimonySnapshot.id_usuario, PatrimonySnapshot.id, PatrimonySnapshot.created_at),
+            _agg(UserMission, UserMission.id_usuario, UserMission.id, UserMission.updated_at),
+            _agg(UserAchievement, UserAchievement.id_usuario, UserAchievement.id, UserAchievement.unlocked_at),
+            _agg(XpEvent, XpEvent.id_usuario, XpEvent.id, XpEvent.created_at),
+        ]
+
+        inv_snap_count, inv_snap_max = (
+            db.query(func.count(InvestmentSnapshot.id), func.max(InvestmentSnapshot.created_at))
+            .join(Investment, Investment.id == InvestmentSnapshot.id_investment)
+            .filter(Investment.id_usuario == user_id)
+            .first()
+            or (0, None)
+        )
+        parts.append(f"investment_snapshots:{int(inv_snap_count or 0)}:{inv_snap_max}")
+
+        hash_data = "|".join(parts)
         return hashlib.md5(hash_data.encode()).hexdigest()
     except Exception as e:
         logger.warning(f"Erro ao gerar hash de transações: {e}")
@@ -1733,9 +1766,138 @@ async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -
 
     contas_db = db.query(Conta).filter(Conta.id_usuario == usuario.id).all()
     metas_db = db.query(Objetivo).filter(Objetivo.id_usuario == usuario.id).all()
+    confirmacoes_metas = (
+        db.query(MetaConfirmacao)
+        .filter(MetaConfirmacao.id_usuario == usuario.id)
+        .order_by(MetaConfirmacao.ano.desc(), MetaConfirmacao.mes.desc())
+        .limit(12)
+        .all()
+    )
+    investimentos_db = (
+        db.query(Investment)
+        .filter(Investment.id_usuario == usuario.id)
+        .order_by(Investment.updated_at.desc())
+        .all()
+    )
+    goals_investimento = (
+        db.query(InvestmentGoal)
+        .filter(InvestmentGoal.id_usuario == usuario.id)
+        .order_by(InvestmentGoal.updated_at.desc())
+        .all()
+    )
+    patrimonio_db = (
+        db.query(PatrimonySnapshot)
+        .filter(PatrimonySnapshot.id_usuario == usuario.id)
+        .order_by(PatrimonySnapshot.mes_referencia.desc())
+        .limit(12)
+        .all()
+    )
+    conquistas = (
+        db.query(UserAchievement)
+        .filter(UserAchievement.id_usuario == usuario.id)
+        .order_by(UserAchievement.unlocked_at.desc())
+        .limit(20)
+        .all()
+    )
+    missoes = (
+        db.query(UserMission)
+        .filter(UserMission.id_usuario == usuario.id)
+        .order_by(UserMission.updated_at.desc())
+        .limit(30)
+        .all()
+    )
+    xp_recent = (
+        db.query(XpEvent)
+        .filter(XpEvent.id_usuario == usuario.id)
+        .order_by(XpEvent.created_at.desc())
+        .limit(50)
+        .all()
+    )
     metas_financeiras = [
         {"descricao": o.descricao, "valor_meta": f"R$ {o.valor_meta:.2f}", "valor_atual": f"R$ {o.valor_atual:.2f}"}
         for o in metas_db
+    ]
+
+    confirmacoes_payload = [
+        {
+            "id_objetivo": c.id_objetivo,
+            "ano": int(c.ano),
+            "mes": int(c.mes),
+            "valor_confirmado": float(c.valor_confirmado or 0),
+            "criado_em": c.criado_em.isoformat() if c.criado_em else None,
+        }
+        for c in confirmacoes_metas
+    ]
+
+    investimentos_payload = [
+        {
+            "id": inv.id,
+            "nome": inv.nome,
+            "tipo": inv.tipo,
+            "valor_inicial": float(inv.valor_inicial or 0),
+            "valor_atual": float(inv.valor_atual or 0),
+            "ativo": bool(inv.ativo),
+            "banco": inv.banco,
+            "indexador": inv.indexador,
+            "updated_at": inv.updated_at.isoformat() if inv.updated_at else None,
+        }
+        for inv in investimentos_db
+    ]
+
+    investimento_goals_payload = [
+        {
+            "id": goal.id,
+            "titulo": goal.titulo,
+            "valor_alvo": float(goal.valor_alvo or 0),
+            "valor_atual": float(goal.valor_atual or 0),
+            "concluida": bool(goal.concluida),
+            "prazo": goal.prazo.isoformat() if goal.prazo else None,
+        }
+        for goal in goals_investimento
+    ]
+
+    patrimonio_payload = [
+        {
+            "mes_referencia": snap.mes_referencia.isoformat() if snap.mes_referencia else None,
+            "total_contas": float(snap.total_contas or 0),
+            "total_investimentos": float(snap.total_investimentos or 0),
+            "total_patrimonio": float(snap.total_patrimonio or 0),
+            "variacao_mensal": float(snap.variacao_mensal or 0),
+            "variacao_percentual": float(snap.variacao_percentual or 0),
+        }
+        for snap in patrimonio_db
+    ]
+
+    conquistas_payload = [
+        {
+            "achievement_key": row.achievement_key,
+            "achievement_name": row.achievement_name,
+            "xp_reward": int(row.xp_reward or 0),
+            "permanent_multiplier": float(row.permanent_multiplier or 0),
+            "unlocked_at": row.unlocked_at.isoformat() if row.unlocked_at else None,
+        }
+        for row in conquistas
+    ]
+
+    missoes_payload = [
+        {
+            "mission_id": row.id_mission,
+            "status": row.status,
+            "progress": int(row.progress or 0),
+            "current_value": int(row.current_value or 0),
+            "target_value": int(row.target_value or 0),
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        }
+        for row in missoes
+    ]
+
+    xp_recent_payload = [
+        {
+            "action": evt.action,
+            "xp_gained": int(evt.xp_gained or 0),
+            "created_at": evt.created_at.isoformat() if evt.created_at else None,
+        }
+        for evt in xp_recent
     ]
 
     todos_dados_financeiros = [
@@ -1763,6 +1925,17 @@ async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -
             "insights_automaticos": _gerar_insights_automaticos(lancamentos),
             "padroes_detectados": _detectar_padroes_comportamentais(lancamentos),
             "estatisticas_cache": _obter_estatisticas_cache(),
+        },
+        "ecossistema_financeiro_integrado": {
+            "metas_confirmacoes": confirmacoes_payload,
+            "investimentos": investimentos_payload,
+            "metas_investimento": investimento_goals_payload,
+            "patrimonio_historico": patrimonio_payload,
+            "gamificacao": {
+                "conquistas": conquistas_payload,
+                "missoes": missoes_payload,
+                "xp_eventos_recentes": xp_recent_payload,
+            },
         },
         "analise_comportamental_avancada": analise_comportamental,
         "contexto_economico": {

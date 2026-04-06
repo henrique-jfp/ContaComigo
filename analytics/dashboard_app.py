@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 _cache = {}
 CACHE_TTL = 300  # 5 minutos
 _miniapp_sessions = {}
+_miniapp_chat_context = {}
 MINIAPP_SESSION_TTL = 60 * 60
 MINIAPP_AI_INSIGHT_ENABLED = os.getenv("MINIAPP_AI_INSIGHT_ENABLED", "0").lower() in ("1", "true", "yes", "on")
 
@@ -71,6 +72,7 @@ from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, 
 from gerente_financeiro.prompts import PROMPT_ALFREDO
 from gerente_financeiro.services import preparar_contexto_financeiro_completo
 from gerente_financeiro.services import salvar_transacoes_generica
+from gerente_financeiro.services import limpar_cache_usuario
 from gerente_financeiro.gamification_service import get_level_progress_payload, award_xp
 from gerente_financeiro.gamification_missions_service import get_user_active_missions
 from gerente_financeiro.fatura_draft_store import (
@@ -300,7 +302,56 @@ def _get_session(session_id: str) -> dict | None:
 
 def _require_session() -> dict | None:
     session_id = request.headers.get("X-Session-Id") or request.args.get("session_id")
-    return _get_session(session_id)
+    session = _get_session(session_id)
+    if session:
+        session["session_id"] = session_id
+    return session
+
+
+def _miniapp_context_key(session: dict | None) -> str:
+    if not session:
+        return ""
+    return str(session.get("session_id") or session.get("user_id") or "")
+
+
+def _get_miniapp_contexto_conversa(session: dict | None) -> str:
+    key = _miniapp_context_key(session)
+    if not key:
+        return ""
+    history = _miniapp_chat_context.get(key, [])
+    if not history:
+        return ""
+    lines = []
+    for row in history[-5:]:
+        lines.append(f"Usuario: {row.get('prompt', '')}")
+        lines.append(f"Alfredo: {row.get('answer', '')}")
+    return "\n".join(lines)
+
+
+def _append_miniapp_contexto_conversa(session: dict | None, prompt: str, answer: str) -> None:
+    key = _miniapp_context_key(session)
+    if not key:
+        return
+    rows = _miniapp_chat_context.get(key, [])
+    rows.append(
+        {
+            "prompt": (prompt or "").strip()[:400],
+            "answer": (answer or "").strip()[:800],
+            "created_at": datetime.utcnow(),
+        }
+    )
+    if len(rows) > 10:
+        rows = rows[-10:]
+    _miniapp_chat_context[key] = rows
+
+
+def _invalidate_financial_cache(telegram_id: int | None) -> None:
+    if not telegram_id:
+        return
+    try:
+        limpar_cache_usuario(int(telegram_id))
+    except Exception:
+        logger.debug("Falha ao invalidar cache financeiro do usuario %s", telegram_id, exc_info=True)
 
 
 def _parse_date(value: str) -> date | None:
@@ -1143,6 +1194,7 @@ def miniapp_lancamento_create():
         )
         db.add(lancamento)
         db.commit()
+        _invalidate_financial_cache(session["user_id"])
         return jsonify({"ok": True, "id": lancamento.id})
     finally:
         db.close()
@@ -1172,6 +1224,7 @@ def miniapp_lancamento_update(lancamento_id: int):
         if request.method == 'DELETE':
             db.delete(lancamento)
             db.commit()
+            _invalidate_financial_cache(session["user_id"])
             return jsonify({"ok": True})
 
         payload = request.get_json(silent=True) or {}
@@ -1198,6 +1251,7 @@ def miniapp_lancamento_update(lancamento_id: int):
             setattr(lancamento, key, value)
 
         db.commit()
+        _invalidate_financial_cache(session["user_id"])
         return jsonify({"ok": True})
     finally:
         db.close()
@@ -1301,6 +1355,7 @@ def miniapp_agendamentos():
         db.add(agendamento)
         db.commit()
         db.refresh(agendamento)
+        _invalidate_financial_cache(session["user_id"])
         return jsonify({"ok": True, "id": agendamento.id})
     finally:
         db.close()
@@ -1329,6 +1384,7 @@ def miniapp_agendamentos_update(agendamento_id: int):
         if request.method == 'DELETE':
             db.delete(agendamento)
             db.commit()
+            _invalidate_financial_cache(session["user_id"])
             return jsonify({"ok": True})
 
         data = request.get_json(silent=True) or {}
@@ -1340,6 +1396,7 @@ def miniapp_agendamentos_update(agendamento_id: int):
             if parsed:
                 agendamento.proxima_data_execucao = parsed
         db.commit()
+        _invalidate_financial_cache(session["user_id"])
         return jsonify({"ok": True})
     finally:
         db.close()
@@ -1406,6 +1463,7 @@ def miniapp_metas():
         db.add(meta)
         db.commit()
         db.refresh(meta)
+        _invalidate_financial_cache(session["user_id"])
         return jsonify({"ok": True, "id": meta.id})
     finally:
         db.close()
@@ -1434,6 +1492,7 @@ def miniapp_metas_update(meta_id: int):
         if request.method == 'DELETE':
             db.delete(meta)
             db.commit()
+            _invalidate_financial_cache(session["user_id"])
             return jsonify({"ok": True})
 
         data = request.get_json(silent=True) or {}
@@ -1445,6 +1504,7 @@ def miniapp_metas_update(meta_id: int):
             if parsed:
                 meta.data_meta = parsed
         db.commit()
+        _invalidate_financial_cache(session["user_id"])
         return jsonify({"ok": True})
     finally:
         db.close()
@@ -1515,6 +1575,7 @@ def miniapp_meta_confirmar_mes(meta_id: int):
             _award_xp_from_miniapp(db, session["user_id"], "META_ATINGIDA")
 
         db.commit()
+        _invalidate_financial_cache(session["user_id"])
         return jsonify({"ok": True})
     finally:
         db.close()
@@ -1656,6 +1717,7 @@ def miniapp_mission_claim():
         user_mission.status = 'claimed'
         user_mission.claimed_at = datetime.utcnow()
         db.commit()
+        _invalidate_financial_cache(session["user_id"])
 
         return jsonify({
             "ok": True,
@@ -1893,6 +1955,7 @@ def miniapp_fatura_editor_save():
 
         # Só consome o rascunho após persistir com sucesso.
         pop_fatura_draft(token, session["user_id"])
+        _invalidate_financial_cache(session["user_id"])
 
         return jsonify({
             "ok": True,
@@ -1926,11 +1989,12 @@ def miniapp_gerente():
             return jsonify({"ok": False, "error": "user_not_found"}), 404
 
         contexto_financeiro = _run_async(preparar_contexto_financeiro_completo(db, usuario))
+        contexto_conversa = _get_miniapp_contexto_conversa(session)
         prompt_final = PROMPT_ALFREDO.format(
             user_name=usuario.nome_completo.split(' ')[0] if usuario.nome_completo else "voce",
             pergunta_usuario=prompt,
             contexto_financeiro_completo=contexto_financeiro,
-            contexto_conversa="",
+            contexto_conversa=contexto_conversa,
             perfil_ia=f"\n\n# 🧠 PERFIL COMPORTAMENTAL IA\n{usuario.perfil_ia}" if usuario.perfil_ia else ""
         )
 
@@ -1967,6 +2031,8 @@ def miniapp_gerente():
 
         if not resposta:
             resposta = "Nao consegui gerar uma resposta agora. Tente novamente."
+
+        _append_miniapp_contexto_conversa(session, prompt, resposta)
 
         return jsonify({
             "ok": True,

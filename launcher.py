@@ -200,45 +200,27 @@ def signal_handler(signum, frame):
     sys.exit(0)
 
 def apply_migrations():
-    """Aplica migrations pendentes no banco de dados"""
+    """Aplica migrations SQL com rastreamento de versao."""
     try:
         logger.info("🔄 Verificando migrations pendentes...")
-        
-        # Importar após carregar ambiente
         from pathlib import Path
-        import psycopg2
-        
-        DATABASE_URL = os.getenv("DATABASE_URL")
-        MIGRATIONS_DIR = Path("migrations")
-        
-        if not MIGRATIONS_DIR.exists():
-            logger.warning(f"⚠️  Diretório de migrations não encontrado: {MIGRATIONS_DIR}")
+        from database.database import engine
+        from database.migration_runner import apply_sql_migrations
+
+        if engine is None:
+            logger.warning("⚠️ Engine do banco indisponivel; migrations nao aplicadas")
             return
-            
-        migration_files = sorted(MIGRATIONS_DIR.glob("*.sql"))
-        if not migration_files:
-            logger.warning(f"⚠️  Nenhum arquivo de migration encontrado em {MIGRATIONS_DIR}")
-            return
-            
-        # Conectar e aplicar
-        conn = psycopg2.connect(DATABASE_URL)
-        cursor = conn.cursor()
-        
-        for m_file in migration_files:
-            logger.info(f"➡️  Aplicando migration: {m_file}")
-            with open(m_file, 'r', encoding='utf-8') as f:
-                sql_content = f.read()
-            cursor.execute(sql_content)
-            conn.commit()
-            logger.info(f"✅ Migration {m_file.name} aplicada com sucesso!")
-        
-        cursor.close()
-        conn.close()
+
+        summary = apply_sql_migrations(engine, Path("migrations"))
+        logger.info(
+            "✅ Migrations processadas: aplicadas=%s ignoradas=%s",
+            len(summary.get("applied", [])),
+            len(summary.get("skipped", [])),
+        )
         
     except Exception as e:
         logger.error(f"❌ Erro ao aplicar migrations: {e}")
-        # Não falhar a aplicação por causa de migration
-        # As tabelas podem já existir ou ser criadas depois
+        raise
 
 def main() -> None:
     """

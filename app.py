@@ -6,6 +6,7 @@ Arquivo de entrada para o servidor web
 
 import os
 import sys
+from pathlib import Path
 
 # Adicionar diretório raiz ao path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -14,6 +15,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault('RENDER_SERVICE_TYPE', 'web')
 
 try:
+    from database.database import engine as db_engine
+    from database.migration_runner import apply_sql_migrations
+
+    if db_engine is not None:
+        apply_sql_migrations(db_engine, Path("migrations"))
+
     # Importar o dashboard Flask
     from analytics.dashboard_app import app
     

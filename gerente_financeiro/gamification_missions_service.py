@@ -687,7 +687,11 @@ def get_user_active_missions(db: Session, usuario_id: int) -> list:
     usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not usuario:
         return []
+    before_new = len(db.new)
     _ensure_user_missions(db, usuario)
+    # Garante persistencia do bootstrap em chamadas de leitura do MiniApp.
+    if len(db.new) > before_new:
+        db.commit()
     user_missions = db.query(UserMission).join(Mission).filter(
         UserMission.id_usuario == usuario_id,
         Mission.active == True,  # noqa: E712

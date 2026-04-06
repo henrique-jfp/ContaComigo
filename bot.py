@@ -4,6 +4,7 @@ import google.generativeai as genai
 import os
 import re
 import functools
+from pathlib import Path
 from datetime import time, datetime
 from telegram import Update
 from telegram.warnings import PTBUserWarning
@@ -147,6 +148,8 @@ from telegram.ext import (
 # --- IMPORTS DO PROJETO ---
 import config
 from database.database import get_db, popular_dados_iniciais, criar_tabelas
+from database.database import engine as db_engine
+from database.migration_runner import apply_sql_migrations
 from models import *
 from alerts import schedule_alerts
 from jobs import configurar_jobs
@@ -557,6 +560,8 @@ def main() -> None:
 
     # Configuração do Banco de Dados
     try:
+        if db_engine is not None:
+            apply_sql_migrations(db_engine, Path("migrations"))
         criar_tabelas()
         db: Session = next(get_db())
         popular_dados_iniciais(db)
@@ -605,6 +610,8 @@ def create_application_ultra_robust():
     # 🔥 CONFIGURAÇÃO BD ULTRA-ROBUSTA COM TIMEOUT
     try:
         logger.info("🗄️ Configurando banco de dados...")
+        if db_engine is not None:
+            apply_sql_migrations(db_engine, Path("migrations"))
         criar_tabelas()
         # 🔥 NOVA POPULAÇÃO ULTRA-ROBUSTA
         db: Session = next(get_db())
