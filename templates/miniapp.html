@@ -1925,14 +1925,15 @@
       gameProfileName.textContent = profile.name || 'Jogador';
       gameProfileTitle.textContent = profile.title || 'Iniciante';
       if (profile.badge_svg) {
-        gameProfileBadge.innerHTML = `<span class="w-5 h-5 inline-flex items-center justify-center">${profile.badge_svg}</span><span>${profile.title || 'Em evolução'}</span>`;
+        gameProfileBadge.innerHTML = `<span class="w-[50px] h-[50px] inline-flex items-center justify-center shrink-0">${profile.badge_svg}</span><span>${profile.title || 'Em evolução'}</span>`;
         const svgEl = gameProfileBadge.querySelector('svg');
         if (svgEl) {
-          svgEl.setAttribute('width', '20');
-          svgEl.setAttribute('height', '20');
-          svgEl.style.width = '20px';
-          svgEl.style.height = '20px';
-          svgEl.style.maxWidth = '20px';
+          svgEl.setAttribute('width', '50');
+          svgEl.setAttribute('height', '50');
+          svgEl.style.width = '50px';
+          svgEl.style.height = '50px';
+          svgEl.style.maxWidth = '50px';
+          svgEl.style.maxHeight = '50px';
           svgEl.style.display = 'block';
         }
       } else {
