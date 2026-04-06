@@ -69,7 +69,7 @@ sys.path.insert(0, parent_dir)
 import config
 from database.database import get_db, buscar_lancamentos_usuario
 from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Categoria, Subcategoria, XpEvent, UserMission, UserAchievement
-from gerente_financeiro.prompts import PROMPT_ALFREDO
+from gerente_financeiro.prompts import PROMPT_ALFREDO_APRIMORADO as PROMPT_ALFREDO
 from gerente_financeiro.services import preparar_contexto_financeiro_completo
 from gerente_financeiro.services import salvar_transacoes_generica
 from gerente_financeiro.services import limpar_cache_usuario

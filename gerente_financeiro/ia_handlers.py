@@ -26,6 +26,7 @@ from database.database import get_db, get_or_create_user
 from models import Lancamento, Usuario, Categoria, Agendamento, Objetivo, ItemLancamento
 import config
 from gerente_financeiro.services import _categorizar_com_mapa_inteligente
+from gerente_financeiro.prompts import PROMPT_ALFREDO_APRIMORADO
 
 try:
     from .analises_ia import get_analisador
@@ -1529,53 +1530,23 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             )
             return ConversationHandler.END
 
-        # Para perguntas analíticas e consultivas, prioriza sempre resposta local
-        # com dados reais do banco e evita deriva para resposta genérica do LLM.
-        if (
-            _intencao_contas(texto_normalizado)
-            or _intencao_comparacao_financeira(texto_normalizado)
-            or _intencao_alerta_financeiro(texto_normalizado)
-            or _intencao_previsao_financeira(texto_normalizado)
-            or _intencao_analise_gastos(texto_normalizado)
-            or _intencao_consultoria_financeira(texto_normalizado)
-            or _intencao_resumo_semana(texto_normalizado)
-        ):
-            resposta_local = _montar_resposta_local_alfredo(
-                texto_usuario,
-                texto_normalizado,
-                db,
-                usuario_db,
-                saldo,
-                entradas,
-                saidas,
-            )
-            await _enviar_resposta_html_segura(update.message, resposta_local)
-            return ConversationHandler.END
+        contexto_financeiro_str = json.dumps(
+            {
+                "saldo_disponivel": round(float(saldo or 0), 2),
+                "entradas_acumuladas": round(float(entradas or 0), 2),
+                "saidas_acumuladas": round(float(saidas or 0), 2),
+                "top_categorias": [
+                    {"nome": nome, "valor": round(float(valor), 2)}
+                    for nome, valor in _resumo_categoria_gastos(db, usuario_db.id, limite=5)
+                ],
+            },
+            ensure_ascii=False,
+        )
 
-        system_prompt = (
-            "Você é Alfredo, um Despachante Financeiro. "
-            "Sempre escolha UMA tool quando houver intenção acionável. "
-            "Use responder_duvida_financeira para perguntas gerais. "
-            "Responda ESTRITAMENTE à pergunta do usuário. "
-            "Se ele perguntar de metas, fale SÓ de metas. "
-            "Use o contexto financeiro apenas como base de conhecimento silenciosa, "
-            "não repita os dados a menos que seja solicitado. "
-            "Responda em português do Brasil usando HTML simples para Telegram. "
-            "Nunca use markdown com asteriscos. "
-            "Suas respostas devem ser curtas, diretas e escaneáveis para dispositivos móveis. "
-            "NUNCA ultrapasse 3 parágrafos curtos. "
-            "Prefira bullet points quando estiver listando informações. "
-            "Não invente valores, datas, categorias ou lançamentos ausentes. "
-            "Se faltar dado no contexto ou no banco, diga claramente que não encontrou a informação. "
-            "Tente deduzir a forma de pagamento da mensagem do usuário. "
-            "Se não houver indicação explícita, preencha obrigatoriamente como Nao_informado. "
-            "\n### INSTRUÇÕES CRÍTICAS PARA NÚMERO E DATAS:\n"
-            "- Para VALORES MONETÁRIOS: Extraia com máxima precisão. Não confunda dígitos (32 ≠ 12). "
-            "- Para DATAS: Sempre use formato YYYY-MM-DD. Se o usuário disser '12/12/2026', converta para '2026-12-12'. "
-            "- Para FREQUÊNCIA: Se não explicit, considere 'mensal' como padrão (não 'único'). "
-            "- NUNCA aproxime números. Se está em dúvida, use o número EXATO mencionado. "
-            "- Em agendamentos e metas, confirme sempre os dados antes de persistir. "
-            "- Para receita recorrente, use a tool agendar_receita; para despesa recorrente, agendar_despesa."
+        system_prompt = PROMPT_ALFREDO_APRIMORADO.format(
+            user_name=usuario_db.nome or "usuário",
+            pergunta_usuario=texto_usuario,
+            contexto_financeiro_completo=contexto_financeiro_str,
         )
 
         messages = [

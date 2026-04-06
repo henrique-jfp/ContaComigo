@@ -61,7 +61,7 @@ from .gamification_utils import give_xp_for_action, touch_user_interaction
 
 from database.database import get_db, get_or_create_user, buscar_lancamentos_usuario
 from models import Categoria, Lancamento, Subcategoria, Usuario, ItemLancamento, Conta
-from .prompts import PROMPT_ALFREDO, PROMPT_INSIGHT_FINAL
+from .prompts import PROMPT_ALFREDO_APRIMORADO as PROMPT_ALFREDO, PROMPT_INSIGHT_FINAL
 from .states import (
     AWAIT_GERENTE_QUESTION, ASK_OBJETIVO_DESCRICAO, ASK_OBJETIVO_VALOR, ASK_OBJETIVO_PRAZO,
     AWAIT_EMAIL_NOTIFICACAO
