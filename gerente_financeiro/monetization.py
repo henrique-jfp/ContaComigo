@@ -1,3 +1,9 @@
+def _to_utc_aware(dt):
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -79,15 +85,18 @@ def ensure_user_plan_state(db: Session, user: Usuario, *, commit: bool = True) -
         user.trial_expires_at = now + timedelta(days=15)
         changed = True
 
-    if user.plan == PLAN_PREMIUM_MONTHLY and user.premium_expires_at and user.premium_expires_at <= now:
+    premium_exp = _to_utc_aware(user.premium_expires_at)
+    trial_exp = _to_utc_aware(user.trial_expires_at)
+
+    if user.plan == PLAN_PREMIUM_MONTHLY and premium_exp and premium_exp <= now:
         user.plan = PLAN_FREE
         changed = True
 
-    if user.plan == PLAN_PREMIUM_ANNUAL and user.premium_expires_at and user.premium_expires_at <= now:
+    if user.plan == PLAN_PREMIUM_ANNUAL and premium_exp and premium_exp <= now:
         user.plan = PLAN_FREE
         changed = True
 
-    if user.plan == PLAN_TRIAL and user.trial_expires_at and user.trial_expires_at <= now:
+    if user.plan == PLAN_TRIAL and trial_exp and trial_exp <= now:
         user.plan = PLAN_FREE
         changed = True
 
