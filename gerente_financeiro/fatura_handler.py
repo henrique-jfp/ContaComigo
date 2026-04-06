@@ -704,116 +704,126 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Handler para callbacks de confirmação de fatura.
+    Trata: fatura_cancelar, fatura_editar_inline, fatura_salvar
+    """
     query = update.callback_query
+    
+    # Responder ao callback imediatamente
     try:
         await query.answer(timeout=5)
     except Exception as e:
         logger.warning("Falha ao responder callback imediatamente: %s", e)
 
+    # Processar ação
     try:
         action = query.data
+        logger.info(f"fatura_confirm: action={action}, user={query.from_user.id}")
+        
         if action == "fatura_cancelar":
-        context.user_data.pop("fatura_transacoes", None)
-        context.user_data.pop("fatura_conta_id", None)
-        await query.edit_message_text("❌ Importacao cancelada.")
-        return ConversationHandler.END
-
-    if action == "fatura_editar_inline":
-        logger.info("Processando fatura_editar_inline para user=%s", query.from_user.id)
-        transacoes = context.user_data.get("fatura_transacoes", [])
-        conta_id = context.user_data.get("fatura_conta_id")
-        origem_label = context.user_data.get("fatura_origem_label", "Inter")
-
-        if not transacoes or not conta_id:
-            logger.warning("Dados de fatura expirados: transacoes=%s, conta_id=%s", bool(transacoes), conta_id)
-            await query.edit_message_text("❌ Dados da fatura expiraram. Envie o PDF novamente.")
-            return ConversationHandler.END
-
-        db = next(get_db())
-        try:
-            conta_obj = db.query(Conta).filter(Conta.id == conta_id).first()
-            conta_nome = conta_obj.nome if conta_obj else "Cartao de Credito"
-        finally:
-            db.close()
-
-        token = create_fatura_draft(
-            telegram_user_id=query.from_user.id,
-            conta_id=conta_id,
-            conta_nome=conta_nome,
-            transacoes=transacoes,
-            origem_label=origem_label,
-        )
-        set_pending_editor_token(query.from_user.id, token)
-
-        try:
-            webapp_url = _get_fatura_webapp_url("fatura_editor", token)
-            logger.info("URL do editor gerada: %s (truncado)", webapp_url[:80])
-        except Exception as e:
-            logger.error("Falha ao gerar webapp_url: %s", e, exc_info=True)
-            raise
-
-        # Evita problemas em alguns clientes ao tentar substituir o teclado inline por um botão web_app.
-        await query.edit_message_text(
-            "✅ Rascunho preparado. Vou te enviar o botao para abrir o editor no MiniApp.",
-            parse_mode="HTML",
-        )
-        logger.info("Enviando botão de editor para user=%s com webapp_url", query.from_user.id)
-        await query.message.reply_text(
-            "📱 <b>Editar lancamentos da fatura</b>\n\n"
-            "Toque no botao abaixo para abrir o editor.\n"
-            "Se o Telegram nao abrir por esse botao, toque em <b>🚀 Abrir o App</b> no teclado que o editor abre automaticamente.",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("✏️ Abrir Editor da Fatura", web_app=WebAppInfo(url=webapp_url))],
-            ]),
-        )
-        logger.info("Botão de editor enviado com sucesso")
-        return FATURA_CONFIRMATION_STATE
-
-    if action == "fatura_salvar":
-        transacoes = context.user_data.get("fatura_transacoes", [])
-        conta_id = context.user_data.get("fatura_conta_id")
-        if not transacoes or not conta_id:
-            await query.edit_message_text("❌ Dados da fatura perdidos. Tente novamente.")
-            return ConversationHandler.END
-
-        db = next(get_db())
-        try:
-            conta_obj = db.query(Conta).filter(Conta.id == conta_id).first()
-            conta_nome = conta_obj.nome if conta_obj else "Cartao de Credito"
-            for item in transacoes:
-                item["forma_pagamento"] = conta_nome
-
-            usuario_db = get_or_create_user(db, query.from_user.id, query.from_user.full_name)
-            tipo_origem = transacoes[0].get("origem", "fatura_pdf_generic") if transacoes else "fatura_pdf_generic"
-            ok, msg, _stats = await salvar_transacoes_generica(
-                db, usuario_db, transacoes, conta_id, tipo_origem=tipo_origem
-            )
-            if ok:
-                try:
-                    await give_xp_for_action(query.from_user.id, "FATURA_PROCESSADA", context)
-                except Exception:
-                    logger.debug("Falha ao conceder XP da fatura (nao critico).")
-            
-            await query.edit_message_text(msg, parse_mode="HTML")
-            return ConversationHandler.END
-        finally:
-            db.close()
             context.user_data.pop("fatura_transacoes", None)
             context.user_data.pop("fatura_conta_id", None)
-            context.user_data.pop("fatura_origem_label", None)
-            context.user_data.pop("fatura_pending_edit", None)
+            await query.edit_message_text("❌ Importacao cancelada.")
+            return ConversationHandler.END
 
-        # Unknown action
-        await query.answer("Acao invalida")
+        if action == "fatura_editar_inline":
+            logger.info("Processando fatura_editar_inline para user=%s", query.from_user.id)
+            transacoes = context.user_data.get("fatura_transacoes", [])
+            conta_id = context.user_data.get("fatura_conta_id")
+            origem_label = context.user_data.get("fatura_origem_label", "Inter")
+
+            if not transacoes or not conta_id:
+                logger.warning("Dados de fatura expirados: transacoes=%s, conta_id=%s", bool(transacoes), conta_id)
+                await query.edit_message_text("❌ Dados da fatura expiraram. Envie o PDF novamente.")
+                return ConversationHandler.END
+
+            db = next(get_db())
+            try:
+                conta_obj = db.query(Conta).filter(Conta.id == conta_id).first()
+                conta_nome = conta_obj.nome if conta_obj else "Cartao de Credito"
+            finally:
+                db.close()
+
+            token = create_fatura_draft(
+                telegram_user_id=query.from_user.id,
+                conta_id=conta_id,
+                conta_nome=conta_nome,
+                transacoes=transacoes,
+                origem_label=origem_label,
+            )
+            set_pending_editor_token(query.from_user.id, token)
+
+            try:
+                webapp_url = _get_fatura_webapp_url("fatura_editor", token)
+                logger.info("URL do editor gerada: %s (truncado)", webapp_url[:80])
+            except Exception as e:
+                logger.error("Falha ao gerar webapp_url: %s", e, exc_info=True)
+                raise
+
+            # Evita problemas em alguns clientes ao tentar substituir o teclado inline por um botão web_app.
+            await query.edit_message_text(
+                "✅ Rascunho preparado. Vou te enviar o botao para abrir o editor no MiniApp.",
+                parse_mode="HTML",
+            )
+            logger.info("Enviando botão de editor para user=%s", query.from_user.id)
+            await query.message.reply_text(
+                "📱 <b>Editar lancamentos da fatura</b>\n\n"
+                "Toque no botao abaixo para abrir o editor.\n"
+                "Se o Telegram nao abrir por esse botao, toque em <b>🚀 Abrir o App</b> no teclado que o editor abre automaticamente.",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✏️ Abrir Editor da Fatura", web_app=WebAppInfo(url=webapp_url))],
+                ]),
+            )
+            logger.info("Botão de editor enviado com sucesso")
+            return FATURA_CONFIRMATION_STATE
+
+        if action == "fatura_salvar":
+            transacoes = context.user_data.get("fatura_transacoes", [])
+            conta_id = context.user_data.get("fatura_conta_id")
+            if not transacoes or not conta_id:
+                await query.edit_message_text("❌ Dados da fatura perdidos. Tente novamente.")
+                return ConversationHandler.END
+
+            db = next(get_db())
+            try:
+                conta_obj = db.query(Conta).filter(Conta.id == conta_id).first()
+                conta_nome = conta_obj.nome if conta_obj else "Cartao de Credito"
+                for item in transacoes:
+                    item["forma_pagamento"] = conta_nome
+
+                usuario_db = get_or_create_user(db, query.from_user.id, query.from_user.full_name)
+                tipo_origem = transacoes[0].get("origem", "fatura_pdf_generic") if transacoes else "fatura_pdf_generic"
+                ok, msg, _stats = await salvar_transacoes_generica(
+                    db, usuario_db, transacoes, conta_id, tipo_origem=tipo_origem
+                )
+                if ok:
+                    try:
+                        await give_xp_for_action(query.from_user.id, "FATURA_PROCESSADA", context)
+                    except Exception:
+                        logger.debug("Falha ao conceder XP da fatura (nao critico).")
+                
+                await query.edit_message_text(msg, parse_mode="HTML")
+                return ConversationHandler.END
+            finally:
+                db.close()
+                context.user_data.pop("fatura_transacoes", None)
+                context.user_data.pop("fatura_conta_id", None)
+                context.user_data.pop("fatura_origem_label", None)
+                context.user_data.pop("fatura_pending_edit", None)
+
+        # Ação desconhecida
+        logger.warning(f"Acao desconhecida em fatura_confirm: {action}")
+        await query.answer("Acao invalida", show_alert=True)
         return FATURA_CONFIRMATION_STATE
         
     except Exception as e:
-        logger.error("ERRO NO FATURA_CONFIRM: action=%s, error=%s", query.data, str(e), exc_info=True)
+        logger.error(f"ERRO NO FATURA_CONFIRM: action={query.data}, error={str(e)}", exc_info=True)
         try:
-            await query.answer(f"Erro: {str(e)[:50]}", show_alert=True)
-        except:
-            pass
+            await query.answer(f"❌ Erro: {str(e)[:50]}", show_alert=True)
+        except Exception as e2:
+            logger.error(f"Falha ao enviar erro ao user: {e2}")
         return FATURA_CONFIRMATION_STATE
 
 
