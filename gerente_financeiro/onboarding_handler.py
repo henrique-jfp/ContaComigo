@@ -649,7 +649,6 @@ configurar_conv = ConversationHandler(
     entry_points=[
         CommandHandler('configurar', configurar_start),
         MessageHandler(filters.Regex(r"^⚙️ Ajustes$"), configurar_start),  # Vai direto ao menu
-        CommandHandler('start', start_onboarding)        # Inclui saudação de boas-vindas
     ],
     states={
         MENU_PRINCIPAL: [CallbackQueryHandler(menu_callback_handler, pattern='^config_')],

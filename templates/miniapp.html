@@ -928,6 +928,7 @@
     let gameProfileCache = null;
     let gameRankingCache = [];
     let gameRankingRefreshTimer = null;
+    const MINIAPP_SESSION_STORAGE_KEY = 'contacomigo-miniapp-session-id';
     const urlParams = new URLSearchParams(window.location.search);
     const initialTabFromUrl = urlParams.get('tab') || '';
     const rawDraftFromUrl = urlParams.get('draft') || '';
@@ -1190,6 +1191,7 @@
           const data = await response.json();
           if (!data.ok || !data.session_id) return false;
           sessionId = data.session_id;
+          try { localStorage.setItem(MINIAPP_SESSION_STORAGE_KEY, sessionId); } catch (_) {}
           return true;
         } catch (_) {
           return false;
@@ -1199,6 +1201,38 @@
       })();
 
       return reauthInFlight;
+    }
+
+    function getStoredSessionId() {
+      try {
+        return localStorage.getItem(MINIAPP_SESSION_STORAGE_KEY) || '';
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function storeSessionId(value) {
+      if (!value) return;
+      try {
+        localStorage.setItem(MINIAPP_SESSION_STORAGE_KEY, value);
+      } catch (_) {}
+    }
+
+    async function tryRecoverSessionFromStorage() {
+      const cached = getStoredSessionId();
+      if (!cached) return false;
+      try {
+        const response = await fetch('/api/miniapp/overview', {
+          headers: { 'X-Session-Id': cached },
+        });
+        if (!response.ok) return false;
+        const data = await response.json();
+        if (!data?.ok) return false;
+        sessionId = cached;
+        return true;
+      } catch (_) {
+        return false;
+      }
     }
 
     async function fetchWithSession(url, options = {}, retryOnUnauthorized = true) {
@@ -2250,11 +2284,28 @@
 
       const initData = await resolveTelegramInitData();
       if (!initData) {
-        mainStatus.textContent = 'Telegram nao enviou sessao';
-        mainStatus.className = 'text-amber-500 font-bold';
-        homeBalanceHint.textContent = 'Abra pelo bot novamente para sincronizar sua sessao.';
-        homeInsight.textContent = 'Se abriu pelo teclado e travou, toque em /start e abra pelo bot para renovar o acesso.';
-        switchTabByName('inicio');
+        const recovered = await tryRecoverSessionFromStorage();
+        if (!recovered) {
+          mainStatus.textContent = 'Telegram nao enviou sessao';
+          mainStatus.className = 'text-amber-500 font-bold';
+          homeBalanceHint.textContent = 'Abra pelo /start para sincronizar sua sessao.';
+          homeInsight.textContent = 'Se abrir pelo teclado e travar, rode /start uma vez e depois use o botao 🚀 Abrir o App.';
+          switchTabByName('inicio');
+          return;
+        }
+
+        mainStatus.textContent = 'Sincronizado';
+        switchTabByName(pendingDraftLaunch ? 'inicio' : (initialTabFromUrl || 'inicio'));
+        loadHomeOverview();
+        loadHistory(true);
+        loadConfiguracoes();
+        setTimeout(() => {
+          loadAgendamentos();
+          loadMetas();
+          loadGameProfile();
+          loadMonthlyRanking();
+          tryOpenPendingFaturaEditor();
+        }, 80);
         return;
       }
 
@@ -2276,6 +2327,7 @@
           return;
         }
         sessionId = data.session_id;
+        storeSessionId(sessionId);
         mainStatus.textContent = 'Sincronizado';
 
         // Abre a interface imediatamente e carrega dados em segundo plano.
