@@ -1,7 +1,7 @@
 import os
 # gerente_financeiro/onboarding_handler.py
 import logging
-from datetime import time
+from datetime import time, datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
     ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler, MessageHandler, filters
@@ -83,8 +83,15 @@ async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         
         webapp_url = build_miniapp_url(source='start')
         link_premium = gerar_link_pagamento_mercadopago(update.effective_user.id, PLAN_PREMIUM_MONTHLY)
+        trial_end = None
+        if user.trial_expires_at:
+            trial_end = user.trial_expires_at.date()
+        else:
+            trial_end = (datetime.now() + timedelta(days=15)).date()
         text = (
             f"👋 <b>Bem-vindo ao Maestro Financeiro, {user_name}!</b>\n\n"
+            f"<b>Seu período de teste premium começou agora e vai até <u>{trial_end.strftime('%d/%m/%Y')}</u>.</b>\n"
+            "Aproveite todos os recursos premium sem restrição!\n\n"
             "O assistente financeiro inteligente que une chat e MiniApp para você controlar tudo sem planilhas.\n\n"
             "<b>O que você pode fazer aqui:</b>\n"
             "• Lançar gastos e receitas por texto, áudio, foto ou PDF\n"
