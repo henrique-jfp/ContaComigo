@@ -346,3 +346,77 @@ class MonthlyGamificationAward(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     usuario = relationship("Usuario", back_populates="monthly_gamification_awards")
+
+
+# --- SISTEMA DE MISSÕES E GAMIFICAÇÃO AVANÇADA ---
+
+class XpLevelDefinition(Base):
+    """Definições dos 16+ níveis com requisitos de XP."""
+    __tablename__ = 'xp_level_definitions'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    level = Column(Integer, unique=True, nullable=False, index=True)
+    level_name = Column(String, nullable=False)
+    required_xp = Column(Integer, nullable=False, index=True)
+    tier = Column(String, nullable=False)  # 'bronze', 'silver', 'gold', 'diamond', 'legend', 'infinite'
+    description = Column(String, nullable=True)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class Mission(Base):
+    """Definições de missões (diárias, semanais, especiais)."""
+    __tablename__ = 'missions'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    mission_key = Column(String, unique=True, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    mission_type = Column(String, nullable=False, index=True)  # 'daily', 'weekly', 'special'
+    xp_reward = Column(Integer, nullable=False)
+    bonus_multiplier = Column(Integer, default=1.0)
+    unlock_level = Column(Integer, default=0)
+    sort_order = Column(Integer, default=0)
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    
+    user_missions = relationship("UserMission", back_populates="mission", cascade="all, delete-orphan")
+
+
+class UserMission(Base):
+    """Rastreamento de progresso de missão por usuário."""
+    __tablename__ = 'user_missions'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id', ondelete='CASCADE'), nullable=False, index=True)
+    id_mission = Column(Integer, ForeignKey('missions.id', ondelete='CASCADE'), nullable=False, index=True)
+    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    completed_at = Column(DateTime, nullable=True)
+    progress = Column(Integer, default=0)  # 0-100 percentual
+    current_value = Column(Integer, default=0)  # valor atual (ex: 2 de 3 gastos)
+    target_value = Column(Integer, default=0)  # alvo (ex: 3 gastos)
+    claimed_at = Column(DateTime, nullable=True)
+    status = Column(String, default='active', index=True)  # 'active', 'completed', 'claimed', 'reset'
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    
+    usuario = relationship("Usuario")
+    mission = relationship("Mission", back_populates="user_missions")
+
+
+class UserAchievement(Base):
+    """Conquistas desbloqueadas pelo usuário."""
+    __tablename__ = 'user_achievements'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id', ondelete='CASCADE'), nullable=False, index=True)
+    achievement_key = Column(String, nullable=False, index=True)
+    achievement_name = Column(String, nullable=False)
+    achievement_description = Column(Text, nullable=True)
+    xp_reward = Column(Integer, default=0)
+    permanent_multiplier = Column(Integer, default=0.0)  # Ex: +0.05x multiplicador permanente
+    badges = Column(JSON, nullable=True)  # JSON array de badges/insígnias
+    unlocked_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    
+    usuario = relationship("Usuario")

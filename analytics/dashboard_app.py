@@ -1414,7 +1414,7 @@ def miniapp_meta_confirmar_mes(meta_id: int):
 
 @app.route('/api/miniapp/game-profile')
 def miniapp_game_profile():
-    """Perfil gamer do usuário com progressão, interações e top features."""
+    """Perfil gamer do usuário com progressão, interações, top features E MISSÕES."""
     session = _require_session()
     if not session:
         return jsonify({"ok": False, "error": "unauthorized"}), 401
@@ -1476,6 +1476,28 @@ def miniapp_game_profile():
                 monthly_rank = idx
                 break
 
+        # NOVO: Carregar missões do usuário
+        from models import UserMission
+        user_missions_raw = (
+            db.query(UserMission)
+            .filter(UserMission.id_usuario == usuario.id)
+            .filter(UserMission.status.in_(['active', 'completed']))
+            .all()
+        )
+        user_missions = []
+        for um in user_missions_raw:
+            user_missions.append({
+                'mission_key': um.mission.mission_key,
+                'name': um.mission.name,
+                'description': um.mission.description,
+                'type': um.mission.mission_type,
+                'xp_reward': um.mission.xp_reward,
+                'progress': um.progress,
+                'current_value': um.current_value,
+                'target_value': um.target_value,
+                'status': um.status,
+            })
+
         level_progress = get_level_progress_payload(usuario)
         top_feature_name = top_features[0]["feature"] if top_features else None
 
@@ -1493,6 +1515,7 @@ def miniapp_game_profile():
                 "interactions_total": int(total_interactions),
                 "interactions_week": int(week_interactions),
                 "top_features": top_features,
+                "missions": user_missions,  # NOVO
                 "alfredo_note": _alfredo_profile_note(int(level_progress.get("progress_pct", 0)), int(week_interactions), top_feature_name),
             },
         })
