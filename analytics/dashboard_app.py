@@ -67,7 +67,7 @@ static_dir = os.path.join(parent_dir, 'static')
 sys.path.insert(0, parent_dir)
 import config
 from database.database import get_db, buscar_lancamentos_usuario
-from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Categoria, Subcategoria, XpEvent
+from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Categoria, Subcategoria, XpEvent, UserMission
 from gerente_financeiro.prompts import PROMPT_ALFREDO
 from gerente_financeiro.services import preparar_contexto_financeiro_completo
 from gerente_financeiro.services import salvar_transacoes_generica
@@ -1477,7 +1477,6 @@ def miniapp_game_profile():
                 break
 
         # NOVO: Carregar missões do usuário
-        from models import UserMission
         user_missions_raw = (
             db.query(UserMission)
             .filter(UserMission.id_usuario == usuario.id)
@@ -1487,6 +1486,7 @@ def miniapp_game_profile():
         user_missions = []
         for um in user_missions_raw:
             user_missions.append({
+                'id': um.id,
                 'mission_key': um.mission.mission_key,
                 'name': um.mission.name,
                 'description': um.mission.description,
@@ -1519,6 +1519,61 @@ def miniapp_game_profile():
                 "alfredo_note": _alfredo_profile_note(int(level_progress.get("progress_pct", 0)), int(week_interactions), top_feature_name),
             },
         })
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/mission-claim', methods=['POST'])
+def miniapp_mission_claim():
+    """Resgata a recompensa de uma missão concluída."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    mission_id = int(payload.get('mission_id') or 0)
+    if not mission_id:
+        return jsonify({"ok": False, "error": "invalid_mission_id"}), 400
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        user_mission = (
+            db.query(UserMission)
+            .filter(UserMission.id == mission_id)
+            .filter(UserMission.id_usuario == usuario.id)
+            .first()
+        )
+        if not user_mission:
+            return jsonify({"ok": False, "error": "mission_not_found"}), 404
+        if user_mission.status == 'claimed':
+            return jsonify({"ok": False, "error": "mission_already_claimed"}), 400
+        if user_mission.status != 'completed':
+            return jsonify({"ok": False, "error": "mission_not_completed"}), 400
+
+        mission_reward = int(user_mission.mission.xp_reward or 0)
+        usuario.xp = int(usuario.xp or 0) + mission_reward
+        from gerente_financeiro.gamification_service import get_level_progress_payload
+        new_level_data = get_level_progress_payload(usuario)
+        usuario.level = int(new_level_data.get('level', usuario.level or 1))
+
+        user_mission.status = 'claimed'
+        user_mission.claimed_at = datetime.utcnow()
+        db.commit()
+
+        return jsonify({
+            "ok": True,
+            "xp_gained": mission_reward,
+            "new_xp": int(usuario.xp or 0),
+            "new_level": int(usuario.level or 1),
+        })
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Erro ao resgatar missão: %s", exc)
+        return jsonify({"ok": False, "error": "mission_claim_failed"}), 500
     finally:
         db.close()
 
