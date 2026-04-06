@@ -1121,6 +1121,11 @@ def miniapp_overview():
         streak = int(usuario.streak_dias or 0)
         level_progress = get_level_progress_payload(usuario)
 
+        # Importa função de label do plano
+        from gerente_financeiro.monetization import _plan_label
+        user_plan = usuario.plan or "free"
+        user_plan_label = _plan_label(user_plan)
+
         return jsonify({
             "ok": True,
             "summary": {
@@ -1142,6 +1147,8 @@ def miniapp_overview():
                 "projection_series": projection_series,
                 "top_villains": top_villains,
                 "recent": [_serialize_miniapp_lancamento(lanc) for lanc in recent_items],
+                "plan": user_plan,
+                "plan_label": user_plan_label,
             }
         })
     finally:

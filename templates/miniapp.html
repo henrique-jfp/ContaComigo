@@ -310,11 +310,12 @@
             <button id="homeLevelCard" type="button" class="shrink-0 rounded-2xl bg-telegram-card border border-telegram-separator shadow-soft p-3 w-[120px] text-left hover:border-brand/40 hover:bg-brand/5 transition" title="Abrir perfil do jogo">
               <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.24em] text-telegram-hint mb-2">
                 <span>Nível</span>
-                <span id="homeStreakIcon">🔥</span>
+                <span id="homeBadgeContainer"></span>
               </div>
               <div class="text-2xl font-extrabold text-brand leading-none" id="homeLevel">1</div>
               <div class="mt-1 text-[11px] text-telegram-hint"><span id="homeXp">0</span> XP</div>
-              <div class="mt-2 text-[11px] font-semibold text-telegram-text">🔥 <span id="homeStreak">0</span> dias</div>
+              <div class="mt-2 text-[11px] font-semibold text-telegram-text"><span id="homeStreak">0</span> dias</div>
+              <div class="mt-2 text-[10px] font-bold uppercase tracking-[0.18em] text-brand/80" id="homePlanLabel" style="display:none"></div>
             </button>
           </div>
 
@@ -887,6 +888,8 @@
     const homeCashflowChartEl = document.getElementById('homeCashflowChart');
     const homeBudgetChartEl = document.getElementById('homeBudgetChart');
     const homeCategoryChartEl = document.getElementById('homeCategoryChart');
+    const homeBadgeContainer = document.getElementById('homeBadgeContainer');
+    const homePlanLabel = document.getElementById('homePlanLabel');
     const homeProjectionChartEl = document.getElementById('homeProjectionChart');
     const homeVillainsChartEl = document.getElementById('homeVillainsChart');
     const homeCategoryValue = document.getElementById('homeCategoryValue');
@@ -1592,6 +1595,7 @@
 
       homeBalance.textContent = formatCurrencyBR(balance);
       homeBalanceHint.textContent = balance >= 0 ? 'Você está fechando o mês no azul.' : 'As despesas estão pressionando o mês.';
+
       homeLevel.textContent = String(summary?.level || 1);
       homeXp.textContent = String(summary?.xp || 0);
       homeStreak.textContent = String(summary?.streak || 0);
@@ -1603,6 +1607,22 @@
       homeReceita.textContent = `Receitas: ${formatCurrencyBR(receita)}`;
       homeDespesa.textContent = `Despesas: ${formatCurrencyBR(despesa)}`;
       homeInsight.textContent = summary?.insight || 'Carregando insight do Alfredo...';
+
+      // Badge do usuário (nível)
+      if (summary?.level_progress?.badge_svg) {
+        homeBadgeContainer.innerHTML = `<span class="inline-flex items-center justify-center w-6 h-6">${summary.level_progress.badge_svg}</span>`;
+      } else {
+        homeBadgeContainer.textContent = '🌱';
+      }
+
+      // Plano do usuário (Free/Premium)
+      if (summary?.plan_label) {
+        homePlanLabel.textContent = summary.plan_label;
+        homePlanLabel.style.display = 'block';
+      } else {
+        homePlanLabel.textContent = '';
+        homePlanLabel.style.display = 'none';
+      }
 
       homeRecentCache = Array.isArray(summary?.recent) ? summary.recent : [];
       const categories = Array.isArray(summary?.categories) ? summary.categories : [];
