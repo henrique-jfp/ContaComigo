@@ -18,6 +18,8 @@ from telegram.ext import ContextTypes
 import config
 from database.database import get_db, get_or_create_user
 from models import Lancamento, Objetivo, Usuario, UserPlanUsageMonthly
+from apscheduler.schedulers.background import BackgroundScheduler
+import mercadopago
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,11 @@ PLAN_PREMIUM_MONTHLY = "premium_monthly"
 PLAN_PREMIUM_ANNUAL = "premium_annual"
 
 ALL_PLANS = {PLAN_TRIAL, PLAN_FREE, PLAN_PREMIUM_MONTHLY, PLAN_PREMIUM_ANNUAL}
+
+PLAN_PRICES = {
+    PLAN_PREMIUM_MONTHLY: 12.90,
+    PLAN_PREMIUM_ANNUAL: 129.00,
+}
 
 BLOCKED_ON_FREE = {
     "voice_input",
@@ -42,6 +49,28 @@ FREE_LIMITS = {
     "metas_ativas": 1,
 }
 
+# === WHITELIST DE USUÁRIOS PREMIUM ===
+import os
+_WHITELIST_PATH = os.path.join(os.path.dirname(__file__), '..', 'whitelist.txt')
+def load_whitelist():
+    try:
+        with open(_WHITELIST_PATH) as f:
+            return set(int(line.strip()) for line in f if line.strip() and not line.startswith('#'))
+    except Exception:
+        return set()
+
+WHITELIST = load_whitelist()
+
+def reload_whitelist():
+    global WHITELIST
+    WHITELIST = load_whitelist()
+    return WHITELIST
+
+def is_whitelisted(user_id):
+    try:
+        return int(user_id) in WHITELIST
+    except Exception:
+        return False
 
 @dataclass
 class PlanGateResult:
@@ -147,8 +176,8 @@ def get_or_create_monthly_usage(db: Session, user_id: int, *, year: int, month: 
 def _upgrade_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("💎 Premium Mensal — R$ 19,90", callback_data="plan_choose_premium_monthly")],
-            [InlineKeyboardButton("📅 Premium Anual — R$ 159,90", callback_data="plan_choose_premium_annual")],
+            [InlineKeyboardButton(f"💎 Premium Mensal — R$ {PLAN_PRICES[PLAN_PREMIUM_MONTHLY]:.2f}", callback_data="plan_choose_premium_monthly")],
+            [InlineKeyboardButton(f"📅 Premium Anual — R$ {PLAN_PRICES[PLAN_PREMIUM_ANNUAL]:.2f}", callback_data="plan_choose_premium_annual")],
             [InlineKeyboardButton("Continuar no Free Tier", callback_data="plan_choose_free")],
         ]
     )
@@ -261,6 +290,10 @@ def require_plan(feature: str) -> Callable:
         async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
             user_tg = update.effective_user
             if not user_tg:
+                return await func(update, context, *args, **kwargs)
+
+            # Se está na whitelist, libera tudo
+            if is_whitelisted(user_tg.id):
                 return await func(update, context, *args, **kwargs)
 
             db = next(get_db())
@@ -382,21 +415,35 @@ async def handle_plan_choice_callback(update: Update, context: ContextTypes.DEFA
             return
 
         if action in {"plan_choose_premium_monthly", "plan_choose_premium_annual"}:
-            plano_txt = "Premium Mensal" if action.endswith("monthly") else "Premium Anual"
-            pix_key = (getattr(config, "PIX_KEY", "") or "").strip()
-            extra = (
-                f"\n\nPIX de ativação: <code>{pix_key}</code>"
-                if pix_key
-                else "\n\nPIX ainda não configurado."
-            )
+            plano = PLAN_PREMIUM_MONTHLY if action.endswith("monthly") else PLAN_PREMIUM_ANNUAL
+            link = gerar_link_pagamento_mercadopago(query.from_user.id, plano)
+            valor = PLAN_PRICES[plano]
             await query.edit_message_text(
-                f"💎 <b>{plano_txt}</b> selecionado.\n"
-                "A cobrança automática está em implantação. "
-                "Assim que o pagamento for confirmado, seu plano é ativado." + extra,
+                f"💎 <b>{'Premium Mensal' if plano == PLAN_PREMIUM_MONTHLY else 'Premium Anual'}</b> selecionado.\n"
+                f"Valor: <b>R$ {valor:.2f}</b>\n\n"
+                f"Clique no botão abaixo para pagar com Mercado Pago e ativar seu premium instantaneamente!",
                 parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Pagar com Mercado Pago", url=link)],
+                    [InlineKeyboardButton("Continuar no Free Tier", callback_data="plan_choose_free")],
+                ])
             )
             return
 
         await query.edit_message_text("Ação de plano inválida.")
     finally:
         db.close()
+
+def reload_whitelist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    reload_whitelist()
+    update.message.reply_text("✅ Whitelist recarregada com sucesso!")
+
+scheduler = BackgroundScheduler()
+
+@scheduler.scheduled_job('interval', hours=3)
+def scheduled_reload_whitelist():
+    reload_whitelist()
+    logger.info("✅ Whitelist recarregada automaticamente pelo scheduler.")
+
+# No final do arquivo, garantir que o scheduler está rodando:
+scheduler.start()

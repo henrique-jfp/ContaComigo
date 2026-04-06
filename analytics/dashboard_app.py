@@ -2611,6 +2611,56 @@ def analytics_debug():
         info["fatal"] = str(e)
     return jsonify(info)
 
+# --- WEBHOOK MERCADO PAGO ---
+from flask import request
+from gerente_financeiro.monetization import PLAN_PREMIUM_MONTHLY, PLAN_PREMIUM_ANNUAL, PLAN_PRICES
+from gerente_financeiro.monetization import get_db, get_or_create_user, ensure_user_plan_state
+import logging
+
+@app.route('/webhook_mercadopago', methods=['POST'])
+def webhook_mercadopago():
+    data = request.json or {}
+    topic = data.get('topic') or data.get('type')
+    if topic not in ('payment', 'merchant_order'):  # só processa pagamentos
+        return {"status": "ignored"}
+    # Buscar info do pagamento
+    payment = data.get('data', {}).get('id') or data.get('id')
+    if not payment:
+        return {"status": "no_payment_id"}
+    # Buscar detalhes do pagamento via API Mercado Pago (opcional, pode confiar no webhook se preferir)
+    # Aqui, assume que o external_reference é o user_id
+    user_id = None
+    try:
+        user_id = int(data.get('data', {}).get('external_reference') or data.get('external_reference'))
+    except Exception:
+        pass
+    if not user_id:
+        return {"status": "no_user_id"}
+    plano = None
+    valor = float(data.get('data', {}).get('transaction_amount') or 0)
+    if abs(valor - PLAN_PRICES[PLAN_PREMIUM_MONTHLY]) < 0.1:
+        plano = PLAN_PREMIUM_MONTHLY
+    elif abs(valor - PLAN_PRICES[PLAN_PREMIUM_ANNUAL]) < 0.1:
+        plano = PLAN_PREMIUM_ANNUAL
+    else:
+        return {"status": "invalid_amount"}
+    # Ativar plano premium
+    db = next(get_db())
+    user = get_or_create_user(db, user_id, None)
+    ensure_user_plan_state(db, user, commit=True)
+    user.plan = plano
+    # premium_expires_at: 1 mês ou 1 ano
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+    if plano == PLAN_PREMIUM_MONTHLY:
+        user.premium_expires_at = now + timedelta(days=31)
+    else:
+        user.premium_expires_at = now + timedelta(days=366)
+    db.add(user)
+    db.commit()
+    logging.info(f"✅ Usuário {user_id} ativado no plano {plano} via Mercado Pago!")
+    return {"status": "ok", "user_id": user_id, "plan": plano}
+
 if __name__ == '__main__':
     # Configurar servidor
     port = int(os.environ.get('PORT', 5000))

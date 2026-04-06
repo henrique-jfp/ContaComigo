@@ -1,0 +1,4 @@
+# IDs de usuários premium liberados manualmente (um por linha)
+# Exemplo:
+# 123456789
+# 987654321

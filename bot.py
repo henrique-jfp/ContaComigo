@@ -154,6 +154,7 @@ from models import *
 from alerts import schedule_alerts
 from jobs import configurar_jobs
 from gerente_financeiro.menu_botoes import BOTAO_LANCAMENTO, BOTAO_GERENTE, BOTAO_EDITAR, BOTAO_CONFIG, BOTAO_FATURA, BOTAO_GRAFICOS, BOTAO_AGENDAMENTOS, BOTAO_METAS, BOTAO_RANKING, BOTAO_NIVEL, BOTAO_CANCELAR, BOTAO_CONTATO, toggle_painel_command
+from gerente_financeiro.monetization import reload_whitelist_command
 
 # --- IMPORTS DOS HANDLERS (AGORA ORGANIZADOS) ---
 from gerente_financeiro.handlers import (
@@ -188,7 +189,7 @@ from gerente_financeiro.dashboard_handler import (
 )
 from gerente_financeiro.gamification_handler import show_profile, show_rankings, handle_gamification_callback
 from gerente_financeiro.gamification_utils import touch_user_interaction
-from gerente_financeiro.monetization import handle_plan_choice_callback
+from gerente_financeiro.monetization import handle_plan_choice_callback, reload_whitelist_command
 
 # 📈 INVESTMENT HANDLER
 from gerente_financeiro.investment_handler import get_investment_handlers
@@ -524,6 +525,8 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         CallbackQueryHandler(touch_interaction_handler, pattern=r".*"),
         group=99,
     )
+
+    application.add_handler(CommandHandler("reload_whitelist", reload_whitelist_command))
 
 # --- FUNÇÕES PRINCIPAIS DO BOT ---
 
