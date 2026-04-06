@@ -169,17 +169,19 @@ def ensure_user_plan_state(db: Session, user: Usuario, *, commit: bool = True) -
         changed = True
 
 
-    if user.plan == PLAN_PREMIUM_MONTHLY and premium_exp and premium_exp <= now:
+    # Corrigir: usar user.premium_expires_at
+    premium_exp = getattr(user, 'premium_expires_at', None)
+    if user.plan == PLAN_PREMIUM_MONTHLY and premium_exp and _to_utc_aware(premium_exp) <= now:
         user.plan = PLAN_FREE
         changed = True
 
-    if user.plan == PLAN_PREMIUM_ANNUAL and premium_exp and premium_exp <= now:
+    if user.plan == PLAN_PREMIUM_ANNUAL and premium_exp and _to_utc_aware(premium_exp) <= now:
         user.plan = PLAN_FREE
         changed = True
 
-        if user.plan == PLAN_TRIAL and _to_utc_aware(user.trial_expires_at) <= now:
-            user.plan = PLAN_FREE
-            changed = True
+    if user.plan == PLAN_TRIAL and _to_utc_aware(user.trial_expires_at) <= now:
+        user.plan = PLAN_FREE
+        changed = True
 
     if changed and commit:
         db.add(user)
