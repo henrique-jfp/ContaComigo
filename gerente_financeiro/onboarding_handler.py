@@ -249,7 +249,7 @@ async def show_gerenciar_contas(update: Update, context: ContextTypes.DEFAULT_TY
         # Buscar contas do usuário (apenas do tipo "Conta")
         usuario_db = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
         contas = db.query(Conta).filter(
-            Conta.id_usuario == usuario_db.id,
+    from gerente_financeiro.monetization import gerar_link_pagamento_mercadopago, PLAN_PREMIUM_MONTHLY
             Conta.tipo == "Conta"
         ).all()
         
