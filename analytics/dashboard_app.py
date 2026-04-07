@@ -1147,6 +1147,8 @@ def miniapp_overview():
                 "level_title": level_progress.get("title"),
                 "level_progress": level_progress,
                 "insight": insight,
+                "badge": _level_badge(level),
+                "badge_svg": _level_badge_svg(level),
                 "cashflow": cashflow,
                 "cashflow_monthly": monthly_cashflow,
                 "categories": categories,
