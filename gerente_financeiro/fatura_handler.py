@@ -10,9 +10,7 @@ from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 from urllib.parse import quote, urlencode, urlparse
 
-import pdfplumber
-from pdfminer.pdfdocument import PDFPasswordIncorrect
-from pdfplumber.utils.exceptions import PdfminerException
+import google.generativeai as genai
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from telegram.ext import (
     ContextTypes,
@@ -41,28 +39,6 @@ logger = logging.getLogger(__name__)
 MAX_PDF_SIZE_MB = int(os.getenv("FATURA_MAX_PDF_SIZE_MB", "100"))
 MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024
 MAX_PDF_PARSE_SECONDS = int(os.getenv("FATURA_PARSE_TIMEOUT_SECONDS", "300"))
-TRAINING_TEXT_MAX_LINES = 80
-GENERIC_TEXT_MAX_LINES = 2000
-GENERIC_MIN_TRANSACOES = 3
-GENERIC_MIN_SCORE = 0.08
-TRAINING_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "data", "fatura_training")
-)
-
-_MONTH_MAP = {
-    "jan": 1,
-    "fev": 2,
-    "mar": 3,
-    "abr": 4,
-    "mai": 5,
-    "jun": 6,
-    "jul": 7,
-    "ago": 8,
-    "set": 9,
-    "out": 10,
-    "nov": 11,
-    "dez": 12,
-}
 
 
 def _fmt_brl(value: float) -> str:
@@ -75,96 +51,6 @@ def _compact_desc(text: str, max_len: int = 42) -> str:
     if len(clean) <= max_len:
         return clean
     return clean[: max_len - 1].rstrip() + "..."
-
-
-def _parse_inter_transaction_line(line: str) -> Optional[Dict]:
-    raw = (line or "").strip()
-    if not raw:
-        return None
-
-    # Limpa glifos comuns do PDF e normaliza espaços
-    compact = re.sub(r"[\ue000-\uf8ff]", " ", raw)
-    compact = re.sub(r"\s+", " ", compact).strip()
-
-    # Inter costuma vir sem espaços no início: 10denov.2025 ...
-    pattern = re.compile(
-        r"^(\d{1,2})\s*de\s*([A-Za-z]{3})\.?\s*(\d{4})\s+(.+?)\s*([+-])?\s*R\$\s*([\d\.]+,\d{2})$",
-        re.IGNORECASE,
-    )
-    match = pattern.match(compact)
-    if not match:
-        return None
-
-    if "****" in compact:
-        return None
-
-    day = int(match.group(1))
-    month_token = match.group(2).lower()
-    year = int(match.group(3))
-    desc = match.group(4).strip(" -+")
-    explicit_sign = (match.group(5) or "").strip()
-    value_str = match.group(6)
-
-    month = _MONTH_MAP.get(month_token)
-    if not month:
-        return None
-
-    value = float(value_str.replace(".", "").replace(",", "."))
-
-    sign = -1.0
-    if explicit_sign == "+":
-        sign = 1.0
-    elif explicit_sign == "-":
-        sign = -1.0
-
-    if not desc:
-        return None
-
-    if "pagamento" in desc.lower() or "estorno" in desc.lower():
-        return None
-
-    try:
-        date_obj = datetime(year, month, day)
-    except ValueError:
-        return None
-
-    return {
-        "descricao": desc,
-        "valor": sign * value,
-        "data_transacao": date_obj,
-        "forma_pagamento": "Crédito",
-        "origem": "fatura_pdf_inter",
-    }
-
-
-def parse_inter_pdf_bytes(file_bytes: bytes) -> Tuple[List[Dict], int]:
-    transacoes: List[Dict] = []
-    ignoradas = 0
-    in_section = False
-    with pdfplumber.open(io_bytes_to_pdf(file_bytes)) as pdf:
-        for page in pdf.pages:
-            text = page.extract_text() or ""
-            for line in text.splitlines():
-                lower_line = re.sub(r"\s+", "", line.lower())
-                if "despesasdafatura" in lower_line:
-                    in_section = True
-                    continue
-                if not in_section:
-                    continue
-                if "datamoviment" in lower_line:
-                    continue
-                item = _parse_inter_transaction_line(line)
-                if item:
-                    transacoes.append(item)
-                elif "pagamento" in lower_line or "estorno" in lower_line:
-                    ignoradas += 1
-
-    # Remove duplicados por descricao+data+valor
-    unique: Dict[Tuple[str, str, float], Dict] = {}
-    for item in transacoes:
-        key = (item["descricao"], item["data_transacao"].strftime("%Y-%m-%d"), float(item["valor"]))
-        unique[key] = item
-    return list(unique.values()), ignoradas
 
 
 def _get_fatura_webapp_url(page: str, token: str) -> str:
@@ -190,476 +76,81 @@ def _get_fatura_webapp_url(page: str, token: str) -> str:
     }
     return f"{base_url}/webapp?{urlencode(params)}"
 
+async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], int, str, float]:
+    import config
+    if not config.GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY não configurada")
 
-def io_bytes_to_pdf(file_bytes: bytes):
-    from io import BytesIO
-
-    return BytesIO(file_bytes)
-
-
-def _safe_slug(value: str) -> str:
-    cleaned = re.sub(r"[^A-Za-z0-9_-]+", "_", value.strip())
-    return cleaned.strip("_") or "desconhecido"
-
-
-def _extract_pdf_text_sample(file_bytes: bytes, max_lines: int = TRAINING_TEXT_MAX_LINES) -> List[str]:
-    lines: List[str] = []
-    try:
-        with pdfplumber.open(io_bytes_to_pdf(file_bytes)) as pdf:
-            for page in pdf.pages:
-                text = page.extract_text() or ""
-                for line in text.splitlines():
-                    if line.strip():
-                        lines.append(line.strip())
-                    if len(lines) >= max_lines:
-                        return lines
-    except Exception:
-        return []
-    return lines
-
-
-def _extract_pdf_text_lines(file_bytes: bytes, max_lines: int = GENERIC_TEXT_MAX_LINES) -> List[str]:
-    lines: List[str] = []
-    try:
-        with pdfplumber.open(io_bytes_to_pdf(file_bytes)) as pdf:
-            for page in pdf.pages:
-                text = page.extract_text() or ""
-                for line in text.splitlines():
-                    if line.strip():
-                        lines.append(line.strip())
-                    if len(lines) >= max_lines:
-                        return lines
-    except Exception:
-        return []
-    return lines
-
-
-def _extract_reference_year(lines: List[str]) -> int:
-    for line in lines:
-        match = re.search(r"\b(20\d{2})\b", line)
-        if match:
-            return int(match.group(1))
-    return datetime.now().year
-
-
-def _is_pdf_password_error(exc: Exception) -> bool:
-    if isinstance(exc, PDFPasswordIncorrect):
-        return True
-    if isinstance(exc, PdfminerException):
-        cause = getattr(exc, "__cause__", None)
-        if isinstance(cause, PDFPasswordIncorrect):
-            return True
-    message = str(exc).lower()
-    return "password" in message and "pdf" in message
-
-
-def _parse_fatura_pipeline(file_bytes: bytes) -> Tuple[List[Dict], int, str]:
-    transacoes, ignoradas = parse_inter_pdf_bytes(file_bytes)
-    origem_label = "Inter"
-    if transacoes:
-        return transacoes, ignoradas, origem_label
-
-    text_lines = _extract_pdf_text_lines(file_bytes)
-    if _is_bradesco_pdf(text_lines):
-        transacoes, ignoradas = _parse_bradesco_pdf_lines(text_lines)
-        if transacoes:
-            return transacoes, ignoradas, "Bradesco"
-        # Evita fallback genérico para Bradesco quando o parser dedicado falha,
-        # pois o parser genérico tende a capturar linhas de "opções de pagamento".
-        return [], 0, "Bradesco"
-
-    bank_name, _score = _match_bank_from_samples(text_lines)
-    transacoes, ignoradas = _parse_generic_transactions(text_lines, bank_name)
-    if transacoes and len(transacoes) >= GENERIC_MIN_TRANSACOES:
-        return transacoes, ignoradas, bank_name or "Outros"
-
-    return [], 0, "Inter"
-
-
-def _normalize_search_text(text: str) -> str:
-    normalized = unicodedata.normalize("NFKD", text or "")
-    normalized = normalized.encode("ascii", "ignore").decode("ascii")
-    return re.sub(r"\s+", "", normalized).lower()
-
-
-def _extract_money_values(text: str) -> List[float]:
-    values: List[float] = []
-    if not text:
-        return values
-    for raw in re.findall(r"\d{1,3}(?:\.\d{3})*,\d{2}", text):
-        try:
-            values.append(float(raw.replace(".", "").replace(",", ".")))
-        except ValueError:
-            continue
-    return values
-
-
-def _find_value_in_line_window(lines: List[str], idx: int, window: int = 2) -> Optional[float]:
-    max_idx = min(len(lines), idx + window + 1)
-    for j in range(idx, max_idx):
-        vals = _extract_money_values(lines[j])
-        if vals:
-            return vals[0]
-    return None
-
-
-def _extract_statement_total(file_bytes: bytes, origem_label: str) -> Optional[float]:
-    lines = _extract_pdf_text_lines(file_bytes)
-    if not lines:
-        return None
-
-    labels = [_normalize_search_text(l) for l in lines]
-    origem = (origem_label or "").lower()
-
-    if origem.startswith("inter"):
-        # No layout do Inter, "Total da sua fatura" pode apontar para limite total,
-        # então priorizamos explicitamente os campos de valor devido.
-        for i, lab in enumerate(labels):
-            if "faturaatual" in lab:
-                value = _find_value_in_line_window(lines, i, window=2)
-                if value is not None:
-                    return value
-        for i, lab in enumerate(labels):
-            if "despesasdomes" in lab:
-                value = _find_value_in_line_window(lines, i, window=2)
-                if value is not None:
-                    return value
-        return None
-
-    if origem.startswith("bradesco"):
-        for i, lab in enumerate(labels):
-            if "totaldafaturaemreal" in lab:
-                value = _find_value_in_line_window(lines, i, window=3)
-                if value is not None:
-                    return value
-        for i, lab in enumerate(labels):
-            if "totaldefatura" in lab:
-                value = _find_value_in_line_window(lines, i, window=2)
-                if value is not None:
-                    return value
-        return None
-
-    for i, lab in enumerate(labels):
-        if "totaldafatura" in lab or "totaldefatura" in lab:
-            value = _find_value_in_line_window(lines, i, window=2)
-            if value is not None:
-                return value
-    return None
-
-
-def _is_bradesco_pdf(lines: List[str]) -> bool:
-    for line in lines[:120]:
-        if "bradesco" in line.lower():
-            return True
-    return False
-
-
-def _parse_bradesco_pdf_lines(lines: List[str]) -> Tuple[List[Dict], int]:
-    transacoes: List[Dict] = []
-    ignoradas = 0
-    in_section = False
-    saw_resume_header = False
-    saw_transactions_header = False
-    year_ref = _extract_reference_year(lines)
-
-    for raw_line in lines:
-        line = raw_line.strip()
-        lower_line = line.lower()
-
-        if "resumo da fatura" in lower_line:
-            saw_resume_header = True
-            in_section = True
-            continue
-
-        if "historico de lancamentos" in lower_line or "histórico de lançamentos" in lower_line:
-            in_section = True
-            saw_transactions_header = True
-            continue
-
-        if saw_resume_header and any(token in lower_line for token in [
-            "mensagens importantes",
-            "informacoes importantes",
-            "informações importantes",
-            "atendimento",
-            "central de atendimento",
-        ]):
-            break
-
-        if "total da fatura em real" in lower_line:
-            break
-
-        if not in_section:
-            continue
-
-        if not re.match(r"^\d{2}/\d{2}\b", line):
-            continue
-
-        if "iof" not in lower_line:
-            if any(token in lower_line for token in [
-                "total utilizado",
-                "disponivel",
-                "limites",
-                "taxa",
-                "rotativo",
-                "pagamento minimo",
-                "pagamento mínimo",
-                "cet",
-                "valor total",
-                "opcoes de pagamento",
-                "opções de pagamento",
-            ]):
-                continue
-
-        date_match = re.match(r"^(\d{2})/(\d{2})\s+(.*)$", line)
-        if not date_match:
-            continue
-
-        day = int(date_match.group(1))
-        month = int(date_match.group(2))
-        rest = date_match.group(3).strip()
-
-        # Algumas extrações colam dados de limite/rodapé na mesma linha.
-        # Mantemos apenas o trecho transacional antes desses marcadores.
-        cut_tokens = [
-            " compras r$",
-            " saque à vista",
-            " saque a vista",
-            " total para",
-            " taxa ao",
-            " * sobre as operações",
-            " válido para o vencimento",
-        ]
-        rest_low = rest.lower()
-        cut_positions = [rest_low.find(tok) for tok in cut_tokens if rest_low.find(tok) >= 0]
-        if cut_positions:
-            rest = rest[: min(cut_positions)].strip()
-
-        value_matches = list(re.finditer(r"(\d{1,3}(?:\.\d{3})*,\d{2})(-?)", rest))
-        value_match = None
-        for match in reversed(value_matches):
-            end_index = match.end()
-            if end_index < len(rest) and rest[end_index] == "%":
-                continue
-            value_match = match
-            break
-
-        if not value_match:
-            continue
-
-        value_str = value_match.group(1)
-        value = float(value_str.replace(".", "").replace(",", "."))
-        sign = -1.0
-        if value_match.group(2) == "-":
-            sign = -1.0
-        elif "credito" in lower_line or "estorno" in lower_line:
-            sign = 1.0
-
-        desc = rest[: value_match.start()].strip()
-        desc = re.sub(r"\b\d{2}/\d{2}(?:/\d{2,4})?\b", "", desc).strip()
-        desc = desc.strip("- ")
-
-        rest_low = rest.lower()
-
-        if re.search(r"\b(a\.m\.|a\.a\.|%|cet)\b", rest_low):
-            continue
-
-        if not desc:
-            continue
-
-        if "pag boleto" in rest_low or "pagamento" in rest_low:
-            ignoradas += 1
-            continue
-
-        if saw_transactions_header and any(token in desc.lower() for token in [
-            "total para",
-            "total utilizado",
-            "disponivel",
-            "disponível",
-        ]):
-            continue
-
-        try:
-            date_obj = datetime(year_ref, month, day)
-        except ValueError:
-            continue
-
-        transacoes.append(
+    genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'\""))
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    
+    prompt = """
+    Você é um extrator de dados de faturas de cartão de crédito especialista e infalível.
+    Analise o documento PDF anexo e extraia as transações com precisão máxima.
+    
+    REGRAS CRÍTICAS:
+    1. Identifique o nome do Banco ou Instituição emissora (ex: Nubank, Itaú, Bradesco, Inter, Santander, C6, etc).
+    2. Identifique o "Valor Total" ou "Total da Fatura" atual.
+    3. Extraia TODOS os lançamentos da fatura do mês atual.
+    4. O valor deve ser NEGATIVO para compras/despesas e POSITIVO para estornos ou pagamentos.
+    5. IGNORE pagamentos da fatura anterior (mas conte quantos itens foram ignorados na chave 'ignoradas').
+    6. Se a descrição indicar um parcelamento (ex: "Compra 01/12", "Lojas X 2/5"), extraia apenas essa fração para a chave "parcela". Ex: "1/12". Caso contrário, deixe null.
+    7. Retorne EXCLUSIVAMENTE um objeto JSON válido, sem nenhum texto extra (sem markdown ```json).
+    
+    FORMATO JSON OBRIGATÓRIO:
+    {
+        "banco": "Nome do Banco",
+        "total_fatura": 1234.56,
+        "transacoes": [
             {
-                "descricao": desc,
-                "valor": sign * value,
-                "data_transacao": date_obj,
+                "data": "YYYY-MM-DD",
+                "descricao": "NOME DO ESTABELECIMENTO",
+                "valor": -150.50,
+                "parcela": "1/12"
+            }
+        ],
+        "ignoradas": 2
+    }
+    """
+    
+    pdf_part = {
+        "mime_type": "application/pdf",
+        "data": file_bytes
+    }
+    
+    response = await model.generate_content_async([prompt, pdf_part])
+    
+    text = response.text
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if not match:
+        raise ValueError("A IA não retornou um JSON válido.")
+        
+    data = json.loads(match.group(0))
+    
+    transacoes_finais = []
+    for t in data.get("transacoes", []):
+        try:
+            dt_obj = datetime.strptime(t["data"], "%Y-%m-%d")
+            transacoes_finais.append({
+                "descricao": str(t.get("descricao", "Sem descrição")),
+                "valor": float(t.get("valor", 0.0)),
+                "data_transacao": dt_obj,
                 "forma_pagamento": "Crédito",
-                "origem": "fatura_pdf_bradesco",
-            }
-        )
-
-    unique: Dict[Tuple[str, str, float], Dict] = {}
-    for item in transacoes:
-        key = (item["descricao"], item["data_transacao"].strftime("%Y-%m-%d"), item["valor"])
-        unique[key] = item
-
-    return list(unique.values()), ignoradas
-
-
-def _tokenize_lines(lines: List[str]) -> set[str]:
-    tokens: set[str] = set()
-    for line in lines:
-        normalized = re.sub(r"\d+", " ", line.lower())
-        for token in re.split(r"[^a-z]+", normalized):
-            if len(token) >= 4:
-                tokens.add(token)
-    return tokens
-
-
-def _load_training_samples() -> List[Dict]:
-    samples: List[Dict] = []
-    if not os.path.isdir(TRAINING_DIR):
-        return samples
-
-    for name in os.listdir(TRAINING_DIR):
-        if not name.endswith(".json"):
+                "origem": f"fatura_pdf_{str(data.get('banco', 'generico')).lower().replace(' ', '_')}",
+                "parcela": t.get("parcela")
+            })
+        except Exception as e:
+            logger.warning(f"Erro ao converter data da transação da fatura: {t} - {e}")
             continue
-        path = os.path.join(TRAINING_DIR, name)
-        try:
-            with open(path, "r", encoding="utf-8") as meta_file:
-                meta = json.load(meta_file)
-        except Exception:
-            continue
-
-        token_sample = meta.get("token_sample")
-        text_sample = meta.get("text_sample", []) or []
-        bank_name = meta.get("bank_name")
-        if not bank_name or not text_sample:
-            continue
-
-        samples.append(
-            {
-                "bank_name": bank_name,
-                "tokens": set(token_sample) if token_sample else _tokenize_lines(text_sample),
-            }
-        )
-    return samples
-
-
-def _match_bank_from_samples(lines: List[str]) -> Tuple[Optional[str], float]:
-    tokens = _tokenize_lines(lines)
-    if not tokens:
-        return None, 0.0
-
-    best_score = 0.0
-    best_bank: Optional[str] = None
-    for sample in _load_training_samples():
-        sample_tokens = sample.get("tokens") or set()
-        if not sample_tokens:
-            continue
-        intersection = tokens.intersection(sample_tokens)
-        score = len(intersection) / max(len(sample_tokens), 1)
-        if score > best_score:
-            best_score = score
-            best_bank = sample.get("bank_name")
-
-    if best_score < GENERIC_MIN_SCORE:
-        return None, best_score
-
-    return best_bank, best_score
-
-
-def _parse_generic_transactions(lines: List[str], bank_name: Optional[str]) -> Tuple[List[Dict], int]:
-    transacoes: List[Dict] = []
-    ignoradas = 0
-    now = datetime.now()
-    origem = f"fatura_pdf_{_safe_slug(bank_name)}" if bank_name else "fatura_pdf_generic"
-
-    for line in lines:
-        lower_line = line.lower()
-        if any(token in lower_line for token in [
-            "pagamento", "estorno", "total", "saldo", "vencimento", "resumo"
-        ]):
-            if "pagamento" in lower_line or "estorno" in lower_line:
-                ignoradas += 1
-            continue
-
-        date_match = re.search(r"(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?", line)
-        if date_match:
-            day = int(date_match.group(1))
-            month = int(date_match.group(2))
-            year_raw = date_match.group(3)
-            if year_raw:
-                year = int(year_raw)
-                if year < 100:
-                    year += 2000
-            else:
-                year = now.year
-        else:
-            alt_match = re.search(r"(\d{1,2})\s+de\s+([A-Za-z]{3})", line, re.IGNORECASE)
-            if not alt_match:
-                continue
-            day = int(alt_match.group(1))
-            month = _MONTH_MAP.get(alt_match.group(2).lower())
-            if not month:
-                continue
-            year = now.year
-
-        value_matches = list(re.finditer(r"R\$\s*([\d\.]+,\d{2})", line))
-        if not value_matches:
-            value_matches = list(re.finditer(r"\b([\d\.]+,\d{2})\b", line))
-        if not value_matches:
-            continue
-
-        value_str = value_matches[-1].group(1)
-        value = float(value_str.replace(".", "").replace(",", "."))
-        sign = -1.0
-        if "credito" in lower_line or "+" in line:
-            sign = 1.0
-
-        desc = line
-        if value_matches:
-            desc = line[: value_matches[-1].start()].strip()
-        desc = desc.strip("-+ ")
-        if not desc:
-            continue
-
-        try:
-            date_obj = datetime(year, month, day)
-        except ValueError:
-            continue
-
-        transacoes.append(
-            {
-                "descricao": desc,
-                "valor": sign * value,
-                "data_transacao": date_obj,
-                "forma_pagamento": "Crédito",
-                "origem": origem,
-            }
-        )
-
-    return transacoes, ignoradas
-
-
-def _store_training_sample(file_bytes: bytes, meta: Dict) -> str:
-    os.makedirs(TRAINING_DIR, exist_ok=True)
-    bank_slug = _safe_slug(meta.get("bank_name", "desconhecido"))
-    sample_id = meta.get("sample_id") or str(uuid.uuid4())
-    base_name = f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{bank_slug}_{sample_id}"
-    pdf_path = os.path.join(TRAINING_DIR, f"{base_name}.pdf")
-    meta_path = os.path.join(TRAINING_DIR, f"{base_name}.json")
-
-    with open(pdf_path, "wb") as pdf_file:
-        pdf_file.write(file_bytes)
-
-    with open(meta_path, "w", encoding="utf-8") as meta_file:
-        json.dump(meta, meta_file, ensure_ascii=True, indent=2)
-
-    return base_name
-
-
-def _clear_training_context(context: ContextTypes.DEFAULT_TYPE) -> None:
-    context.user_data.pop("fatura_training_bytes", None)
-    context.user_data.pop("fatura_training_name", None)
-    context.user_data.pop("fatura_training_size", None)
-    context.user_data.pop("fatura_training_pages", None)
-    context.user_data.pop("fatura_training_text", None)
+            
+    banco = str(data.get("banco", "Desconhecido"))
+    try:
+        total = float(data.get("total_fatura", 0.0))
+    except (ValueError, TypeError):
+        total = 0.0
+    ignoradas = int(data.get("ignoradas", 0))
+    
+    return transacoes_finais, ignoradas, banco, total
 
 
 async def fatura_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -726,19 +217,20 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
     try:
-        transacoes, ignoradas, origem_label = await asyncio.wait_for(
-            asyncio.to_thread(_parse_fatura_pipeline, bytes(file_bytes)),
+        transacoes, ignoradas, origem_label, total_pdf = await asyncio.wait_for(
+            _parse_fatura_pdf_with_gemini(bytes(file_bytes)),
             timeout=MAX_PDF_PARSE_SECONDS,
         )
     except asyncio.TimeoutError:
         await process_msg.edit_text(
             "⏱️ O processamento da fatura excedeu o tempo limite.\n"
-            "Tente enviar novamente ou exportar em partes por período."
+            "Tente enviar novamente ou exportar em partes menores."
         )
         return FATURA_AWAIT_FILE
     except Exception as exc:
         logger.exception("Erro ao processar fatura PDF", exc_info=True)
-        if _is_pdf_password_error(exc):
+        error_str = str(exc).lower()
+        if "password" in error_str or "senha" in error_str or "encrypted" in error_str:
             await process_msg.edit_text(
                 "🔒 Este PDF está protegido por senha.\n"
                 "Remova a senha no app do banco e envie novamente."
@@ -746,7 +238,7 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
         else:
             await process_msg.edit_text(
                 "❌ Nao consegui ler esse PDF de fatura.\n"
-                "Verifique se o arquivo nao está corrompido e tente novamente."
+                "Verifique se o arquivo não está corrompido ou tente novamente."
             )
         return FATURA_AWAIT_FILE
     else:
@@ -757,35 +249,15 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if not transacoes:
         await update.message.reply_text(
-            "Nao consegui localizar as transacoes da fatura. "
-            "Verifique se o PDF e do Banco Inter e tente novamente.\n\n"
-            "Quer ajudar a ensinar novos bancos? Posso guardar esse PDF "
-            "(somente para treino interno)."
+            "❌ Não consegui localizar as transações desta fatura.\n"
+            "Verifique se o PDF é realmente uma fatura de cartão de crédito e tente novamente."
         )
-        context.user_data["fatura_training_bytes"] = bytes(file_bytes)
-        context.user_data["fatura_training_name"] = document.file_name or "fatura.pdf"
-        context.user_data["fatura_training_size"] = document.file_size or len(file_bytes)
-        try:
-            with pdfplumber.open(io_bytes_to_pdf(bytes(file_bytes))) as pdf:
-                context.user_data["fatura_training_pages"] = len(pdf.pages)
-        except Exception:
-            context.user_data["fatura_training_pages"] = None
-        context.user_data["fatura_training_text"] = _extract_pdf_text_sample(bytes(file_bytes))
-
-        keyboard = [
-            [InlineKeyboardButton("Quero ajudar", callback_data="fatura_treino_sim")],
-            [InlineKeyboardButton("Nao agora", callback_data="fatura_treino_nao")],
-        ]
-        await update.message.reply_text(
-            "Deseja enviar este PDF para treino?",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-        )
-        return FATURA_TRAIN_CONSENT
+        return ConversationHandler.END
 
     context.user_data["fatura_transacoes"] = transacoes
     context.user_data["fatura_ignoradas"] = ignoradas
     context.user_data["fatura_origem_label"] = origem_label
-    context.user_data["fatura_valor_total_pdf"] = _extract_statement_total(bytes(file_bytes), origem_label)
+    context.user_data["fatura_valor_total_pdf"] = total_pdf
 
     db = next(get_db())
     try:
@@ -999,62 +471,6 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return FATURA_CONFIRMATION_STATE
 
 
-async def fatura_training_consent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-
-    if query.data == "fatura_treino_nao":
-        _clear_training_context(context)
-        await query.edit_message_text("Tudo bem. Se quiser ajudar no futuro, me avise.")
-        return ConversationHandler.END
-
-    await query.edit_message_text(
-        "Perfeito! Qual o banco/cartao dessa fatura?\n"
-        "Ex: Nubank, Itau, C6, Bradesco"
-    )
-    return FATURA_TRAIN_BANK
-
-
-async def fatura_training_receive_bank(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    bank_name = (update.message.text or "").strip()
-    if len(bank_name) < 2:
-        await update.message.reply_text("Me diga apenas o nome do banco/cartao, por favor.")
-        return FATURA_TRAIN_BANK
-
-    file_bytes = context.user_data.get("fatura_training_bytes")
-    if not file_bytes:
-        await update.message.reply_text("Nao encontrei o PDF. Tente enviar novamente.")
-        _clear_training_context(context)
-        return ConversationHandler.END
-
-    meta = {
-        "sample_id": str(uuid.uuid4()),
-        "uploaded_at": datetime.utcnow().isoformat() + "Z",
-        "bank_name": bank_name,
-        "user_telegram_id": update.effective_user.id,
-        "original_filename": context.user_data.get("fatura_training_name"),
-        "file_size_bytes": context.user_data.get("fatura_training_size"),
-        "page_count": context.user_data.get("fatura_training_pages"),
-        "text_sample": context.user_data.get("fatura_training_text", []),
-        "source": "fatura_training",
-    }
-
-    try:
-        meta["token_sample"] = sorted(_tokenize_lines(meta.get("text_sample", [])))
-        _store_training_sample(file_bytes, meta)
-        await update.message.reply_text(
-            "Obrigado! Seu PDF foi salvo para treino e vai ajudar a liberar novos bancos."
-        )
-    except Exception:
-        await update.message.reply_text(
-            "Ops, houve um erro ao salvar o treino. Tente novamente depois."
-        )
-    finally:
-        _clear_training_context(context)
-
-    return ConversationHandler.END
-
-
 async def fatura_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.callback_query:
         await update.callback_query.answer()
@@ -1064,7 +480,6 @@ async def fatura_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     context.user_data.pop("fatura_transacoes", None)
     context.user_data.pop("fatura_conta_id", None)
     context.user_data.pop("fatura_origem_label", None)
-    _clear_training_context(context)
     return ConversationHandler.END
 
 
@@ -1076,12 +491,6 @@ fatura_conv = ConversationHandler(
         ],
         FATURA_CONFIRMATION_STATE: [
             CallbackQueryHandler(fatura_confirm, pattern="^fatura_")
-        ],
-        FATURA_TRAIN_CONSENT: [
-            CallbackQueryHandler(fatura_training_consent, pattern="^fatura_treino_")
-        ],
-        FATURA_TRAIN_BANK: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, fatura_training_receive_bank)
         ],
     },
     fallbacks=[
