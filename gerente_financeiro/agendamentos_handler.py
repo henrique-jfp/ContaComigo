@@ -26,48 +26,6 @@ logger = logging.getLogger(__name__)
 
 # --- INÍCIO E MENU MODERNO ---
 async def agendamento_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    
-    # Pergunta o valor de forma mais atrativa
-    tipo = context.user_data['novo_agendamento']['tipo']
-    emoji = "🟢" if tipo == "Entrada" else "🔴"
-    
-    await update.message.reply_text(
-        f"{emoji} <b>{descricao_texto}</b>\n\n"
-        f"💰 <b>Qual o valor?</b>\n\n"
-        f"💡 <i>Se for parcelado, informe o valor da parcela</i>\n\n"
-        f"<i>Exemplos:</i>\n"
-        f"• <code>1500</code>\n"
-        f"• <code>350.50</code>\n"
-        f"• <code>2500.00</code>",
-        parse_mode='HTML'
-    )
-    
-    return ASK_VALOR_AGENDAMENTOarkup, Update
-from telegram.ext import (
-    CallbackQueryHandler, CommandHandler, ContextTypes, ConversationHandler,
-    MessageHandler, filters
-)
-
-from database.database import get_db, get_or_create_user
-from models import Categoria, Agendamento, Usuario
-from .handlers import cancel, criar_teclado_colunas
-from .utils_validation import (
-    validar_valor_monetario, validar_descricao,
-    ask_valor_generico, ask_descricao_generica
-)
-from .states import (
-    ASK_TIPO, ASK_DESCRICAO_AGENDAMENTO, ASK_VALOR_AGENDAMENTO, ASK_CATEGORIA_AGENDAMENTO, 
-    ASK_PRIMEIRO_EVENTO, ASK_FREQUENCIA, ASK_TIPO_RECORRENCIA, ASK_TOTAL_PARCELAS, 
-    CONFIRM_AGENDAMENTO
-)
-from typing import List
-
-logger = logging.getLogger(__name__)
-
-# ESTADOS DA CONVERSA - MOVIDOS PARA states.py
-
-# --- INÍCIO E MENU MODERNO ---
-async def agendamento_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Menu inicial de agendamentos com design moderno"""
     keyboard = [
         [InlineKeyboardButton("➕ Novo Agendamento", callback_data="agendamento_novo")],
@@ -600,6 +558,83 @@ async def cancelar_agendamento_callback(update: Update, context: ContextTypes.DE
     finally:
         db.close()
 
+async def dar_baixa_agendamento_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Dá baixa em um agendamento, criando o lançamento e agendando o próximo se for o caso."""
+    query = update.callback_query
+    await query.answer()
+    
+    agendamento_id = int(query.data.split('_')[-1])
+    user_id = query.from_user.id
+    logger.info(f"Processando baixa manual para agendamento {agendamento_id} do usuário {user_id}")
+    
+    db = next(get_db())
+    try:
+        from models import Lancamento
+        from dateutil.relativedelta import relativedelta
+        from datetime import timedelta
+        
+        ag = db.query(Agendamento).join(Usuario).filter(
+            Agendamento.id == agendamento_id,
+            Usuario.telegram_id == user_id
+        ).first()
+        
+        if not ag or not ag.ativo:
+            await query.edit_message_text("❌ Agendamento não encontrado ou já desativado.")
+            return
+
+        # Registrar o lançamento
+        novo_lancamento = Lancamento(
+            id_usuario=ag.id_usuario,
+            descricao=ag.descricao,
+            valor=ag.valor,
+            tipo=ag.tipo,
+            data_transacao=datetime.now(),
+            forma_pagamento="Nao_informado",
+            id_categoria=ag.id_categoria,
+            id_subcategoria=ag.id_subcategoria,
+            origem="agendamento"
+        )
+        db.add(novo_lancamento)
+        
+        # Atualizar o agendamento
+        ag.parcela_atual = (ag.parcela_atual or 0) + 1
+        
+        # Verificar se acabou
+        if ag.total_parcelas and ag.parcela_atual >= ag.total_parcelas:
+            ag.ativo = False
+            status_msg = f"✅ <b>{ag.descricao}</b> registrado! Este foi o último evento deste agendamento."
+        else:
+            # Calcular próxima data
+            if ag.frequencia == 'mensal':
+                ag.proxima_data_execucao = ag.proxima_data_execucao + relativedelta(months=1)
+            elif ag.frequencia == 'semanal':
+                ag.proxima_data_execucao = ag.proxima_data_execucao + timedelta(days=7)
+            else: # unico (fallback)
+                ag.ativo = False
+            
+            if ag.ativo:
+                status_msg = f"✅ <b>{ag.descricao}</b> registrado!\nPróximo agendado para: {ag.proxima_data_execucao.strftime('%d/%m/%Y')}."
+            else:
+                status_msg = f"✅ <b>{ag.descricao}</b> registrado!"
+                
+        db.commit()
+        
+        # Dar XP
+        try:
+            from .gamification_utils import give_xp_for_action
+            await give_xp_for_action(user_id, "LANCAMENTO_CRIADO_TEXTO", context) 
+        except Exception:
+            pass
+
+        await query.edit_message_text(status_msg, parse_mode='HTML')
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Erro ao dar baixa no agendamento: {e}", exc_info=True)
+        await query.edit_message_text("❌ Erro ao registrar o lançamento. Tente novamente.")
+    finally:
+        db.close()
+
 async def handle_agendamento_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handler para confirmações de agendamento"""
     query = update.callback_query
@@ -642,4 +677,3 @@ agendamento_conv = ConversationHandler(
     per_user=True,
     per_chat=True
 )
-

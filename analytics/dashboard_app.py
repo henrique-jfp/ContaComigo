@@ -2618,6 +2618,41 @@ def analytics_debug():
         info["fatal"] = str(e)
     return jsonify(info)
 
+@app.route('/api/miniapp/toggle-notificacoes', methods=['POST'])
+def toggle_notificacoes():
+    """
+    Endpoint para o MiniApp ativar/desativar as notificações automáticas do usuário.
+    Espera um JSON: {"telegram_id": 123456789, "ativo": true/false}
+    """
+    logger.info("⚡ Recebida requisição para alterar status das notificações automáticas.")
+    dados = request.get_json(silent=True) or {}
+    telegram_id = dados.get('telegram_id')
+    ativo = dados.get('ativo')
+
+    if telegram_id is None or ativo is None:
+        return jsonify({"erro": "telegram_id e ativo são obrigatórios"}), 400
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == telegram_id).first()
+        if not usuario:
+            return jsonify({"erro": "Usuário não encontrado"}), 404
+
+        usuario.alerta_gastos_ativo = bool(ativo)
+        db.commit()
+
+        status_msg = "ligadas" if ativo else "desligadas"
+        return jsonify({
+            "sucesso": True, 
+            "mensagem": f"Notificações {status_msg} com sucesso!",
+            "estado_atual": usuario.alerta_gastos_ativo
+        })
+    except Exception as e:
+        db.rollback()
+        return jsonify({"erro": str(e)}), 500
+    finally:
+        db.close()
+
 # --- WEBHOOK MERCADO PAGO ---
 from flask import request
 from gerente_financeiro.monetization import PLAN_PREMIUM_MONTHLY, PLAN_PREMIUM_ANNUAL, PLAN_PRICES

@@ -168,7 +168,7 @@ from gerente_financeiro.handlers import (
     painel_notificacoes
 )
 from gerente_financeiro.agendamentos_handler import (
-    agendamento_start, agendamento_conv, agendamento_menu_callback, cancelar_agendamento_callback
+    agendamento_start, agendamento_conv, agendamento_menu_callback, cancelar_agendamento_callback, dar_baixa_agendamento_callback
 )
 from gerente_financeiro.metas_handler import (
     metas_conv, metas_callbacks, metas_start
@@ -473,6 +473,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("fatura_callback", lambda: CallbackQueryHandler(fatura_confirm, pattern="^fatura_")),
         ("agendamento_menu_callback", lambda: CallbackQueryHandler(agendamento_menu_callback, pattern="^agendamento_")),
         ("cancelar_agendamento_callback", lambda: CallbackQueryHandler(cancelar_agendamento_callback, pattern="^ag_cancelar_")),
+        ("dar_baixa_agendamento_callback", lambda: CallbackQueryHandler(dar_baixa_agendamento_callback, pattern="^ag_baixa_")), # Lida com baixa de notificacao
         ("gamificacao_callback", lambda: CallbackQueryHandler(handle_gamification_callback, pattern="^(show_rankings|show_stats|show_rewards)$")),
         ("dashboard_callback", lambda: CallbackQueryHandler(dashboard_callback_handler, pattern="^dashboard_")),
         ("quick_callback", lambda: CallbackQueryHandler(quick_action_handler, pattern="^quick_")),
