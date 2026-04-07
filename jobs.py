@@ -46,17 +46,17 @@ def configurar_jobs(job_queue):
                 time=time(hour=0, minute=20),
                 name="gamification_monthly_xp_competition"
             )
-    """Configura todos os jobs agendados do sistema"""
+    """
+    Configura todos os jobs agendados do sistema
+    """
     try:
         logger.info("⚙️ Configurando jobs agendados...")
-        
         # Job diário às 01:00 - Agendamento de notificações
         job_queue.run_daily(
             agendar_notificacoes_diarias,
             time=time(hour=1, minute=0),
             name="agendador_mestre_diario"
         )
-        
         # Job diario que roda no dia 1 - Check-in mensal de metas
         job_queue.run_daily(
             job_metas_mensal,
