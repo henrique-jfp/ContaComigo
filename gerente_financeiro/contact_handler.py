@@ -66,7 +66,7 @@ from telegram.ext import (
 )
 
 import config
-from .handlers import cancel
+from .onboarding_handler import cancel
 from .states import MENU_CONTATO, AWAIT_SUBJECT, AWAIT_BODY
 from email.utils import formataddr
 

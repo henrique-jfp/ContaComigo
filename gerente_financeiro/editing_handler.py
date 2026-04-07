@@ -45,7 +45,8 @@ from database.database import (
     buscar_lancamentos_usuario, deletar_lancamento_por_id, atualizar_lancamento_por_id, get_db
 )
 from models import Categoria, Subcategoria
-from .handlers import cancel, criar_teclado_colunas
+from .onboarding_handler import cancel
+from .utils_validation import criar_teclado_colunas_otimizado as criar_teclado_colunas
 from .gamification_utils import give_xp_for_action, touch_user_interaction
 from .states import (
     CHOOSE_METHOD, AWAIT_SEARCH_QUERY, CHOOSE_LANCAMENTO,

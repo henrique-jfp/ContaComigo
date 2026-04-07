@@ -39,7 +39,7 @@ from telegram.ext import filters, ContextTypes, ConversationHandler, CommandHand
 
 # Importando a função que vamos criar no próximo passo
 from database.database import deletar_todos_dados_usuario
-from .handlers import cancel # Reutilizamos a função de cancelamento
+from .onboarding_handler import cancel # Reutilizamos a função de cancelamento
 from .states import CONFIRM_DELETION
 
 logger = logging.getLogger(__name__)
