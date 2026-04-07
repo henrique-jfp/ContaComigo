@@ -34,11 +34,13 @@
 
 ### Proposta de Valor
 
-- **Zero Atrito:** Registre gastos via voz, texto ou foto
+- **Zero Setup & Zero Atrito:** Fim dos comandos complexos. O chat é apenas para interações naturais (voz, texto, foto), enquanto configurações e visualizações moram no MiniApp.
 - **IA Inteligente:** Router Alfredo (Groq) com function-calling para decisões automáticas
 - **Dashboard Web:** MiniApp otimizada para carregamento instantâneo
-- **OCR Robusto:** Google Vision com fallback automático
+- **OCR & Parsing Universal:** Leitura multimodal nativa (Gemini 2.5 Flash) capaz de extrair dados de notas físicas e faturas em PDF de QUALQUER banco.
 - **Análises em Tempo Real:** Insights personalizados e alertas proativos
+- **Assistente Proativo:** Notificações diárias de contas a pagar com botão "✅ Dar baixa" direto no chat.
+- **Gamificação Viciante:** Transforme o controle financeiro em um jogo de RPG com missões, XP, rankings e níveis.
 - **Escalável:** Arquitetura híbrida que suporta milhares de usuários simultâneos
 
 ---
@@ -436,32 +438,29 @@ def _friendly_feature_name(action: str):
 
 ## 🚀 Funcionalidades
 
-### Entrada de Dados
+### 🤖 Zero Setup & Chat Inteligente
 
-- [x] **Texto Natural:** "Gastei 50 no mercado"
-- [x] **Voz:** Envie áudio → transcrição automática
-- [x] **Foto:** Envie nota fiscal → OCR com validação
-- [x] **PDF:** `/fatura` para importar banco (Inter)
-- [x] **Entrada Guiada:** Fluxo conversacional passo-a-passo
-- [x] **Edição:** Modificar transações criadas
-  - **NOVO:** Botões MiniApp funcionam perfeitamente (sem BOT_RESPONSE_TIMEOUT)
-  - Callback routing global para PDFs de fatura
-  - URL normalization com HTTPS support
+- [x] **Lançamentos sem Atrito:** Aceita texto livre, áudios (transcritos via Groq Whisper), fotos de notas fiscais (OCR) e faturas em PDF.
+- [x] **O Cérebro do Alfredo:** IA com memória de sessão que entende intenções, diagnostica erros e aconselha com precisão cirúrgica e tom humanizado.
+- [x] **Microlearning:** Manuais curtos e temáticos acessíveis pelo chat, substituindo "textões" de ajuda engessados.
 
-### Análise & Inteligência
+### 📱 MiniApp (Sua Central de Controle)
 
-- [x] **Conversa Natural:** Pergunte "quanto gastei com comida?"
-- [x] **Insights IA:** Análises automáticas de gastos
-- [x] **Comparação Periódica:** "Semana passada vs hoje"
-- [x] **Alertas Proativos:** Gastos fora do padrão
-- [x] **Dados Externos:** Cotações, índices, cripto
+- [x] **Dashboard em Tempo Real:** Gráficos interativos de fluxo de caixa, despesas por categoria e evolução patrimonial.
+- [x] **Gestão Completa:** Edição rápida de histórico de lançamentos, gestão de cartões/contas e personalização de perfil de investidor.
+- [x] **Controle de Notificações:** Toggle em tempo real para ativar/desativar lembretes automáticos.
 
-### Planejamento
+### 🎮 Gamificação (O Jogo da Riqueza)
 
-- [x] **Metas Financeiras:** Economia com plano mensal
-- [x] **Agendamentos:** Parcelas, recorrências, assinaturas
-- [x] **Investimentos:** Portfólio com dashboards
-- [x] **Patrimônio Líquido:** Visão consolidada de ativos
+- [x] **XP e Níveis:** De "Caderneta Zerada" (Nível 1) a "Além do Budget" (Nível 16+).
+- [x] **Missões e Conquistas:** Missões Diárias (ex: *Caffeine Tracker*), Semanais (ex: *Semana Azul*) e bônus permanentes por consistência (Streaks).
+- [x] **Ranking Global:** Competição em tempo real mostrando os líderes de XP do mês (com premiação mensal automática).
+
+### 🔔 Assistente Proativo & Planejamento
+
+- [x] **Agendamentos com 1-Clique:** Notificações automáticas na madrugada para contas do dia, com botão nativo "✅ Dar baixa".
+- [x] **Metas Inteligentes:** A IA calcula o aporte necessário e o bot faz o check-in mensalmente para garantir seu progresso.
+- [x] **Wrapped Anual:** Retrospectiva automatizada todo dia 31 de dezembro mostrando as curiosidades do ano.
 
 ### Relatórios & Visualização
 
@@ -473,10 +472,9 @@ def _friendly_feature_name(action: str):
 ### Engajamento
 
 - [x] **Gamificação:** XP, níveis, ranking, streaks
-  - **NOVO:** Feature names em português legível no game profile
-  - Display de "Top Features" com contadores de atividades
-  - Alfredo cards com motivação personalizada
-- [x] **Notificações:** Daily, check-in de metas, alertas
+  - Tela de perfil gamer completa com resgate de missões
+  - Alfredo cards baseados no momento do usuário
+- [x] **Notificações:** Diárias (vencimentos de contas), check-in de metas, e alertas
 - [x] **Suporte:** Fluxo de contato integrado
 
 ---
@@ -721,13 +719,6 @@ tail -f debug_logs/bot.log
 ---
 
 ## � Correções Recentes (Abril 2026)
-
-### Commit `Zero Setup & Notificações Proativas`
-**O que mudou:** Transição total para filosofia Zero Setup e implementação de alertas automáticos.
-- Comandos legados e complexos de configuração retirados do chat.
-- Criado CRON Job para buscar contas recorrentes no dia e enviar mensagem proativa.
-- Integrado botão de ação rápida de `[✅ Dar baixa]` direto na notificação.
-- Adicionado Toggle no MiniApp para ativar/silenciar lembretes dinamicamente via `POST /api/miniapp/toggle-notificacoes`.
 
 ### Commit `f25dba2` - Estabilização de callbacks de fatura
 **Problema:** Botões MiniApp e botão de editar fatura não respondiam (BOT_RESPONSE_TIMEOUT)
