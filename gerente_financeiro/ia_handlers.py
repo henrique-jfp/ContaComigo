@@ -1619,8 +1619,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                     pass
 
             if not tool_calls:
-            await _enviar_resposta_html_segura(update.message, resposta_direta)
-            return ConversationHandler.END
+                await _enviar_resposta_html_segura(update.message, resposta_direta)
+                return ConversationHandler.END
 
         tool_call = tool_calls[0]
         fn = (tool_call.get("function") or {})
