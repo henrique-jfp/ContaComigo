@@ -1872,3 +1872,133 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         return ConversationHandler.END
     finally:
         db.close()
+
+
+async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    action = query.data
+    dados_quick = context.user_data.get("dados_quick") or context.user_data.get("quick_lancamento")
+
+    if not dados_quick and action != "quick_cancel":
+        await query.edit_message_text("❌ Dados expirados. Tente novamente.")
+        return ConversationHandler.END
+
+    if action == "quick_cancel":
+        context.user_data.pop("dados_quick", None)
+        context.user_data.pop("quick_lancamento", None)
+        await query.edit_message_text("❌ Ação cancelada.")
+        return ConversationHandler.END
+
+    if action == "quick_edit":
+        await query.edit_message_text("✏️ Para editar, por favor reformule sua mensagem ou abra o MiniApp.")
+        return ConversationHandler.END
+
+    if action == "quick_confirm":
+        tipo_acao = dados_quick.get("acao")
+        db = next(get_db())
+        try:
+            usuario_db = get_or_create_user(db, query.from_user.id, query.from_user.full_name)
+            
+            if tipo_acao == "registrar_lancamento":
+                data_str = dados_quick.get("data")
+                try:
+                    data_tx = datetime.strptime(data_str, "%d/%m/%Y")
+                except Exception:
+                    data_tx = datetime.now()
+                    
+                cat_id, subcat_id = _categorizar_com_mapa_inteligente(dados_quick.get("descricao"), dados_quick.get("tipo_transacao"), db)
+                if cat_id is None and dados_quick.get("categoria"):
+                    cat = db.query(Categoria).filter(Categoria.nome.ilike(dados_quick.get("categoria"))).first()
+                    if cat:
+                        cat_id = cat.id
+
+                novo_lanc = Lancamento(
+                    id_usuario=usuario_db.id,
+                    descricao=dados_quick.get("descricao"),
+                    valor=dados_quick.get("valor"),
+                    tipo=dados_quick.get("tipo_transacao"),
+                    data_transacao=data_tx,
+                    forma_pagamento=dados_quick.get("forma_pagamento"),
+                    id_categoria=cat_id,
+                    id_subcategoria=subcat_id,
+                    origem=dados_quick.get("origem", "alfredo")
+                )
+                db.add(novo_lanc)
+                db.commit()
+                
+                from gerente_financeiro.gamification_utils import give_xp_for_action
+                try:
+                    await give_xp_for_action(query.from_user.id, "LANCAMENTO_CRIADO_TEXTO", context)
+                except Exception:
+                    pass
+                    
+                await query.edit_message_text("✅ Lançamento registrado com sucesso!")
+                
+            elif tipo_acao in ["agendar_receita", "agendar_despesa"]:
+                data_str = dados_quick.get("data")
+                try:
+                    data_primeiro = datetime.fromisoformat(data_str).date()
+                except Exception:
+                    data_primeiro = datetime.now().date()
+                    
+                novo_agendamento = Agendamento(
+                    id_usuario=usuario_db.id,
+                    descricao=dados_quick.get("descricao"),
+                    valor=dados_quick.get("valor"),
+                    tipo="Receita" if tipo_acao == "agendar_receita" else "Saída",
+                    data_primeiro_evento=data_primeiro,
+                    proxima_data_execucao=data_primeiro,
+                    frequencia=dados_quick.get("frequencia", "mensal"),
+                    total_parcelas=dados_quick.get("parcelas"),
+                    ativo=True
+                )
+                db.add(novo_agendamento)
+                db.commit()
+                
+                from gerente_financeiro.gamification_utils import give_xp_for_action
+                try:
+                    await give_xp_for_action(query.from_user.id, "AGENDAMENTO_CRIADO", context)
+                except Exception:
+                    pass
+                    
+                await query.edit_message_text("✅ Agendamento criado com sucesso!")
+                
+            elif tipo_acao == "criar_meta":
+                data_meta_str = dados_quick.get("data_meta")
+                data_meta = None
+                if data_meta_str:
+                    try:
+                        data_meta = datetime.fromisoformat(data_meta_str).date()
+                    except Exception:
+                        pass
+                        
+                nova_meta = Objetivo(
+                    id_usuario=usuario_db.id,
+                    descricao=dados_quick.get("descricao"),
+                    valor_meta=dados_quick.get("valor_alvo"),
+                    valor_atual=0.0,
+                    data_meta=data_meta
+                )
+                db.add(nova_meta)
+                db.commit()
+                
+                from gerente_financeiro.gamification_utils import give_xp_for_action
+                try:
+                    await give_xp_for_action(query.from_user.id, "META_CRIADA", context)
+                except Exception:
+                    pass
+                    
+                await query.edit_message_text("✅ Meta financeira criada com sucesso!")
+
+        except Exception as e:
+            db.rollback()
+            logger.error("Erro no quick_action_handler: %s", e, exc_info=True)
+            await query.edit_message_text("❌ Ocorreu um erro ao salvar os dados. Tente novamente.")
+        finally:
+            db.close()
+            context.user_data.pop("dados_quick", None)
+            context.user_data.pop("quick_lancamento", None)
+
+    return ConversationHandler.END
