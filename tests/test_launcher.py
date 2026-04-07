@@ -43,10 +43,11 @@ class TestLauncher(unittest.TestCase):
         mock_bot_thread.start.assert_called_once()
         mock_start_dashboard.assert_called_once()
 
+    @patch('launcher.Thread')
     @patch('launcher.start_dashboard')
     @patch('launcher.start_telegram_bot')
-    def test_render_web_service_starts_dashboard(self, mock_start_bot, mock_start_dashboard):
-        """Render Web Service deve iniciar dashboard."""
+    def test_render_web_service_starts_hybrid(self, mock_start_bot, mock_start_dashboard, mock_thread):
+        """Render Web Service deve iniciar híbrido por padrão (Bot + Dashboard)."""
         env = {
             'RENDER_INSTANCE_ID': 'instance-1',
             'RENDER_SERVICE_TYPE': 'web',
@@ -54,9 +55,18 @@ class TestLauncher(unittest.TestCase):
             'DATABASE_URL': 'fake_db_url',
         }
 
+        mock_bot_thread = MagicMock()
+        mock_thread.return_value = mock_bot_thread
+
         self.run_main_with_env(env)
 
         mock_start_bot.assert_not_called()
+        mock_thread.assert_called_once_with(
+            target=mock_start_bot,
+            kwargs={'enable_health_server': False},
+            daemon=True,
+        )
+        mock_bot_thread.start.assert_called_once()
         mock_start_dashboard.assert_called_once()
 
     @patch('launcher.start_dashboard')

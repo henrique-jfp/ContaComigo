@@ -57,8 +57,8 @@ def get_settings() -> AppSettings:
     if os.getenv('RENDER_INSTANCE_ID'):
         service_type = os.getenv('RENDER_SERVICE_TYPE', 'web')
         if service_type == 'web':
-            logger.info("🔍 Modo detectado: DASHBOARD (Render Web Service)")
-            return AppSettings(mode=ExecutionMode.DASHBOARD)
+            logger.info("🔍 Modo detectado: LOCAL_DEV (Render Web Service - Híbrido)")
+            return AppSettings(mode=ExecutionMode.LOCAL_DEV)
         else: # 'worker' ou outro tipo
             logger.info("🔍 Modo detectado: BOT (Render Worker)")
             return AppSettings(mode=ExecutionMode.BOT)

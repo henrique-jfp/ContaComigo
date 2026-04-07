@@ -61,7 +61,8 @@ def _normalizar_forma_pagamento(valor: str | None) -> str:
 
 
 def _get_webapp_url(tab: str | None = None, draft: dict | None = None) -> str:
-    base_url = os.getenv("DASHBOARD_BASE_URL", "http://localhost:5000").rstrip("/")
+    base_url = os.getenv("DASHBOARD_BASE_URL") or os.getenv("RENDER_EXTERNAL_URL") or "http://localhost:5000"
+    base_url = base_url.rstrip("/")
     url = f"{base_url}/webapp"
     params: list[str] = []
     if tab:
