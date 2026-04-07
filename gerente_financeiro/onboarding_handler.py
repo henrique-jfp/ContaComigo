@@ -31,7 +31,7 @@ from .states import (
 )
 
 # --- ESTADO PARA O MANUAL ---
-MANUAL_MENU, MANUAL_LANCAMENTOS, MANUAL_IA, MANUAL_METAS, MANUAL_JOGO, MANUAL_APP = range(900, 906)
+MANUAL_MENU, MANUAL_LANCAMENTOS, MANUAL_IA, MANUAL_METAS, MANUAL_JOGO, MANUAL_APP, MANUAL_LIMITES = range(900, 907)
 # --- FLUXO DE MANUAL INTERATIVO ---
 async def manual_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Exibe o menu de seções do manual."""
@@ -40,8 +40,9 @@ async def manual_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     keyboard = [
         [InlineKeyboardButton("📝 Lançamentos", callback_data="manual_lancamentos")],
         [InlineKeyboardButton("🧠 IA", callback_data="manual_ia")],
-        [InlineKeyboardButton("🎯 Metas", callback_data="manual_metas")],
-        [InlineKeyboardButton("🎮 Jogo", callback_data="manual_jogo")],
+        [InlineKeyboardButton("� Metas e Contas", callback_data="manual_metas")],
+        [InlineKeyboardButton("🚧 Limites de Orçamento", callback_data="manual_limites")],
+        [InlineKeyboardButton("� Jogo", callback_data="manual_jogo")],
         [InlineKeyboardButton("📱 App", callback_data="manual_app")],
     ]
     await query.edit_message_text(
@@ -101,7 +102,7 @@ async def manual_jogo_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         "<b>Ganhe XP:</b> Cada registro, áudio ou foto enviada te dá experiência. Lançamentos complexos (como PDF e Foto) dão BÔNUS de XP! 💎\n\n"
         "<b>Não Quebre a Ofensiva:</b> O Streak é sagrado. Registre algo todo dia para manter sua chama acesa e ganhar multiplicadores de pontos. 🔥\n\n"
         "<b>Missões Diárias:</b> Fique de olho no seu perfil! Missões como o 'Caffeine Tracker' (registrar 3 cafés) te dão recompensas extras.\n\n"
-        "<b>Ranking Global:</b> Suba de nível (do Nível 1 'Caderneta Zerada' ao 16+ 'Além do Budget') e dispute o topo do ranking com outros usuários. 🥇"
+        "<b>Ranking Global:</b> Suba de nível (do Nível 1 'Caderneta Zerada' ao 16+ 'Além do Budget') e dispute o topo do ranking global com outros usuários. 🏆 <b>Todo mês, os 2 primeiros colocados ganham 1 mês de Premium grátis!</b>"
     )
     keyboard = [[InlineKeyboardButton("⬅️ Voltar", callback_data="manual_menu")]]
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
@@ -122,14 +123,28 @@ async def manual_app_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
     return MANUAL_APP
 
+async def manual_limites_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    text = (
+        "🚧 <b>Limites de Orçamento</b>\n<b>O Alfredo de olho para você não extrapolar.</b>\n\n"
+        "<b>Teto Mensal:</b> Defina um limite máximo que você quer gastar em uma categoria (ex: R$ 250 em Restaurante/Delivery).\n\n"
+        "<b>Avisos Proativos:</b> Ao registrar um gasto no chat, o Alfredo te avisa na hora se você estiver chegando perto do limite (ex: 'Atenção, você já consumiu 85% do orçamento de Lazer').\n\n"
+        "<b>Onde Configurar:</b> Acesse o <b>MiniApp</b>, vá na aba <b>Metas</b> e clique em 'Definir' na seção de Limites de Orçamento."
+    )
+    keyboard = [[InlineKeyboardButton("⬅️ Voltar", callback_data="manual_menu")]]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+    return MANUAL_LIMITES
+
 @track_analytics("help")
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Exibe o menu de seções do manual."""
     keyboard = [
         [InlineKeyboardButton("📝 Lançamentos", callback_data="manual_lancamentos")],
         [InlineKeyboardButton("🧠 IA", callback_data="manual_ia")],
-        [InlineKeyboardButton("🎯 Metas", callback_data="manual_metas")],
-        [InlineKeyboardButton("🎮 Jogo", callback_data="manual_jogo")],
+        [InlineKeyboardButton("� Metas e Contas", callback_data="manual_metas")],
+        [InlineKeyboardButton("🚧 Limites de Orçamento", callback_data="manual_limites")],
+        [InlineKeyboardButton("� Jogo", callback_data="manual_jogo")],
         [InlineKeyboardButton("📱 App", callback_data="manual_app")],
     ]
     await update.message.reply_html(
@@ -147,6 +162,7 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if action == "manual_metas": return await manual_metas_callback(update, context)
     if action == "manual_jogo": return await manual_jogo_callback(update, context)
     if action == "manual_app": return await manual_app_callback(update, context)
+    if action == "manual_limites": return await manual_limites_callback(update, context)
     await query.answer()
     return ConversationHandler.END
 
@@ -820,6 +836,7 @@ configurar_conv = ConversationHandler(
             CallbackQueryHandler(manual_metas_callback, pattern='^manual_metas$'),
             CallbackQueryHandler(manual_jogo_callback, pattern='^manual_jogo$'),
             CallbackQueryHandler(manual_app_callback, pattern='^manual_app$'),
+            CallbackQueryHandler(manual_limites_callback, pattern='^manual_limites$'),
             CallbackQueryHandler(manual_menu_callback, pattern='^manual_menu$'),
         ],
         MANUAL_LANCAMENTOS: [CallbackQueryHandler(manual_menu_callback, pattern='^manual_menu$')],
@@ -827,6 +844,7 @@ configurar_conv = ConversationHandler(
         MANUAL_METAS: [CallbackQueryHandler(manual_menu_callback, pattern='^manual_menu$')],
         MANUAL_JOGO: [CallbackQueryHandler(manual_menu_callback, pattern='^manual_menu$')],
         MANUAL_APP: [CallbackQueryHandler(manual_menu_callback, pattern='^manual_menu$')],
+        MANUAL_LIMITES: [CallbackQueryHandler(manual_menu_callback, pattern='^manual_menu$')],
     },
     fallbacks=[
         CommandHandler(['cancelar', 'cancel', 'sair', 'parar'], cancel),
