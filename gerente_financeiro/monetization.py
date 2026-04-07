@@ -189,13 +189,6 @@ def ensure_user_plan_state(db: Session, user: Usuario, *, commit: bool = True) -
         db.refresh(user)
     return user
 
-    def _to_utc_aware(dt):
-        if dt is None:
-            return None
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
-
 
 def get_effective_plan(db: Session, user: Usuario) -> str:
     user = ensure_user_plan_state(db, user, commit=True)
