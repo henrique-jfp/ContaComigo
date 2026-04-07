@@ -245,6 +245,17 @@ _ALFREDO_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "categorizar_lancamentos_pendentes",
+            "description": "Categoriza automaticamente todos os lançamentos financeiros do usuário que estão sem categoria registrada.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
 ]
 
 
@@ -1836,6 +1847,25 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")],
             ])
             await update.message.reply_html(preview, reply_markup=keyboard)
+            return ConversationHandler.END
+
+        if fn_name == "categorizar_lancamentos_pendentes":
+            atualizados, total_pendentes = _categorizar_lancamentos_sem_categoria(db, usuario_db.id)
+            if total_pendentes == 0:
+                await update.message.reply_html(
+                    "🏷️ <b>Categorização automática</b>\n\n"
+                    "Não encontrei lançamentos pendentes sem categoria no seu histórico."
+                )
+                return ConversationHandler.END
+
+            nao_classificados = max(0, total_pendentes - atualizados)
+            await update.message.reply_html(
+                "🏷️ <b>Categorização automática concluída!</b>\n\n"
+                f"• <b>Lançamentos analisados:</b> {total_pendentes}\n"
+                f"• <b>Categorizados com sucesso:</b> {atualizados}\n"
+                f"• <b>Ainda sem categoria:</b> {nao_classificados}\n\n"
+                "Pronto! Alfredo organizou os lançamentos usando regras inteligentes."
+            )
             return ConversationHandler.END
 
         if fn_name == "responder_duvida_financeira":
