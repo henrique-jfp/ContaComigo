@@ -1426,6 +1426,42 @@
       return mapping[source] || [sourceRaw || 'Manual', 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700'];
     }
 
+    function getCategoryIcon(categoria, subcategoria, tipo) {
+      const combined = `${categoria || ''} ${subcategoria || ''}`.toLowerCase();
+      
+      const map = [
+        { keys: ['aliment', 'mercado', 'padaria', 'supermercado', 'açougue', 'feira'], icon: 'shopping-cart' },
+        { keys: ['restaurante', 'ifood', 'delivery', 'lanche', 'pizza', 'hamburguer'], icon: 'utensils' },
+        { keys: ['café', 'coffee', 'confeitaria'], icon: 'coffee' },
+        { keys: ['transporte', 'uber', '99', 'táxi', 'taxi', 'estacionamento', 'pedágio'], icon: 'car' },
+        { keys: ['combustível', 'gasolina', 'posto', 'etanol', 'diesel'], icon: 'fuel' },
+        { keys: ['passagem', 'ônibus', 'onibus', 'metro', 'metrô', 'trem'], icon: 'bus' },
+        { keys: ['moradia', 'aluguel', 'casa', 'condomínio', 'condominio'], icon: 'home' },
+        { keys: ['energia', 'luz', 'eletricidade'], icon: 'zap' },
+        { keys: ['água', 'agua', 'saneamento'], icon: 'droplets' },
+        { keys: ['internet', 'telefone', 'celular', 'claro', 'vivo', 'tim'], icon: 'wifi' },
+        { keys: ['saúde', 'saude', 'médico', 'medico', 'hospital', 'dentista', 'convênio', 'unimed', 'terapia'], icon: 'heart-pulse' },
+        { keys: ['farmácia', 'farmacia', 'remédio', 'medicamento'], icon: 'pill' },
+        { keys: ['lazer', 'entretenimento', 'cinema', 'show', 'ingresso', 'festa', 'bar'], icon: 'popcorn' },
+        { keys: ['assinatura', 'streaming', 'netflix', 'spotify', 'amazon', 'prime'], icon: 'play-square' },
+        { keys: ['educação', 'educacao', 'escola', 'faculdade', 'curso', 'livro'], icon: 'graduation-cap' },
+        { keys: ['vestuário', 'vestuario', 'roupa', 'calçado', 'loja', 'shopping'], icon: 'shirt' },
+        { keys: ['eletrônico', 'eletronico', 'computador', 'tecnologia', 'software', 'hardware'], icon: 'laptop' },
+        { keys: ['pet', 'cachorro', 'gato', 'veterinário', 'ração', 'animal'], icon: 'dog' },
+        { keys: ['viagem', 'voo', 'hotel', 'hospedagem', 'airbnb', 'turismo'], icon: 'plane' },
+        { keys: ['beleza', 'cabelo', 'salão', 'barbearia', 'cosmético', 'estética'], icon: 'scissors' },
+        { keys: ['esporte', 'academia', 'gympass', 'smartfit', 'futebol', 'crossfit'], icon: 'dumbbell' },
+        { keys: ['imposto', 'taxa', 'ipva', 'iptu', 'darf', 'multa'], icon: 'landmark' },
+        { keys: ['salário', 'salario', 'renda', 'pagamento', 'prolabore', 'adiantamento'], icon: 'coins' },
+        { keys: ['investimento', 'rendimento', 'dividendos', 'cdb', 'selic', 'bolsa', 'poupança'], icon: 'trending-up' },
+        { keys: ['transferência', 'transferencia', 'pix', 'ted', 'doc'], icon: 'arrow-right-left' },
+      ];
+      for (const item of map) { if (item.keys.some(key => combined.includes(key))) return item.icon; }
+      const tipoNorm = String(tipo || '').toLowerCase();
+      if (tipoNorm.includes('entrada') || tipoNorm.includes('receita')) return 'arrow-down-to-line';
+      return 'receipt';
+    }
+
     function renderHomeRecent(items = []) {
       if (!items.length) {
         homeRecentList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint">Sem movimentações recentes por enquanto.</div>';
@@ -1436,18 +1472,25 @@
         const numericValue = Number(item.valor) || 0;
         const isReceita = isEntradaTipo(item.tipo, numericValue);
         const [badgeLabel, badgeClass] = sourceBadgeConfig(item.origem_label || item.origem);
+        const iconName = getCategoryIcon(item.categoria_nome, item.subcategoria_nome, item.tipo);
         return `
           <button class="recent-item w-full text-left rounded-2xl border border-telegram-separator bg-telegram-card p-4 hover:bg-brand/5 transition shadow-soft" data-action="edit" data-id="${item.id}">
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <p class="font-semibold text-sm text-telegram-text truncate max-w-[190px]">${item.descricao || 'Lançamento'}</p>
-                  <span class="text-[10px] font-bold uppercase tracking-[0.16em] rounded-full border px-2 py-1 ${badgeClass}">${badgeLabel}</span>
-                </div>
-                <p class="text-xs text-telegram-hint mt-1">${new Date(item.data).toLocaleDateString('pt-BR')} • ${item.forma_pagamento || '-'}</p>
-                <p class="text-xs text-telegram-hint mt-1">${item.categoria_nome ? `${item.categoria_nome}${item.subcategoria_nome ? ` / ${item.subcategoria_nome}` : ''}` : 'Sem categoria'}</p>
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full ${isReceita ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300'} flex items-center justify-center shrink-0">
+                <i data-lucide="${iconName}" class="w-5 h-5"></i>
               </div>
-              <span class="shrink-0 font-extrabold ${isReceita ? 'text-emerald-600' : 'text-rose-600'}">${formatMoney(item.valor, item.tipo)}</span>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-sm text-telegram-text truncate">${item.descricao || 'Lançamento'}</p>
+                    <p class="text-xs text-telegram-hint mt-0.5 truncate">${item.categoria_nome ? `${item.categoria_nome}${item.subcategoria_nome ? ` / ${item.subcategoria_nome}` : ''}` : 'Sem categoria'} • ${new Date(item.data).toLocaleDateString('pt-BR')}</p>
+                  </div>
+                  <div class="text-right shrink-0 flex flex-col items-end gap-1.5">
+                    <span class="font-extrabold ${isReceita ? 'text-emerald-600' : 'text-rose-600'}">${formatMoney(item.valor, item.tipo)}</span>
+                    <span class="text-[9px] font-bold uppercase tracking-[0.16em] rounded-full border px-1.5 py-0.5 ${badgeClass}">${badgeLabel}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </button>
         `;
@@ -2733,17 +2776,18 @@
           const numericValue = Number(item.valor) || 0;
           const isReceita = isEntradaTipo(item.tipo, numericValue);
           const valueText = formatMoney(item.valor, item.tipo);
+          const iconName = getCategoryIcon(item.categoria_nome, item.subcategoria_nome, item.tipo);
           
           const div = document.createElement('div');
           div.className = 'flex items-center justify-between gap-3 p-4 rounded-2xl hover:bg-brand/5 transition border border-transparent';
           div.innerHTML = `
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-4 min-w-0">
               <div class="w-10 h-10 rounded-full ${isReceita ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300'} flex items-center justify-center shrink-0">
-                <i data-lucide="${isReceita ? 'briefcase' : 'credit-card'}" class="w-5 h-5"></i>
+                <i data-lucide="${iconName}" class="w-5 h-5"></i>
               </div>
-              <div>
+              <div class="min-w-0">
                 <p class="font-semibold text-sm max-w-[150px] truncate text-telegram-text">${item.descricao || 'Lançamento'}</p>
-                <p class="text-xs text-telegram-hint">${new Date(item.data).toLocaleDateString('pt-BR')} • ${item.forma_pagamento || '-'}</p>
+                <p class="text-xs text-telegram-hint truncate mt-0.5">${item.categoria_nome ? item.categoria_nome : 'Sem categoria'} • ${new Date(item.data).toLocaleDateString('pt-BR')}</p>
               </div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
