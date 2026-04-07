@@ -395,9 +395,8 @@ Use isso como fonte da verdade para todo cálculo. Se não souber um dado, diga 
 
 Pergunta do usuário: **"{pergunta_usuario}"**
 
-Decida: é chamada de função (listar lançamentos)?
-- **SIM:** Retorne APENAS o JSON da função.
-- **NÃO:** Responda como Alfredo. Direto. Preciso. Humano. Contexto. Integrado.
+Se a pergunta ou comando exigir uma ação no sistema (ex: registrar lançamento, criar meta, agendar despesa, etc.), **USE AS FERRAMENTAS (TOOLS)** correspondentes nativamente.
+Caso contrário, responda como Alfredo: Direto. Preciso. Humano. Contexto. Integrado.
 
 Você tem isso.
 """

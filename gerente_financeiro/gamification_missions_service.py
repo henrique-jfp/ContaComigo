@@ -54,13 +54,17 @@ def award_monthly_xp_competition_premium(db: Session, reference_date: date | Non
             # Notificação via Telegram
             if bot:
                 try:
-                    bot.send_message(
-                        chat_id=usuario.telegram_id,
-                        text=(
-                            f"🏆 Parabéns! Você ficou entre os 2 primeiros do ranking mensal de XP do Maestro Financeiro e ganhou 1 mês de Premium grátis!\n\n"
-                            f"Continue usando o bot para manter sua liderança!"
-                        )
+                    import asyncio
+                    msg_text = (
+                        f"🏆 Parabéns! Você ficou entre os 2 primeiros do ranking mensal de XP do Maestro Financeiro e ganhou 1 mês de Premium grátis!\n\n"
+                        f"Continue usando o bot para manter sua liderança!"
                     )
+                    coro = bot.send_message(chat_id=usuario.telegram_id, text=msg_text)
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(coro)
+                    except RuntimeError:
+                        asyncio.run(coro)
                 except Exception as e:
                     print(f"Falha ao notificar usuário {usuario.telegram_id}: {e}")
     db.commit()
