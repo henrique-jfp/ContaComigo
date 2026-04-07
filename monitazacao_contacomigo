@@ -1,0 +1,290 @@
+# 💰 Plano de Monetização — ContaComigo
+
+> Assistente financeiro inteligente no Telegram  
+> Versão do documento: 1.0 — Abril 2026
+
+---
+
+## Visão Geral do Modelo
+
+O ContaComigo adota um modelo **Freemium com trial premium de 15 dias**, sem exigir cartão de crédito na entrada. O objetivo é eliminar toda a fricção no onboarding, deixar o usuário experimentar o produto completo e, no 15º dia, apresentar a escolha entre continuar com o free tier ou assinar o premium.
+
+**Princípio central:** o free tier deve ser útil o suficiente para não frustrar, mas limitado o suficiente para que quem criou hábito sinta falta do que vai perder.
+
+---
+
+## Jornada do Novo Usuário
+
+```
+Dia 1           Dia 1–15              Dia 14              Dia 15
+──────          ──────────            ──────              ──────
+Entra no bot    Premium completo      Aviso de            Escolha: Premium
+Sem cadastro    liberado              expiração           ou Free Tier
+Sem cartão      automaticamente       enviado pelo bot    Sem interrupção
+```
+
+1. **Usuário inicia o bot** → acesso imediato, sem cadastro, sem cartão
+2. **Dias 1–15** → plano Premium liberado automaticamente (`trial_expires_at = now + 15 dias`)
+3. **Dia 14** → bot envia aviso: "Seu trial expira amanhã. Escolha seu plano."
+4. **Dia 15** → bot apresenta os planos. Sem escolha = downgrade automático para Free Tier
+5. **Dados preservados** em ambos os casos — o usuário nunca perde o histórico
+
+---
+
+## Estrutura de Planos
+
+### Free Tier — R$ 0 / sempre
+
+Para quem quer o básico sem compromisso. Permanece disponível indefinidamente após o trial.
+
+| Funcionalidade | Limite Free |
+|---|---|
+| Lançamentos por mês | 30 lançamentos |
+| Metas simultâneas | 1 meta ativa |
+| Histórico disponível | Últimos 30 dias |
+| Entrada por voz | ❌ Bloqueado |
+| OCR de foto / nota fiscal | 3 OCRs por mês |
+| Importação de fatura PDF | ❌ Bloqueado |
+| Análise IA (Alfredo insights) | 3 perguntas por mês |
+| Relatório PDF exportável | ❌ Bloqueado |
+| Dashboard MiniApp | Apenas saldo e 1 gráfico |
+| Gamificação e XP | ✅ Liberado |
+
+---
+
+### Premium Mensal — R$ 19,90 / mês
+
+Experiência completa. Cancela quando quiser, sem multa.
+
+| Funcionalidade | Premium |
+|---|---|
+| Lançamentos por mês | ✅ Ilimitado |
+| Metas simultâneas | ✅ Ilimitado |
+| Histórico disponível | ✅ Completo |
+| Entrada por voz | ✅ Sim |
+| OCR de foto / nota fiscal | ✅ Sim |
+| Importação de fatura PDF | ✅ Sim |
+| Análise IA (Alfredo insights) | ✅ Ilimitado |
+| Relatório PDF exportável | ✅ Sim |
+| Dashboard MiniApp completo | ✅ Sim |
+| Gamificação e XP | ✅ Sim |
+
+---
+
+### Premium Anual — R$ 159,90 / ano
+
+Equivale a **R$ 13,32/mês** — 2 meses grátis em relação ao mensal.  
+Economia de R$ 78,90 vs pagar mês a mês.
+
+Inclui tudo do plano mensal, mais:
+
+- Prioridade no suporte
+- Acesso antecipado a novas funcionalidades
+- Badge exclusivo no perfil de gamificação
+
+---
+
+## Comparativo Detalhado: Free vs Premium
+
+| Funcionalidade | Free Tier | Premium |
+|---|:---:|:---:|
+| Lançamentos/mês | 30 | Ilimitado |
+| Metas ativas | 1 | Ilimitado |
+| Histórico | 30 dias | Completo |
+| Entrada por voz | ❌ | ✅ |
+| OCR foto/nota | 3/mês | ✅ Ilimitado |
+| Fatura PDF | ❌ | ✅ |
+| Análise IA (Alfredo) | 3/mês | ✅ Ilimitado |
+| Relatório PDF | ❌ | ✅ |
+| Dashboard MiniApp | Saldo + 1 gráfico | Completo |
+| Gamificação / XP | ✅ | ✅ |
+| Preço | R$ 0 | A partir de R$ 13,32/mês |
+
+---
+
+## Lógica de Upsell: Por que Esse Free Tier Funciona
+
+O free tier foi desenhado para criar **ciclos de frustração controlada** — o usuário chega perto do limite, sente o valor do produto, e decide upgradar por vontade própria:
+
+- **30 lançamentos/mês** → suficiente para quem lança só os grandes gastos; frustrante para quem quer controle real (média de 40–60 transações/mês por pessoa ativa)
+- **3 OCRs/mês** → dá para experimentar a feature de foto, mas não sustenta o uso real (quem tem cartão de crédito já tira 4+ fotos de nota por semana)
+- **3 perguntas IA/mês** → o Alfredo é o diferencial do produto; 3 perguntas mostram o valor e criam vontade de usar mais
+- **Dashboard limitado** → ver saldo é básico; quem quer entender gastos por categoria, tendências e metas precisa do premium
+- **Gamificação free** → XP e levels funcionam como retenção mesmo no free, criando apego ao histórico e incentivando o upgrade para não "perder" o progresso
+
+---
+
+## Mensagem de Conversão (Dia 14 e Dia 15)
+
+### Dia 14 — Aviso (bot envia automaticamente)
+
+```
+⏳ Seu trial premium acaba amanhã.
+
+Nestes 15 dias você:
+• Registrou X lançamentos
+• Criou Y metas
+• Usou o Alfredo Z vezes
+
+Amanhã você escolhe: continua com tudo por R$ 19,90/mês, 
+ou segue no free tier. Sem pressão — seus dados ficam aqui de qualquer jeito.
+```
+
+### Dia 15 — Escolha (bot apresenta os planos com botões inline)
+
+```
+📊 Seu trial encerrou. Como quer continuar?
+
+[💎 Premium Mensal — R$ 19,90/mês]
+[📅 Premium Anual — R$ 159,90/ano  (economize R$ 78,90)]
+[Continuar no Free Tier]
+```
+
+---
+
+## Implementação Técnica
+
+### Banco de dados (PostgreSQL)
+
+Adicionar à tabela `users`:
+
+```sql
+ALTER TABLE users ADD COLUMN plan VARCHAR(20) DEFAULT 'trial';
+ALTER TABLE users ADD COLUMN trial_expires_at TIMESTAMP;
+ALTER TABLE users ADD COLUMN premium_expires_at TIMESTAMP;
+ALTER TABLE users ADD COLUMN subscription_id VARCHAR(100);
+
+-- Valores possíveis para plan: 'trial', 'free', 'premium_monthly', 'premium_annual'
+```
+
+### APScheduler (job diário)
+
+```python
+# No bot thread, adicionar ao APScheduler:
+
+@scheduler.scheduled_job('cron', hour=9, minute=0)
+async def check_trial_expirations():
+    """Verifica trials que expiram hoje e envia aviso no dia 14."""
+    users_expiring_tomorrow = db.get_users_trial_expiring_in(days=1)
+    for user in users_expiring_tomorrow:
+        await send_trial_warning(user)
+
+    users_expired = db.get_users_trial_expired()
+    for user in users_expired:
+        await send_plan_choice(user)
+        db.downgrade_to_free(user.id)
+```
+
+### Middleware de plano nos handlers
+
+```python
+# Decorator para verificar limite antes de executar feature premium
+
+def require_plan(feature: str):
+    def decorator(func):
+        async def wrapper(update, context):
+            user_id = update.effective_user.id
+            if not plan_allows(user_id, feature):
+                await send_upgrade_prompt(update, feature)
+                return
+            return await func(update, context)
+        return wrapper
+    return decorator
+
+# Uso nos handlers:
+@require_plan("voice_input")
+async def handle_voice(update, context): ...
+
+@require_plan("ocr")
+async def handle_photo(update, context): ...
+```
+
+### Verificação de limites mensais
+
+```python
+MONTHLY_LIMITS = {
+    "free": {
+        "lancamentos": 30,
+        "ocr": 3,
+        "ia_questions": 3,
+    },
+    "trial": None,          # sem limites
+    "premium_monthly": None,
+    "premium_annual": None,
+}
+
+BLOCKED_ON_FREE = [
+    "voice_input",
+    "pdf_import",
+    "relatorio_pdf",
+    "dashboard_full",
+]
+```
+
+### Gateway de pagamento recomendado
+
+| Opção | Vantagem | Indicado para |
+|---|---|---|
+| **Stripe** | API robusta, webhook confiável, recorrência nativa | Cartão de crédito internacional |
+| **Pagar.me** | Pix nativo, mercado brasileiro, parcelamento | Público-alvo BR, Pix |
+| **Mercado Pago** | Familiar para usuários BR, Pix instantâneo | Volume alto, custo menor |
+
+> A variável `PIX_KEY` já está nas env vars do projeto — Pagar.me ou Mercado Pago são o caminho mais rápido para cobrança via Pix.
+
+---
+
+## Projeção de Receita
+
+Estimativa conservadora com base em benchmarks de SaaS freemium no Brasil:
+
+| Cenário | Usuários ativos | Conversão | Assinantes | MRR estimado |
+|---|:---:|:---:|:---:|:---:|
+| Lançamento | 500 | 2% | 10 | R$ 199 |
+| Crescimento inicial | 1.000 | 3% | 30 | R$ 597 |
+| Tração | 2.000 | 4% | 80 | R$ 1.592 |
+| Consolidado | 5.000 | 5% | 250 | R$ 4.975 |
+
+> Mix estimado: 70% mensal / 30% anual. No cenário consolidado com 250 assinantes, receita anual projetada: **~R$ 65.000**.
+
+---
+
+## Roadmap de Monetização
+
+### Fase 1 — MVP de cobrança (imediato)
+- [ ] Adicionar campos de plano na tabela `users`
+- [ ] Implementar middleware `require_plan()` nos handlers
+- [ ] APScheduler: job de expiração de trial
+- [ ] Mensagem de conversão no dia 14 e 15
+- [ ] Integração Pix via Pagar.me ou Mercado Pago
+
+### Fase 2 — Cobrança recorrente (1–2 meses)
+- [ ] Webhook de pagamento atualiza `plan` no banco
+- [ ] Renovação automática mensal/anual
+- [ ] Cancelamento via comando no bot (`/cancelar`)
+- [ ] Nota fiscal automática por e-mail
+
+### Fase 3 — Crescimento (3–6 meses)
+- [ ] Programa de indicação (indique 3, ganhe 1 mês grátis)
+- [ ] Plano família (até 3 usuários, R$ 34,90/mês)
+- [ ] Plano empresarial para equipes
+- [ ] Integração Open Finance (feature do roadmap)
+
+---
+
+## Perguntas Frequentes (FAQ interno)
+
+**Por que 15 dias e não 7 ou 30?**  
+7 dias é pouco para criar hábito com um app financeiro (ciclo mensal). 30 dias reduz a urgência de decidir. 15 dias equilibra os dois — tempo suficiente para ver o primeiro fechamento mensal parcial.
+
+**Por que não exigir cartão no trial?**  
+Conversão na entrada cai drasticamente com cartão obrigatório. O modelo "sem cartão" aumenta o volume de trials e, com boa retenção, a conversão total é maior mesmo com churn maior no final do trial.
+
+**O que acontece com os dados se o usuário ficar no free?**  
+Nada. Dados ficam intactos. O histórico anterior ao trial fica acessível nos últimos 30 dias. Lançamentos do trial continuam visíveis, mas o usuário não pode criar novos além do limite.
+
+**O free tier tem prazo para mudar?**  
+Não nesta versão. Free tier é permanente — é a âncora do modelo.
+
+---
+
+*Última atualização: Abril 2026 — ContaComigo v2.0*

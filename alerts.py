@@ -4,59 +4,13 @@ Sistema de Alertas e Notificações - ContaComigo
 import logging
 from datetime import datetime, time, date, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
 from sqlalchemy.orm import Session
 from database.database import get_db
-from models import Usuario, Objetivo, Agendamento
+from models import Usuario, Objetivo, Agendamento, Lancamento, MetaConfirmacao
+from gerente_financeiro.gamification_utils import give_xp_for_action
 
 logger = logging.getLogger(__name__)
-
-async def schedule_alerts(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Comando para configurar alertas personalizados"""
-    await update.message.reply_text(
-        "🔔 *Sistema de Alertas*\n\n"
-        "Em breve você poderá configurar:\n"
-        "• Alertas de gastos por categoria\n"
-        "• Lembretes de metas financeiras\n"
-        "• Notificações de vencimentos\n\n"
-        "Sistema em desenvolvimento! 🚧",
-        parse_mode='Markdown'
-    )
-
-async def checar_objetivos_semanal(context: ContextTypes.DEFAULT_TYPE):
-    """Verifica objetivos semanalmente"""
-    try:
-        logger.info("🎯 Iniciando verificação semanal de objetivos...")
-        
-        db: Session = next(get_db())
-        
-        # Buscar todos os usuários com objetivos ativos
-        hoje = datetime.now().date()
-        usuarios_com_objetivos = (
-            db.query(Usuario)
-            .join(Objetivo)
-            .filter(Objetivo.data_meta >= hoje)
-            .distinct()
-            .all()
-        )
-        
-        for usuario in usuarios_com_objetivos:
-            try:
-                # Aqui poderia enviar mensagem sobre progresso dos objetivos
-                logger.info(f"📊 Verificando objetivos do usuário {usuario.telegram_id}")
-                
-                # Por enquanto só registra no log
-                # Futuramente enviará mensagens personalizadas
-                
-            except Exception as e:
-                logger.error(f"❌ Erro ao verificar objetivos do usuário {usuario.telegram_id}: {e}")
-                continue
-        
-        db.close()
-        logger.info("✅ Verificação semanal de objetivos concluída")
-        
-    except Exception as e:
-        logger.error(f"❌ Erro na verificação semanal de objetivos: {e}")
 
 async def enviar_lembretes_usuario(context: ContextTypes.DEFAULT_TYPE):
     """Job disparado no horário específico do usuário para enviar os lembretes de agendamentos."""
@@ -155,3 +109,120 @@ async def agendar_notificacoes_diarias(context: ContextTypes.DEFAULT_TYPE):
     finally:
         if 'db' in locals():
             db.close()
+
+# --- FUNÇÕES DE CHECK-IN DE METAS ---
+def _format_currency(valor: float) -> str:
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+def _progress_bar(percentual: float) -> str:
+    PROGRESS_STEPS = 10
+    percent = max(0.0, min(100.0, percentual))
+    filled = int(percent // (100 / PROGRESS_STEPS))
+    empty = PROGRESS_STEPS - filled
+    return "▓" * filled + "░" * empty
+
+def _meses_entre_datas(inicio: date, fim: date) -> int:
+    dias = (fim - inicio).days
+    return max(1, int(round(dias / 30)))
+
+async def job_metas_mensal(context: ContextTypes.DEFAULT_TYPE) -> None:
+    hoje = datetime.now().date()
+    if hoje.day != 1:
+        return
+    db = next(get_db())
+    try:
+        objetivos = db.query(Objetivo).join(Usuario).filter(Objetivo.data_meta >= hoje).all()
+        for obj in objetivos:
+            if float(obj.valor_atual or 0) >= float(obj.valor_meta) or not obj.data_meta:
+                continue
+            confirmacao = db.query(MetaConfirmacao).filter(
+                MetaConfirmacao.id_objetivo == obj.id, MetaConfirmacao.ano == hoje.year, MetaConfirmacao.mes == hoje.month
+            ).first()
+            if confirmacao:
+                continue
+            prazo_meses = _meses_entre_datas(obj.criado_em.date(), obj.data_meta)
+            aporte = float(obj.valor_meta) / prazo_meses if prazo_meses > 0 else float(obj.valor_meta)
+            percentual = float(obj.valor_atual or 0) / float(obj.valor_meta) * 100
+            texto = (
+                "📅 <b>Check-in mensal da sua meta</b>\n\n"
+                f"🎯 <b>{obj.descricao}</b>\n"
+                f"{_progress_bar(percentual)} <b>{percentual:.1f}%</b>\n"
+                f"💵 Valor sugerido do mês: <b>{_format_currency(aporte)}</b>\n\n"
+                "Você conseguiu guardar esse valor este mês?"
+            )
+            keyboard = [
+                [InlineKeyboardButton("✅ Sim, consegui", callback_data=f"meta_confirm_{obj.id}_{hoje.year}_{hoje.month}"),
+                 InlineKeyboardButton("❌ Ainda não", callback_data=f"meta_skip_{obj.id}_{hoje.year}_{hoje.month}")]
+            ]
+            await context.bot.send_message(chat_id=obj.usuario.telegram_id, text=texto, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
+    finally:
+        db.close()
+
+async def metas_confirmacao_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    parts = query.data.split("_")
+    if len(parts) < 5: return
+    _, acao, obj_id, ano, mes = parts
+    db = next(get_db())
+    try:
+        objetivo = db.query(Objetivo).filter(Objetivo.id == int(obj_id)).first()
+        if not objetivo: return
+        confirmacao_existente = db.query(MetaConfirmacao).filter(
+            MetaConfirmacao.id_objetivo == int(obj_id), MetaConfirmacao.ano == int(ano), MetaConfirmacao.mes == int(mes)
+        ).first()
+        if confirmacao_existente:
+            await query.edit_message_text("✅ Este mês já foi registrado.")
+            return
+        prazo_meses = _meses_entre_datas(objetivo.criado_em.date(), objetivo.data_meta) if objetivo.data_meta else 1
+        aporte = float(objetivo.valor_meta) / prazo_meses if prazo_meses > 0 else float(objetivo.valor_meta)
+        if acao == "confirm":
+            objetivo.valor_atual = min(float(objetivo.valor_meta), float(objetivo.valor_atual or 0) + aporte)
+            db.add(MetaConfirmacao(id_usuario=objetivo.id_usuario, id_objetivo=objetivo.id, ano=int(ano), mes=int(mes), valor_confirmado=aporte))
+            msg_status = "✅ Progresso atualizado!"
+        else:
+            db.add(MetaConfirmacao(id_usuario=objetivo.id_usuario, id_objetivo=objetivo.id, ano=int(ano), mes=int(mes), valor_confirmado=0.0))
+            msg_status = "Entendido. Seguimos acompanhando sua meta."
+        db.commit()
+        percentual = float(objetivo.valor_atual or 0) / float(objetivo.valor_meta) * 100
+        mensagem = f"{msg_status}\n\n🎯 <b>{objetivo.descricao}</b>\n{_progress_bar(percentual)} <b>{percentual:.1f}%</b>\n💰 {_format_currency(float(objetivo.valor_atual))} / {_format_currency(float(objetivo.valor_meta))}"
+        await query.edit_message_text(mensagem, parse_mode="HTML")
+        if acao == "confirm":
+            await give_xp_for_action(query.from_user.id, "META_CHECKIN", context)
+            if float(objetivo.valor_atual or 0) >= float(objetivo.valor_meta):
+                await give_xp_for_action(query.from_user.id, "META_ATINGIDA", context)
+    finally:
+        db.close()
+
+# --- FUNÇÃO DE BAIXA DE AGENDAMENTOS ---
+async def dar_baixa_agendamento_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    agendamento_id = int(query.data.split('_')[-1])
+    db = next(get_db())
+    try:
+        from dateutil.relativedelta import relativedelta
+        ag = db.query(Agendamento).join(Usuario).filter(Agendamento.id == agendamento_id, Usuario.telegram_id == query.from_user.id).first()
+        if not ag or not ag.ativo:
+            await query.edit_message_text("❌ Agendamento não encontrado ou já desativado.")
+            return
+        novo_lancamento = Lancamento(
+            id_usuario=ag.id_usuario, descricao=ag.descricao, valor=ag.valor, tipo=ag.tipo, data_transacao=datetime.now(),
+            forma_pagamento="Nao_informado", id_categoria=ag.id_categoria, id_subcategoria=ag.id_subcategoria, origem="agendamento"
+        )
+        db.add(novo_lancamento)
+        ag.parcela_atual = (ag.parcela_atual or 0) + 1
+        if ag.total_parcelas and ag.parcela_atual >= ag.total_parcelas:
+            ag.ativo = False
+            status_msg = f"✅ <b>{ag.descricao}</b> registrado! Este foi o último evento deste agendamento."
+        else:
+            if ag.frequencia == 'mensal': ag.proxima_data_execucao = ag.proxima_data_execucao + relativedelta(months=1)
+            elif ag.frequencia == 'semanal': ag.proxima_data_execucao = ag.proxima_data_execucao + timedelta(days=7)
+            else: ag.ativo = False
+            status_msg = f"✅ <b>{ag.descricao}</b> registrado!\nPróximo agendado para: {ag.proxima_data_execucao.strftime('%d/%m/%Y')}." if ag.ativo else f"✅ <b>{ag.descricao}</b> registrado!"
+        db.commit()
+        try: await give_xp_for_action(query.from_user.id, "LANCAMENTO_CRIADO_TEXTO", context) 
+        except Exception: pass
+        await query.edit_message_text(status_msg, parse_mode='HTML')
+    finally:
+        db.close()

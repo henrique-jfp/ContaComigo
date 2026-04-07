@@ -22,7 +22,6 @@ from .analytics_utils import track_analytics
 
 from database.database import get_db, get_or_create_user # <-- Importação adicionada
 from models import Usuario, Conta
-from .handlers import cancel
 from .menu_botoes import obter_teclado_painel, build_miniapp_url
 from .states import (
     MENU_PRINCIPAL, ADD_CONTA_NOME, ASK_ADD_ANOTHER_CONTA,  
@@ -30,6 +29,98 @@ from .states import (
     ASK_HORARIO, PERFIL_ASK_RISCO, PERFIL_ASK_OBJETIVO, PERFIL_ASK_HABITO,
     GERENCIAR_CONTAS, GERENCIAR_CARTOES
 )
+
+# --- ESTADO PARA O MANUAL ---
+MANUAL_MENU, MANUAL_LANCAMENTOS, MANUAL_IA, MANUAL_METAS, MANUAL_JOGO, MANUAL_APP = range(900, 906)
+# --- FLUXO DE MANUAL INTERATIVO ---
+async def manual_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Exibe o menu de seções do manual."""
+    query = update.callback_query
+    await query.answer()
+    keyboard = [
+        [InlineKeyboardButton("📝 Lançamentos", callback_data="manual_lancamentos")],
+        [InlineKeyboardButton("🧠 IA", callback_data="manual_ia")],
+        [InlineKeyboardButton("🎯 Metas", callback_data="manual_metas")],
+        [InlineKeyboardButton("🎮 Jogo", callback_data="manual_jogo")],
+        [InlineKeyboardButton("📱 App", callback_data="manual_app")],
+    ]
+    await query.edit_message_text(
+        "<b>📖 Manuais Interativos</b>\n\nEscolha uma seção para aprender mais:",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return MANUAL_MENU
+
+async def manual_lancamentos_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    text = (
+        "📝 <b>Lançamentos Mágicos</b>\n<b>Esqueça os botões chatos. Apenas fale ou mostre!</b>\n\n"
+        "<b>Texto Livre:</b> Digite como se estivesse no WhatsApp: 'Paguei 50 no mercado no débito' ou 'Recebi 3000 de salário'. O Alfredo entende e categoriza sozinho.\n\n"
+        "<b>Voz (O favorito!):</b> Mande um áudio rápido: 'Alfredo, anota 15 reais de café agora' 🎙️. Nossa IA transcreve e registra em segundos.\n\n"
+        "<b>Foto (OCR):</b> Tirou nota fiscal? Mande a foto! Lemos o CNPJ, os itens da nota e o valor total automaticamente. 📸\n\n"
+        "<b>PDF de Fatura:</b> Arraste o PDF da sua fatura (qualquer banco!). O sistema explode os gastos e você só confirma. 🧾"
+    )
+    keyboard = [[InlineKeyboardButton("⬅️ Voltar", callback_data="manual_menu")]]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+    return MANUAL_LANCAMENTOS
+
+async def manual_ia_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    text = (
+        "🧠 <b>O Cérebro do Alfredo (Sua IA)</b>\n<b>Mais que um bot, um mentor financeiro no seu bolso.</b>\n\n"
+        "O Alfredo tem memória e entende o seu contexto. Você pode perguntar:\n\n"
+        '"Onde eu mais gastei essa semana?" 🧐\n'
+        '"Alfredo, quanto eu preciso economizar para viajar em dezembro?"\n'
+        '"Compare meus gastos com lazer de agora com o mês passado." 📊\n\n'
+        "<b>Dica Pro:</b> Use o comando /relatorio para receber um PDF profissional com análise de IA sobre sua saúde financeira. Se sentir que algo está errado, pergunte: 'Qual é o meu maior erro este mês?' e prepare-se para a 'real'."
+    )
+    keyboard = [[InlineKeyboardButton("⬅️ Voltar", callback_data="manual_menu")]]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+    return MANUAL_IA
+
+async def manual_metas_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    text = (
+        "🎯 <b>Piloto Automático (Metas e Contas)</b>\n<b>Nunca mais pague juros por esquecimento.</b>\n\n"
+        "<b>Contas Fixas:</b> Cadastre seus aluguéis, assinaturas e boletos. O bot te avisa na manhã do vencimento com um botão mágico: [✅ Dar Baixa]. Clicou, tá pago e registrado! 🔔\n\n"
+        "<b>Metas Inteligentes:</b> Quer comprar um carro ou reserva de emergência? Crie uma meta. Todo dia 1º, o Alfredo faz um Check-in Mensal com você para ver quanto você conseguiu guardar. 🏆\n\n"
+        "<b>Planos de Ação:</b> A IA calcula automaticamente quanto você precisa aportar por mês para chegar no seu objetivo no prazo desejado."
+    )
+    keyboard = [[InlineKeyboardButton("⬅️ Voltar", callback_data="manual_menu")]]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+    return MANUAL_METAS
+
+async def manual_jogo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    text = (
+        "🎮 <b>O Jogo da Riqueza</b>\n<b>Controle financeiro não precisa ser chato, pode ser um RPG.</b>\n\n"
+        "<b>Ganhe XP:</b> Cada registro, áudio ou foto enviada te dá experiência. Lançamentos complexos (como PDF e Foto) dão BÔNUS de XP! 💎\n\n"
+        "<b>Não Quebre a Ofensiva:</b> O Streak é sagrado. Registre algo todo dia para manter sua chama acesa e ganhar multiplicadores de pontos. 🔥\n\n"
+        "<b>Missões Diárias:</b> Fique de olho no seu perfil! Missões como o 'Caffeine Tracker' (registrar 3 cafés) te dão recompensas extras.\n\n"
+        "<b>Ranking Global:</b> Suba de nível (do Nível 1 'Caderneta Zerada' ao 16+ 'Além do Budget') e dispute o topo do ranking com outros usuários. 🥇"
+    )
+    keyboard = [[InlineKeyboardButton("⬅️ Voltar", callback_data="manual_menu")]]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+    return MANUAL_JOGO
+
+async def manual_app_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    text = (
+        "📱 <b>O MiniApp (Sua Central)</b>\n<b>A visão de águia do seu dinheiro.</b>\n\n"
+        "Enquanto o chat é para a correria do dia a dia, o MiniApp é onde a mágica visual acontece:\n\n"
+        "<b>Dashboard Real-time:</b> Gráficos de pizza, barras e evolução patrimonial que carregam instantaneamente. 📈\n\n"
+        "<b>Edição Rápida:</b> Errou um valor no chat? Abra o app, clique na transação e corrija em um segundo.\n\n"
+        "<b>Ajustes Finos:</b> No app você define o horário que quer ser lembrado de suas contas e personaliza seu perfil de investidor.\n\n"
+        "<b>Como acessar:</b> Basta clicar no botão fixo [🚀 Abrir o App] no seu teclado aqui no Telegram."
+    )
+    keyboard = [[InlineKeyboardButton("⬅️ Voltar", callback_data="manual_menu")]]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+    return MANUAL_APP
 
 logger = logging.getLogger(__name__)
 
@@ -237,6 +328,17 @@ async def finalizar_perfil(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     import asyncio
     await asyncio.sleep(1.5)
     return await show_main_menu(update, context)
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cancela qualquer conversa em andamento no chat."""
+    message = update.message or (update.callback_query and update.callback_query.message)
+    if update.callback_query:
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text("Operação cancelada. ✅")
+    else:
+        await message.reply_text("Operação cancelada. ✅")
+    context.user_data.clear()
+    return ConversationHandler.END
 
 # --- GERENCIAMENTO DE CONTAS ---
 
@@ -682,6 +784,21 @@ configurar_conv = ConversationHandler(
         PERFIL_ASK_RISCO: [CallbackQueryHandler(ask_perfil_risco, pattern='^perfil_risco_')],
         PERFIL_ASK_OBJETIVO: [CallbackQueryHandler(ask_perfil_objetivo, pattern='^perfil_objetivo_')],
         PERFIL_ASK_HABITO: [CallbackQueryHandler(finalizar_perfil, pattern='^perfil_habito_')],
+
+        # --- MANUAL INTERATIVO ---
+        MANUAL_MENU: [
+            CallbackQueryHandler(manual_lancamentos_callback, pattern='^manual_lancamentos$'),
+            CallbackQueryHandler(manual_ia_callback, pattern='^manual_ia$'),
+            CallbackQueryHandler(manual_metas_callback, pattern='^manual_metas$'),
+            CallbackQueryHandler(manual_jogo_callback, pattern='^manual_jogo$'),
+            CallbackQueryHandler(manual_app_callback, pattern='^manual_app$'),
+            CallbackQueryHandler(manual_menu_callback, pattern='^manual_menu$'),
+        ],
+        MANUAL_LANCAMENTOS: [CallbackQueryHandler(manual_menu_callback, pattern='^manual_menu$')],
+        MANUAL_IA: [CallbackQueryHandler(manual_menu_callback, pattern='^manual_menu$')],
+        MANUAL_METAS: [CallbackQueryHandler(manual_menu_callback, pattern='^manual_menu$')],
+        MANUAL_JOGO: [CallbackQueryHandler(manual_menu_callback, pattern='^manual_menu$')],
+        MANUAL_APP: [CallbackQueryHandler(manual_menu_callback, pattern='^manual_menu$')],
     },
     fallbacks=[
         CommandHandler(['cancelar', 'cancel', 'sair', 'parar'], cancel),
@@ -691,50 +808,3 @@ configurar_conv = ConversationHandler(
     per_user=True,
     per_chat=True
 )
-
-# --- HANDLERS DOS BOTÕES DO MANUAL ---
-async def manual_menu_callback(update, context):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text("<b>Manual do Maestro Financeiro</b>\n\nEscolha um tema:", parse_mode='HTML', reply_markup=MANUAL_KEYBOARD)
-
-async def manual_lancamento_callback(update, context):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text(MANUAL_LANCAMENTO, parse_mode='HTML', reply_markup=MANUAL_KEYBOARD)
-
-async def manual_agendamentos_callback(update, context):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text(MANUAL_AGENDAMENTOS, parse_mode='HTML', reply_markup=MANUAL_KEYBOARD)
-
-async def manual_metas_callback(update, context):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text(MANUAL_METAS, parse_mode='HTML', reply_markup=MANUAL_KEYBOARD)
-
-async def manual_dashboard_callback(update, context):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text(MANUAL_DASHBOARD, parse_mode='HTML', reply_markup=MANUAL_KEYBOARD)
-
-async def manual_xp_callback(update, context):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text(MANUAL_XP, parse_mode='HTML', reply_markup=MANUAL_KEYBOARD)
-
-async def manual_voltar_callback(update, context):
-    await start_onboarding(update, context)
-
-# --- REGISTRO DOS HANDLERS ---
-def get_manual_handlers():
-    from telegram.ext import CallbackQueryHandler
-    return [
-        CallbackQueryHandler(manual_menu_callback, pattern="^manual_menu$"),
-        CallbackQueryHandler(manual_lancamento_callback, pattern="^manual_lancamento$"),
-        CallbackQueryHandler(manual_agendamentos_callback, pattern="^manual_agendamentos$"),
-        CallbackQueryHandler(manual_metas_callback, pattern="^manual_metas$"),
-        CallbackQueryHandler(manual_dashboard_callback, pattern="^manual_dashboard$"),
-        CallbackQueryHandler(manual_xp_callback, pattern="^manual_xp$"),
-        CallbackQueryHandler(manual_voltar_callback, pattern="^manual_voltar$"),
-    ]

@@ -151,37 +151,17 @@ from database.database import get_db, popular_dados_iniciais, criar_tabelas
 from database.database import engine as db_engine
 from database.migration_runner import apply_sql_migrations
 from models import *
-from alerts import schedule_alerts
+from alerts import dar_baixa_agendamento_callback, metas_confirmacao_callback
 from jobs import configurar_jobs
-from gerente_financeiro.menu_botoes import BOTAO_LANCAMENTO, BOTAO_GERENTE, BOTAO_EDITAR, BOTAO_CONFIG, BOTAO_FATURA, BOTAO_GRAFICOS, BOTAO_AGENDAMENTOS, BOTAO_METAS, BOTAO_RANKING, BOTAO_NIVEL, BOTAO_CANCELAR, BOTAO_CONTATO, toggle_painel_command
+from gerente_financeiro.menu_botoes import BOTAO_LANCAMENTO, BOTAO_GERENTE, BOTAO_EDITAR, BOTAO_CONFIG, BOTAO_FATURA, BOTAO_GRAFICOS, BOTAO_AGENDAMENTOS, BOTAO_METAS, BOTAO_RANKING, BOTAO_NIVEL, BOTAO_CANCELAR, BOTAO_CONTATO
 from gerente_financeiro.monetization import reload_whitelist_command
 
 # --- IMPORTS DOS HANDLERS (AGORA ORGANIZADOS) ---
-from gerente_financeiro.handlers import (
-
-    create_gerente_conversation_handler, 
-    create_cadastro_email_conversation_handler,
-    handle_action_button_callback,
-    help_callback,  
-    help_command,
-    cancel,
-    painel_notificacoes
-)
-from gerente_financeiro.agendamentos_handler import (
-    agendamento_start, agendamento_conv, agendamento_menu_callback, cancelar_agendamento_callback, dar_baixa_agendamento_callback
-)
-from gerente_financeiro.metas_handler import (
-    metas_conv, metas_callbacks, metas_start
-)
-from gerente_financeiro.onboarding_handler import configurar_conv, start_onboarding, configurar_start, get_manual_handlers
-from gerente_financeiro.editing_handler import edit_conv
-from gerente_financeiro.graficos import grafico_conv
+from gerente_financeiro.onboarding_handler import configurar_conv, start_onboarding, configurar_start, help_command, help_callback, cancel
 from gerente_financeiro.relatorio_handler import relatorio_handler
-from gerente_financeiro.manual_entry_handler import manual_entry_conv, manual_entry_start
 from gerente_financeiro.fatura_handler import fatura_conv, fatura_start, fatura_receive_file, fatura_confirm
 from gerente_financeiro.ocr_handler import ocr_action_processor, ocr_iniciar_como_subprocesso
-from gerente_financeiro.quick_entry_handler import quick_action_handler
-from gerente_financeiro.ia_handlers import processar_mensagem_com_alfredo
+from gerente_financeiro.ia_handlers import processar_mensagem_com_alfredo, quick_action_handler
 from gerente_financeiro.contact_handler import contact_conv, contact_start
 from gerente_financeiro.delete_user_handler import delete_user_conv
 from gerente_financeiro.dashboard_handler import (
@@ -401,18 +381,10 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
 
     conversation_builders = [
         ("configurar_conv", lambda: configurar_conv),
-        ("gerente_conv", create_gerente_conversation_handler),
-        ("cadastro_email_conv", create_cadastro_email_conversation_handler),
-        ("manual_entry_conv", lambda: manual_entry_conv),
         ("delete_user_conv", lambda: delete_user_conv),
         ("contact_conv", lambda: contact_conv),
-        ("grafico_conv", lambda: grafico_conv),
-        ("metas_conv", lambda: metas_conv),
-        ("agendamento_conv", lambda: agendamento_conv),
-        ("edit_conv", lambda: edit_conv),
         ("fatura_conv", lambda: fatura_conv),
     ]
-    
 
 
     for name, builder in conversation_builders:
@@ -422,21 +394,8 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
     command_builders = [
         ("relatorio_handler", lambda: relatorio_handler),
         ("/help", lambda: CommandHandler("help", help_command)),
-        ("/alerta", lambda: CommandHandler("alerta", schedule_alerts)),
-        ("/agendar", lambda: CommandHandler("agendar", agendamento_start)),
-        ("/notificacoes", lambda: CommandHandler("notificacoes", painel_notificacoes)),
         ("/perfil", lambda: CommandHandler("perfil", show_profile)),
         ("/ranking", lambda: CommandHandler("ranking", show_rankings)),
-        ("/dashboard", lambda: CommandHandler("dashboard", cmd_dashboard)),
-        ("cancelar_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_CANCELAR}$"), cancel)),
-        ("lancamento_b", lambda: MessageHandler(filters.Regex(f"^{re.escape(BOTAO_LANCAMENTO)}$"), manual_entry_start)),
-        ("fatura_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_FATURA}$"), fatura_start)),
-        ("agendamentos_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_AGENDAMENTOS}$"), agendamento_start)),
-        ("ranking_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_RANKING}$"), show_rankings)),
-        ("nivel_b", lambda: MessageHandler(filters.Regex(f"^{BOTAO_NIVEL}$"), show_profile)),
-        ("contato_b", lambda: MessageHandler(filters.Regex(f"^{re.escape(BOTAO_CONTATO)}$"), contact_start)),
-        ("/painel", lambda: CommandHandler("painel", toggle_painel_command)),
-        ("/dashstatus", lambda: CommandHandler("dashstatus", cmd_dashstatus)),
         ("/dashboarddebug", lambda: CommandHandler("dashboarddebug", debug_dashboard)),
         ("/debugocr", lambda: CommandHandler("debugocr", debug_ocr_command)),
         ("/debuglogs", lambda: CommandHandler("debuglogs", debug_logs_command)),
@@ -464,21 +423,18 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         build_and_add(name, builder)
         print(f"DEBUG: Comando {name} registrado com sucesso")
 
+    from gerente_financeiro.onboarding_handler import manual_menu_callback
     callback_builders = [
         ("help_callback", lambda: CallbackQueryHandler(help_callback, pattern="^help_")),
-        ("analise_callback", lambda: CallbackQueryHandler(handle_action_button_callback, pattern="^analise_")),
-        ("metas_delete_callback", lambda: metas_callbacks[0]),
-        ("metas_confirm_callback", lambda: metas_callbacks[1]),
-        # Necessario para fluxo de fatura iniciado por handler global de PDF (fora da ConversationHandler).
+        ("metas_confirm_callback", lambda: CallbackQueryHandler(metas_confirmacao_callback, pattern="^meta_(confirm|skip)_")),
         ("fatura_callback", lambda: CallbackQueryHandler(fatura_confirm, pattern="^fatura_")),
-        ("agendamento_menu_callback", lambda: CallbackQueryHandler(agendamento_menu_callback, pattern="^agendamento_")),
-        ("cancelar_agendamento_callback", lambda: CallbackQueryHandler(cancelar_agendamento_callback, pattern="^ag_cancelar_")),
         ("dar_baixa_agendamento_callback", lambda: CallbackQueryHandler(dar_baixa_agendamento_callback, pattern="^ag_baixa_")), # Lida com baixa de notificacao
         ("gamificacao_callback", lambda: CallbackQueryHandler(handle_gamification_callback, pattern="^(show_rankings|show_stats|show_rewards)$")),
         ("dashboard_callback", lambda: CallbackQueryHandler(dashboard_callback_handler, pattern="^dashboard_")),
         ("quick_callback", lambda: CallbackQueryHandler(quick_action_handler, pattern="^quick_")),
         ("ocr_callback", lambda: CallbackQueryHandler(ocr_action_processor, pattern="^ocr_")),
         ("plan_choice_callback", lambda: CallbackQueryHandler(handle_plan_choice_callback, pattern="^plan_choose_")),
+        ("manual_menu_callback", lambda: CallbackQueryHandler(manual_menu_callback, pattern="^manual_menu$")),
     ]
     
 

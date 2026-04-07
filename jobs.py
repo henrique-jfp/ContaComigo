@@ -8,7 +8,7 @@ from alerts import agendar_notificacoes_diarias
 from gerente_financeiro.assistente_proativo import job_assistente_proativo
 from gerente_financeiro.wrapped_anual import job_wrapped_anual
 from gerente_financeiro.ai_memory_service import job_atualizar_perfis_ia
-from gerente_financeiro.metas_handler import job_metas_mensal
+from alerts import job_metas_mensal
 from gerente_financeiro.gamification_missions_service import (
     reset_daily_missions_for_all_users,
     reset_weekly_missions_for_all_users,
