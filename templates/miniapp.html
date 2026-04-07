@@ -491,6 +491,18 @@
     <section class="panel" id="metas">
       <div class="glass-card rounded-3xl p-6">
         <h2 class="text-sm font-semibold text-telegram-text mb-4 flex items-center justify-between">
+          <span class="flex items-center"><i data-lucide="pie-chart" class="w-4 h-4 mr-2 text-brand"></i> Limites de Orçamento</span>
+          <div class="flex items-center gap-2">
+            <button id="orcamentoNew" class="rounded-lg border border-brand/20 px-2 py-1 text-xs font-semibold text-brand hover:bg-brand/10 transition">Definir</button>
+          </div>
+        </h2>
+        <div id="orcamentoList" class="space-y-4 mb-6">
+            <div class="text-xs text-telegram-hint text-center p-4 border border-dashed rounded-xl border-telegram-separator">Carregando limites...</div>
+        </div>
+
+        <div class="h-px w-full bg-telegram-separator my-6"></div>
+
+        <h2 class="text-sm font-semibold text-telegram-text mb-4 flex items-center justify-between">
           <span class="flex items-center"><i data-lucide="target" class="w-4 h-4 mr-2 text-brand"></i> Metas em andamento</span>
           <div class="flex items-center gap-2">
             <button id="metaNew" class="rounded-lg border border-brand/20 px-2 py-1 text-xs font-semibold text-brand hover:bg-brand/10 transition">Nova</button>
@@ -868,6 +880,33 @@
     </div>
   </div>
 
+  <!-- Modal de Orçamento -->
+  <div class="modal-overlay" id="orcamentoModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="text-lg font-bold text-telegram-text flex items-center gap-2">
+          <i data-lucide="pie-chart" class="w-5 h-5 text-brand"></i> Definir Orçamento
+        </h2>
+        <button class="modal-close-btn" onclick="closeOrcamentoModal()"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+      <div class="modal-body space-y-4">
+        <p class="text-xs text-telegram-hint">Defina um limite de gastos mensal para uma categoria. O Alfredo te avisará ao chegar perto do teto!</p>
+        <div class="floating-field">
+          <select id="orcamentoCategoria" class="floating-select peer" required></select>
+          <label for="orcamentoCategoria" class="floating-label">Categoria</label>
+        </div>
+        <div class="floating-field">
+          <input id="orcamentoValor" class="floating-input peer" placeholder=" " inputmode="decimal" required>
+          <label for="orcamentoValor" class="floating-label">Limite Mensal (R$)</label>
+        </div>
+        <p class="text-[10px] text-telegram-hint text-center">Deixe o valor em 0 para remover o limite.</p>
+        <div class="flex gap-3 pt-4">
+          <button id="orcamentoSave" class="flex-1 rounded-xl bg-brand py-3 text-sm font-semibold text-white hover:bg-brand-soft active:scale-95 transition shadow-soft">Salvar Limite</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Bottom Tab Bar Premium -->
   <nav id="bottomNav" class="fixed bottom-5 left-1/2 -translate-x-1/2 w-[94%] glass-card rounded-[28px] px-3 py-2 grid grid-cols-5 gap-1 z-50 shadow-soft border border-telegram-separator bg-telegram-card/95">
     <button class="nav-btn tab-active text-brand flex flex-col items-center gap-1 text-[10px] font-semibold py-2 rounded-2xl" data-tab="inicio" onclick="switchTab(this)"><i data-lucide="sparkles" class="w-5 h-5"></i><span>Início</span></button>
@@ -948,6 +987,13 @@
     const metaValorAtual = document.getElementById('metaValorAtual');
     const metaData = document.getElementById('metaData');
     const metaSave = document.getElementById('metaSave');
+
+    const orcamentoList = document.getElementById('orcamentoList');
+    const orcamentoNew = document.getElementById('orcamentoNew');
+    const orcamentoModal = document.getElementById('orcamentoModal');
+    const orcamentoCategoria = document.getElementById('orcamentoCategoria');
+    const orcamentoValor = document.getElementById('orcamentoValor');
+    const orcamentoSave = document.getElementById('orcamentoSave');
 
     const editModal = document.getElementById('editModal');
     const editModalBadge = document.getElementById('editModalBadge');
@@ -2570,6 +2616,7 @@
         setTimeout(() => {
           loadAgendamentos();
           loadMetas();
+          loadOrcamentos();
           loadMissions();
           loadGameProfile();
           loadMonthlyRanking();
@@ -2635,6 +2682,10 @@
           if (document.hidden || !sessionId) return;
           loadHistory(true);
           loadHomeOverview();
+          if (document.getElementById('metas')?.classList.contains('active')) {
+              loadMetas();
+              loadOrcamentos();
+          }
         }, 20000);
       } catch(e) {
         mainStatus.textContent = 'Erro Conexão';
@@ -2809,6 +2860,64 @@
       }
     }
 
+    // --- Lógica de Orçamentos ---
+    function openOrcamentoModal() {
+      orcamentoValor.value = '';
+      orcamentoModal.classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeOrcamentoModal() {
+      orcamentoModal.classList.remove('active');
+      document.body.style.overflow = 'auto';
+    }
+
+    async function loadOrcamentos() {
+      if (!sessionId) return;
+      try {
+        const res = await fetchWithSession('/api/miniapp/orcamentos');
+        const data = await res.json();
+        if (!data.ok) return;
+
+        if (orcamentoCategoria.options.length === 0) {
+            orcamentoCategoria.innerHTML = data.categorias.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+        }
+        if (data.items.length === 0) {
+            orcamentoList.innerHTML = '<div class="text-xs text-telegram-hint text-center p-4 border border-dashed rounded-xl border-telegram-separator bg-telegram-card">Nenhum orçamento definido.</div>';
+            return;
+        }
+
+        orcamentoList.innerHTML = data.items.map(o => {
+            const pct = Math.min(100, Math.max(0, (o.valor_gasto / o.valor_limite) * 100));
+            const color = pct >= 100 ? 'linear-gradient(90deg, #ef4444, #b91c1c)' : (pct >= 80 ? 'linear-gradient(90deg, #f59e0b, #d97706)' : 'linear-gradient(90deg, #10b981, #059669)');
+            return `
+            <div class="mb-3">
+                <div class="flex justify-between text-xs font-semibold mb-1 text-telegram-text">
+                    <span>${o.categoria_nome}</span>
+                    <span>R$ ${o.valor_gasto.toFixed(2).replace('.', ',')} / R$ ${o.valor_limite.toFixed(2).replace('.', ',')}</span>
+                </div>
+                <div class="h-2 w-full rounded-full bg-telegram-separator overflow-hidden">
+                    <div class="h-full rounded-full transition-all" style="width: ${pct}%; background: ${color};"></div>
+                </div>
+            </div>`;
+        }).join('');
+      } catch(e) {}
+    }
+
+    if (orcamentoNew) orcamentoNew.addEventListener('click', openOrcamentoModal);
+    if (orcamentoSave) orcamentoSave.addEventListener('click', async () => {
+      const id_categoria = orcamentoCategoria.value;
+      const valor = parseMoneyInput(orcamentoValor.value);
+      try {
+          const res = await fetchWithSession('/api/miniapp/orcamentos', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id_categoria, valor_limite: valor}) });
+          if ((await res.json()).ok) {
+              showToast('✅ Limite de orçamento salvo!', 'success');
+              closeOrcamentoModal();
+              loadOrcamentos();
+              loadHomeOverview();
+          }
+      } catch(e) { showToast('Erro ao salvar', 'error'); }
+    });
+
     async function loadMetas() {
       if (!sessionId) return;
       renderMetaSkeleton(3);
@@ -2967,6 +3076,9 @@
     });
     metaModal.addEventListener('click', (e) => {
       if (e.target === metaModal) closeMetaModal();
+    });
+    orcamentoModal.addEventListener('click', (e) => {
+      if (e.target === orcamentoModal) closeOrcamentoModal();
     });
 
     // Boot

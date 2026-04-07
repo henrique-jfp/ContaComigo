@@ -196,6 +196,18 @@ class Agendamento(Base):
     usuario = relationship("Usuario", back_populates="agendamentos")
     categoria = relationship("Categoria")
     subcategoria = relationship("Subcategoria")
+
+class OrcamentoCategoria(Base):
+    __tablename__ = 'orcamentos_categoria'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id', ondelete='CASCADE'), nullable=False, index=True)
+    id_categoria = Column(Integer, ForeignKey('categorias.id', ondelete='CASCADE'), nullable=False)
+    valor_limite = Column(Numeric(12, 2), nullable=False)
+    criado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    usuario = relationship("Usuario")
+    categoria = relationship("Categoria")
+
 # ==================== MODELS DE INVESTIMENTOS ====================
 
 

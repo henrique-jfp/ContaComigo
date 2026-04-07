@@ -68,7 +68,7 @@ static_dir = os.path.join(parent_dir, 'static')
 sys.path.insert(0, parent_dir)
 import config
 from database.database import get_db, buscar_lancamentos_usuario
-from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Categoria, Subcategoria, XpEvent, UserMission, UserAchievement
+from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Categoria, Subcategoria, XpEvent, UserMission, UserAchievement, OrcamentoCategoria
 from gerente_financeiro.prompts import PROMPT_ALFREDO_APRIMORADO as PROMPT_ALFREDO
 from gerente_financeiro.services import preparar_contexto_financeiro_completo
 from gerente_financeiro.services import salvar_transacoes_generica
@@ -1022,6 +1022,9 @@ def miniapp_overview():
             })
 
         # Orçamento vs realizado por categoria (realizado no mês vs média dos 3 meses anteriores como teto realista).
+        orcamentos_reais = db.query(OrcamentoCategoria).filter(OrcamentoCategoria.id_usuario == usuario.id).all()
+        orcamentos_map = {o.categoria.nome: float(o.valor_limite) for o in orcamentos_reais if o.categoria}
+        
         current_expenses: dict[str, float] = {}
         for lanc in lancamentos_mes:
             if str(lanc.tipo).lower().startswith("entr"):
@@ -1050,8 +1053,13 @@ def miniapp_overview():
                 hist_by_cat[categoria] = hist_by_cat.get(categoria, 0.0) + abs(float(lanc.valor or 0))
 
             for categoria, realizado in sorted_current:
-                media_3m = hist_by_cat.get(categoria, 0.0) / 3.0 if hist_by_cat.get(categoria, 0.0) > 0 else realizado
-                limite = max(realizado, media_3m * 1.1)
+                # Usa o limite real definido pelo usuário, ou a média de fallback
+                if categoria in orcamentos_map:
+                    limite = orcamentos_map[categoria]
+                else:
+                    media_3m = hist_by_cat.get(categoria, 0.0) / 3.0 if hist_by_cat.get(categoria, 0.0) > 0 else realizado
+                    limite = max(realizado, media_3m * 1.1)
+                
                 budget_items.append({
                     "label": categoria,
                     "orcamento": round(limite, 2),
@@ -1408,6 +1416,56 @@ def miniapp_agendamentos_update(agendamento_id: int):
     finally:
         db.close()
 
+@app.route('/api/miniapp/orcamentos', methods=['GET', 'POST'])
+def miniapp_orcamentos():
+    """Lista ou cria limites de orçamento para categorias."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        if request.method == 'GET':
+            orcamentos = db.query(OrcamentoCategoria).options(joinedload(OrcamentoCategoria.categoria)).filter(OrcamentoCategoria.id_usuario == usuario.id).all()
+            start_date = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            items = []
+            for o in orcamentos:
+                gasto = db.query(func.sum(Lancamento.valor)).filter(
+                    Lancamento.id_usuario == usuario.id,
+                    Lancamento.id_categoria == o.id_categoria,
+                    Lancamento.tipo == 'Saída',
+                    Lancamento.data_transacao >= start_date
+                ).scalar() or 0
+                items.append({
+                    "id": o.id,
+                    "id_categoria": o.id_categoria,
+                    "categoria_nome": o.categoria.nome if o.categoria else "Desconhecida",
+                    "valor_limite": float(o.valor_limite),
+                    "valor_gasto": float(gasto)
+                })
+            categorias = db.query(Categoria).order_by(Categoria.nome).all()
+            cats = [{"id": c.id, "nome": c.nome} for c in categorias]
+            return jsonify({"ok": True, "items": items, "categorias": cats})
+
+        data = request.get_json(silent=True) or {}
+        id_cat = int(data.get("id_categoria", 0))
+        valor = float(str(data.get("valor_limite", 0)).replace(",", "."))
+
+        if valor <= 0:
+            db.query(OrcamentoCategoria).filter(OrcamentoCategoria.id_usuario == usuario.id, OrcamentoCategoria.id_categoria == id_cat).delete()
+        else:
+            orc = db.query(OrcamentoCategoria).filter(OrcamentoCategoria.id_usuario == usuario.id, OrcamentoCategoria.id_categoria == id_cat).first()
+            if orc: orc.valor_limite = valor
+            else: db.add(OrcamentoCategoria(id_usuario=usuario.id, id_categoria=id_cat, valor_limite=valor))
+        db.commit()
+        _invalidate_financial_cache(session["user_id"])
+        return jsonify({"ok": True})
+    finally:
+        db.close()
 
 @app.route('/api/miniapp/metas', methods=['GET', 'POST'])
 def miniapp_metas():
