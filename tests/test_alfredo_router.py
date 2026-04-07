@@ -135,12 +135,6 @@ class TestAlfredoRouter(unittest.IsolatedAsyncioTestCase):
         ]
         db = _FakeDB(rows=lancs)
 
-        def _query_model(model):
-            if model.__name__ == 'Categoria':
-                return _FakeQuery([SimpleNamespace(id=999, nome='Outros')])
-            return _FakeQuery(lancs)
-        db.query = _query_model
-
         def _fake_categorizer(texto, tipo_transacao, _db):
             if "uber" in texto:
                 return 10, 99
@@ -148,9 +142,9 @@ class TestAlfredoRouter(unittest.IsolatedAsyncioTestCase):
                 return 20, None
             return None, None
 
-        with patch.object(ia_handlers.config, "GROQ_API_KEY", ""), \
-             patch.object(ia_handlers, "_categorizar_com_mapa_inteligente", side_effect=_fake_categorizer):
-            atualizados, pendentes = await ia_handlers._categorizar_lancamentos_sem_categoria(db, usuario_id=123)
+        with patch.object(ia_handlers, "_categorizar_com_mapa_inteligente", side_effect=_fake_categorizer), \
+             patch.object(ia_handlers.config, "GROQ_API_KEY", ""):
+            atualizados, pendentes = await ia_handlers._categorizar_lancamentos_sem_categoria_async(db, usuario_id=123)
 
         self.assertEqual(pendentes, 3)
         self.assertEqual(atualizados, 2)
@@ -198,13 +192,10 @@ class TestAlfredoRouter(unittest.IsolatedAsyncioTestCase):
         context = _DummyContext()
         fake_db = _FakeDB()
 
-        async def _fake_cat(*args, **kwargs):
-            return (3, 5)
-
         with patch.object(ia_handlers.config, "GROQ_API_KEY", "fake-key"), \
              patch.object(ia_handlers, "get_db", return_value=iter([fake_db])), \
-             patch.object(ia_handlers, "_usuario_e_saldo", return_value=(SimpleNamespace(id=1), 0.0, 0.0, 0.0)), \
-             patch.object(ia_handlers, "_categorizar_lancamentos_sem_categoria", side_effect=_fake_cat), \
+             patch.object(ia_handlers, "_usuario_e_saldo", return_value=(SimpleNamespace(id=1, nome_completo="A", perfil_ia=""), 0.0, 0.0, 0.0)), \
+             patch.object(ia_handlers, "_categorizar_lancamentos_sem_categoria_async", return_value=(3, 5)), \
              patch.object(ia_handlers, "_groq_chat_completion_async", side_effect=AssertionError("Nao deveria chamar LLM")):
             result = await ia_handlers.processar_mensagem_com_alfredo(update, context)
 
@@ -219,7 +210,7 @@ class TestAlfredoRouter(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(ia_handlers.config, "GROQ_API_KEY", "fake-key"), \
              patch.object(ia_handlers, "get_db", return_value=iter([fake_db])), \
-             patch.object(ia_handlers, "_usuario_e_saldo", return_value=(SimpleNamespace(id=1), 0.0, 0.0, 0.0)), \
+             patch.object(ia_handlers, "_usuario_e_saldo", return_value=(SimpleNamespace(id=1, nome_completo="a", perfil_ia=""), 0.0, 0.0, 0.0)), \
              patch.object(ia_handlers, "_forma_pagamento_mais_usada", return_value=("Crédito", 7, 10)), \
              patch.object(ia_handlers, "_groq_chat_completion_async", side_effect=AssertionError("Nao deveria chamar LLM")):
             result = await ia_handlers.processar_mensagem_com_alfredo(update, context)
@@ -249,7 +240,7 @@ class TestAlfredoRouter(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(ia_handlers.config, "GROQ_API_KEY", "fake-key"), \
              patch.object(ia_handlers, "get_db", return_value=iter([fake_db])), \
-             patch.object(ia_handlers, "_usuario_e_saldo", return_value=(SimpleNamespace(id=1), 0.0, 0.0, 0.0)), \
+             patch.object(ia_handlers, "_usuario_e_saldo", return_value=(SimpleNamespace(id=1, nome_completo="A", perfil_ia=""), 0.0, 0.0, 0.0)), \
              patch.object(ia_handlers, "_groq_chat_completion_async", side_effect=erro):
             result = await ia_handlers.processar_mensagem_com_alfredo(update, context)
 
@@ -296,7 +287,7 @@ class TestAlfredoRouter(unittest.IsolatedAsyncioTestCase):
 
             with patch.object(ia_handlers.config, "GROQ_API_KEY", "fake-key"), \
                  patch.object(ia_handlers, "get_db", return_value=iter([fake_db])), \
-                 patch.object(ia_handlers, "_usuario_e_saldo", return_value=(SimpleNamespace(id=1), 1000.0, 3000.0, 2000.0)), \
+                 patch.object(ia_handlers, "_usuario_e_saldo", return_value=(SimpleNamespace(id=1, nome_completo="A", perfil_ia=""), 1000.0, 3000.0, 2000.0)), \
                  patch.object(ia_handlers, "_groq_chat_completion_async", side_effect=AssertionError("Nao deveria chamar LLM")):
                 result = await ia_handlers.processar_mensagem_com_alfredo(update, context)
 

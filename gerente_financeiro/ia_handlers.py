@@ -136,7 +136,7 @@ _ALFREDO_TOOLS = [
         "type": "function",
         "function": {
             "name": "registrar_lancamento",
-            "description": "Registra um lançamento financeiro APENAS se o usuário afirmar claramente que já gastou, comprou ou recebeu o valor no mundo real. NUNCA use para simulações (ex: 'se eu comprar', 'e se eu gastar').",
+            "description": "Registra um lançamento financeiro REAL de entrada ou saída. IMPORTANTE: Use APENAS quando o usuário afirmar que JÁ pagou/recebeu ou VAI pagar/receber definitivamente. NÃO USE para simulações ou perguntas hipotéticas (ex: 'se eu comprar um tênis').",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -527,12 +527,12 @@ def _montar_resposta_local_alfredo(texto_usuario: str, texto_normalizado: str, d
         return _resumo_mes_local(db, usuario_db.id)
 
     return (
-        "📊 <b>Resumo Rápido</b>\n\n"
-        "Tive uma pequena dificuldade para me aprofundar agora, mas aqui estão seus números principais:\n"
+        "🤖 <b>Resumo Rápido</b>\n\n"
+        "Tive uma pequena dificuldade para aprofundar a análise agora, mas aqui estão seus números principais:\n"
         f"• <b>Saldo:</b> <code>{_formatar_valor_brasileiro(saldo)}</code>\n"
         f"• <b>Entradas:</b> <code>{_formatar_valor_brasileiro(entradas)}</code>\n"
         f"• <b>Saídas:</b> <code>{_formatar_valor_brasileiro(saidas)}</code>\n\n"
-        "Posso ajudar com uma busca específica ou resumo do mês se precisar!"
+        "Posso buscar uma compra específica ou listar seus últimos gastos, se quiser."
     )
 
 
@@ -744,9 +744,9 @@ def _resumo_analise_gastos_local(db, usuario_id: int) -> str:
 
     if top_recorrentes:
         nome_rec, qtd_rec = top_recorrentes[0]
-        linhas.append(f"👉 Dica: {escape(nome_rec)} aparece {qtd_rec}x em gastos pequenos recentes.")
+        linhas.append(f"👉 Insight: {escape(nome_rec)} aparece {qtd_rec}x em gastos pequenos e recorrentes.")
     else:
-        linhas.append("👉 Dica: cortar a categoria mais alta costuma dar resultado mais rápido.")
+        linhas.append("👉 Insight: cortar a categoria mais alta em 10% costuma dar resultado mais rápido que vários cortes pequenos.")
     return "\n".join(linhas)
 
 
@@ -1251,7 +1251,7 @@ def _intencao_cotacao_externa(texto: str) -> bool:
     return any(s in texto for s in ["valor do dolar", "valor do dólar", "cotação", "cotacao", "crypto", "criptomoeda", "bitcoin", "ethereum"])
 
 
-async def _categorizar_lancamentos_sem_categoria(db, usuario_id: int) -> tuple[int, int]:
+async def _categorizar_lancamentos_sem_categoria_async(db, usuario_id: int) -> tuple[int, int]:
     pendentes = (
         db.query(Lancamento)
         .filter(
@@ -1259,15 +1259,11 @@ async def _categorizar_lancamentos_sem_categoria(db, usuario_id: int) -> tuple[i
             Lancamento.id_categoria.is_(None),
         )
         .order_by(Lancamento.id.asc())
-        .limit(50)
         .all()
     )
-    if not pendentes:
-        return 0, 0
 
     atualizados = 0
-    pendentes_para_groq = []
-
+    ainda_pendentes = []
     for lanc in pendentes:
         descricao = (lanc.descricao or "").strip().lower()
         if not descricao:
@@ -1279,38 +1275,44 @@ async def _categorizar_lancamentos_sem_categoria(db, usuario_id: int) -> tuple[i
             lanc.id_subcategoria = subcat_id
             atualizados += 1
         else:
-            pendentes_para_groq.append({"id": str(lanc.id), "descricao": lanc.descricao, "valor": float(lanc.valor or 0)})
+            ainda_pendentes.append(lanc)
 
-    if pendentes_para_groq and config.GROQ_API_KEY:
+    if ainda_pendentes and config.GROQ_API_KEY:
         try:
             categorias = db.query(Categoria).all()
             cat_nomes = [c.nome for c in categorias if c.nome]
-            cat_map = {c.nome.lower(): c.id for c in categorias if c.nome}
-            prompt = f"Você é um categorizador.\nCATEGORIAS: {json.dumps(cat_nomes, ensure_ascii=False)}\nTRANSAÇÕES: {json.dumps(pendentes_para_groq, ensure_ascii=False)}\nRetorne APENAS um JSON: {{\"...id...\": \"Nome da Categoria\"}}"
-            payload = {
-                "model": config.GROQ_MODEL_NAME,
-                "messages": [{"role": "system", "content": "You are a JSON-only bot."}, {"role": "user", "content": prompt}],
-                "temperature": 0.1
-            }
-            headers = {"Authorization": f"Bearer {config.GROQ_API_KEY}", "Content-Type": "application/json"}
-            loop = asyncio.get_running_loop()
-            response = await loop.run_in_executor(None, lambda: requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=20))
-            if response.status_code == 200:
-                content = response.json()["choices"][0]["message"]["content"]
-                match = re.search(r'\{.*\}', content, re.DOTALL)
-                if match:
-                    result = json.loads(match.group(0))
-                    for lanc in pendentes:
-                        if str(lanc.id) in result and cat_map.get(str(result[str(lanc.id)]).strip().lower()):
-                            lanc.id_categoria = cat_map.get(str(result[str(lanc.id)]).strip().lower())
+            cat_map_nome_para_id = {c.nome.lower(): c.id for c in categorias if c.nome}
+
+            itens_para_categorizar = [
+                {"id": idx, "descricao": l.descricao, "valor": float(l.valor or 0)} 
+                for idx, l in enumerate(ainda_pendentes)
+            ]
+            
+            prompt = f"Você é um categorizador financeiro automático. Analise e categorize as transações.\nCATEGORIAS PERMITIDAS: {json.dumps(cat_nomes, ensure_ascii=False)}\nTRANSAÇÕES: {json.dumps(itens_para_categorizar, ensure_ascii=False)}\nRetorne APENAS um JSON onde as chaves são os 'id' numéricos e os valores são os nomes EXATOS das categorias. Sem markdown."
+            messages = [
+                {"role": "system", "content": "You are a JSON-only bot. Return strictly a raw JSON object and nothing else."},
+                {"role": "user", "content": prompt}
+            ]
+            resp = await _groq_chat_completion_async(messages)
+            content = resp["choices"][0]["message"]["content"]
+            match = re.search(r'\{.*\}', content, re.DOTALL)
+            if match:
+                result = json.loads(match.group(0))
+                for idx_str, cat_nome in result.items():
+                    try:
+                        idx = int(idx_str)
+                        cat_id = cat_map_nome_para_id.get(str(cat_nome).strip().lower())
+                        if cat_id is not None:
+                            ainda_pendentes[idx].id_categoria = cat_id
                             atualizados += 1
+                    except (ValueError, KeyError):
+                        pass
         except Exception as e:
-            logger.error(f"Erro Groq categorizacao: {e}")
+            logger.warning("Groq categorização lote falhou no fallback: %s", e)
 
     if atualizados:
         db.commit()
-    total_restantes = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_id, Lancamento.id_categoria.is_(None)).count()
-    return atualizados, total_restantes
+    return atualizados, len(pendentes)
 
 
 def _resumo_categoria_gastos(db, usuario_id: int, limite: int = 5) -> list[tuple[str, float]]:
@@ -1487,7 +1489,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             return ConversationHandler.END
 
         if _intencao_categorizar_sem_categoria(texto_normalizado):
-            atualizados, total_pendentes = await _categorizar_lancamentos_sem_categoria(db, usuario_db.id)
+            atualizados, total_pendentes = await _categorizar_lancamentos_sem_categoria_async(db, usuario_db.id)
             if total_pendentes == 0:
                 await update.message.reply_html(
                     "🏷️ <b>Categorização automática</b>\n\n"
@@ -1602,71 +1604,69 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             return ConversationHandler.END
 
         hoje = datetime.now()
-        hoje_inicio = hoje.replace(hour=0, minute=0, second=0, microsecond=0)
-        semana_inicio = hoje_inicio - timedelta(days=hoje.weekday())
-        mes_inicio = hoje_inicio.replace(day=1)
-        ano_inicio = hoje_inicio.replace(month=1, day=1)
-
-        todas_saidas = db.query(Lancamento).filter(
+        inicio_mes = hoje.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        lanc_mes = db.query(Lancamento).filter(
             Lancamento.id_usuario == usuario_db.id,
-            ~Lancamento.tipo.ilike('entr%')
+            Lancamento.data_transacao >= inicio_mes
         ).all()
+        saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith("entr"))
+        entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith("entr"))
 
-        saidas_hoje = sum(abs(float(l.valor)) for l in todas_saidas if l.data_transacao >= hoje_inicio)
-        saidas_semana = sum(abs(float(l.valor)) for l in todas_saidas if l.data_transacao >= semana_inicio)
-        saidas_mes = sum(abs(float(l.valor)) for l in todas_saidas if l.data_transacao >= mes_inicio)
-
-        maior_gasto_ano = max((l for l in todas_saidas if l.data_transacao >= ano_inicio), key=lambda x: abs(float(x.valor)), default=None)
-        maior_gasto_str = f"{maior_gasto_ano.descricao} (R${abs(float(maior_gasto_ano.valor)):.2f})" if maior_gasto_ano else "Nenhum"
+        inicio_hoje = hoje.replace(hour=0, minute=0, second=0, microsecond=0)
+        lanc_hoje = [l for l in lanc_mes if l.data_transacao >= inicio_hoje]
+        saidas_hoje = sum(abs(float(l.valor or 0)) for l in lanc_hoje if not str(l.tipo).lower().startswith("entr"))
         
-        menor_gasto_ano = min((l for l in todas_saidas if l.data_transacao >= ano_inicio and abs(float(l.valor)) > 0), key=lambda x: abs(float(x.valor)), default=None)
-        menor_gasto_str = f"{menor_gasto_ano.descricao} (R${abs(float(menor_gasto_ano.valor)):.2f})" if menor_gasto_ano else "Nenhum"
+        inicio_semana = hoje - timedelta(days=hoje.weekday())
+        inicio_semana = inicio_semana.replace(hour=0, minute=0, second=0, microsecond=0)
+        lanc_semana = [l for l in lanc_mes if l.data_transacao >= inicio_semana]
+        saidas_semana = sum(abs(float(l.valor or 0)) for l in lanc_semana if not str(l.tipo).lower().startswith("entr"))
 
-        ultimos_lancamentos = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id).order_by(Lancamento.data_transacao.desc()).limit(7).all()
-        ultimos_lancamentos_str = [
-            f"{l.data_transacao.strftime('%d/%m')} - {l.descricao} - R${abs(float(l.valor)):.2f} ({l.tipo}) [Cat: {l.categoria.nome if l.categoria else 'Sem categoria'}]"
-            for l in ultimos_lancamentos
+        ultimos_5 = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id).order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc()).limit(5).all()
+        resumo_ultimos = [
+            f"{l.data_transacao.strftime('%d/%m')} | {l.descricao} | {'+' if str(l.tipo).lower().startswith('entr') else '-'}R$ {abs(float(l.valor or 0)):.2f}"
+            for l in ultimos_5
         ]
 
-        contexto_financeiro_dict = {
-            "saldo_disponivel": round(float(saldo or 0), 2),
-            "saidas_hoje": round(saidas_hoje, 2),
-            "saidas_semana": round(saidas_semana, 2),
-            "saidas_mes": round(saidas_mes, 2),
-            "maior_gasto_ano": maior_gasto_str,
-            "menor_gasto_ano": menor_gasto_str,
-            "ultimos_7_lancamentos": ultimos_lancamentos_str,
-            "top_5_categorias": [
-                {"nome": nome, "valor": round(float(valor), 2)}
-                for nome, valor in _resumo_categoria_gastos(db, usuario_db.id, limite=5)
-            ],
-        }
+        contexto_financeiro_str = json.dumps(
+            {
+                "saldo_disponivel_hoje": round(float(saldo or 0), 2),
+                "entradas_totais_historico": round(float(entradas or 0), 2),
+                "saidas_totais_historico": round(float(saidas or 0), 2),
+                "gastos_mes_atual": round(saidas_mes, 2),
+                "receitas_mes_atual": round(entradas_mes, 2),
+                "gastos_hoje": round(saidas_hoje, 2),
+                "gastos_esta_semana": round(saidas_semana, 2),
+                "top_5_categorias_historico": [
+                    {"nome": nome, "valor": round(float(valor), 2)}
+                    for nome, valor in _resumo_categoria_gastos(db, usuario_db.id, limite=5)
+                ],
+                "ultimos_5_lancamentos": resumo_ultimos
+            },
+            ensure_ascii=False,
+        )
 
         try:
-            manager = PromptManager(template_dir=Path(os.path.dirname(__file__)) / "prompts")
-            config_prompt = PromptConfig(
+            pm = PromptManager(Path("gerente_financeiro/prompts"))
+            p_config = PromptConfig(
                 user_name=(usuario_db.nome_completo or update.effective_user.first_name or "usuário"),
                 user_query=texto_usuario,
-                financial_context=contexto_financeiro_dict,
-                conversation_history=json.dumps(context.user_data.get('alfredo_history', []), ensure_ascii=False),
+                financial_context=json.loads(contexto_financeiro_str),
                 intent="general_analysis",
-                relevant_skills=["advanced_comparative_analysis", "strategic_responses", "proactive_insights", "simple_predictive_analysis"]
+                perfil_ia=usuario_db.perfil_ia
             )
-            system_prompt = manager.build_prompt(config_prompt)
-        except Exception as prompt_err:
-            logger.warning(f"Fallback to legacy prompt due to template error: {prompt_err}")
-            from gerente_financeiro.prompts import PROMPT_ALFREDO_APRIMORADO
+            system_prompt = pm.build_prompt(p_config)
+        except Exception as pm_err:
+            logger.warning("Falha ao usar PromptManager, caindo para string literal: %s", pm_err)
             system_prompt = PROMPT_ALFREDO_APRIMORADO.format(
                 user_name=(usuario_db.nome_completo or update.effective_user.first_name or "usuário"),
                 pergunta_usuario=texto_usuario,
-                contexto_financeiro_completo=json.dumps(contexto_financeiro_dict, ensure_ascii=False),
+                contexto_financeiro_completo=contexto_financeiro_str,
             )
 
-        history = context.user_data.get('alfredo_history', [])
-        messages = [{"role": "system", "content": system_prompt}]
-        for msg in history:
-            messages.append(msg)
-        messages.append({"role": "user", "content": texto_usuario})
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": texto_usuario},
+        ]
 
         completion = None
         try:
@@ -1697,10 +1697,12 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                     json_str = json_str[json_str.find("{"):]
                     args_parse = json.loads(json_str)
                     
-                    if "limite" in intent.lower() or "limite" in str(args_parse.get("descricao", "")).lower():
+                    if "limite" in intent.lower() or "limite" in str(args_parse.get("descricao", "")).lower() or "limite" in str(args_parse.get("categoria", "")).lower():
                         fake_fn = "definir_limite_orcamento"
                         if "valor" not in args_parse and "valor_limite" in args_parse:
                             args_parse["valor"] = args_parse["valor_limite"]
+                        if "categoria" not in args_parse:
+                            args_parse["categoria"] = args_parse.get("descricao", "Geral")
                     else:
                         fake_fn = "registrar_lancamento"
                         
@@ -1709,14 +1711,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                     pass
 
             if not tool_calls:
-                history.append({"role": "user", "content": texto_usuario})
-                history.append({"role": "assistant", "content": resposta_direta})
-                context.user_data['alfredo_history'] = history[-6:]
                 await _enviar_resposta_html_segura(update.message, resposta_direta)
                 return ConversationHandler.END
-
-        history.append({"role": "user", "content": texto_usuario})
-        context.user_data['alfredo_history'] = history[-6:]
 
         tool_call = tool_calls[0]
         fn = (tool_call.get("function") or {})
@@ -1901,12 +1897,9 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             return ConversationHandler.END
 
         if fn_name == "definir_limite_orcamento":
-            categoria = str(args.get("categoria") or args.get("categoria_nome") or "").strip()
+            categoria = str(args.get("categoria") or "").strip()
             try:
-                raw_val = args.get("valor")
-                if raw_val is None:
-                    raw_val = args.get("valor_limite")
-                valor = float(str(raw_val or 0).replace(",", "."))
+                valor = float(str(args.get("valor") or 0).replace(",", "."))
             except (ValueError, TypeError):
                 valor = 0.0
 
@@ -1938,7 +1931,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             return ConversationHandler.END
 
         if fn_name == "categorizar_lancamentos_pendentes":
-            atualizados, total_pendentes = await _categorizar_lancamentos_sem_categoria(db, usuario_db.id)
+            atualizados, total_pendentes = await _categorizar_lancamentos_sem_categoria_async(db, usuario_db.id)
             if total_pendentes == 0:
                 await update.message.reply_html(
                     "🏷️ <b>Categorização automática</b>\n\n"
