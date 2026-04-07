@@ -708,6 +708,73 @@ def analisar_comportamento_financeiro(lancamentos: List[Lancamento]) -> Dict[str
 
 # --- FUNÇÕES GENÉRICAS PARA ELIMINAÇÃO DE DUPLICAÇÃO ---
 
+async def _categorizar_lote_com_groq(db: Session, transacoes: list) -> list:
+    if not config.GROQ_API_KEY:
+        return transacoes
+
+    categorias = db.query(Categoria).all()
+    cat_nomes = [c.nome for c in categorias if c.nome]
+    cat_map_nome_para_id = {c.nome.lower(): c.id for c in categorias if c.nome}
+
+    itens_para_categorizar = []
+    for idx, t in enumerate(transacoes):
+        if not t.get('id_categoria'):
+            itens_para_categorizar.append({
+                "id": idx,
+                "descricao": t.get("descricao", ""),
+                "valor": t.get("valor", 0)
+            })
+
+    if not itens_para_categorizar:
+        return transacoes
+
+    prompt = f"""
+    Você é um categorizador financeiro automático. Sua tarefa é analisar as transações e categorizá-las corretamente.
+
+    CATEGORIAS PERMITIDAS (escolha estritamente UMA destas):
+    {json.dumps(cat_nomes, ensure_ascii=False)}
+
+    TRANSAÇÕES:
+    {json.dumps(itens_para_categorizar, ensure_ascii=False)}
+
+    Retorne APENAS um objeto JSON puro. As chaves devem ser as strings de "id" numéricos e os valores devem ser o nome EXATO da categoria aplicável.
+    Sem markdown.
+    """
+
+    payload = {
+        "model": config.GROQ_MODEL_NAME,
+        "messages": [
+            {"role": "system", "content": "You are a JSON-only bot. Return strictly a raw JSON object and nothing else."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.1
+    }
+    headers = {
+        "Authorization": f"Bearer {config.GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    loop = asyncio.get_running_loop()
+    try:
+        response = await loop.run_in_executor(None, lambda: requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=20))
+        if response.status_code == 200:
+            content = response.json()["choices"][0]["message"]["content"]
+            match = re.search(r'\{.*\}', content, re.DOTALL)
+            if match:
+                result = json.loads(match.group(0))
+                for idx_str, cat_nome in result.items():
+                    try:
+                        idx = int(idx_str)
+                        cat_id = cat_map_nome_para_id.get(str(cat_nome).strip().lower())
+                        if cat_id is not None and 0 <= idx < len(transacoes):
+                            transacoes[idx]['id_categoria_groq'] = cat_id
+                    except (ValueError, KeyError):
+                        pass
+    except Exception as e:
+        logger.error(f"Erro na categorização em lote com Groq: {e}")
+
+    return transacoes
+
 async def salvar_transacoes_generica(db: Session, usuario_db, transacoes: list, 
                                    conta_id: int, tipo_origem: str = "manual") -> tuple[bool, str, dict]:
     """
@@ -750,6 +817,14 @@ async def salvar_transacoes_generica(db: Session, usuario_db, transacoes: list,
             'valor_total': 0.0
         }
         
+        # Categorização em lote super-rápida utilizando Groq
+        if len(transacoes) > 1 and config.GROQ_API_KEY:
+            try:
+                logger.info(f"Iniciando categorização em lote de {len(transacoes)} itens com Groq...")
+                transacoes = await _categorizar_lote_com_groq(db, transacoes)
+            except Exception as e:
+                logger.error(f"Falha na categorização em lote com Groq: {e}", exc_info=True)
+
         transacoes_salvas = []
         
         for transacao_data in transacoes:
@@ -904,8 +979,13 @@ def _preparar_dados_lancamento(transacao_data: dict, user_id: int, conta_id: int
     # --- LÓGICA DE CATEGORIZAÇÃO INTELIGENTE (NOVO) ---
     texto_busca = (dados['descricao'] + ' ' + (transacao_data.get('merchant_name') or '')).lower()
     
-    # 1. Tenta categorizar usando o novo mapa inteligente
-    categoria_id, subcategoria_id = _categorizar_com_mapa_inteligente(texto_busca, tipo_transacao, db)
+    # 1. Usa categoria do Groq se foi processada no lote
+    if transacao_data.get('id_categoria_groq'):
+        categoria_id = transacao_data.get('id_categoria_groq')
+        subcategoria_id = None
+    else:
+        # Fallback local se a transação for individual ou o Groq falhou
+        categoria_id, subcategoria_id = _categorizar_com_mapa_inteligente(texto_busca, tipo_transacao, db)
     
     dados['id_categoria'] = categoria_id
     dados['id_subcategoria'] = subcategoria_id
