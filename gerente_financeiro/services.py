@@ -1937,6 +1937,8 @@ async def preparar_contexto_financeiro_completo(db: Session, usuario: Usuario) -
     ]
 
     todos_dados_financeiros.sort(key=lambda x: x['data'], reverse=True)
+    # Limitar aos 50 lançamentos mais recentes para economizar tokens do Groq (mantém histórico agregado intacto)
+    todos_dados_financeiros = todos_dados_financeiros[:50]
 
     contexto_completo = {
         "informacoes_gerais": {
@@ -2050,4 +2052,3 @@ def _limpar_cache_ia_expirado():
     
     if expirados:
         logger.info(f"🧹 Cache IA: Removidas {len(expirados)} entradas expiradas")
-

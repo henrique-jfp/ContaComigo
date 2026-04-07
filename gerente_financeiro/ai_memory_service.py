@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+import asyncio
 import google.generativeai as genai
 import config
 from models import Usuario, Lancamento, Categoria
@@ -71,6 +72,7 @@ async def job_atualizar_perfis_ia(context):
         
         for u in usuarios:
             await atualizar_perfil_usuario(u, db)
+            await asyncio.sleep(5)  # Protege o limite de 15 Requisições por Minuto do Gemini Free Tier
             
     except Exception as e:
         logger.error(f"Erro no job_atualizar_perfis_ia: {e}")
