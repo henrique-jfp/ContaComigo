@@ -523,6 +523,24 @@
             <button id="agendamentoRefresh" class="text-brand hover:text-brand-soft transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
           </div>
         </h2>
+        
+        <!-- Toggle Notificações Globais -->
+        <div class="mb-4 p-3 rounded-2xl border border-telegram-separator bg-telegram-bg flex items-center justify-between shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="p-2 rounded-xl bg-brand/10 text-brand">
+              <i data-lucide="bell-ring" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <p class="text-sm font-bold text-telegram-text">Lembretes automáticos</p>
+              <p class="text-[10px] text-telegram-hint">O Alfredo avisa no dia do vencimento</p>
+            </div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="alertaGastosAtivoToggle" class="sr-only peer">
+            <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-brand"></div>
+          </label>
+        </div>
+
         <p id="agendamentoStatus" class="text-xs text-slate-500 mb-3"></p>
         <div id="agendamentoList" class="space-y-3"></div>
       </div>
@@ -945,7 +963,7 @@
     const configRefresh = document.getElementById('configRefresh');
     const perfilInvestidor = document.getElementById('perfilInvestidor');
     const horarioNotificacao = document.getElementById('horarioNotificacao');
-    const alertaGastosAtivo = document.getElementById('alertaGastosAtivo');
+    const alertaGastosAtivoToggle = document.getElementById('alertaGastosAtivoToggle');
     const configSave = document.getElementById('configSave');
     const configFinish = document.getElementById('configFinish');
 
@@ -2391,19 +2409,19 @@
     }
 
     async function loadConfiguracoes() {
-      if (!sessionId || !perfilInvestidor || !horarioNotificacao || !alertaGastosAtivo) return;
+      if (!sessionId) return;
       try {
         const response = await fetchWithSession('/api/miniapp/configuracoes');
         const data = await response.json();
         if (!data.ok) return;
-        perfilInvestidor.value = data.usuario?.perfil_investidor || '';
-        horarioNotificacao.value = data.usuario?.horario_notificacao || '09:00';
-        alertaGastosAtivo.checked = Boolean(data.usuario?.alerta_gastos_ativo);
+        if (perfilInvestidor) perfilInvestidor.value = data.usuario?.perfil_investidor || '';
+        if (horarioNotificacao) horarioNotificacao.value = data.usuario?.horario_notificacao || '09:00';
+        if (alertaGastosAtivoToggle) alertaGastosAtivoToggle.checked = Boolean(data.usuario?.alerta_gastos_ativo);
       } catch (e) {}
     }
 
     async function saveConfiguracoes() {
-      if (!sessionId || !perfilInvestidor || !horarioNotificacao || !alertaGastosAtivo) return;
+      if (!sessionId || !perfilInvestidor || !horarioNotificacao) return;
       try {
         const response = await fetch('/api/miniapp/configuracoes', {
           method: 'PUT',
@@ -2411,7 +2429,6 @@
           body: JSON.stringify({
             perfil_investidor: perfilInvestidor.value,
             horario_notificacao: horarioNotificacao.value,
-            alerta_gastos_ativo: alertaGastosAtivo.checked,
           }),
         });
         const data = await response.json();
@@ -2908,6 +2925,38 @@
     newAgendSave.addEventListener('click', createAgendamento);
     newAgendFrequencia.addEventListener('change', updateParcelasVisibility);
     newAgendInfinito.addEventListener('change', updateParcelasVisibility);
+    
+    // Novo evento de salvar o toggle de notificações em tempo real
+    if (alertaGastosAtivoToggle) {
+      alertaGastosAtivoToggle.addEventListener('change', async (e) => {
+        if (!sessionId) return;
+        const ativo = e.target.checked;
+        try {
+          const response = await fetch('/api/miniapp/toggle-notificacoes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
+            body: JSON.stringify({
+              telegram_id: window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 0,
+              ativo: ativo
+            }),
+          });
+          const data = await response.json();
+          if (data.sucesso) {
+            showToast('✓ ' + data.mensagem, 'success');
+            if (window.Telegram?.WebApp?.HapticFeedback) {
+              window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+            }
+          } else {
+            showToast('Erro ao atualizar lembretes', 'error');
+            e.target.checked = !ativo;
+          }
+        } catch (error) {
+          showToast('Erro de conexão ao atualizar lembretes', 'error');
+          e.target.checked = !ativo;
+        }
+      });
+    }
+
     if (configSave) configSave.addEventListener('click', saveConfiguracoes);
     if (configFinish) configFinish.addEventListener('click', saveConfiguracoes);
     editModal.addEventListener('click', (e) => {
