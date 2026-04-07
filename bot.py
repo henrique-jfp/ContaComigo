@@ -423,9 +423,8 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         build_and_add(name, builder)
         print(f"DEBUG: Comando {name} registrado com sucesso")
 
-    from gerente_financeiro.onboarding_handler import manual_menu_callback
     callback_builders = [
-        ("help_callback", lambda: CallbackQueryHandler(help_callback, pattern="^help_")),
+        ("help_callback", lambda: CallbackQueryHandler(help_callback, pattern="^manual_")),
         ("metas_confirm_callback", lambda: CallbackQueryHandler(metas_confirmacao_callback, pattern="^meta_(confirm|skip)_")),
         ("fatura_callback", lambda: CallbackQueryHandler(fatura_confirm, pattern="^fatura_")),
         ("dar_baixa_agendamento_callback", lambda: CallbackQueryHandler(dar_baixa_agendamento_callback, pattern="^ag_baixa_")), # Lida com baixa de notificacao
@@ -434,7 +433,6 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("quick_callback", lambda: CallbackQueryHandler(quick_action_handler, pattern="^quick_")),
         ("ocr_callback", lambda: CallbackQueryHandler(ocr_action_processor, pattern="^ocr_")),
         ("plan_choice_callback", lambda: CallbackQueryHandler(handle_plan_choice_callback, pattern="^plan_choose_")),
-        ("manual_menu_callback", lambda: CallbackQueryHandler(manual_menu_callback, pattern="^manual_menu$")),
     ]
     
 

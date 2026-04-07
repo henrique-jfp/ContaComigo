@@ -30,7 +30,7 @@ _cache = {}
 CACHE_TTL = 300  # 5 minutos
 _miniapp_sessions = {}
 _miniapp_chat_context = {}
-MINIAPP_SESSION_TTL = 60 * 60
+MINIAPP_SESSION_TTL = 30 * 24 * 60 * 60  # 30 dias de duração da sessão
 MINIAPP_AI_INSIGHT_ENABLED = os.getenv("MINIAPP_AI_INSIGHT_ENABLED", "0").lower() in ("1", "true", "yes", "on")
 
 def cache_key(*args):
@@ -789,7 +789,7 @@ def dashboard():
         """
 
 
-@app.route('/webapp')
+@app.route('/webapp', strict_slashes=False)
 def miniapp_shell():
     """Shell do miniapp Telegram"""
     response = make_response(render_template('miniapp.html'))

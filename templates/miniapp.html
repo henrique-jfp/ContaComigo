@@ -1472,7 +1472,7 @@
       });
     }
 
-    async function resolveTelegramInitData(maxRetries = 8, intervalMs = 120) {
+  async function resolveTelegramInitData(maxRetries = 20, intervalMs = 150) {
       for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
         const current = Telegram?.WebApp?.initData;
         if (current) return current;
@@ -2554,10 +2554,10 @@
       if (!initData) {
         const recovered = await tryRecoverSessionFromStorage();
         if (!recovered) {
-          mainStatus.textContent = 'Telegram nao enviou sessao';
+          mainStatus.textContent = 'Erro de Sessão';
           mainStatus.className = 'text-amber-500 font-bold';
-          homeBalanceHint.textContent = 'Abra pelo /start para sincronizar sua sessao.';
-          homeInsight.textContent = 'Se abrir pelo teclado e travar, rode /start uma vez e depois use o botao 🚀 Abrir o App.';
+          homeBalanceHint.textContent = 'A sessão do seu teclado expirou ou está desatualizada.';
+          homeInsight.textContent = '⚠️ Para corrigir isso permanentemente: feche o MiniApp, digite /start no chat do bot para atualizar seus atalhos e clique no botão "🚀 Abrir o App" novamente.';
           switchTabByName('inicio');
           return;
         }
@@ -3046,3 +3046,4 @@
   </script>
 </body>
 </html>
+  
