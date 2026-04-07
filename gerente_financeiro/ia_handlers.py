@@ -23,7 +23,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppI
 from telegram.ext import ContextTypes, CommandHandler, ConversationHandler
 from sqlalchemy import and_, extract, func, or_
 from database.database import get_db, get_or_create_user
-from models import Lancamento, Usuario, Categoria, Agendamento, Objetivo, ItemLancamento
+from models import Lancamento, Usuario, Categoria, Agendamento, Objetivo, ItemLancamento, OrcamentoCategoria
 import config
 from gerente_financeiro.services import _categorizar_com_mapa_inteligente
 from gerente_financeiro.prompts import PROMPT_ALFREDO_APRIMORADO
@@ -116,6 +116,21 @@ def _normalizar_data_lancamento(valor_data: str | None) -> str:
 
 _ALFREDO_TOOLS = [
     {
+            "type": "function",
+            "function": {
+                "name": "definir_limite_orcamento",
+                "description": "Define um limite (teto de gastos) mensal de orçamento para uma categoria.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "categoria": {"type": "string", "description": "Nome da categoria (ex: Lazer, Alimentação, Transporte)"},
+                        "valor": {"type": "number", "description": "Valor monetário do limite"},
+                    },
+                    "required": ["categoria", "valor"],
+                },
+            },
+        },
+        {
         "type": "function",
         "function": {
             "name": "registrar_lancamento",
@@ -1584,6 +1599,26 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
 
         if not tool_calls:
             resposta_direta = (message.get("content") or "Não consegui processar agora. Tente novamente.").strip()
+
+            # Fallback para capturar vazamentos de JSON na string (ex: registrar_lancamento>{"valor":...})
+            if ">" in resposta_direta and "{" in resposta_direta:
+                try:
+                    intent, json_str = resposta_direta.split(">", 1)
+                    json_str = json_str[json_str.find("{"):]
+                    args_parse = json.loads(json_str)
+                    
+                    if "limite" in intent.lower() or "limite" in str(args_parse.get("descricao", "")).lower():
+                        fake_fn = "definir_limite_orcamento"
+                        if "valor" not in args_parse and "valor_limite" in args_parse:
+                            args_parse["valor"] = args_parse["valor_limite"]
+                    else:
+                        fake_fn = "registrar_lancamento"
+                        
+                    tool_calls = [{"function": {"name": fake_fn, "arguments": json.dumps(args_parse)}}]
+                except Exception:
+                    pass
+
+            if not tool_calls:
             await _enviar_resposta_html_segura(update.message, resposta_direta)
             return ConversationHandler.END
 
@@ -1764,6 +1799,40 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("✅ Confirmar", callback_data="quick_confirm")],
                 [InlineKeyboardButton("✏️ Editar", callback_data="quick_edit")],
+                [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")],
+            ])
+            await update.message.reply_html(preview, reply_markup=keyboard)
+            return ConversationHandler.END
+
+        if fn_name == "definir_limite_orcamento":
+            categoria = str(args.get("categoria") or "").strip()
+            try:
+                valor = float(str(args.get("valor") or 0).replace(",", "."))
+            except (ValueError, TypeError):
+                valor = 0.0
+
+            if not categoria or valor <= 0:
+                await update.message.reply_html(
+                    "❌ <b>Dados incompletos</b>\n\n"
+                    "Preciso do nome da categoria e um valor maior que zero para criar o limite."
+                )
+                return ConversationHandler.END
+
+            dados_quick = {
+                "acao": "definir_limite_orcamento",
+                "categoria": categoria,
+                "valor_limite": valor,
+                "origem": "alfredo",
+            }
+            context.user_data["dados_quick"] = dados_quick
+
+            preview = (
+                "🚧 <b>Confirme o Limite de Orçamento</b>\n\n"
+                f"• <b>Categoria:</b> {escape(categoria)}\n"
+                f"• <b>Limite Mensal:</b> <code>{_formatar_valor_brasileiro(valor)}</code>"
+            )
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Confirmar", callback_data="quick_confirm")],
                 [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")],
             ])
             await update.message.reply_html(preview, reply_markup=keyboard)
@@ -1991,6 +2060,41 @@ async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     pass
                     
                 await query.edit_message_text("✅ Meta financeira criada com sucesso!")
+
+            elif tipo_acao == "definir_limite_orcamento":
+                cat_nome = dados_quick.get("categoria")
+                valor = dados_quick.get("valor_limite")
+                
+                cat = db.query(Categoria).filter(Categoria.nome.ilike(f"%{cat_nome}%")).first()
+                if not cat:
+                    await query.edit_message_text(f"❌ Não encontrei a categoria '{cat_nome}'. Tente criar pelo MiniApp.")
+                    return ConversationHandler.END
+                    
+                orc = db.query(OrcamentoCategoria).filter(
+                    OrcamentoCategoria.id_usuario == usuario_db.id, 
+                    OrcamentoCategoria.id_categoria == cat.id
+                ).first()
+                
+                if orc:
+                    orc.valor_limite = valor
+                else:
+                    db.add(OrcamentoCategoria(
+                        id_usuario=usuario_db.id, 
+                        id_categoria=cat.id, 
+                        valor_limite=valor
+                    ))
+                db.commit()
+                
+                from gerente_financeiro.services import limpar_cache_usuario
+                try:
+                    limpar_cache_usuario(query.from_user.id)
+                except Exception:
+                    pass
+                    
+                await query.edit_message_text(
+                    f"🚧 <b>Limite Configurado!</b>\n\nAgora você tem um teto de <b>{_formatar_valor_brasileiro(valor)}</b> para <i>{cat.nome}</i>.", 
+                    parse_mode='HTML'
+                )
 
         except Exception as e:
             db.rollback()
