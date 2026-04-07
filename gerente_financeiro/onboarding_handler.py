@@ -218,7 +218,13 @@ async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         user_name = user.nome_completo.split(' ')[0] if user.nome_completo else update.effective_user.first_name
         
         webapp_url = build_miniapp_url(source='start')
-        link_premium = gerar_link_pagamento_mercadopago(update.effective_user.id, PLAN_PREMIUM_MONTHLY)
+        
+        try:
+            link_premium = gerar_link_pagamento_mercadopago(update.effective_user.id, PLAN_PREMIUM_MONTHLY)
+        except Exception as e:
+            logger.warning(f"⚠️ Não foi possível gerar link premium: {e}")
+            link_premium = None
+            
         trial_end = None
         if user.trial_expires_at:
             trial_end = user.trial_expires_at.date()
@@ -236,11 +242,15 @@ async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             "• Ganhar XP, subir de nível e completar missões\n\n"
             "<b>Experimente o Premium: lançamentos ilimitados, IA, OCR, dashboard completo e mais!\n</b>"
         )
-        keyboard = InlineKeyboardMarkup([
+        
+        keyboard_buttons = [
             [InlineKeyboardButton("🧩 Abrir MiniApp", web_app=WebAppInfo(url=webapp_url))],
-            [InlineKeyboardButton("💎 Pagar Premium", url=link_premium)],
-            [InlineKeyboardButton("📖 Manual do Bot", callback_data="manual_menu")],
-        ])
+        ]
+        if link_premium:
+            keyboard_buttons.append([InlineKeyboardButton("💎 Pagar Premium", url=link_premium)])
+        keyboard_buttons.append([InlineKeyboardButton("📖 Manual do Bot", callback_data="manual_menu")])
+        
+        keyboard = InlineKeyboardMarkup(keyboard_buttons)
         if update.message:
             await update.message.reply_html(text, reply_markup=keyboard)
         elif update.callback_query:

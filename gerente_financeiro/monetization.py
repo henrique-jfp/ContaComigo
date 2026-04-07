@@ -465,18 +465,29 @@ async def handle_plan_choice_callback(update: Update, context: ContextTypes.DEFA
 
         if action in {"plan_choose_premium_monthly", "plan_choose_premium_annual"}:
             plano = PLAN_PREMIUM_MONTHLY if action.endswith("monthly") else PLAN_PREMIUM_ANNUAL
-            link = gerar_link_pagamento_mercadopago(query.from_user.id, plano)
-            valor = PLAN_PRICES[plano]
-            await query.edit_message_text(
-                f"💎 <b>{'Premium Mensal' if plano == PLAN_PREMIUM_MONTHLY else 'Premium Anual'}</b> selecionado.\n"
-                f"Valor: <b>R$ {valor:.2f}</b>\n\n"
-                f"Clique no botão abaixo para pagar com Mercado Pago e ativar seu premium instantaneamente!",
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Pagar com Mercado Pago", url=link)],
-                    [InlineKeyboardButton("Continuar no Free Tier", callback_data="plan_choose_free")],
-                ])
-            )
+            try:
+                link = gerar_link_pagamento_mercadopago(query.from_user.id, plano)
+                valor = PLAN_PRICES[plano]
+                await query.edit_message_text(
+                    f"💎 <b>{'Premium Mensal' if plano == PLAN_PREMIUM_MONTHLY else 'Premium Anual'}</b> selecionado.\n"
+                    f"Valor: <b>R$ {valor:.2f}</b>\n\n"
+                    f"Clique no botão abaixo para pagar com Mercado Pago e ativar seu premium instantaneamente!",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("Pagar com Mercado Pago", url=link)],
+                        [InlineKeyboardButton("Continuar no Free Tier", callback_data="plan_choose_free")],
+                    ])
+                )
+            except Exception as e:
+                logger.error(f"Erro ao gerar link premium no callback: {e}")
+                await query.edit_message_text(
+                    "⚠️ <b>Sistema de pagamentos indisponível.</b>\n\n"
+                    "Por favor, tente novamente mais tarde ou continue no plano gratuito.",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("Continuar no Free Tier", callback_data="plan_choose_free")]
+                    ])
+                )
             return
 
         await query.edit_message_text("Ação de plano inválida.")
