@@ -34,12 +34,6 @@ from gerente_financeiro.monetization import (
     upgrade_prompt_for_feature,
 )
 
-try:
-    from .analises_ia import get_analisador
-except ModuleNotFoundError:
-    def get_analisador():
-        raise RuntimeError("Modulo opcional analises_ia indisponivel neste ambiente")
-
 logger = logging.getLogger(__name__)
 
 _FORMAS_PAGAMENTO_VALIDAS = {"Pix", "Crédito", "Débito", "Boleto", "Dinheiro", "Nao_informado"}
