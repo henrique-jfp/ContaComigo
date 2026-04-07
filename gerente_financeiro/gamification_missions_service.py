@@ -1,5 +1,11 @@
+"""Serviço canônico de gamificação alinhado ao contacomigo_xp_sistema.md."""
+import logging
+from datetime import datetime, date, timedelta
+
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 from gerente_financeiro.monetization import PLAN_PREMIUM_MONTHLY
-from datetime import timedelta
+
 # === PREMIAÇÃO MENSAL DE PREMIUM PARA TOP 2 XP ===
 def get_monthly_xp_ranking(db: Session, year: int, month: int, limit: int = 2):
     """Retorna os top usuários com mais XP ganho no mês especificado."""
@@ -59,14 +65,6 @@ def award_monthly_xp_competition_premium(db: Session, reference_date: date | Non
                     print(f"Falha ao notificar usuário {usuario.telegram_id}: {e}")
     db.commit()
     return premiados
-"""Serviço canônico de gamificação alinhado ao contacomigo_xp_sistema.md."""
-
-import logging
-from datetime import datetime, date, timedelta
-
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-
 from models import (
     Lancamento,
     MetaConfirmacao,

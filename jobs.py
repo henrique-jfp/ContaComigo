@@ -28,29 +28,29 @@ logger = logging.getLogger(__name__)
 
 
 def configurar_jobs(job_queue):
-            # Job mensal: premiação dos 2 primeiros do ranking de XP
-            async def job_gamification_monthly_xp_competition(context):
-                from datetime import datetime
-                if datetime.now().day != 1:
-                    return
-                db = next(get_db())
-                try:
-                    from gerente_financeiro.gamification_missions_service import award_monthly_xp_competition_premium
-                    premiados = award_monthly_xp_competition_premium(db)
-                    logger.info(f"🏆 Premiação mensal XP: {premiados} usuários receberam 1 mês de premium.")
-                finally:
-                    db.close()
-
-            job_queue.run_daily(
-                job_gamification_monthly_xp_competition,
-                time=time(hour=0, minute=20),
-                name="gamification_monthly_xp_competition"
-            )
     """
     Configura todos os jobs agendados do sistema
     """
+    # Job mensal: premiação dos 2 primeiros do ranking de XP
+    async def job_gamification_monthly_xp_competition(context):
+        from datetime import datetime
+        if datetime.now().day != 1:
+            return
+        db = next(get_db())
+        try:
+            from gerente_financeiro.gamification_missions_service import award_monthly_xp_competition_premium
+            premiados = award_monthly_xp_competition_premium(db)
+            logger.info(f"🏆 Premiação mensal XP: {premiados} usuários receberam 1 mês de premium.")
+        finally:
+            db.close()
+
     try:
         logger.info("⚙️ Configurando jobs agendados...")
+        job_queue.run_daily(
+            job_gamification_monthly_xp_competition,
+            time=time(hour=0, minute=20),
+            name="gamification_monthly_xp_competition"
+        )
         # Job diário às 01:00 - Agendamento de notificações
         job_queue.run_daily(
             agendar_notificacoes_diarias,
@@ -194,9 +194,6 @@ def configurar_jobs(job_queue):
         logger.info("   🗓️ Gamificação semanal: 00:10")
         logger.info("   📈 Gamificação mensal: dia 1, 00:15")
         logger.info("   💰 Monetização trial: 09:00")
-        
-    except Exception as e:
-        logger.error(f"❌ Erro ao configurar jobs: {e}")
 
         job_queue.run_daily(
             job_atualizar_perfis_ia,
@@ -204,3 +201,6 @@ def configurar_jobs(job_queue):
             days=(0,),  # Domingo de madrugada
             name="job_atualizar_perfis_ia_semanal"
         )
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao configurar jobs: {e}")
