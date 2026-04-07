@@ -254,8 +254,24 @@
   body.device-desktop nav.glass-card:hover {
     transform: translateY(-50%);
   }
+  body.device-desktop #homeChartsPills {
+    display: none !important;
+  }
+  body.device-desktop #homeChartCarousel {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+    overflow: visible !important;
+    scroll-snap-type: none !important;
+  }
+  @media (min-width: 1200px) {
+    body.device-desktop #homeChartCarousel {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
   body.device-desktop #homeChartCarousel [data-home-chart-card] {
-    min-width: calc(50% - 0.5rem);
+    min-width: 0 !important;
+    scroll-snap-align: none !important;
   }
   body.device-desktop .modal-overlay.active {
     align-items: center;
@@ -2661,6 +2677,9 @@
       }
       Telegram.WebApp.ready();
       Telegram.WebApp.expand();
+      if (Telegram.WebApp.requestFullscreen) {
+        try { Telegram.WebApp.requestFullscreen(); } catch (e) {}
+      }
 
       const initData = await resolveTelegramInitData();
       if (!initData) {
