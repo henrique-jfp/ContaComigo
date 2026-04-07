@@ -1728,10 +1728,21 @@
       homeInsight.textContent = summary?.insight || 'Carregando insight do Alfredo...';
 
       // Badge do usuário (nível)
-      if (summary?.level_progress?.badge_svg) {
-        homeBadgeContainer.innerHTML = `<span class="inline-flex items-center justify-center w-6 h-6">${summary.level_progress.badge_svg}</span>`;
+      const badgeSvg = summary?.badge_svg || summary?.level_progress?.badge_svg;
+      if (badgeSvg) {
+        homeBadgeContainer.innerHTML = `<span class="inline-flex items-center justify-center w-6 h-6 shrink-0">${badgeSvg}</span>`;
+        const svgEl = homeBadgeContainer.querySelector('svg');
+        if (svgEl) {
+          svgEl.setAttribute('width', '24');
+          svgEl.setAttribute('height', '24');
+          svgEl.style.width = '24px';
+          svgEl.style.height = '24px';
+          svgEl.style.maxWidth = '24px';
+          svgEl.style.maxHeight = '24px';
+          svgEl.style.display = 'block';
+        }
       } else {
-        homeBadgeContainer.textContent = '🌱';
+        homeBadgeContainer.textContent = summary?.badge || '🌱';
       }
 
       // Plano do usuário (Free/Premium)
