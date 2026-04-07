@@ -1730,15 +1730,15 @@
       // Badge do usuário (nível)
       const badgeSvg = summary?.badge_svg || summary?.level_progress?.badge_svg;
       if (badgeSvg) {
-        homeBadgeContainer.innerHTML = `<span class="inline-flex items-center justify-center w-6 h-6 shrink-0">${badgeSvg}</span>`;
+        homeBadgeContainer.innerHTML = `<span class="inline-flex items-center justify-center w-9 h-9 shrink-0">${badgeSvg}</span>`;
         const svgEl = homeBadgeContainer.querySelector('svg');
         if (svgEl) {
-          svgEl.setAttribute('width', '24');
-          svgEl.setAttribute('height', '24');
-          svgEl.style.width = '24px';
-          svgEl.style.height = '24px';
-          svgEl.style.maxWidth = '24px';
-          svgEl.style.maxHeight = '24px';
+          svgEl.setAttribute('width', '36');
+          svgEl.setAttribute('height', '36');
+          svgEl.style.width = '36px';
+          svgEl.style.height = '36px';
+          svgEl.style.maxWidth = '36px';
+          svgEl.style.maxHeight = '36px';
           svgEl.style.display = 'block';
         }
       } else {
