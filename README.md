@@ -722,6 +722,13 @@ tail -f debug_logs/bot.log
 
 ## � Correções Recentes (Abril 2026)
 
+### Commit `Zero Setup & Notificações Proativas`
+**O que mudou:** Transição total para filosofia Zero Setup e implementação de alertas automáticos.
+- Comandos legados e complexos de configuração retirados do chat.
+- Criado CRON Job para buscar contas recorrentes no dia e enviar mensagem proativa.
+- Integrado botão de ação rápida de `[✅ Dar baixa]` direto na notificação.
+- Adicionado Toggle no MiniApp para ativar/silenciar lembretes dinamicamente via `POST /api/miniapp/toggle-notificacoes`.
+
 ### Commit `f25dba2` - Estabilização de callbacks de fatura
 **Problema:** Botões MiniApp e botão de editar fatura não respondiam (BOT_RESPONSE_TIMEOUT)
 **Causa Raiz:** 
