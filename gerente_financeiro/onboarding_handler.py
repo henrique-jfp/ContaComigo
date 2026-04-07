@@ -122,6 +122,34 @@ async def manual_app_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
     return MANUAL_APP
 
+@track_analytics("help")
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Exibe o menu de seções do manual."""
+    keyboard = [
+        [InlineKeyboardButton("📝 Lançamentos", callback_data="manual_lancamentos")],
+        [InlineKeyboardButton("🧠 IA", callback_data="manual_ia")],
+        [InlineKeyboardButton("🎯 Metas", callback_data="manual_metas")],
+        [InlineKeyboardButton("🎮 Jogo", callback_data="manual_jogo")],
+        [InlineKeyboardButton("📱 App", callback_data="manual_app")],
+    ]
+    await update.message.reply_html(
+        "<b>📖 Manuais Interativos</b>\n\nEscolha uma seção para aprender mais:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return MANUAL_MENU
+
+async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    action = query.data
+    if action == "manual_menu": return await manual_menu_callback(update, context)
+    if action == "manual_lancamentos": return await manual_lancamentos_callback(update, context)
+    if action == "manual_ia": return await manual_ia_callback(update, context)
+    if action == "manual_metas": return await manual_metas_callback(update, context)
+    if action == "manual_jogo": return await manual_jogo_callback(update, context)
+    if action == "manual_app": return await manual_app_callback(update, context)
+    await query.answer()
+    return ConversationHandler.END
+
 logger = logging.getLogger(__name__)
 
 # --- FUNÇÕES DE MENU E NAVEGAÇÃO ---
