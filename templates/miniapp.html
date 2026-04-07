@@ -1180,6 +1180,10 @@
       if (tabName === 'inicio' && sessionId) {
         loadHomeOverview();
       }
+      if (tabName === 'metas' && sessionId) {
+        loadMetas();
+        loadOrcamentos();
+      }
     }
 
     const switchTab = (el) => {
@@ -2751,6 +2755,7 @@
         setTimeout(() => {
           loadAgendamentos();
           loadMetas();
+          loadOrcamentos();
           loadMissions();
           loadGameProfile();
           loadMonthlyRanking();
