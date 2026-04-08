@@ -902,20 +902,30 @@ lucide.createIcons();
       const pctDespesa = totalFluxo > 0 ? Math.round((despesa / totalFluxo) * 100) : 0;
       
       // Lógica do Aquário: Nível é o saldo restante (proporcional ao verde)
-      const waterLevel = Math.max(0, 100 - progressPct);
-      homeProgressLabel.textContent = `${waterLevel}%`;
-      
-      // Animação de enchimento: primeiro vermelho (despesa) depois verde (receita/saldo)
+      const waterLevel = Math.max(15, 100 - progressPct); // Garante visibilidade mínima
+      homeProgressLabel.textContent = `${100 - progressPct}%`;
+
+      // Animação de enchimento: efeito de "briga" entre cores
       if (homeAquariumWater) {
+        // 1. Reset
         homeAquariumWater.style.height = '0%';
-        homeAquariumWater.style.background = '#ef4444'; // Começa vermelho
-        
+        homeAquariumWater.style.background = '#ef4444'; 
+
         setTimeout(() => {
-          homeAquariumWater.style.height = `${Math.max(15, progressPct)}%`; // Sobe o nível de despesa primeiro
+          // 2. Primeiro sobe a despesa (vermelho) de forma agressiva
+          homeAquariumWater.style.height = '100%'; 
+          
           setTimeout(() => {
-            homeAquariumWater.style.height = `${waterLevel}%`; // Ajusta para o nível de saúde
-            homeAquariumWater.style.background = 'linear-gradient(180deg, #10b981 0%, #059669 100%)';
-          }, 1000);
+            // 3. Aplica o gradiente dividido (Hard Stop)
+            // A parte de baixo (0% a progressPct%) fica vermelha
+            // A parte de cima (progressPct% a 100%) fica verde
+            const despesaPos = Math.max(5, progressPct); // Garante um pouco de vermelho se houver gasto
+            homeAquariumWater.style.background = `linear-gradient(to top, #ef4444 0%, #ef4444 ${despesaPos}%, #10b981 ${despesaPos}%, #059669 100%)`;
+            
+            // Mantemos a altura em 100% para o tanque parecer "cheio" de decisões financeiras
+            // ou ajustamos para waterLevel se quiser que o volume total represente a saúde
+            homeAquariumWater.style.height = '100%'; 
+          }, 1200);
         }, 300);
       }
 
