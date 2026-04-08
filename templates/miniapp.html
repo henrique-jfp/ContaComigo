@@ -304,16 +304,16 @@
     }
   }
 
-  /* Componente Aquário (Liquid Fill Gauge) - REFORMULADO */
+  /* Componente Aquário (Liquid Fill Gauge) - REFORMULADO DEFINITIVO */
   .aquarium-card {
     position: relative;
     width: 100%;
-    height: 80px; /* Um pouco mais alto */
-    background: color-mix(in srgb, var(--tg-theme-text-color, #0f172a) 5%, transparent);
-    border-radius: 20px;
+    height: 95px;
+    background: rgba(0,0,0,0.1);
+    border-radius: 24px;
     overflow: hidden;
     border: 2px solid color-mix(in srgb, var(--tg-theme-text-color, #0f172a) 15%, transparent);
-    box-shadow: inset 0 4px 12px rgba(0,0,0,0.08);
+    box-shadow: inset 0 4px 15px rgba(0,0,0,0.2);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -324,35 +324,27 @@
     left: 0;
     width: 100%;
     height: 0%;
-    transition: height 2s cubic-bezier(0.4, 0, 0.2, 1);
-    background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+    transition: height 1.5s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.8s ease;
+    background-color: #ef4444; 
     z-index: 1;
   }
-  /* Efeito de Ondas */
-  .aquarium-water::before {
-    content: "";
-    position: absolute;
-    width: 200%;
-    height: 200%;
-    top: -192%;
-    left: -50%;
-    background-color: var(--tg-theme-bg-color, #f8fafc);
-    border-radius: 38%;
-    animation: aquarium-waves 10s infinite linear;
-    opacity: 0.8;
-    z-index: 2;
-  }
+  .aquarium-water::before,
   .aquarium-water::after {
     content: "";
     position: absolute;
-    width: 210%;
-    height: 210%;
-    top: -196%;
-    left: -55%;
-    background-color: var(--tg-theme-bg-color, #f8fafc);
-    border-radius: 42%;
-    animation: aquarium-waves 15s infinite linear;
-    opacity: 0.5;
+    width: 280%;
+    height: 280%;
+    top: -220%;
+    left: -90%;
+    border-radius: 40%;
+    background: rgba(255, 255, 255, 0.2);
+    animation: aquarium-waves 10s infinite linear;
+    z-index: 2;
+  }
+  .aquarium-water::after {
+    border-radius: 35%;
+    background: rgba(255, 255, 255, 0.1);
+    animation: aquarium-waves 7s infinite linear;
     z-index: 3;
   }
   @keyframes aquarium-waves {
@@ -362,23 +354,23 @@
   .aquarium-percentage {
     position: relative;
     z-index: 10;
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: var(--tg-theme-text-color, #0f172a);
-    text-shadow: 0 2px 4px rgba(255,255,255,0.5);
     display: flex;
-    gap: 15px;
+    gap: 12px;
     align-items: center;
+    background: rgba(0,0,0,0.2);
+    backdrop-filter: blur(8px);
+    padding: 6px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.1);
   }
   .percentage-badge {
-    padding: 2px 8px;
-    border-radius: 8px;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 900;
     color: white;
-    font-weight: 700;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
   }
-  .percentage-receita { background: #10b981; }
-  .percentage-despesa { background: #ef4444; }
+  .percentage-receita { color: #10b981; }
+  .percentage-despesa { color: #f87171; }
 </style>
 </head>
 <body class="h-screen w-screen overflow-hidden flex flex-col font-sans antialiased selection:bg-brand selection:text-white bg-telegram-bg text-telegram-text">

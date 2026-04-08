@@ -73,9 +73,13 @@ import config
 from database.database import get_db, get_or_create_user
 from models import Lancamento, Objetivo, Usuario, UserPlanUsageMonthly
 from apscheduler.schedulers.background import BackgroundScheduler
-import mercadopago
-
 logger = logging.getLogger(__name__)
+
+try:
+    import mercadopago
+except ImportError:
+    mercadopago = None
+    logger.warning("⚠️ Biblioteca 'mercadopago' não instalada. Funções de pagamento estarão desativadas.")
 
 PLAN_TRIAL = "trial"
 PLAN_FREE = "free"
