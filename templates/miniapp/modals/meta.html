@@ -1,0 +1,38 @@
+<div class="modal-overlay" id="metaModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="text-lg font-bold text-telegram-text flex items-center gap-2">
+          <i data-lucide="target" class="w-5 h-5 text-brand"></i>
+          <span id="metaModalTitle">Nova Meta</span>
+        </h2>
+        <button class="modal-close-btn" onclick="closeMetaModal()"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+      <div class="modal-body space-y-4">
+        <div class="floating-field">
+          <input id="metaDescricao" class="floating-input peer" placeholder=" " inputmode="text" required>
+          <label for="metaDescricao" class="floating-label">Descrição</label>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="floating-field">
+            <input id="metaValorMeta" class="floating-input peer" placeholder=" " inputmode="decimal" required>
+            <label for="metaValorMeta" class="floating-label">Valor da meta</label>
+          </div>
+          <div class="floating-field">
+            <input id="metaValorAtual" class="floating-input peer" placeholder=" " inputmode="decimal" required>
+            <label for="metaValorAtual" class="floating-label">Valor atual</label>
+          </div>
+        </div>
+
+        <div class="floating-field">
+          <input id="metaData" type="date" class="floating-input peer" placeholder=" " required>
+          <label for="metaData" class="floating-label">Data alvo</label>
+        </div>
+
+        <div class="flex gap-3 pt-4">
+          <button id="metaSave" class="flex-1 rounded-xl bg-brand py-3 text-sm font-semibold text-white hover:bg-brand-soft active:scale-95 transition flex items-center justify-center gap-2 shadow-soft"><span class="save-text">Salvar meta</span></button>
+          <button class="flex-1 rounded-xl border border-telegram-separator bg-telegram-card py-3 text-sm font-semibold text-telegram-text hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition" onclick="closeMetaModal()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>

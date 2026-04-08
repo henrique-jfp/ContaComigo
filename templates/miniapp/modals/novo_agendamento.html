@@ -1,0 +1,62 @@
+<div class="modal-overlay" id="newAgendamentoModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="text-lg font-bold text-telegram-text flex items-center gap-2">
+          <i data-lucide="plus-circle" class="w-5 h-5 text-brand"></i> Novo Agendamento
+        </h2>
+        <button class="modal-close-btn" onclick="closeNewAgendamentoModal()"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+      <div class="modal-body space-y-4">
+        <div class="floating-field">
+          <input id="newAgendDescricao" class="floating-input peer" placeholder=" " inputmode="text" required>
+          <label for="newAgendDescricao" class="floating-label">Descrição</label>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="floating-field">
+            <input id="newAgendValor" class="floating-input peer" placeholder=" " inputmode="decimal" required>
+            <label for="newAgendValor" class="floating-label">Valor</label>
+          </div>
+          <div class="floating-field">
+            <select id="newAgendTipo" class="floating-select peer" required>
+              <option value="Saída">Saída</option>
+              <option value="Entrada">Entrada</option>
+            </select>
+            <label for="newAgendTipo" class="floating-label">Tipo</label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="floating-field">
+            <select id="newAgendFrequencia" class="floating-select peer" required>
+              <option value="unico">Única vez</option>
+              <option value="semanal">Semanal</option>
+              <option value="mensal">Mensal</option>
+            </select>
+            <label for="newAgendFrequencia" class="floating-label">Frequência</label>
+          </div>
+          <div class="floating-field">
+            <input id="newAgendData" type="date" class="floating-input peer" placeholder=" " required>
+            <label for="newAgendData" class="floating-label">Primeira execução</label>
+          </div>
+        </div>
+
+        <label class="flex items-center gap-2 rounded-2xl border border-telegram-separator bg-telegram-card px-4 py-3 text-sm text-telegram-text shadow-soft">
+          <input id="newAgendInfinito" type="checkbox" class="h-4 w-4 accent-brand">
+          Recorrente infinita (sem quantidade de parcelas)
+        </label>
+
+        <div id="parcelasGroup" class="hidden">
+          <div class="floating-field">
+            <input id="newAgendParcelas" type="number" min="1" max="360" value="12" class="floating-input peer" placeholder=" " inputmode="numeric">
+            <label for="newAgendParcelas" class="floating-label">Quantidade de parcelas</label>
+          </div>
+        </div>
+
+        <div class="flex gap-3 pt-4">
+          <button id="newAgendSave" class="flex-1 rounded-xl bg-brand py-3 text-sm font-semibold text-white hover:bg-brand-soft active:scale-95 transition flex items-center justify-center gap-2 shadow-soft"><span class="save-text">Criar agendamento</span></button>
+          <button id="newAgendCancel" class="flex-1 rounded-xl border border-telegram-separator bg-telegram-card py-3 text-sm font-semibold text-telegram-text hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition" onclick="closeNewAgendamentoModal()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>

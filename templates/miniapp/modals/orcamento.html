@@ -1,0 +1,25 @@
+<div class="modal-overlay" id="orcamentoModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="text-lg font-bold text-telegram-text flex items-center gap-2">
+          <i data-lucide="pie-chart" class="w-5 h-5 text-brand"></i> Definir Orçamento
+        </h2>
+        <button class="modal-close-btn" onclick="closeOrcamentoModal()"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+      <div class="modal-body space-y-4">
+        <p class="text-xs text-telegram-hint">Defina um limite de gastos mensal para uma categoria. O Alfredo te avisará ao chegar perto do teto!</p>
+        <div class="floating-field">
+          <select id="orcamentoCategoria" class="floating-select peer" required></select>
+          <label for="orcamentoCategoria" class="floating-label">Categoria</label>
+        </div>
+        <div class="floating-field">
+          <input id="orcamentoValor" class="floating-input peer" placeholder=" " inputmode="decimal" required>
+          <label for="orcamentoValor" class="floating-label">Limite Mensal (R$)</label>
+        </div>
+        <p class="text-[10px] text-telegram-hint text-center">Deixe o valor em 0 para remover o limite.</p>
+        <div class="flex gap-3 pt-4">
+          <button id="orcamentoSave" class="flex-1 rounded-xl bg-brand py-3 text-sm font-semibold text-white hover:bg-brand-soft active:scale-95 transition shadow-soft">Salvar Limite</button>
+        </div>
+      </div>
+    </div>
+  </div>

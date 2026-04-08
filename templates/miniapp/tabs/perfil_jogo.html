@@ -1,0 +1,60 @@
+<section class="panel" id="perfil-jogo">
+      <div class="space-y-4">
+        <div class="rounded-3xl border border-brand/20 p-6 text-white shadow-lift" style="background: radial-gradient(circle at 15% 20%, rgba(255,255,255,0.2), transparent 45%), linear-gradient(135deg, #7b1e2d 0%, #b85d6e 55%, #1f2937 100%);">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-xs uppercase tracking-[0.28em] text-white/80">Perfil do Jogo</p>
+              <h2 id="gameProfileName" class="mt-2 text-2xl font-extrabold">Jogador</h2>
+              <p id="gameProfileTitle" class="mt-1 text-sm font-semibold text-white/85">Iniciante</p>
+            </div>
+            <span id="gameProfileBadge" class="rounded-full border border-white/30 bg-white/15 px-3 py-1 text-xs font-bold inline-flex items-center gap-2">🌱 Em evolução</span>
+          </div>
+
+          <div class="mt-5">
+            <div class="flex items-center justify-between text-xs font-semibold text-white/90">
+              <span id="gameProfileLevelLine">Nível 1</span>
+              <span id="gameProfileXpLine">0 / 100 XP</span>
+            </div>
+            <div class="mt-2 h-3 w-full overflow-hidden rounded-full bg-white/20">
+              <div id="gameProfileProgressBar" class="h-full rounded-full bg-white transition-[width] duration-700 ease-out" style="width: 0%"></div>
+            </div>
+            <p id="gameProfileNextHint" class="mt-2 text-xs font-semibold text-white/80">Faltam 0 XP para o próximo nível</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="glass-card rounded-2xl p-4">
+            <p class="text-xs font-semibold uppercase tracking-[0.2em] text-telegram-hint">Interações (histórico)</p>
+            <p id="gameInteractionsTotal" class="mt-2 text-2xl font-extrabold text-telegram-text">0</p>
+          </div>
+          <div class="glass-card rounded-2xl p-4">
+            <p class="text-xs font-semibold uppercase tracking-[0.2em] text-telegram-hint">Interações (7 dias)</p>
+            <p id="gameInteractionsWeek" class="mt-2 text-2xl font-extrabold text-telegram-text">0</p>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-3xl p-5">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-telegram-text">Features que você mais usa</h3>
+            <button id="gameProfileRefresh" class="text-brand hover:text-brand-soft transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+          </div>
+          <div id="gameTopFeatures" class="mt-3 space-y-2"></div>
+        </div>
+
+        <div class="glass-card alfredo-card rounded-3xl p-5">
+          <p class="alfredo-kicker text-xs font-bold uppercase tracking-[0.2em]">Recadinho do Alfredo</p>
+          <p id="gameAlfredoNote" class="alfredo-body mt-2 text-sm font-semibold">Carregando recomendação...</p>
+        </div>
+
+        <div class="glass-card rounded-3xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold text-telegram-text">Ranking mensal</h3>
+            <span id="gameRankingUpdatedAt" class="text-xs text-telegram-hint">--</span>
+          </div>
+          <div id="gameRankingList" class="space-y-2"></div>
+          <button id="gameSeeRanking" class="mt-4 w-full rounded-xl bg-brand py-3 text-sm font-semibold text-white hover:bg-brand-soft transition">Veja o Ranking Mensal</button>
+        </div>
+
+        <button id="gameBackHome" class="w-full rounded-xl border border-telegram-separator bg-telegram-card py-3 text-sm font-semibold text-telegram-text hover:bg-brand/5 transition">Voltar para o Início</button>
+      </div>
+    </section>

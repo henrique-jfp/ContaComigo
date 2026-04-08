@@ -1,0 +1,31 @@
+<section class="panel" id="agendamentos">
+      <div class="glass-card rounded-3xl p-6">
+        <h2 class="text-sm font-semibold text-telegram-text mb-4 flex items-center justify-between">
+          <span class="flex items-center"><i data-lucide="calendar-clock" class="w-4 h-4 mr-2 text-brand"></i> Agendamentos futuros</span>
+          <div class="flex gap-2">
+            <button id="agendamentoNew" class="text-brand hover:text-brand-soft transition" title="Novo agendamento"><i data-lucide="plus" class="w-4 h-4"></i></button>
+            <button id="agendamentoRefresh" class="text-brand hover:text-brand-soft transition"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+          </div>
+        </h2>
+        
+        <!-- Toggle Notificações Globais -->
+        <div class="mb-4 p-3 rounded-2xl border border-telegram-separator bg-telegram-bg flex items-center justify-between shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="p-2 rounded-xl bg-brand/10 text-brand">
+              <i data-lucide="bell-ring" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <p class="text-sm font-bold text-telegram-text">Lembretes automáticos</p>
+              <p class="text-[10px] text-telegram-hint">O Alfredo avisa no dia do vencimento</p>
+            </div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="alertaGastosAtivoToggle" class="sr-only peer">
+            <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-brand"></div>
+          </label>
+        </div>
+
+        <p id="agendamentoStatus" class="text-xs text-slate-500 mb-3"></p>
+        <div id="agendamentoList" class="space-y-3"></div>
+      </div>
+    </section>

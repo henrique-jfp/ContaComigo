@@ -1,0 +1,58 @@
+<div class="modal-overlay" id="editModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="text-lg font-bold text-telegram-text flex items-center gap-2">
+          <i data-lucide="pencil-line" class="w-5 h-5 text-brand"></i> Editar Lançamento
+        </h2>
+        <button class="modal-close-btn" onclick="closeEditModal()"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+      <div class="modal-body space-y-4">
+        <div id="editModalBadge" class="rounded-full bg-brand/10 text-brand px-3 py-2 text-xs font-semibold w-fit"></div>
+        <div id="editDraftInfo" class="hidden rounded-2xl bg-telegram-bg border border-telegram-separator px-3 py-2 text-xs text-telegram-hint"></div>
+
+        <div class="floating-field">
+          <input id="editDescricao" class="floating-input peer" placeholder=" " inputmode="text" required>
+          <label for="editDescricao" class="floating-label">Descrição</label>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="floating-field">
+            <input id="editValor" class="floating-input peer" placeholder=" " inputmode="decimal" required>
+            <label for="editValor" class="floating-label">Valor</label>
+          </div>
+          <div class="floating-field">
+            <select id="editTipo" class="floating-select peer" required>
+              <option value="Saída">Saída</option>
+              <option value="Entrada">Entrada</option>
+            </select>
+            <label for="editTipo" class="floating-label">Tipo</label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="floating-field">
+            <input id="editData" type="date" class="floating-input peer" placeholder=" " required>
+            <label for="editData" class="floating-label">Data</label>
+          </div>
+        </div>
+
+        <div class="floating-field">
+          <select id="editForma" class="floating-select peer" required>
+            <option value="">Selecione a forma</option>
+            <option value="Pix">Pix</option>
+            <option value="Crédito">Crédito</option>
+            <option value="Débito">Débito</option>
+            <option value="Boleto">Boleto</option>
+            <option value="Dinheiro">Dinheiro</option>
+            <option value="Nao_informado">Não informado</option>
+          </select>
+          <label for="editForma" class="floating-label">Forma de pagamento</label>
+        </div>
+
+        <div class="flex gap-3 pt-4">
+          <button id="editSave" class="flex-1 rounded-xl bg-brand py-3 text-sm font-semibold text-white hover:bg-brand-soft active:scale-95 transition flex items-center justify-center gap-2 shadow-soft"><span class="save-text">Salvar alteração</span></button>
+          <button id="editCancel" class="flex-1 rounded-xl border border-telegram-separator bg-telegram-card py-3 text-sm font-semibold text-telegram-text hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition" onclick="closeEditModal()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>

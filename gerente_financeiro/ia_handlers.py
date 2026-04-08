@@ -327,7 +327,7 @@ def _groq_chat_completion(messages: list[dict], tools: list[dict] | None = None,
 
 
 async def _gemini_chat_completion_async(messages: list[dict]) -> str | None:
-    \"\"\"Fallback para análise usando Gemini se o Groq falhar.\"\"\"
+    """Fallback para análise usando Gemini se o Groq falhar."""
     if not config.GEMINI_API_KEY:
         return None
     
@@ -351,7 +351,7 @@ async def _gemini_chat_completion_async(messages: list[dict]) -> str | None:
                 role = "User" if m["role"] == "user" else "System"
                 prompt_parts.append(f"{role}: {m['content']}")
             
-            full_prompt = \"\\n\\n\".join(prompt_parts)
+            full_prompt = "\n\n".join(prompt_parts)
             
             # Chama com timeout e passando a chave novamente se o interceptor falhar
             response = await model.generate_content_async(full_prompt)

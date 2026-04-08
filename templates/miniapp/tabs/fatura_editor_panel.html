@@ -1,0 +1,22 @@
+<section class="panel" id="fatura-editor-panel">
+      <div class="space-y-4">
+        <div class="sticky top-0 bg-gradient-to-b from-telegram-bg to-transparent pb-3 z-10">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-bold text-telegram-text flex items-center gap-2">
+              <i data-lucide="file-text" class="w-5 h-5 text-brand"></i> Editar Lançamentos
+            </h2>
+            <button id="faturaBkBtn" class="text-brand hover:text-brand-soft transition">
+              <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+          </div>
+          <div id="faturaHeaderInfo" class="text-xs text-telegram-hint">Carregando dados da fatura...</div>
+        </div>
+
+        <div id="faturaEditList" class="space-y-2"></div>
+
+        <div class="sticky bottom-0 py-3 bg-gradient-to-t from-telegram-bg via-telegram-bg to-transparent flex gap-2">
+          <button id="faturaEditorSave" class="flex-1 rounded-xl bg-brand py-2 text-sm font-semibold text-white hover:bg-brand-soft transition">💾 Confirmar</button>
+          <button id="faturaEditorCancel" class="flex-1 rounded-xl border border-telegram-separator bg-telegram-card py-2 text-sm font-semibold text-telegram-text hover:bg-slate-100 dark:hover:bg-slate-800 transition">❌ Cancelar</button>
+        </div>
+      </div>
+    </section>
