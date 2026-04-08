@@ -23,13 +23,16 @@ lucide.createIcons();
         console.warn("Falha ao registrar plugins adicionais do Chart.js:", e);
       }
 
-      Chart.defaults.color = 'var(--tg-theme-hint-color, #64748b)';
+      Chart.defaults.color = '#64748b';
       Chart.defaults.font.family = "'Outfit', sans-serif";
       Chart.defaults.font.weight = '600';
-      Chart.defaults.plugins.tooltip.backgroundColor = 'var(--tg-theme-secondary-bg-color, #ffffff)';
-      Chart.defaults.plugins.tooltip.titleColor = 'var(--tg-theme-text-color, #0f172a)';
-      Chart.defaults.plugins.tooltip.bodyColor = 'var(--tg-theme-text-color, #0f172a)';
-      Chart.defaults.plugins.tooltip.borderColor = 'var(--tg-theme-section-separator-color, #e2e8f0)';
+      
+      // Cores dos Tooltips explicitamente contrastadas
+      const isDarkMode = window.Telegram?.WebApp?.colorScheme === 'dark';
+      Chart.defaults.plugins.tooltip.backgroundColor = isDarkMode ? '#1e293b' : '#ffffff';
+      Chart.defaults.plugins.tooltip.titleColor = isDarkMode ? '#f8fafc' : '#0f172a';
+      Chart.defaults.plugins.tooltip.bodyColor = isDarkMode ? '#f8fafc' : '#0f172a';
+      Chart.defaults.plugins.tooltip.borderColor = 'rgba(123, 30, 45, 0.1)';
       Chart.defaults.plugins.tooltip.borderWidth = 1;
       Chart.defaults.plugins.tooltip.padding = 12;
       Chart.defaults.plugins.tooltip.cornerRadius = 12;
