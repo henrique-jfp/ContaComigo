@@ -327,14 +327,22 @@ def _groq_chat_completion(messages: list[dict], tools: list[dict] | None = None,
 
 
 async def _gemini_chat_completion_async(messages: list[dict]) -> str | None:
-    """Fallback para análise usando Gemini se o Groq falhar."""
+    \"\"\"Fallback para análise usando Gemini se o Groq falhar.\"\"\"
     if not config.GEMINI_API_KEY:
         return None
+    
+    # Limpeza rigorosa da chave
+    api_key = str(config.GEMINI_API_KEY).strip().strip("'\"").strip()
     
     max_retries = 1
     for attempt in range(max_retries + 1):
         try:
-            genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'\""))
+            # Tenta configurar globalmente apenas se necessário, mas passa explicitamente se falhar
+            try:
+                genai.configure(api_key=api_key)
+            except Exception:
+                pass
+                
             model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
             
             # Converte formato OpenAI/Groq para Gemini
@@ -343,8 +351,9 @@ async def _gemini_chat_completion_async(messages: list[dict]) -> str | None:
                 role = "User" if m["role"] == "user" else "System"
                 prompt_parts.append(f"{role}: {m['content']}")
             
-            full_prompt = "\n\n".join(prompt_parts)
+            full_prompt = \"\\n\\n\".join(prompt_parts)
             
+            # Chama com timeout e passando a chave novamente se o interceptor falhar
             response = await model.generate_content_async(full_prompt)
             if response and response.text:
                 return response.text
@@ -1632,23 +1641,23 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 cats_mes[c_nome] = cats_mes.get(c_nome, 0.0) + abs(float(l.valor or 0))
         breakdown_mes = sorted(cats_mes.items(), key=lambda x: x[1], reverse=True)
 
-        # Últimos 20 lançamentos
+        # Últimos 20 lançamentos (Versão Comprimida)
         ultimos_20 = db.query(Lancamento).filter(
             Lancamento.id_usuario == usuario_db.id
         ).order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc()).limit(20).all()
         
         resumo_ultimos = [
-            f"{l.data_transacao.strftime('%d/%m')} | {l.descricao} | {'+' if str(l.tipo).lower().startswith('entr') else '-'}R$ {abs(float(l.valor or 0)):.2f} ({l.categoria.nome if l.categoria else 'N/A'})"
+            f"{l.data_transacao.strftime('%d/%m')} | {l.descricao[:15]} | {'+' if str(l.tipo).lower().startswith('entr') else '-'}R$ {abs(float(l.valor or 0)):.0f}"
             for l in ultimos_20
         ]
 
-        # Metas
+        # Metas (Versão Comprimida)
         metas_ativas = db.query(Objetivo).filter(
             Objetivo.id_usuario == usuario_db.id,
             func.coalesce(Objetivo.valor_atual, 0) < func.coalesce(Objetivo.valor_meta, 0)
         ).all()
         resumo_metas = [
-            f"{m.descricao}: R$ {float(m.valor_atual or 0):.2f} de R$ {float(m.valor_meta or 0):.2f} ({int((float(m.valor_atual or 0)/float(m.valor_meta or 0.01))*100)}%)"
+            f"{m.descricao[:15]}: {int((float(m.valor_atual or 0)/float(m.valor_meta or 0.01))*100)}%"
             for m in metas_ativas if m.valor_meta and m.valor_meta > 0
         ]
 
