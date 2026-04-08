@@ -2,6 +2,12 @@
 
 import os
 import logging
+import uuid
+from datetime import datetime
+
+# Identificação única da instância para logs e debug
+INSTANCE_ID = str(uuid.uuid4())[:8]
+START_TIME = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 # Configurar logging básico
 logging.basicConfig(level=logging.INFO)

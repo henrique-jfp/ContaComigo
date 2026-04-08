@@ -13,6 +13,8 @@ import json
 import asyncio
 import re
 import os
+import time
+from jinja2 import Template
 from calendar import monthrange
 from collections import Counter
 from html import escape
@@ -1669,8 +1671,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             resposta_local = _montar_resposta_local_alfredo(texto_usuario, texto_normalizado, db, usuario_db, saldo, entradas, saidas)
             
             # Adiciona ID da instância no rodapé para Henrique identificar qual bot respondeu
-            from bot import INSTANCE_ID
-            resposta_local += f"\n\n<pre>ID: {INSTANCE_ID}</pre>"
+            resposta_local += f"\n\n<pre>ID: {config.INSTANCE_ID}</pre>"
             
             await _enviar_resposta_html_segura(update.message, resposta_local)
             return ConversationHandler.END

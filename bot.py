@@ -554,18 +554,12 @@ def main() -> None:
 
     return application
 
-import uuid
-from datetime import datetime
-
-INSTANCE_ID = str(uuid.uuid4())[:8]
-START_TIME = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
 async def post_init(application: Application) -> None:
-    logger.info(f"🚀 [INSTANCE:{INSTANCE_ID}] BOT ATIVO | Start: {START_TIME}")
+    logger.info(f"🚀 [INSTANCE:{config.INSTANCE_ID}] BOT ATIVO | Start: {config.START_TIME}")
 
 def create_application_ultra_robust():
     """🔥 CRIA APLICAÇÃO BOT ULTRA-ROBUSTA - SEM TRAVAR"""
-    logger.info(f"🚀 [INSTANCE:{INSTANCE_ID}] Criando aplicação bot...")
+    logger.info(f"🚀 [INSTANCE:{config.INSTANCE_ID}] Criando aplicação bot...")
 
     # Verificação rápida de credenciais
     if not config.TELEGRAM_TOKEN:
