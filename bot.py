@@ -591,7 +591,7 @@ def create_application_ultra_robust():
 
     # 🔥 CRIAÇÃO APLICAÇÃO ULTRA-ROBUSTA
     try:
-        print(f"DEBUG: Criando ApplicationBuilder para {INSTANCE_ID}...")
+        print(f"DEBUG: Criando ApplicationBuilder para {config.INSTANCE_ID}...")
         application = ApplicationBuilder().token(config.TELEGRAM_TOKEN).post_init(post_init).build()
         print("DEBUG: Application criada!")
         logger.info("✅ Aplicação do bot criada.")
