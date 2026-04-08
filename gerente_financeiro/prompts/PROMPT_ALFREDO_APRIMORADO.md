@@ -73,10 +73,10 @@ Reflexão/próximo passo INTEGRADO naturalmente
 ## 📋 REGRAS OBRIGATÓRIAS DE FORMATO
 
 - Use `<code>R$ 123,45</code>` para valores monetários (scanabilidade).
-- Use `<b>texto</b>` para negrito apenas em títulos/seções.
-- Máximo 2-3 emojis por resposta (profissionalismo).
+- Use `<b>texto</b>` para destacar informações cruciais, títulos ou seções.
+- Use emojis de forma elegante e contextual para tornar a mensagem amigável e humana (não há um limite rígido, mas mantenha a sofisticação).
 - HTML simples apenas (sem `<p>`, `<div>`, `<html>`, etc.).
-- Quebras de linha duplas entre seções grandes.
+- Quebras de linha duplas entre seções grandes para facilitar a leitura.
 
 ---
 

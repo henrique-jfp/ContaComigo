@@ -441,7 +441,8 @@ def _friendly_feature_name(action: str):
 ### 🤖 Zero Setup & Chat Inteligente
 
 - [x] **Lançamentos sem Atrito:** Aceita texto livre, áudios (transcritos via Groq Whisper), fotos de notas fiscais (OCR) e faturas em PDF.
-- [x] **O Cérebro do Alfredo:** IA com memória de sessão que entende intenções, diagnostica erros e aconselha com precisão cirúrgica e tom humanizado.
+- [x] **O Cérebro do Alfredo (AI-First):** Motor de inteligência que prioriza o processamento via LLM (Groq/Gemini). Diferente de bots comuns, o Alfredo possui visão periférica de todo o seu mês, analisando padrões, sugerindo cortes e respondendo com a sofisticação de um mordomo financeiro de elite.
+- [x] **Contexto Rico:** A IA agora recebe o breakdown completo de categorias, gastos de ontem, metas ativas e histórico expandido (20+ transações) em cada interação.
 - [x] **Microlearning:** Manuais curtos e temáticos acessíveis pelo chat, substituindo "textões" de ajuda engessados.
 
 ### 📱 MiniApp (Sua Central de Controle)
@@ -718,7 +719,18 @@ tail -f debug_logs/bot.log
 
 ---
 
-## � Correções Recentes (Abril 2026)
+##  Correções Recentes (Abril 2026)
+
+### Operação "Alfredo Super Inteligente" - 08 de Abril de 2026
+**Problema:** Alfredo estava se comportando de forma "fria" e limitada, respondendo com resumos locais estáticos que bloqueavam a inteligência da IA.
+**Solução:**
+- **AI-First Architecture:** Removidas interceptações locais para saldo, metas e gastos. Agora, a IA processa essas perguntas com contexto total.
+- **Contexto Enriquecido:** Adicionado breakdown de categorias do mês atual, gastos de ontem e prazos de metas no prompt do sistema.
+- **Nova Persona:** Refinado o tom de voz para ser mais profissional, empático e "mordomo financeiro".
+- **Formatação Premium:** Implementado uso mandatório de `<code>` para valores e `<b>` para destaques, garantindo legibilidade superior no Telegram.
+- **Robustez em Metas:** Adicionado suporte a `data_meta` via IA e maior flexibilidade no reconhecimento de valores alvo.
+
+**Status:** ✅ Implantado e 100% Operacional
 
 ### Commit `f25dba2` - Estabilização de callbacks de fatura
 **Problema:** Botões MiniApp e botão de editar fatura não respondiam (BOT_RESPONSE_TIMEOUT)
@@ -784,5 +796,5 @@ Issues e PRs são bem-vindos!
 
 ---
 
-**Última atualização:** 05 de abril de 2026  
-**Versão:** 2.0 (Arquitetura Híbrida)
+**Última atualização:** 08 de abril de 2026  
+**Versão:** 2.1 (Alfredo Intelligence Update)
