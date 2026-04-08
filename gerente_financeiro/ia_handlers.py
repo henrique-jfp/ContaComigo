@@ -283,9 +283,17 @@ def _clear_pending_context(context: ContextTypes.DEFAULT_TYPE) -> None:
         context.user_data.pop(key, None)
 
 
+import google.generativeai as genai
+
 def _groq_chat_completion(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> dict:
     if not config.GROQ_API_KEY:
         raise RuntimeError("GROQ_API_KEY nao configurada")
+
+    # Limpeza rigorosa da chave
+    api_key = str(config.GROQ_API_KEY).strip().strip("'\"").strip()
+    
+    if len(api_key) < 10:
+        logger.error(f"GROQ_API_KEY parece ser invalida ou curta demais (len={len(api_key)})")
 
     payload = {
         "model": config.GROQ_MODEL_NAME,
@@ -301,7 +309,7 @@ def _groq_chat_completion(messages: list[dict], tools: list[dict] | None = None,
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {config.GROQ_API_KEY}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
             json=payload,
@@ -314,6 +322,32 @@ def _groq_chat_completion(messages: list[dict], tools: list[dict] | None = None,
     except Exception as e:
         logger.error(f"Falha critica na chamada Groq: {str(e)}")
         raise
+
+
+async def _gemini_chat_completion_async(messages: list[dict]) -> str | None:
+    """Fallback para análise usando Gemini se o Groq falhar."""
+    if not config.GEMINI_API_KEY:
+        return None
+    
+    try:
+        genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'\""))
+        model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
+        
+        # Converte formato OpenAI/Groq para Gemini
+        prompt_parts = []
+        for m in messages:
+            role = "User" if m["role"] == "user" else "System"
+            prompt_parts.append(f"{role}: {m['content']}")
+        
+        full_prompt = "\n\n".join(prompt_parts)
+        
+        response = await model.generate_content_async(full_prompt)
+        if response and response.text:
+            return response.text
+        return None
+    except Exception as e:
+        logger.error(f"Falha no fallback Gemini: {e}")
+        return None
 
 
 async def _groq_chat_completion_async(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> dict:
@@ -806,80 +840,53 @@ def _resumo_semana_local(db, usuario_id: int) -> str:
 
 
 def _resumo_saldo_local(saldo: float, entradas: float, saidas: float) -> str:
-    if saldo < 0:
-        primeira = f"⚠️ Hoje você está no negativo em {_formatar_valor_brasileiro(abs(saldo))}."
-    else:
-        primeira = f"✅ Hoje você tem {_formatar_valor_brasileiro(saldo)} disponível."
-
+    status = "🟢 Positivo" if saldo >= 0 else "🔴 Negativo"
     return (
-        f"{primeira}\n"
-        f"Entrou {_formatar_valor_brasileiro(entradas)} e saiu {_formatar_valor_brasileiro(saidas)} no acumulado.\n"
-        "👉 Insight: manter seu saldo positivo depende mais de controlar as maiores categorias do que dos gastos pequenos."
+        f"💰 <b>Situação Financeira Atual</b>\n\n"
+        f"• <b>Saldo Disponível:</b> <code>{_formatar_valor_brasileiro(saldo)}</code> ({status})\n"
+        f"• <b>Entradas (Acumulado):</b> <code>{_formatar_valor_brasileiro(entradas)}</code>\n"
+        f"• <b>Saídas (Acumulado):</b> <code>{_formatar_valor_brasileiro(saidas)}</code>\n\n"
+        f"💡 <i>Lembre-se: o saldo disponível é sua ferramenta de liberdade. Use-o com estratégia.</i>"
     )
 
 
 def _resumo_metas_local(db, usuario_id: int) -> str:
-    objetivos_ativos = (
-        db.query(Objetivo)
-        .filter(
-            Objetivo.id_usuario == usuario_id,
-            func.coalesce(Objetivo.valor_atual, 0) < func.coalesce(Objetivo.valor_meta, 0),
-        )
-        .order_by(Objetivo.criado_em.desc(), Objetivo.id.desc())
-        .all()
-    )
+    objetivos_ativos = db.query(Objetivo).filter(
+        Objetivo.id_usuario == usuario_id,
+        func.coalesce(Objetivo.valor_atual, 0) < func.coalesce(Objetivo.valor_meta, 0)
+    ).order_by(Objetivo.criado_em.desc(), Objetivo.id.desc()).all()
 
     if not objetivos_ativos:
-        return (
-            "📌 Hoje você ainda não tem meta ativa com progresso pendente.\n"
-            "👉 Insight: criar uma meta com valor mensal automático aumenta muito sua chance de concluir."
-        )
+        return "🎯 <b>Minhas Metas</b>\n\nVocê ainda não tem metas ativas. Ter um objetivo claro (como uma reserva ou viagem) torna o controle financeiro muito mais prazeroso!"
 
-    objetivo = objetivos_ativos[0]
-    valor_atual = float(objetivo.valor_atual or 0)
-    valor_meta = float(objetivo.valor_meta or 0)
-    faltante = max(0.0, valor_meta - valor_atual)
-    percentual = 0 if valor_meta <= 0 else int((valor_atual / valor_meta) * 100)
+    linhas = ["🎯 <b>Progresso das Metas</b>\n"]
+    for obj in objetivos_ativos[:3]:
+        v_meta = float(obj.valor_meta or 0)
+        v_atual = float(obj.valor_atual or 0)
+        perc = (v_atual / v_meta * 100) if v_meta > 0 else 0
+        linhas.append(f"• <b>{escape(obj.descricao)}:</b> {perc:.0f}% (<code>{_formatar_valor_brasileiro(v_atual)}</code> de <code>{_formatar_valor_brasileiro(v_meta)}</code>)")
 
-    return (
-        f"🎯 Você está no caminho da meta <b>{escape(objetivo.descricao or objetivo.nome or 'Meta')}</b>: {percentual}% concluído.\n"
-        f"Faltam {_formatar_valor_brasileiro(faltante)} para bater o alvo de {_formatar_valor_brasileiro(valor_meta)}.\n"
-        "👉 Insight: definir um aporte fixo semanal acelera mais do que tentar compensar no fim do mês."
-    )
+    linhas.append("\n💡 <i>A consistência nos pequenos aportes é o que constrói grandes patrimônios.</i>")
+    return "\n".join(linhas)
 
 
 def _resumo_mes_local(db, usuario_id: int) -> str:
     agora = datetime.now()
     inicio_mes = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    lanc_mes = (
-        db.query(Lancamento)
-        .filter(
-            Lancamento.id_usuario == usuario_id,
-            Lancamento.data_transacao >= inicio_mes,
-        )
-        .order_by(Lancamento.id.desc())
-        .all()
-    )
+    lanc_mes = db.query(Lancamento).filter(
+        Lancamento.id_usuario == usuario_id,
+        Lancamento.data_transacao >= inicio_mes
+    ).all()
     entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith("entr"))
     saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith("entr"))
-    saldo_mes = entradas_mes - saidas_mes
-    top_categorias_mes = _resumo_categoria_gastos_por_lancamentos(lanc_mes, limite=1)
-
-    if saldo_mes >= 0:
-        primeira = f"✅ Seu mês está positivo em {_formatar_valor_brasileiro(saldo_mes)}."
-    else:
-        primeira = f"⚠️ Seu mês está negativo em {_formatar_valor_brasileiro(abs(saldo_mes))}."
-
-    linhas = [
-        primeira,
-        f"Entradas {_formatar_valor_brasileiro(entradas_mes)} vs saídas {_formatar_valor_brasileiro(saidas_mes)}.",
-    ]
-    if top_categorias_mes:
-        nome_top, valor_top = top_categorias_mes[0]
-        linhas.append(f"👉 Insight: {escape(nome_top)} é o principal peso do mês ({_formatar_valor_brasileiro(valor_top)}).")
-    else:
-        linhas.append("👉 Insight: categorizando melhor os lançamentos, você descobre rápido onde cortar.")
-    return "\n".join(linhas)
+    
+    return (
+        f"📊 <b>Fechamento Parcial do Mês</b>\n\n"
+        f"• <b>Total Entradas:</b> <code>{_formatar_valor_brasileiro(entradas_mes)}</code>\n"
+        f"• <b>Total Saídas:</b> <code>{_formatar_valor_brasileiro(saidas_mes)}</code>\n"
+        f"• <b>Resultado:</b> <code>{_formatar_valor_brasileiro(entradas_mes - saidas_mes)}</code>\n\n"
+        f"💡 <i>Cada economia hoje é um investimento no seu eu do futuro.</i>"
+    )
 
 
 def _formatar_lancamento_card(lanc: Lancamento) -> str:
@@ -1618,14 +1625,26 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         except Exception as groq_err:
             logger.error(f"❌ [GROQ-TOOLS] Falha na chamada principal: {str(groq_err)}")
             try:
+                logger.info("🔄 Tentando fallback Gemini para análise...")
+                gemini_resp = await _gemini_chat_completion_async(messages)
+                if gemini_resp:
+                    # Envia a resposta do Gemini diretamente e encerra
+                    await _enviar_resposta_html_segura(update.message, gemini_resp)
+                    return ConversationHandler.END
+                
                 logger.info("🔄 Tentando fallback Groq sem tools...")
                 completion = await _groq_chat_completion_async(messages)
             except Exception as groq_err_sem_tools:
                 logger.error(f"❌ [GROQ-FALLBACK] Falha no fallback sem tools: {str(groq_err_sem_tools)}")
 
         if not completion:
-            logger.warning(f"⚠️ [ALFREDO] AI indisponível para query: '{texto_usuario}'. Usando motor local.")
+            logger.warning(f"⚠️ [ALFREDO] Todos os modelos de IA falharam para query: '{texto_usuario}'. Usando motor local.")
             resposta_local = _montar_resposta_local_alfredo(texto_usuario, texto_normalizado, db, usuario_db, saldo, entradas, saidas)
+            
+            # Adiciona ID da instância no rodapé para Henrique identificar qual bot respondeu
+            from bot import INSTANCE_ID
+            resposta_local += f"\n\n<pre>ID: {INSTANCE_ID}</pre>"
+            
             await _enviar_resposta_html_segura(update.message, resposta_local)
             return ConversationHandler.END
 
