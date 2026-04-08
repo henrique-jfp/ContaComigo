@@ -309,7 +309,7 @@
     position: relative;
     width: 100%;
     height: 64px;
-    background: color-mix(in srgb, var(--tg-theme-text-color, #0f172a) 5%, transparent);
+    background: color-mix(in srgb, #ef4444 10%, transparent);
     border-radius: 18px;
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--tg-theme-text-color, #0f172a) 10%, transparent);
@@ -321,7 +321,8 @@
     left: 0;
     width: 100%;
     height: 0%;
-    transition: height 1.5s cubic-bezier(0.4, 0, 0.2, 1), background-color 1s ease;
+    transition: height 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+    background: linear-gradient(0deg, #ef4444 0%, #10b981 100%);
   }
   .aquarium-water::before,
   .aquarium-water::after {
@@ -347,9 +348,6 @@
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
   }
-  .water-healthy { background: linear-gradient(180deg, #10b981 0%, #059669 100%); }
-  .water-warning { background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%); }
-  .water-critical { background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%); }
 </style>
 </head>
 <body class="h-screen w-screen overflow-hidden flex flex-col font-sans antialiased selection:bg-brand selection:text-white bg-telegram-bg text-telegram-text">
@@ -1011,6 +1009,14 @@
 
     // Chart.js Global Defaults
     if (window.Chart) {
+      // Registrar plugins especiais para Chart.js 4
+      try {
+        if (typeof SankeyController !== 'undefined') Chart.register(SankeyController, FlowElement);
+        if (typeof MatrixController !== 'undefined') Chart.register(MatrixController, MatrixElement);
+      } catch (e) {
+        console.warn("Falha ao registrar plugins adicionais do Chart.js:", e);
+      }
+
       Chart.defaults.color = 'var(--tg-theme-hint-color, #64748b)';
       Chart.defaults.font.family = "'Outfit', sans-serif";
       Chart.defaults.font.weight = '600';
@@ -1796,18 +1802,30 @@
 
       // Sankey Data (Flow)
       const sankeyData = [];
-      if (receita > 0) {
-        const saldoLivre = Math.max(0, receita - despesa);
-        sankeyData.push({ from: 'Receitas', to: 'Caixa', flow: receita });
-        if (despesa > 0) sankeyData.push({ from: 'Caixa', to: 'Despesas', flow: despesa });
-        if (saldoLivre > 0) sankeyData.push({ from: 'Caixa', to: 'Saldo Livre', flow: saldoLivre });
-        
-        // Link despesas para categorias (top 5)
-        categories.forEach(cat => {
-          if (cat.value > 0) {
-            sankeyData.push({ from: 'Despesas', to: cat.label, flow: Number(cat.value) });
-          }
-        });
+      if (receita > 0 || despesa > 0) {
+        const principalSource = receita > 0 ? 'Receitas' : 'Saldo Anterior';
+        const initialFlow = receita > 0 ? receita : despesa;
+
+        if (receita > 0) {
+          sankeyData.push({ from: 'Receitas', to: 'Caixa', flow: receita });
+        } else {
+          sankeyData.push({ from: 'Saldo Anterior', to: 'Caixa', flow: despesa });
+        }
+
+        if (despesa > 0) {
+          sankeyData.push({ from: 'Caixa', to: 'Despesas', flow: despesa });
+          // Link despesas para categorias (top 5)
+          categories.forEach(cat => {
+            if (cat.value > 0) {
+              sankeyData.push({ from: 'Despesas', to: cat.label, flow: Number(cat.value) });
+            }
+          });
+        }
+
+        const saldoLivre = receita - despesa;
+        if (saldoLivre > 0) {
+          sankeyData.push({ from: 'Caixa', to: 'Saldo Livre', flow: saldoLivre });
+        }
       }
 
       // Heatmap Data (Activity by Day of Week vs Week of Month)
@@ -1815,8 +1833,6 @@
       const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
       const weeks = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4', 'Sem 5'];
       
-      // Mock/Process activity data if available or create placeholder
-      // For now, let's use recent transactions to build a basic density map
       const activityMap = {}; 
       const recent = summary?.recent || [];
       recent.forEach(item => {
@@ -1876,24 +1892,12 @@
       homeLevel.textContent = String(summary?.level || 1);
       homeXp.textContent = String(summary?.xp || 0);
       homeStreak.textContent = String(summary?.streak || 0);
-      homeProgressLabel.textContent = `${progressPct}%`;
+      const waterLevel = Math.max(0, 100 - progressPct);
+      homeProgressLabel.textContent = `${waterLevel}%`;
       
       // Lógica do Aquário: Nível é o saldo restante (100% - progressPct)
-      const waterLevel = Math.max(0, 100 - progressPct);
       if (homeAquariumWater) {
         homeAquariumWater.style.height = `${waterLevel}%`;
-        
-        // Remover classes de cor antigas
-        homeAquariumWater.classList.remove('water-healthy', 'water-warning', 'water-critical');
-        
-        // Aplicar nova cor baseada no nível
-        if (waterLevel > 50) {
-          homeAquariumWater.classList.add('water-healthy');
-        } else if (waterLevel > 20) {
-          homeAquariumWater.classList.add('water-warning');
-        } else {
-          homeAquariumWater.classList.add('water-critical');
-        }
       }
 
       homeReceita.textContent = `Receitas: ${formatCurrencyBR(receita)}`;

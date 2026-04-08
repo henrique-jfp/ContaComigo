@@ -402,7 +402,7 @@ def _daily_cashflow(lancamentos: list[Lancamento], start: date, end: date) -> li
         if not data or data < start or data > end:
             continue
         label = data.strftime("%d/%m")
-        tipo = "Entrada" if str(lanc.tipo).lower().startswith("entr") else "Saída"
+        tipo = "Entrada" if str(lanc.tipo).lower().startswith(("entr", "recei")) else "Saída"
         series[label][tipo] += float(lanc.valor or 0)
 
     return [
@@ -414,7 +414,7 @@ def _daily_cashflow(lancamentos: list[Lancamento], start: date, end: date) -> li
 def _category_distribution(lancamentos: list[Lancamento]) -> list[dict]:
     totals: dict[str, float] = {}
     for lanc in lancamentos:
-        if str(lanc.tipo).lower().startswith("entr"):
+        if str(lanc.tipo).lower().startswith(("entr", "recei")):
             continue
         categoria = "Sem categoria"
         if getattr(lanc, "categoria", None) and lanc.categoria.nome:
@@ -907,8 +907,8 @@ def miniapp_overview():
             .all()
         )
 
-        receita = sum(float(lanc.valor or 0) for lanc in lancamentos_mes if str(lanc.tipo).lower().startswith("entr"))
-        despesa = sum(abs(float(lanc.valor or 0)) for lanc in lancamentos_mes if not str(lanc.tipo).lower().startswith("entr"))
+        receita = sum(float(lanc.valor or 0) for lanc in lancamentos_mes if str(lanc.tipo).lower().startswith(("entr", "recei")))
+        despesa = sum(abs(float(lanc.valor or 0)) for lanc in lancamentos_mes if not str(lanc.tipo).lower().startswith(("entr", "recei")))
         balance = receita - despesa
         cashflow = _daily_cashflow(lancamentos_mes, start_date, end_date)
         categories = _category_distribution(lancamentos_mes)
@@ -954,7 +954,7 @@ def miniapp_overview():
             if key not in monthly_map:
                 continue
             valor = float(lanc.valor or 0)
-            is_entrada = str(lanc.tipo).lower().startswith("entr")
+            is_entrada = str(lanc.tipo).lower().startswith(("entr", "recei"))
             if is_entrada:
                 monthly_map[key]["entrada"] += max(valor, 0)
                 monthly_map[key]["net"] += max(valor, 0)
@@ -993,7 +993,7 @@ def miniapp_overview():
         prior_balance = 0.0
         for lanc in prior_lanc:
             valor = float(lanc.valor or 0)
-            prior_balance += valor if str(lanc.tipo).lower().startswith("entr") else -abs(valor)
+            prior_balance += valor if str(lanc.tipo).lower().startswith(("entr", "recei")) else -abs(valor)
 
         patrimony_map: dict[tuple[int, int], float] = {key: 0.0 for key in month_refs_8}
         lanc_8m = (
@@ -1009,7 +1009,7 @@ def miniapp_overview():
             if key not in patrimony_map:
                 continue
             valor = float(lanc.valor or 0)
-            patrimony_map[key] += valor if str(lanc.tipo).lower().startswith("entr") else -abs(valor)
+            patrimony_map[key] += valor if str(lanc.tipo).lower().startswith(("entr", "recei")) else -abs(valor)
 
         running_balance = prior_balance
         patrimony_series = []
@@ -1027,7 +1027,7 @@ def miniapp_overview():
         
         current_expenses: dict[str, float] = {}
         for lanc in lancamentos_mes:
-            if str(lanc.tipo).lower().startswith("entr"):
+            if str(lanc.tipo).lower().startswith(("entr", "recei")):
                 continue
             categoria = lanc.categoria.nome if lanc.categoria and lanc.categoria.nome else "Sem categoria"
             current_expenses[categoria] = current_expenses.get(categoria, 0.0) + abs(float(lanc.valor or 0))
@@ -1047,7 +1047,7 @@ def miniapp_overview():
 
             hist_by_cat: dict[str, float] = {}
             for lanc in hist_lanc:
-                if str(lanc.tipo).lower().startswith("entr"):
+                if str(lanc.tipo).lower().startswith(("entr", "recei")):
                     continue
                 categoria = lanc.categoria.nome if lanc.categoria and lanc.categoria.nome else "Sem categoria"
                 hist_by_cat[categoria] = hist_by_cat.get(categoria, 0.0) + abs(float(lanc.valor or 0))
@@ -1113,7 +1113,7 @@ def miniapp_overview():
         )
         villains_totals: dict[str, float] = {}
         for lanc in villains_lanc:
-            if str(lanc.tipo).lower().startswith("entr"):
+            if str(lanc.tipo).lower().startswith(("entr", "recei")):
                 continue
             nome = (lanc.descricao or "Sem nome").strip() or "Sem nome"
             villains_totals[nome] = villains_totals.get(nome, 0.0) + abs(float(lanc.valor or 0))

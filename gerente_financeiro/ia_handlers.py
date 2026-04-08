@@ -411,8 +411,8 @@ def _resolve_categoria_id(db, categoria_nome: str) -> int | None:
 def _usuario_e_saldo(db, telegram_user) -> tuple[Usuario, float, float, float]:
     usuario_db = get_or_create_user(db, telegram_user.id, telegram_user.full_name)
     lancamentos = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id).all()
-    entradas = sum(float(l.valor or 0) for l in lancamentos if str(l.tipo).lower().startswith("entr"))
-    saidas = sum(abs(float(l.valor or 0)) for l in lancamentos if not str(l.tipo).lower().startswith("entr"))
+    entradas = sum(float(l.valor or 0) for l in lancamentos if str(l.tipo).lower().startswith(("entr", "recei")))
+    saidas = sum(abs(float(l.valor or 0)) for l in lancamentos if not str(l.tipo).lower().startswith(("entr", "recei")))
     saldo = entradas - saidas
     return usuario_db, saldo, entradas, saidas
 
@@ -679,8 +679,8 @@ def _resumo_comparacao_local(db, usuario_id: int) -> str:
         )
         .all()
     )
-    total_atual = sum(abs(float(l.valor or 0)) for l in atual if not str(l.tipo).lower().startswith("entr"))
-    total_anterior = sum(abs(float(l.valor or 0)) for l in anterior if not str(l.tipo).lower().startswith("entr"))
+    total_atual = sum(abs(float(l.valor or 0)) for l in atual if not str(l.tipo).lower().startswith(("entr", "recei")))
+    total_anterior = sum(abs(float(l.valor or 0)) for l in anterior if not str(l.tipo).lower().startswith(("entr", "recei")))
     delta = total_atual - total_anterior
     delta_pct = 0.0 if total_anterior <= 0 else (delta / total_anterior) * 100.0
 
@@ -714,8 +714,8 @@ def _resumo_alerta_local(db, usuario_id: int) -> str:
         )
         .all()
     )
-    saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith("entr"))
-    entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith("entr"))
+    saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith(("entr", "recei")))
+    entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith(("entr", "recei")))
     saldo_mes = entradas_mes - saidas_mes
     
     if saldo_mes < 0:
@@ -748,8 +748,8 @@ def _resumo_previsao_local(db, usuario_id: int, saldo: float, entradas: float, s
     dias_passados = max(1, agora.day)
     dias_no_mes = monthrange(agora.year, agora.month)[1]
     dias_restantes = max(1, dias_no_mes - agora.day)
-    saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith("entr"))
-    entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith("entr"))
+    saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith(("entr", "recei")))
+    entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith(("entr", "recei")))
     media_diaria_saida = saidas_mes / dias_passados
     proj_saida = media_diaria_saida * dias_no_mes
     saldo_projetado = entradas_mes - proj_saida
@@ -779,7 +779,7 @@ def _resumo_analise_gastos_local(db, usuario_id: int) -> str:
         .limit(180)
         .all()
     )
-    saidas_lanc = [l for l in lancamentos if not str(l.tipo).lower().startswith("entr")]
+    saidas_lanc = [l for l in lancamentos if not str(l.tipo).lower().startswith(("entr", "recei"))]
     top_categorias = _resumo_categoria_gastos_por_lancamentos(saidas_lanc, limite=5)
     pequenos = [l for l in saidas_lanc if abs(float(l.valor or 0)) <= 30]
     recorrentes = Counter((l.descricao or "Lançamento").strip().lower() for l in pequenos)
@@ -840,8 +840,8 @@ def _resumo_semana_local(db, usuario_id: int) -> str:
         .order_by(Lancamento.id.desc())
         .all()
     )
-    entradas_sem = sum(float(l.valor or 0) for l in lancamentos if str(l.tipo).lower().startswith("entr"))
-    saidas_sem = sum(abs(float(l.valor or 0)) for l in lancamentos if not str(l.tipo).lower().startswith("entr"))
+    entradas_sem = sum(float(l.valor or 0) for l in lancamentos if str(l.tipo).lower().startswith(("entr", "recei")))
+    saidas_sem = sum(abs(float(l.valor or 0)) for l in lancamentos if not str(l.tipo).lower().startswith(("entr", "recei")))
     saldo_sem = entradas_sem - saidas_sem
     top_categorias = _resumo_categoria_gastos_por_lancamentos(lancamentos, limite=3)
 
@@ -895,8 +895,8 @@ def _resumo_mes_local(db, usuario_id: int) -> str:
         Lancamento.id_usuario == usuario_id,
         Lancamento.data_transacao >= inicio_mes
     ).all()
-    entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith("entr"))
-    saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith("entr"))
+    entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith(("entr", "recei")))
+    saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith(("entr", "recei")))
     
     return (
         f"📊 <b>Fechamento Parcial do Mês</b>\n\n"
@@ -915,7 +915,7 @@ def _formatar_lancamento_card(lanc: Lancamento) -> str:
     data_formatada = lanc.data_transacao.strftime("%d/%m/%Y")
     hora_formatada = lanc.data_transacao.strftime("%H:%M")
     valor = _formatar_valor_brasileiro(abs(float(lanc.valor or 0)))
-    tipo_emoji = "🟢" if str(lanc.tipo).lower().startswith("entr") else "🔴"
+    tipo_emoji = "🟢" if str(lanc.tipo).lower().startswith(("entr", "recei")) else "🔴"
 
     return (
         f"📌 <b>Seu último lançamento</b>\n"
@@ -1306,7 +1306,7 @@ async def _categorizar_lancamentos_sem_categoria_async(db, usuario_id: int) -> t
         descricao = (lanc.descricao or "").strip().lower()
         if not descricao:
             continue
-        tipo_transacao = "Receita" if str(lanc.tipo).lower().startswith("entr") else "Despesa"
+        tipo_transacao = "Receita" if str(lanc.tipo).lower().startswith(("entr", "recei")) else "Despesa"
         cat_id, subcat_id = _categorizar_com_mapa_inteligente(descricao, tipo_transacao, db)
         if cat_id:
             lanc.id_categoria = cat_id
@@ -1367,7 +1367,7 @@ def _resumo_categoria_gastos(db, usuario_id: int, limite: int = 5) -> list[tuple
 def _resumo_categoria_gastos_por_lancamentos(lancamentos: list[Lancamento], limite: int = 5) -> list[tuple[str, float]]:
     categorias: dict[str, float] = {}
     for lanc in lancamentos:
-        if str(lanc.tipo).lower().startswith("entr"):
+        if str(lanc.tipo).lower().startswith(("entr", "recei")):
             continue
         nome = lanc.categoria.nome if getattr(lanc, "categoria", None) and lanc.categoria else "Sem categoria"
         categorias[nome] = categorias.get(nome, 0.0) + abs(float(lanc.valor or 0))
@@ -1535,12 +1535,12 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             Lancamento.data_transacao >= inicio_mes
         ).all()
         
-        saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith("entr"))
-        entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith("entr"))
+        saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith(("entr", "recei")))
+        entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith(("entr", "recei")))
 
         inicio_hoje = hoje.replace(hour=0, minute=0, second=0, microsecond=0)
         lanc_hoje = [l for l in lanc_mes if l.data_transacao >= inicio_hoje]
-        saidas_hoje = sum(abs(float(l.valor or 0)) for l in lanc_hoje if not str(l.tipo).lower().startswith("entr"))
+        saidas_hoje = sum(abs(float(l.valor or 0)) for l in lanc_hoje if not str(l.tipo).lower().startswith(("entr", "recei")))
         
         # Gastos de Ontem (Otimizado: tenta filtrar de lanc_mes primeiro)
         ontem = hoje - timedelta(days=1)
@@ -1555,17 +1555,17 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 Lancamento.data_transacao >= inicio_ontem,
                 Lancamento.data_transacao <= fim_ontem
             ).all()
-        saidas_ontem = sum(abs(float(l.valor or 0)) for l in lanc_ontem if not str(l.tipo).lower().startswith("entr"))
+        saidas_ontem = sum(abs(float(l.valor or 0)) for l in lanc_ontem if not str(l.tipo).lower().startswith(("entr", "recei")))
 
         inicio_semana = hoje - timedelta(days=hoje.weekday())
         inicio_semana = inicio_semana.replace(hour=0, minute=0, second=0, microsecond=0)
         lanc_semana = [l for l in lanc_mes if l.data_transacao >= inicio_semana]
-        saidas_semana = sum(abs(float(l.valor or 0)) for l in lanc_semana if not str(l.tipo).lower().startswith("entr"))
+        saidas_semana = sum(abs(float(l.valor or 0)) for l in lanc_semana if not str(l.tipo).lower().startswith(("entr", "recei")))
 
         # Breakdown por categoria (Mês Atual)
         cats_mes: dict[str, float] = {}
         for l in lanc_mes:
-            if not str(l.tipo).lower().startswith("entr"):
+            if not str(l.tipo).lower().startswith(("entr", "recei")):
                 c_nome = l.categoria.nome if l.categoria else "Sem categoria"
                 cats_mes[c_nome] = cats_mes.get(c_nome, 0.0) + abs(float(l.valor or 0))
         breakdown_mes = sorted(cats_mes.items(), key=lambda x: x[1], reverse=True)
@@ -1964,7 +1964,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             resumo_ultimos = []
             for lanc in ultimos_lanc:
                 valor = float(lanc.valor or 0)
-                sinal = "+" if str(lanc.tipo).lower().startswith("entr") else "-"
+                sinal = "+" if str(lanc.tipo).lower().startswith(("entr", "recei")) else "-"
                 resumo_ultimos.append(
                     f"{lanc.data_transacao.strftime('%d/%m/%Y')} | {lanc.descricao or 'Lançamento'} | {sinal}R$ {abs(valor):.2f}"
                 )
@@ -1977,7 +1977,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 .limit(120)
                 .all()
             ):
-                if str(lanc.tipo).lower().startswith("entr"):
+                if str(lanc.tipo).lower().startswith(("entr", "recei")):
                     continue
                 chave = "Sem categoria"
                 if getattr(lanc, "categoria", None) and lanc.categoria:

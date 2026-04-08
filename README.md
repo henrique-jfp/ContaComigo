@@ -54,13 +54,13 @@
 │                                                                   │
 │  THREAD 1 (Bot Telegram)        │  MAIN PROCESS (Flask Dashboard) │
 │  ────────────────────────       │  ────────────────────────────── │
-│  • Polling (getUpdates)         │  • Flask app (0.0.0.0:8080)    │
+│  • Polling (getUpdates)         │  • Flask app (Port: $PORT)      │
 │  • Handlers por tipo de media   │  • /api/miniapp/* endpoints    │
 │  • Alfredo router (Groq)        │  • /api/telegram/auth          │
 │  • OCR, audio, processamento    │  • WebApp view                  │
 │  • Background jobs (APScheduler)│  • Static files + templates    │
 │  ────────────────────────       │  ────────────────────────────── │
-│  Runs: bot.run_polling()        │  Runs: app.run()               │
+│  Runs: Thread(target=bot)       │  Runs: python launcher.py       │
 │                                                                   │
 └─────────────────────────────────────────────────────────────────┘
                           ↓
@@ -798,3 +798,4 @@ Issues e PRs são bem-vindos!
 
 **Última atualização:** 08 de abril de 2026  
 **Versão:** 2.1 (Alfredo Intelligence Update)
+:** 2.1 (Alfredo Intelligence Update)
