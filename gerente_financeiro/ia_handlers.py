@@ -297,19 +297,23 @@ def _groq_chat_completion(messages: list[dict], tools: list[dict] | None = None,
         if tool_choice:
             payload["tool_choice"] = tool_choice
 
-    response = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {config.GROQ_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=45,
-    )
-    if response.status_code >= 400:
-        logger.error("Groq HTTP %s: %s", response.status_code, response.text[:2000])
-    response.raise_for_status()
-    return response.json()
+    try:
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {config.GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=45,
+        )
+        if response.status_code >= 400:
+            logger.error(f"Groq Error {response.status_code}: {response.text}")
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logger.error(f"Falha critica na chamada Groq: {str(e)}")
+        raise
 
 
 async def _groq_chat_completion_async(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> dict:
@@ -465,6 +469,9 @@ def _formatar_busca_compras(lancamentos: list[Lancamento], termo: str) -> str:
 
 
 def _montar_resposta_local_alfredo(texto_usuario: str, texto_normalizado: str, db, usuario_db, saldo: float, entradas: float, saidas: float) -> str:
+    # Este método é o fallback quando a IA falha.
+    # Ele deve ser elegante e informativo, mantendo a persona do Alfredo.
+    
     if _intencao_contas(texto_normalizado):
         return _resumo_contas_local(db, usuario_db.id)
 
@@ -503,23 +510,21 @@ def _montar_resposta_local_alfredo(texto_usuario: str, texto_normalizado: str, d
         top_categorias = _resumo_categoria_gastos(db, usuario_db.id, limite=5)
         if top_categorias:
             linhas = [
-                "📊 <b>Categoria com maior gasto</b>",
-                "",
-                f"• <b>Maior gasto:</b> {escape(top_categorias[0][0])} ({_formatar_valor_brasileiro(top_categorias[0][1])})",
-                "",
-                "<b>Top 5 categorias:</b>",
+                "📊 <b>Principais Categorias de Gasto</b>\n",
+                f"A categoria que mais pesou foi <b>{escape(top_categorias[0][0])}</b>, com um total de <code>{_formatar_valor_brasileiro(top_categorias[0][1])}</code>.\n",
+                "<b>Top 5 categorias:</b>"
             ]
             for nome, valor in top_categorias:
-                linhas.append(f"• {escape(nome)}: {_formatar_valor_brasileiro(valor)}")
+                linhas.append(f"• {escape(nome)}: <code>{_formatar_valor_brasileiro(valor)}</code>")
             return "\n".join(linhas)
 
     if _intencao_forma_pagamento_mais_usada(texto_normalizado):
         forma_top, qtd_top, base_util = _forma_pagamento_mais_usada(db, usuario_db.id)
         if forma_top:
             return (
-                "💳 <b>Forma de pagamento mais utilizada</b>\n\n"
-                f"• <b>Mais usada:</b> {escape(forma_top)}\n"
-                f"• <b>Ocorrências:</b> {qtd_top} de {base_util} lançamentos com forma informada"
+                "💳 <b>Preferências de Pagamento</b>\n\n"
+                f"Sua forma de pagamento mais utilizada é o <b>{escape(forma_top)}</b>, "
+                f"presente em {qtd_top} dos seus últimos {base_util} lançamentos."
             )
 
     if _intencao_resumo_semana(texto_normalizado):
@@ -528,13 +533,14 @@ def _montar_resposta_local_alfredo(texto_usuario: str, texto_normalizado: str, d
     if _intencao_resumo_mes(texto_normalizado):
         return _resumo_mes_local(db, usuario_db.id)
 
+    # Se nada bater, retorna um resumo geral elegante
     return (
-        "🤖 <b>Resumo Rápido</b>\n\n"
-        "Tive uma pequena dificuldade para aprofundar a análise agora, mas aqui estão seus números principais:\n"
-        f"• <b>Saldo:</b> <code>{_formatar_valor_brasileiro(saldo)}</code>\n"
+        "🤖 <b>Resumo Geral do Alfredo</b>\n\n"
+        "No momento, meu motor de análise profunda está passando por uma manutenção rápida, mas aqui estão seus números vitais:\n\n"
+        f"• <b>Saldo Disponível:</b> <code>{_formatar_valor_brasileiro(saldo)}</code>\n"
         f"• <b>Entradas:</b> <code>{_formatar_valor_brasileiro(entradas)}</code>\n"
         f"• <b>Saídas:</b> <code>{_formatar_valor_brasileiro(saidas)}</code>\n\n"
-        "Posso buscar uma compra específica ou listar seus últimos gastos, se quiser."
+        "Deseja que eu busque alguma transação específica ou liste seus últimos gastos?"
     )
 
 
@@ -559,7 +565,7 @@ def _resumo_contas_local(db, usuario_id: int) -> str:
         data_ag = ag.proxima_data_execucao.date() if getattr(ag, "proxima_data_execucao", None) else None
         if not data_ag:
             continue
-        item = f"{escape(ag.descricao)} ({_formatar_valor_brasileiro(float(ag.valor or 0))}) em {data_ag.strftime('%d/%m/%Y')}"
+        item = f"{escape(ag.descricao)} (<code>{_formatar_valor_brasileiro(float(ag.valor or 0))}</code>) em {data_ag.strftime('%d/%m/%Y')}"
         if data_ag < hoje:
             vencidas.append(item)
         elif data_ag == hoje:
@@ -569,27 +575,32 @@ def _resumo_contas_local(db, usuario_id: int) -> str:
 
     if not agendamentos:
         return (
-            "✅ Hoje você está tranquilo: não encontrei contas fixas ativas no seu banco.\n\n"
-            "👉 Insight: vale cadastrar as contas recorrentes para evitar susto de vencimento."
+            "✅ <b>Tudo em dia por aqui!</b>\n\n"
+            "Não encontrei contas fixas ou compromissos pendentes no momento. "
+            "Manter seus agendamentos atualizados é o segredo para nunca ser pego de surpresa. 🚀"
         )
 
+    linhas = ["🗓️ <b>Compromissos Financeiros</b>\n"]
+
     if hoje_itens:
-        linhas = [
-            f"⚠️ Sim, você tem {len(hoje_itens)} conta(s) vencendo hoje.",
-            "\n".join(f"• {item}" for item in hoje_itens[:3]),
-        ]
-    else:
-        linhas = ["✅ Hoje não tem conta vencendo."]
+        linhas.append(f"⚠️ <b>Vencendo hoje:</b> {len(hoje_itens)}")
+        for item in hoje_itens[:3]:
+            linhas.append(f"• {item}")
+        linhas.append("")
 
     if vencidas:
-        linhas.append(f"⚠️ Tem {len(vencidas)} conta(s) em atraso, priorize isso primeiro.")
-    elif semana_itens:
-        linhas.append(f"📅 Até o fim da semana você ainda tem {len(semana_itens)} compromisso(s).")
+        linhas.append(f"🚨 <b>Atrasados:</b> {len(vencidas)}")
+        for item in vencidas[:3]:
+            linhas.append(f"• {item}")
+        linhas.append("")
 
     if semana_itens:
-        linhas.append("👉 Insight: já separa esse valor agora para não apertar seu caixa no fim da semana.")
-    else:
-        linhas.append("👉 Insight: sem compromissos próximos, você ganha margem para focar nas metas.")
+        linhas.append(f"📅 <b>Até o fim da semana:</b> {len(semana_itens)}")
+        for item in semana_itens[:3]:
+            linhas.append(f"• {item}")
+        linhas.append("")
+
+    linhas.append("💡 <i>Organizar o fluxo para essas datas garante que seu saldo permaneça saudável.</i>")
     return "\n".join(linhas)
 
 
@@ -620,26 +631,24 @@ def _resumo_comparacao_local(db, usuario_id: int) -> str:
     total_anterior = sum(abs(float(l.valor or 0)) for l in anterior if not str(l.tipo).lower().startswith("entr"))
     delta = total_atual - total_anterior
     delta_pct = 0.0 if total_anterior <= 0 else (delta / total_anterior) * 100.0
-    sinal = "aumentou" if delta > 0 else "caiu" if delta < 0 else "ficou igual"
 
     if total_atual > total_anterior:
-        primeira = "⚠️ Sim, este mês você está gastando mais que no mês passado."
+        status = f"⚠️ Seus gastos estão <b>{delta_pct:.1f}% acima</b> do mês passado."
+        insight = "Vale a pena revisar as categorias que mais pesaram para frear essa tendência."
     elif total_atual < total_anterior:
-        primeira = "✅ Você melhorou: este mês está gastando menos que no mês passado."
+        status = f"✅ Excelente! Você reduziu seus gastos em <b>{abs(delta_pct):.1f}%</b> comparado ao mês passado."
+        insight = "Manter esse ritmo é o caminho mais rápido para atingir suas metas."
     else:
-        primeira = "➡️ Seu gasto está praticamente igual ao mês passado."
+        status = "📊 Seus gastos estão estáveis em relação ao mês passado."
+        insight = "Estabilidade é bom, mas sempre há espaço para otimizar um pouco mais."
 
-    linhas = [
-        primeira,
-        f"Hoje: {_formatar_valor_brasileiro(total_atual)} | Mês passado: {_formatar_valor_brasileiro(total_anterior)} ({delta_pct:+.1f}%).",
-    ]
-    if total_atual > total_anterior:
-        linhas.append("👉 Insight: se cortar 10% agora, você já volta para o patamar do mês anterior.")
-    elif total_atual < total_anterior:
-        linhas.append("👉 Insight: mantenha esse ritmo por mais 2 semanas para consolidar o ganho.")
-    else:
-        linhas.append("👉 Insight: o próximo salto vem de atacar sua categoria mais cara, não de cortes pequenos.")
-    return "\n".join(linhas)
+    return (
+        f"🔍 <b>Comparativo Mensal</b>\n\n"
+        f"• <b>Mês Atual:</b> <code>{_formatar_valor_brasileiro(total_atual)}</code>\n"
+        f"• <b>Mês Passado:</b> <code>{_formatar_valor_brasileiro(total_anterior)}</code>\n\n"
+        f"{status}\n\n"
+        f"💡 {insight}"
+    )
 
 
 def _resumo_alerta_local(db, usuario_id: int) -> str:
@@ -651,32 +660,26 @@ def _resumo_alerta_local(db, usuario_id: int) -> str:
             Lancamento.id_usuario == usuario_id,
             Lancamento.data_transacao >= inicio_mes,
         )
-        .order_by(Lancamento.id.desc())
         .all()
     )
     saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith("entr"))
     entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith("entr"))
     saldo_mes = entradas_mes - saidas_mes
-    top_categorias = _resumo_categoria_gastos_por_lancamentos(lanc_mes, limite=3)
-    risco = "alto" if saldo_mes < 0 else "moderado" if saidas_mes > entradas_mes * 0.85 else "baixo"
-
-    if risco == "alto":
-        primeira = "⚠️ Sim, agora você está gastando acima do saudável."
-    elif risco == "moderado":
-        primeira = "⚠️ Você está no limite, então vale frear um pouco já."
+    
+    if saldo_mes < 0:
+        titulo = "🚨 <b>Alerta de Atenção Máxima</b>"
+        msg = f"Seu mês está fechando no negativo em <code>{_formatar_valor_brasileiro(abs(saldo_mes))}</code>."
+        dica = "Recomendo travar gastos variáveis imediatamente para proteger seu caixa."
+    elif saidas_mes > entradas_mes * 0.85:
+        titulo = "⚠️ <b>Alerta de Margem Estreita</b>"
+        msg = "Seus gastos já consumiram mais de 85% das suas entradas deste mês."
+        dica = "Estamos no limite seguro. Qualquer gasto extra pode comprometer o próximo mês."
     else:
-        primeira = "✅ Por enquanto, você não está gastando acima do que deveria."
+        titulo = "✅ <b>Saúde Financeira sob Controle</b>"
+        msg = "Seu padrão de gastos atual está dentro de uma margem segura."
+        dica = "Você tem fôlego para manter suas metas ou até acelerar algum aporte."
 
-    linhas = [
-        primeira,
-        f"Seu mês está em {_formatar_valor_brasileiro(saldo_mes)} (entradas {_formatar_valor_brasileiro(entradas_mes)} vs saídas {_formatar_valor_brasileiro(saidas_mes)}).",
-    ]
-    if top_categorias:
-        nome_top, valor_top = top_categorias[0]
-        linhas.append(f"👉 Insight: seu maior peso está em {escape(nome_top)} ({_formatar_valor_brasileiro(valor_top)}).")
-    else:
-        linhas.append("👉 Insight: mesmo sem categoria dominante, controlar gasto diário já melhora seu fechamento do mês.")
-    return "\n".join(linhas)
+    return f"{titulo}\n\n{msg}\n\n💡 {dica}"
 
 
 def _resumo_previsao_local(db, usuario_id: int, saldo: float, entradas: float, saidas: float) -> str:
@@ -1584,7 +1587,16 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 user_query=texto_usuario,
                 financial_context=json.loads(contexto_financeiro_str),
                 intent="general_analysis",
-                perfil_ia=usuario_db.perfil_ia
+                perfil_ia=usuario_db.perfil_ia,
+                relevant_skills=[
+                    "comparative_analysis",
+                    "lists_rankings",
+                    "payment_account_analysis",
+                    "period_summaries",
+                    "proactive_insights",
+                    "simple_predictive_analysis",
+                    "strategic_questions"
+                ]
             )
             system_prompt = pm.build_prompt(p_config)
         except Exception as pm_err:
@@ -1604,13 +1616,15 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         try:
             completion = await _groq_chat_completion_async(messages, tools=_ALFREDO_TOOLS, tool_choice="auto")
         except Exception as groq_err:
-            logger.warning("Falha na chamada Groq com tools; tentando fallback sem tools: %s", groq_err)
+            logger.error(f"❌ [GROQ-TOOLS] Falha na chamada principal: {str(groq_err)}")
             try:
+                logger.info("🔄 Tentando fallback Groq sem tools...")
                 completion = await _groq_chat_completion_async(messages)
             except Exception as groq_err_sem_tools:
-                logger.warning("Fallback Groq sem tools também falhou: %s", groq_err_sem_tools)
+                logger.error(f"❌ [GROQ-FALLBACK] Falha no fallback sem tools: {str(groq_err_sem_tools)}")
 
         if not completion:
+            logger.warning(f"⚠️ [ALFREDO] AI indisponível para query: '{texto_usuario}'. Usando motor local.")
             resposta_local = _montar_resposta_local_alfredo(texto_usuario, texto_normalizado, db, usuario_db, saldo, entradas, saidas)
             await _enviar_resposta_html_segura(update.message, resposta_local)
             return ConversationHandler.END

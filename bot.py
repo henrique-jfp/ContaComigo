@@ -554,9 +554,18 @@ def main() -> None:
 
     return application
 
+import uuid
+from datetime import datetime
+
+INSTANCE_ID = str(uuid.uuid4())[:8]
+START_TIME = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+async def post_init(application: Application) -> None:
+    logger.info(f"🚀 [INSTANCE:{INSTANCE_ID}] BOT ATIVO | Start: {START_TIME}")
+
 def create_application_ultra_robust():
     """🔥 CRIA APLICAÇÃO BOT ULTRA-ROBUSTA - SEM TRAVAR"""
-    logger.info("🚀 [ULTRA-ROBUST] Criando aplicação bot...")
+    logger.info(f"🚀 [INSTANCE:{INSTANCE_ID}] Criando aplicação bot...")
 
     # Verificação rápida de credenciais
     if not config.TELEGRAM_TOKEN:
@@ -588,8 +597,8 @@ def create_application_ultra_robust():
 
     # 🔥 CRIAÇÃO APLICAÇÃO ULTRA-ROBUSTA
     try:
-        print("DEBUG: Criando ApplicationBuilder...")
-        application = ApplicationBuilder().token(config.TELEGRAM_TOKEN).build()
+        print(f"DEBUG: Criando ApplicationBuilder para {INSTANCE_ID}...")
+        application = ApplicationBuilder().token(config.TELEGRAM_TOKEN).post_init(post_init).build()
         print("DEBUG: Application criada!")
         logger.info("✅ Aplicação do bot criada.")
 

@@ -12,10 +12,14 @@ from database.database import get_db
 logger = logging.getLogger(__name__)
 
 PROMPT_PERFIL = """
-Você é um analista e psicólogo financeiro. Seu trabalho é criar ou atualizar o perfil comportamental-financeiro do usuário de forma super concisa.
-Analise o histórico e os hábitos recentes a seguir.
-Responda com UM ÚNICO PARÁGRAFO extremamente direto (sem rodeios, sem introduções) que descreva: O estilo de vida da pessoa, onde ela mais gasta, se tem problemas para economizar, e qual abordagem ela parece preferir na comunicação.
-Esta descrição será injetada como instrução de sistema para o Bot conversar com ela.
+Você é o estrategista-chefe do Alfredo. Seu papel é analisar os dados financeiros do usuário e criar um perfil psicológico-financeiro sofisticado.
+Descreva em um parágrafo denso e direto:
+1. O estilo de consumo (essencialista, impulsivo, equilibrado).
+2. As categorias que dominam o orçamento e por quê.
+3. A "saúde emocional" das finanças (se há economia constante ou se vive no limite).
+4. Como Alfredo deve tratá-lo (ex: com pulso firme para cortes, ou com encorajamento para metas).
+
+Este perfil servirá de bússola para o Alfredo personalizar cada palavra da interação.
 
 DADOS RECENTES:
 {dados_json}
