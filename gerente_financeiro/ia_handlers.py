@@ -329,30 +329,46 @@ async def _gemini_chat_completion_async(messages: list[dict]) -> str | None:
     if not config.GEMINI_API_KEY:
         return None
     
-    try:
-        genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'\""))
-        model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
-        
-        # Converte formato OpenAI/Groq para Gemini
-        prompt_parts = []
-        for m in messages:
-            role = "User" if m["role"] == "user" else "System"
-            prompt_parts.append(f"{role}: {m['content']}")
-        
-        full_prompt = "\n\n".join(prompt_parts)
-        
-        response = await model.generate_content_async(full_prompt)
-        if response and response.text:
-            return response.text
-        return None
-    except Exception as e:
-        logger.error(f"Falha no fallback Gemini: {e}")
-        return None
+    max_retries = 1
+    for attempt in range(max_retries + 1):
+        try:
+            genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'\""))
+            model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
+            
+            # Converte formato OpenAI/Groq para Gemini
+            prompt_parts = []
+            for m in messages:
+                role = "User" if m["role"] == "user" else "System"
+                prompt_parts.append(f"{role}: {m['content']}")
+            
+            full_prompt = "\n\n".join(prompt_parts)
+            
+            response = await model.generate_content_async(full_prompt)
+            if response and response.text:
+                return response.text
+            return None
+        except Exception as e:
+            if "429" in str(e) and attempt < max_retries:
+                logger.warning(f"⚠️ Gemini Rate Limit (429). Aguardando 2s para retry...")
+                await asyncio.sleep(2)
+                continue
+            logger.error(f"Falha no fallback Gemini: {e}")
+            return None
 
 
 async def _groq_chat_completion_async(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> dict:
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _groq_chat_completion, messages, tools, tool_choice)
+    max_retries = 2
+    for attempt in range(max_retries + 1):
+        try:
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, _groq_chat_completion, messages, tools, tool_choice)
+        except Exception as e:
+            if "429" in str(e) and attempt < max_retries:
+                wait_time = (attempt + 1) * 2
+                logger.warning(f"⚠️ Groq Rate Limit (429). Aguardando {wait_time}s antes da tentativa {attempt + 2}...")
+                await asyncio.sleep(wait_time)
+                continue
+            raise
 
 
 def _groq_transcribe_voice(voice_bytes: bytes, mime_type: str = "audio/ogg") -> str:
@@ -1524,14 +1540,19 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         lanc_hoje = [l for l in lanc_mes if l.data_transacao >= inicio_hoje]
         saidas_hoje = sum(abs(float(l.valor or 0)) for l in lanc_hoje if not str(l.tipo).lower().startswith("entr"))
         
+        # Gastos de Ontem (Otimizado: tenta filtrar de lanc_mes primeiro)
         ontem = hoje - timedelta(days=1)
         inicio_ontem = ontem.replace(hour=0, minute=0, second=0, microsecond=0)
         fim_ontem = ontem.replace(hour=23, minute=59, second=59, microsecond=999999)
-        lanc_ontem = db.query(Lancamento).filter(
-            Lancamento.id_usuario == usuario_db.id,
-            Lancamento.data_transacao >= inicio_ontem,
-            Lancamento.data_transacao <= fim_ontem
-        ).all()
+        
+        if ontem.month == hoje.month:
+            lanc_ontem = [l for l in lanc_mes if inicio_ontem <= l.data_transacao <= fim_ontem]
+        else:
+            lanc_ontem = db.query(Lancamento).filter(
+                Lancamento.id_usuario == usuario_db.id,
+                Lancamento.data_transacao >= inicio_ontem,
+                Lancamento.data_transacao <= fim_ontem
+            ).all()
         saidas_ontem = sum(abs(float(l.valor or 0)) for l in lanc_ontem if not str(l.tipo).lower().startswith("entr"))
 
         inicio_semana = hoje - timedelta(days=hoje.weekday())
@@ -1567,6 +1588,11 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             for m in metas_ativas if m.valor_meta and m.valor_meta > 0
         ]
 
+        # Otimização de Concisão
+        eh_pergunta_curta = len(texto_usuario.split()) <= 5
+        keywords_diretas = ["saldo", "quanto", "tenho", "hoje", "ontem", "última", "ultima", "gasto", "gastei", "entrou"]
+        ser_ultra_direto = eh_pergunta_curta or any(k in texto_normalizado for k in keywords_diretas)
+
         contexto_financeiro_str = json.dumps(
             {
                 "data_hora_atual": hoje_str,
@@ -1582,7 +1608,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 "gastos_ontem": round(saidas_ontem, 2),
                 "gastos_esta_semana": round(saidas_semana, 2),
                 "ultimos_20_lancamentos": resumo_ultimos,
-                "metas_ativas": resumo_metas
+                "metas_ativas": resumo_metas,
+                "configuracao_resposta": "ULTRA_DIRETO" if ser_ultra_direto else "ANALISE_DETALHADA"
             },
             ensure_ascii=False,
         )
@@ -1607,8 +1634,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             )
             system_prompt = pm.build_prompt(p_config)
         except Exception as pm_err:
-            logger.warning("Falha ao usar PromptManager, caindo para string literal: %s", pm_err)
-            system_prompt = PROMPT_ALFREDO_APRIMORADO.format(
+            logger.warning("Falha ao usar PromptManager, caindo para Jinja2 local: %s", pm_err)
+            system_prompt = Template(PROMPT_ALFREDO_APRIMORADO).render(
                 user_name=(usuario_db.nome_completo or update.effective_user.first_name or "usuário"),
                 pergunta_usuario=texto_usuario,
                 contexto_financeiro_completo=contexto_financeiro_str,
