@@ -30,5 +30,5 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # Copia o resto da aplicação
 COPY . /app
 
-# O Gunicorn usará o arquivo de configuração definitivo
-CMD ["gunicorn", "-c", "gunicorn_config.py", "app:app"]
+# O launcher orquestra o Bot e o Flask Híbrido
+CMD ["python", "launcher.py"]

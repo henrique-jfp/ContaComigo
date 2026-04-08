@@ -237,19 +237,17 @@ def main() -> None:
         logger.error("❌ Falha ao carregar ambiente. Encerrando...")
         sys.exit(1)
 
-    apply_migrations()
-    
     settings = get_settings()
 
-    if settings.mode == ExecutionMode.BOT:
-        start_telegram_bot()
-    elif settings.mode == ExecutionMode.DASHBOARD:
-        start_dashboard()
     if settings.mode == ExecutionMode.LOCAL_DEV:
-        logger.info(f"🔄 [INSTANCE:{os.getenv('INSTANCE_ID', 'unknown')}] Modo HIBRIDO: Iniciando bot em thread e dashboard no processo principal.")
+        logger.info(f"🔄 [INSTANCE:{os.getenv('INSTANCE_ID', 'unknown')}] MODO HÍBRIDO ATIVADO")
+        logger.info("1. Aplicando Migrações...")
+        try:
+            apply_migrations()
+        except Exception as e_mig:
+            logger.error(f"❌ Erro nas migrações (tentando continuar): {e_mig}")
 
-        # Iniciar o bot em uma thread separada para não bloquear o processo principal
-        # que precisa rodar o Flask (Dashboard) para o health check do Render.
+        logger.info("2. Iniciando Thread do Bot...")
         bot_thread = Thread(
             target=start_telegram_bot,
             kwargs={"enable_health_server": False},
@@ -257,9 +255,14 @@ def main() -> None:
         )
         bot_thread.start()
 
-        # IMPORTANTE: O processo principal DEVE rodar o Dashboard
-        # para que o Render consiga fazer o Health Check na porta configurada.
-        logger.info("🚀 Disparando Dashboard no processo principal...")
+        # O processo principal PRECISA rodar o dashboard para o Render Health Check
+        logger.info("3. Disparando Dashboard (Main Process)...")
+        start_dashboard()
+    elif settings.mode == ExecutionMode.BOT:
+        apply_migrations()
+        start_telegram_bot()
+    elif settings.mode == ExecutionMode.DASHBOARD:
+        apply_migrations()
         start_dashboard()
     else:
         logger.error(f"❌ Modo de execução desconhecido: {settings.mode}. Encerrando.")
