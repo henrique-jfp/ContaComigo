@@ -521,7 +521,7 @@ def _formatar_busca_compras(lancamentos: list[Lancamento], termo: str) -> str:
 
 
 def _extrair_valor_regex(texto: str) -> float | None:
-    \"\"\"Extrai o primeiro valor numérico que parece monetário.\"\"\"
+    """Extrai o primeiro valor numérico que parece monetário."""
     texto = texto.replace("reais", "").replace("real", "").strip()
     match = re.search(r'(\d+(?:[.,]\d{1,2})?)\b', texto)
     if match:
@@ -534,10 +534,10 @@ def _extrair_valor_regex(texto: str) -> float | None:
 
 
 def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
-    \"\"\"
+    """
     Tenta detectar intenções de ação (Lançamento, Meta, Agendamento) via Regex.
     Retorna (nome_funcao, argumentos) ou None.
-    \"\"\"
+    """
     t = texto.lower().strip()
     
     # 1. LANÇAMENTO (Gastei, Paguei, Recebi, Lança)
@@ -1736,13 +1736,14 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             return ConversationHandler.END
 
         # Extração de tool_calls (seja da IA ou do interceptor)
+        ia_message = {}
         if not tool_calls and completion:
             choice = ((completion or {}).get("choices") or [{}])[0]
-            message = choice.get("message") or {}
-            tool_calls = message.get("tool_calls") or []
+            ia_message = choice.get("message") or {}
+            tool_calls = ia_message.get("tool_calls") or []
 
         if not tool_calls:
-            resposta_direta = (message.get("content") or "Não consegui processar agora. Tente novamente.").strip()
+            resposta_direta = (ia_message.get("content") or "Não consegui processar agora. Tente novamente.").strip()
 
             # Fallback para capturar vazamentos de JSON na string (ex: registrar_lancamento>{"valor":...})
             if ">" in resposta_direta and "{" in resposta_direta:
