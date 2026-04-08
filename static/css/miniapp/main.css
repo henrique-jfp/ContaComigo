@@ -1,4 +1,4 @@
-<style>
+
   body {
     background: var(--tg-theme-bg-color, #f8fafc);
     color: var(--tg-theme-text-color, #0f172a);
@@ -276,4 +276,3 @@
   }
   .percentage-receita { border-left: 3px solid #10b981; }
   .percentage-despesa { border-left: 3px solid #ef4444; }
-</style>

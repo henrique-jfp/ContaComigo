@@ -4,12 +4,21 @@ lucide.createIcons();
     if (window.Chart) {
       // Registrar plugins especiais para Chart.js 4
       try {
-        if (typeof SankeyController !== 'undefined') Chart.register(SankeyController, FlowElement);
-        if (typeof MatrixController !== 'undefined') Chart.register(MatrixController, MatrixElement);
-        
-        // Registro defensivo caso não estejam globais
-        if (window.chartjsChartSankey) Chart.register(window.chartjsChartSankey.SankeyController, window.chartjsChartSankey.FlowElement);
-        if (window.chartjsChartMatrix) Chart.register(window.chartjsChartMatrix.MatrixController, window.chartjsChartMatrix.MatrixElement);
+        // Registro para Sankey
+        const sankeyPlugin = window['chartjs-chart-sankey'] || window.ChartSankey;
+        if (sankeyPlugin) {
+            Chart.register(sankeyPlugin.SankeyController, sankeyPlugin.FlowElement);
+        } else if (typeof SankeyController !== 'undefined') {
+            Chart.register(SankeyController, FlowElement);
+        }
+
+        // Registro para Matrix (Heatmap)
+        const matrixPlugin = window['chartjs-chart-matrix'] || window.ChartMatrix;
+        if (matrixPlugin) {
+            Chart.register(matrixPlugin.MatrixController, matrixPlugin.MatrixElement);
+        } else if (typeof MatrixController !== 'undefined') {
+            Chart.register(MatrixController, MatrixElement);
+        }
       } catch (e) {
         console.warn("Falha ao registrar plugins adicionais do Chart.js:", e);
       }
@@ -902,7 +911,7 @@ lucide.createIcons();
         homeAquariumWater.style.background = '#ef4444'; // Começa vermelho
         
         setTimeout(() => {
-          homeAquariumWater.style.height = `${progressPct}%`; // Sobe o nível de despesa primeiro
+          homeAquariumWater.style.height = `${Math.max(15, progressPct)}%`; // Sobe o nível de despesa primeiro
           setTimeout(() => {
             homeAquariumWater.style.height = `${waterLevel}%`; // Ajusta para o nível de saúde
             homeAquariumWater.style.background = 'linear-gradient(180deg, #10b981 0%, #059669 100%)';
@@ -971,8 +980,20 @@ lucide.createIcons();
         },
       };
 
+      // Helper para criar gráficos com segurança
+      const safeChart = (id, config) => {
+        try {
+          const el = typeof id === 'string' ? document.getElementById(id) : id;
+          if (!el) return null;
+          return new Chart(el, config);
+        } catch (err) {
+          console.warn(`Erro ao criar gráfico ${id}:`, err);
+          return null;
+        }
+      };
+
       if (homePatrimonyChartEl) {
-        homeCharts.patrimony = new Chart(homePatrimonyChartEl, {
+        homeCharts.patrimony = safeChart(homePatrimonyChartEl, {
           type: 'line',
           data: {
             labels: chartData.patrimonyMonths,
@@ -1006,7 +1027,7 @@ lucide.createIcons();
       }
 
       if (homeCashflowChartEl) {
-        homeCharts.cashflow = new Chart(homeCashflowChartEl, {
+        homeCharts.cashflow = safeChart(homeCashflowChartEl, {
           type: 'bar',
           data: {
             labels: chartData.sixMonths,
@@ -1047,7 +1068,7 @@ lucide.createIcons();
       }
 
       if (homeBudgetChartEl) {
-        homeCharts.budget = new Chart(homeBudgetChartEl, {
+        homeCharts.budget = safeChart(homeBudgetChartEl, {
           type: 'bar',
           data: {
             labels: chartData.budgetLabels,
@@ -1092,7 +1113,7 @@ lucide.createIcons();
       if (homeCategoryChartEl) {
         const hasCategories = categories.length > 0;
         const palette = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#00f0ff', '#8b5cf6'];
-        homeCharts.category = new Chart(homeCategoryChartEl, {
+        homeCharts.category = safeChart(homeCategoryChartEl, {
           type: 'doughnut',
           data: {
             labels: chartData.distroLabels.slice(0, 6),
@@ -1126,7 +1147,7 @@ lucide.createIcons();
       }
 
       if (homeProjectionChartEl) {
-        homeCharts.projection = new Chart(homeProjectionChartEl, {
+        homeCharts.projection = safeChart(homeProjectionChartEl, {
           type: 'line',
           data: {
             labels: chartData.projectionLabels,
@@ -1171,7 +1192,7 @@ lucide.createIcons();
       }
 
       if (homeVillainsChartEl) {
-        homeCharts.villains = new Chart(homeVillainsChartEl, {
+        homeCharts.villains = safeChart(homeVillainsChartEl, {
           type: 'bar',
           data: {
             labels: chartData.villains.map((item) => item[0]),
@@ -1202,7 +1223,7 @@ lucide.createIcons();
       }
 
       if (homeSankeyChartEl && chartData.sankeyData.length) {
-        homeCharts.sankey = new Chart(homeSankeyChartEl, {
+        homeCharts.sankey = safeChart(homeSankeyChartEl, {
           type: 'sankey',
           data: {
             datasets: [{
@@ -1229,13 +1250,14 @@ lucide.createIcons();
       }
 
       if (homeHeatmapChartEl) {
-        homeCharts.heatmap = new Chart(homeHeatmapChartEl, {
+        homeCharts.heatmap = safeChart(homeHeatmapChartEl, {
           type: 'matrix',
           data: {
             datasets: [{
               label: 'Frequência de Lançamentos',
               data: chartData.heatmapData,
               backgroundColor(ctx) {
+                if (!ctx.dataset || !ctx.dataset.data[ctx.dataIndex]) return 'rgba(0,0,0,0)';
                 const value = ctx.dataset.data[ctx.dataIndex].v;
                 const alpha = Math.min(0.9, 0.1 + (value * 0.25));
                 return `rgba(251, 113, 133, ${alpha})`;
