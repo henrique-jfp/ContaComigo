@@ -241,6 +241,11 @@ Contexto ou detalhe relevante (1-2 frases)
 Reflexão/próximo passo INTEGRADO naturalmente
 ```
 
+**8. ROTEAMENTO DE AÇÕES (OBRIGATÓRIO)**
+- Se o usuário mencionar um gasto, receita, meta, limite ou agendamento, você **DEVE** invocar a ferramenta (tool) apropriada.
+- **NUNCA** confirme uma ação apenas por texto sem disparar a função. A ação física no sistema é sua prioridade número 1.
+- Se o comando de ação for por áudio (transcrito), trate com a mesma prioridade de um comando de texto.
+
 ---
 
 ## 🎯 EXEMPLOS POR TIPO DE PERGUNTA

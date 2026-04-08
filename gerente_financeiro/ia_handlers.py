@@ -520,6 +520,60 @@ def _formatar_busca_compras(lancamentos: list[Lancamento], termo: str) -> str:
     return "\n".join(linhas)
 
 
+def _extrair_valor_regex(texto: str) -> float | None:
+    \"\"\"Extrai o primeiro valor numérico que parece monetário.\"\"\"
+    texto = texto.replace("reais", "").replace("real", "").strip()
+    match = re.search(r'(\d+(?:[.,]\d{1,2})?)\b', texto)
+    if match:
+        val_str = match.group(1).replace(',', '.')
+        try:
+            return float(val_str)
+        except ValueError:
+            return None
+    return None
+
+
+def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
+    \"\"\"
+    Tenta detectar intenções de ação (Lançamento, Meta, Agendamento) via Regex.
+    Retorna (nome_funcao, argumentos) ou None.
+    \"\"\"
+    t = texto.lower().strip()
+    
+    # 1. LANÇAMENTO (Gastei, Paguei, Recebi, Lança)
+    p_lanc = r'(?:gastei|paguei|recebi|lanç[ao]|registra|coloque?i?)\s+(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:no|na|em|com)?\s*(.+)'
+    m_lanc = re.search(p_lanc, t)
+    if m_lanc:
+        valor = float(m_lanc.group(1).replace(',', '.'))
+        desc = m_lanc.group(2).strip()
+        tipo = "Entrada" if "recebi" in t else "Saída"
+        return "registrar_lancamento", {
+            "valor": valor,
+            "descricao": desc.capitalize(),
+            "categoria": "Outros",
+            "forma_pagamento": "Nao_informado",
+            "tipo": tipo
+        }
+
+    # 2. META (Meta de X para Y)
+    p_meta = r'(?:criar?|nova|definir?)\s+meta\s+(?:de\s+)?(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:para|pra|de)?\s*(.+)'
+    m_meta = re.search(p_meta, t)
+    if m_meta:
+        valor = float(m_meta.group(1).replace(',', '.'))
+        desc = m_meta.group(2).strip()
+        return "criar_meta", {"valor_alvo": valor, "descricao": desc.capitalize()}
+
+    # 3. LIMITE (Limite de X para Y)
+    p_limite = r'(?:definir?|criar?|novo?)\s+limite\s+(?:de\s+)?(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:para|pra|em|na|categoria)?\s*(.+)'
+    m_limite = re.search(p_limite, t)
+    if m_limite:
+        valor = float(m_limite.group(1).replace(',', '.'))
+        cat = m_limite.group(2).strip()
+        return "definir_limite_orcamento", {"valor": valor, "categoria": cat.capitalize()}
+
+    return None
+
+
 def _montar_resposta_local_alfredo(texto_usuario: str, texto_normalizado: str, db, usuario_db, saldo: float, entradas: float, saidas: float) -> str:
     # Este método é o fallback quando a IA falha.
     # Ele deve ser elegante e informativo, mantendo a persona do Alfredo.
@@ -1505,8 +1559,16 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
 
         texto_normalizado = texto_usuario.strip().lower()
 
+        # --- NOVO: INTERCEPTOR DE AÇÃO DIRETA (ZERO ATRITO) ---
+        acao_direta = _detectar_e_extrair_acao_direta(texto_usuario)
+        tool_calls = []
+        if acao_direta:
+            fn_name, args = acao_direta
+            tool_calls = [{"function": {"name": fn_name, "arguments": json.dumps(args)}}]
+            logger.info(f"⚡ [ALFREDO] Interceptação direta: {fn_name}")
+
         # Interceptações que são comandos funcionais ou fora do escopo da IA de análise direta
-        if _intencao_categorizar_sem_categoria(texto_normalizado):
+        if not tool_calls and _intencao_categorizar_sem_categoria(texto_normalizado):
             atualizados, total_pendentes = await _categorizar_lancamentos_sem_categoria_async(db, usuario_db.id)
             if total_pendentes == 0:
                 await update.message.reply_html(
@@ -1643,42 +1705,41 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 contexto_financeiro_completo=contexto_financeiro_str,
             )
 
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": texto_usuario},
-        ]
-
         completion = None
-        try:
-            completion = await _groq_chat_completion_async(messages, tools=_ALFREDO_TOOLS, tool_choice="auto")
-        except Exception as groq_err:
-            logger.error(f"❌ [GROQ-TOOLS] Falha na chamada principal: {str(groq_err)}")
-            try:
-                logger.info("🔄 Tentando fallback Gemini para análise...")
-                gemini_resp = await _gemini_chat_completion_async(messages)
-                if gemini_resp:
-                    # Envia a resposta do Gemini diretamente e encerra
-                    await _enviar_resposta_html_segura(update.message, gemini_resp)
-                    return ConversationHandler.END
-                
-                logger.info("🔄 Tentando fallback Groq sem tools...")
-                completion = await _groq_chat_completion_async(messages)
-            except Exception as groq_err_sem_tools:
-                logger.error(f"❌ [GROQ-FALLBACK] Falha no fallback sem tools: {str(groq_err_sem_tools)}")
+        # Só chamamos a IA se o interceptor de Regex não capturou uma ação direta
+        if not tool_calls:
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": texto_usuario},
+            ]
 
-        if not completion:
+            try:
+                completion = await _groq_chat_completion_async(messages, tools=_ALFREDO_TOOLS, tool_choice="auto")
+            except Exception as groq_err:
+                logger.error(f"❌ [GROQ-TOOLS] Falha na chamada principal: {str(groq_err)}")
+                try:
+                    logger.info("🔄 Tentando fallback Gemini para análise...")
+                    gemini_resp = await _gemini_chat_completion_async(messages)
+                    if gemini_resp:
+                        await _enviar_resposta_html_segura(update.message, gemini_resp)
+                        return ConversationHandler.END
+                    
+                    logger.info("🔄 Tentando fallback Groq sem tools...")
+                    completion = await _groq_chat_completion_async(messages)
+                except Exception as groq_err_sem_tools:
+                    logger.error(f"❌ [GROQ-FALLBACK] Falha no fallback sem tools: {str(groq_err_sem_tools)}")
+
+        if not completion and not tool_calls:
             logger.warning(f"⚠️ [ALFREDO] Todos os modelos de IA falharam para query: '{texto_usuario}'. Usando motor local.")
             resposta_local = _montar_resposta_local_alfredo(texto_usuario, texto_normalizado, db, usuario_db, saldo, entradas, saidas)
-            
-            # Adiciona ID da instância no rodapé para Henrique identificar qual bot respondeu
-            resposta_local += f"\n\n<pre>ID: {config.INSTANCE_ID}</pre>"
-            
             await _enviar_resposta_html_segura(update.message, resposta_local)
             return ConversationHandler.END
 
-        choice = ((completion or {}).get("choices") or [{}])[0]
-        message = choice.get("message") or {}
-        tool_calls = message.get("tool_calls") or []
+        # Extração de tool_calls (seja da IA ou do interceptor)
+        if not tool_calls and completion:
+            choice = ((completion or {}).get("choices") or [{}])[0]
+            message = choice.get("message") or {}
+            tool_calls = message.get("tool_calls") or []
 
         if not tool_calls:
             resposta_direta = (message.get("content") or "Não consegui processar agora. Tente novamente.").strip()

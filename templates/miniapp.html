@@ -379,6 +379,9 @@
               <div class="mt-1 text-[11px] text-telegram-hint"><span id="homeXp">0</span> XP</div>
               <div class="mt-2 text-[11px] font-semibold text-telegram-text"><span id="homeStreak">0</span> dias</div>
               <div class="mt-2 text-[10px] font-bold uppercase tracking-[0.18em] text-brand/80" id="homePlanLabel" style="display:none"></div>
+              <div id="homeUpgradeBtn" class="mt-2 w-full py-1.5 bg-brand text-white text-[10px] font-bold uppercase tracking-wider rounded-lg text-center shadow-sm hover:bg-brand-soft transition active:scale-95" style="display:none">
+                💎 SEJA PREMIUM
+              </div>
             </button>
           </div>
 
@@ -1060,6 +1063,7 @@
     const homeCategoryChartEl = document.getElementById('homeCategoryChart');
     const homeBadgeContainer = document.getElementById('homeBadgeContainer');
     const homePlanLabel = document.getElementById('homePlanLabel');
+    const homeUpgradeBtn = document.getElementById('homeUpgradeBtn');
     const homeProjectionChartEl = document.getElementById('homeProjectionChart');
     const homeVillainsChartEl = document.getElementById('homeVillainsChart');
     const homeSankeyChartEl = document.getElementById('homeSankeyChart');
@@ -1926,9 +1930,18 @@
       if (summary?.plan_label) {
         homePlanLabel.textContent = summary.plan_label;
         homePlanLabel.style.display = 'block';
+        
+        // Mostrar botão de upgrade se for free ou trial
+        const userPlan = summary.plan || 'free';
+        if (userPlan === 'free' || userPlan === 'trial') {
+          homeUpgradeBtn.style.display = 'block';
+        } else {
+          homeUpgradeBtn.style.display = 'none';
+        }
       } else {
         homePlanLabel.textContent = '';
         homePlanLabel.style.display = 'none';
+        homeUpgradeBtn.style.display = 'none';
       }
 
       homeRecentCache = Array.isArray(summary?.recent) ? summary.recent : [];
@@ -3422,6 +3435,19 @@
     });
 
     homeRecentRefresh.addEventListener('click', loadHomeOverview);
+    
+    if (homeUpgradeBtn) {
+      homeUpgradeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (window.Telegram?.WebApp) {
+          // Obtém o username do bot dinamicamente ou usa o padrão
+          const botUsername = 'MaestroFinanceiroBot'; // Ajustado para o nome do bot do projeto
+          window.Telegram.WebApp.openTelegramLink(`https://t.me/${botUsername}?start=premium`);
+          setTimeout(() => window.Telegram.WebApp.close(), 100);
+        }
+      });
+    }
+
     homeLevelCard.addEventListener('click', openGameProfilePanel);
     gameProfileRefresh.addEventListener('click', async () => {
       await loadGameProfile();

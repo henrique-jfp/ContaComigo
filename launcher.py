@@ -241,13 +241,9 @@ def main() -> None:
 
     if settings.mode == ExecutionMode.LOCAL_DEV:
         logger.info(f"🔄 [INSTANCE:{os.getenv('INSTANCE_ID', 'unknown')}] MODO HÍBRIDO ATIVADO")
-        logger.info("1. Aplicando Migrações...")
-        try:
-            apply_migrations()
-        except Exception as e_mig:
-            logger.error(f"❌ Erro nas migrações (tentando continuar): {e_mig}")
-
-        logger.info("2. Iniciando Thread do Bot...")
+        
+        # 1. Thread do Bot em paralelo imediato
+        logger.info("1. Iniciando Thread do Bot...")
         bot_thread = Thread(
             target=start_telegram_bot,
             kwargs={"enable_health_server": False},
@@ -255,8 +251,18 @@ def main() -> None:
         )
         bot_thread.start()
 
-        # O processo principal PRECISA rodar o dashboard para o Render Health Check
-        logger.info("3. Disparando Dashboard (Main Process)...")
+        # 2. Migrações em background para não travar o boot do HTTP
+        def run_migrations():
+            try:
+                apply_migrations()
+            except Exception as e:
+                logger.error(f"❌ Erro nas migrações em background: {e}")
+        
+        migration_thread = Thread(target=run_migrations, daemon=True)
+        migration_thread.start()
+
+        # 3. Disparar Dashboard (Processo Principal) - Essencial para o Render Health Check
+        logger.info("2. Disparando Dashboard (Main Process)...")
         start_dashboard()
     elif settings.mode == ExecutionMode.BOT:
         apply_migrations()
