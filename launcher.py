@@ -244,16 +244,21 @@ def main() -> None:
         start_telegram_bot()
     elif settings.mode == ExecutionMode.DASHBOARD:
         start_dashboard()
-    elif settings.mode == ExecutionMode.LOCAL_DEV:
-        logger.info("🔄 Modo HIBRIDO: Iniciando bot em thread e dashboard no processo principal.")
-        # Em plataformas como Railway, manter o web server no processo principal
-        # evita o cenário onde o bot continua vivo, mas a aplicação web cai.
+    if settings.mode == ExecutionMode.LOCAL_DEV:
+        logger.info(f"🔄 [INSTANCE:{os.getenv('INSTANCE_ID', 'unknown')}] Modo HIBRIDO: Iniciando bot em thread e dashboard no processo principal.")
+
+        # Iniciar o bot em uma thread separada para não bloquear o processo principal
+        # que precisa rodar o Flask (Dashboard) para o health check do Render.
         bot_thread = Thread(
             target=start_telegram_bot,
             kwargs={"enable_health_server": False},
             daemon=True,
         )
         bot_thread.start()
+
+        # IMPORTANTE: O processo principal DEVE rodar o Dashboard
+        # para que o Render consiga fazer o Health Check na porta configurada.
+        logger.info("🚀 Disparando Dashboard no processo principal...")
         start_dashboard()
     else:
         logger.error(f"❌ Modo de execução desconhecido: {settings.mode}. Encerrando.")
