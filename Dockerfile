@@ -30,9 +30,5 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # Copia o resto da aplicação
 COPY . /app
 
-# Permitir passagem de porta via env (Railway define PORT automaticamente)
-ENV PORT=8000
-
-EXPOSE 8000
-
-CMD ["gunicorn", "-b", "0.0.0.0:8000", "app:app", "--workers", "2", "--timeout", "120"]
+# O Gunicorn usará o arquivo de configuração definitivo
+CMD ["gunicorn", "-c", "gunicorn_config.py", "app:app"]

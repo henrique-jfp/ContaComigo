@@ -24,6 +24,26 @@ try:
     # Importar o dashboard Flask
     from analytics.dashboard_app import app
     
+    # 🔥 INICIALIZAÇÃO HÍBRIDA (Bot + Dashboard)
+    # Quando o gunicorn carrega o 'app', precisamos subir o bot em thread
+    try:
+        from threading import Thread
+        from launcher import start_telegram_bot
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        logger.info("🔄 Detectado carregamento da aplicação. Iniciando thread do Bot...")
+        
+        bot_thread = Thread(
+            target=start_telegram_bot,
+            kwargs={"enable_health_server": False},
+            daemon=True,
+        )
+        bot_thread.start()
+        logger.info("✅ Thread do Bot disparada em background.")
+    except Exception as e_bot:
+        print(f"⚠️ Falha ao iniciar bot em background: {e_bot}")
+
     # Configuração para produção
     if __name__ != "__main__":
         # Quando chamado pelo gunicorn

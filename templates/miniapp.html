@@ -8,6 +8,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lucide@latest"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-sankey@0.12.0/dist/chartjs-chart-sankey.min.js"></script>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
   (function syncTelegramTheme() {
@@ -406,6 +408,8 @@
               <button type="button" data-home-chart-pill="chart-distribuicao" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Distribuicao</button>
               <button type="button" data-home-chart-pill="chart-projecao" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Projecao</button>
               <button type="button" data-home-chart-pill="chart-viloes" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Top 5 Viloes</button>
+              <button type="button" data-home-chart-pill="chart-sankey" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Fluxo</button>
+              <button type="button" data-home-chart-pill="chart-heatmap" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Densidade</button>
             </div>
           </div>
 
@@ -492,6 +496,32 @@
               </div>
               <div class="h-[280px]">
                 <canvas id="homeVillainsChart"></canvas>
+              </div>
+            </article>
+
+            <article id="chart-sankey" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+              <div class="mb-3 flex items-center justify-between">
+                <div>
+                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Fluxo</p>
+                  <h3 class="text-lg font-extrabold text-telegram-text">Caminho do Dinheiro</h3>
+                </div>
+                <i data-lucide="git-branch" class="h-5 w-5 text-brand"></i>
+              </div>
+              <div class="h-[280px]">
+                <canvas id="homeSankeyChart"></canvas>
+              </div>
+            </article>
+
+            <article id="chart-heatmap" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+              <div class="mb-3 flex items-center justify-between">
+                <div>
+                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Densidade</p>
+                  <h3 class="text-lg font-extrabold text-telegram-text">Mapa de Calor de Gastos</h3>
+                </div>
+                <i data-lucide="layout-grid" class="h-5 w-5 text-brand"></i>
+              </div>
+              <div class="h-[280px]">
+                <canvas id="homeHeatmapChart"></canvas>
               </div>
             </article>
           </div>
@@ -1026,6 +1056,8 @@
     const homePlanLabel = document.getElementById('homePlanLabel');
     const homeProjectionChartEl = document.getElementById('homeProjectionChart');
     const homeVillainsChartEl = document.getElementById('homeVillainsChart');
+    const homeSankeyChartEl = document.getElementById('homeSankeyChart');
+    const homeHeatmapChartEl = document.getElementById('homeHeatmapChart');
     const homeCategoryValue = document.getElementById('homeCategoryValue');
     const homeCategoryLabel = document.getElementById('homeCategoryLabel');
     const historyList = document.getElementById('historyList');
@@ -1762,6 +1794,49 @@
 
       const villains = topVillains.map((item) => [item.label || 'Sem nome', Number(item.value || 0)]);
 
+      // Sankey Data (Flow)
+      const sankeyData = [];
+      if (receita > 0) {
+        const saldoLivre = Math.max(0, receita - despesa);
+        sankeyData.push({ from: 'Receitas', to: 'Caixa', flow: receita });
+        if (despesa > 0) sankeyData.push({ from: 'Caixa', to: 'Despesas', flow: despesa });
+        if (saldoLivre > 0) sankeyData.push({ from: 'Caixa', to: 'Saldo Livre', flow: saldoLivre });
+        
+        // Link despesas para categorias (top 5)
+        categories.forEach(cat => {
+          if (cat.value > 0) {
+            sankeyData.push({ from: 'Despesas', to: cat.label, flow: Number(cat.value) });
+          }
+        });
+      }
+
+      // Heatmap Data (Activity by Day of Week vs Week of Month)
+      const heatmapData = [];
+      const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+      const weeks = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4', 'Sem 5'];
+      
+      // Mock/Process activity data if available or create placeholder
+      // For now, let's use recent transactions to build a basic density map
+      const activityMap = {}; 
+      const recent = summary?.recent || [];
+      recent.forEach(item => {
+        const d = new Date(item.data);
+        const dayIdx = d.getDay();
+        const weekIdx = Math.floor((d.getDate() - 1) / 7);
+        const key = `${dayIdx}-${weekIdx}`;
+        activityMap[key] = (activityMap[key] || 0) + 1;
+      });
+
+      weeks.forEach((w, wIdx) => {
+        days.forEach((d, dIdx) => {
+          heatmapData.push({
+            x: d,
+            y: w,
+            v: activityMap[`${dIdx}-${wIdx}`] || 0
+          });
+        });
+      });
+
       return {
         sixMonths,
         patrimonyMonths,
@@ -1777,6 +1852,8 @@
         projectionHistory,
         projectionFuture,
         villains,
+        sankeyData,
+        heatmapData,
       };
     }
 
@@ -2095,6 +2172,72 @@
               y: { grid: { display: false }, ticks: { color: '#475569' } },
             },
           },
+        });
+      }
+
+      if (homeSankeyChartEl && chartData.sankeyData.length) {
+        homeCharts.sankey = new Chart(homeSankeyChartEl, {
+          type: 'sankey',
+          data: {
+            datasets: [{
+              label: 'Fluxo Financeiro',
+              data: chartData.sankeyData,
+              colorFrom: (c) => palette[c.index % palette.length],
+              colorTo: (c) => palette[(c.index + 1) % palette.length],
+              colorMode: 'gradient',
+              alpha: 0.45,
+              fontFamily: "'Outfit', sans-serif",
+              fontWeight: 'bold',
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: commonAnimation,
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { label: (ctx) => `Fluxo: ${formatCurrencyBR(ctx.raw.flow)}` } }
+            }
+          }
+        });
+      }
+
+      if (homeHeatmapChartEl) {
+        homeCharts.heatmap = new Chart(homeHeatmapChartEl, {
+          type: 'matrix',
+          data: {
+            datasets: [{
+              label: 'Frequência de Lançamentos',
+              data: chartData.heatmapData,
+              backgroundColor(ctx) {
+                const value = ctx.dataset.data[ctx.dataIndex].v;
+                const alpha = Math.min(0.9, 0.1 + (value * 0.25));
+                return `rgba(251, 113, 133, ${alpha})`;
+              },
+              borderColor: 'rgba(251, 113, 133, 0.15)',
+              borderWidth: 1,
+              width: ({chart}) => (chart.chartArea || {}).width / 7 - 4,
+              height: ({chart}) => (chart.chartArea || {}).height / 5 - 4,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: commonAnimation,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  title: () => 'Densidade de Gastos',
+                  label: (ctx) => `${ctx.raw.v} lançamento(s) na ${ctx.raw.y} (${ctx.raw.x})`
+                }
+              }
+            },
+            scales: {
+              x: { type: 'category', labels: ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'], grid: { display: false } },
+              y: { type: 'category', labels: ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4', 'Sem 5'], grid: { display: false }, offset: true }
+            }
+          }
         });
       }
 
