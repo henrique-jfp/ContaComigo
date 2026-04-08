@@ -3,6 +3,7 @@
 Launcher unificado, robusto e otimizado para produção.
 """
 
+# ContaComigo Launcher - v2.2.0 (Premium Dashboard Update)
 import os
 import sys
 import logging
