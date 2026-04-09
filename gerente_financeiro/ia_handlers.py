@@ -549,54 +549,71 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
     """
     t = texto.lower().strip()
     
-    # 1. LANÇAMENTO (Gastei, Paguei, Recebi, Lança, Comprei)
-    # Suporta: "Gastei 50 no mercado", "Comprei uma calça de 300 reais", "Lança 20 reais em transporte"
-    # Padrao A: Verbo + Valor + Descrição
-    p_lanc_a = r'(?:gastei|paguei|recebi|lanç[ao]|registra|coloque?i?|comprei|compras?)\s+(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:no|na|em|com|de)?\s*(.+)'
-    # Padrao B: Verbo + Descrição + Valor no final
-    p_lanc_b = r'(?:gastei|paguei|recebi|lanç[ao]|registra|coloque?i?|comprei|compras?)\s+(.+?)\s+(?:por|de|foi|valor de)?\s*(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)?$'
+    # 1. LANÇAMENTO (Gastei, Paguei, Recebi, Lança, Comprei, Registra)
+    # Suporta: "Gastei 50 no mercado", "Comprei uma calça de 300 reais", "Quero registrar uma compra de 300 na oakley"
+    # Verbos e variações
+    verbos = r'(?:gastei|paguei|recebi|lanç[ao]r?|registra?r?|coloque?i?|comprei|compras?|adiciona?r?|anota?r?)'
+    # Artigos e conectivos opcionais
+    fillers = r'(?:\s+(?:um|uma|o|a|os|as|do|da|no|na|em|com|de|valor|compra|gasto|despesa|receita|para|pra))*'
+    
+    # Padrao A: Verbo + (Fillers) + Valor + (Fillers) + Descrição
+    p_lanc_a = verbos + fillers + r'\s+(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:no|na|em|com|de)?\s*(.+)'
+    # Padrao B: Verbo + (Fillers) + Descrição + (Fillers) + Valor no final
+    p_lanc_b = verbos + fillers + r'\s+(.+?)\s+(?:por|de|foi|valor de|r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)?$'
     
     m_a = re.search(p_lanc_a, t)
     if m_a:
-        valor = float(m_a.group(1).replace(',', '.'))
-        desc = m_a.group(2).strip()
-        tipo = "Entrada" if "recebi" in t else "Saída"
-        return "registrar_lancamento", {
-            "valor": valor,
-            "descricao": desc.capitalize(),
-            "categoria": "Outros",
-            "forma_pagamento": "Nao_informado",
-            "tipo": tipo
-        }
+        try:
+            valor = float(m_a.group(1).replace(',', '.'))
+            desc = m_a.group(2).strip()
+            tipo = "Entrada" if any(x in t for x in ["recebi", "ganhei", "vendi", "salário", "reembolso"]) else "Saída"
+            return "registrar_lancamento", {
+                "valor": valor,
+                "descricao": desc.capitalize(),
+                "categoria": "Outros",
+                "forma_pagamento": "Nao_informado",
+                "tipo": tipo
+            }
+        except (ValueError, IndexError):
+            pass
         
     m_b = re.search(p_lanc_b, t)
     if m_b:
-        desc = m_b.group(1).strip()
-        valor = float(m_b.group(2).replace(',', '.'))
-        tipo = "Entrada" if "recebi" in t else "Saída"
-        return "registrar_lancamento", {
-            "valor": valor,
-            "descricao": desc.capitalize(),
-            "categoria": "Outros",
-            "forma_pagamento": "Nao_informado",
-            "tipo": tipo
-        }
+        try:
+            desc = m_b.group(1).strip()
+            valor = float(m_b.group(2).replace(',', '.'))
+            tipo = "Entrada" if any(x in t for x in ["recebi", "ganhei", "vendi", "salário", "reembolso"]) else "Saída"
+            return "registrar_lancamento", {
+                "valor": valor,
+                "descricao": desc.capitalize(),
+                "categoria": "Outros",
+                "forma_pagamento": "Nao_informado",
+                "tipo": tipo
+            }
+        except (ValueError, IndexError):
+            pass
 
     # 2. META (Meta de X para Y)
-    p_meta = r'(?:criar?|nova|definir?)\s+meta\s+(?:de\s+)?(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:para|pra|de)?\s*(.+)'
+    p_meta = r'(?:criar?|nova|definir?|adiciona?r?)\s+meta\s+(?:de\s+)?(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:para|pra|de)?\s*(.+)'
     m_meta = re.search(p_meta, t)
     if m_meta:
-        valor = float(m_meta.group(1).replace(',', '.'))
-        desc = m_meta.group(2).strip()
-        return "criar_meta", {"valor_alvo": valor, "descricao": desc.capitalize()}
+        try:
+            valor = float(m_meta.group(1).replace(',', '.'))
+            desc = m_meta.group(2).strip()
+            return "criar_meta", {"valor_alvo": valor, "descricao": desc.capitalize()}
+        except (ValueError, IndexError):
+            pass
 
     # 3. LIMITE (Limite de X para Y)
-    p_limite = r'(?:definir?|criar?|novo?)\s+limite\s+(?:de\s+)?(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:para|pra|em|na|categoria)?\s*(.+)'
+    p_limite = r'(?:definir?|criar?|novo?|limita?r?)\s+limite\s+(?:de\s+)?(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:para|pra|em|na|categoria)?\s*(.+)'
     m_limite = re.search(p_limite, t)
     if m_limite:
-        valor = float(m_limite.group(1).replace(',', '.'))
-        cat = m_limite.group(2).strip()
-        return "definir_limite_orcamento", {"valor": valor, "categoria": cat.capitalize()}
+        try:
+            valor = float(m_limite.group(1).replace(',', '.'))
+            cat = m_limite.group(2).strip()
+            return "definir_limite_orcamento", {"valor": valor, "categoria": cat.capitalize()}
+        except (ValueError, IndexError):
+            pass
 
     return None
 
@@ -708,9 +725,8 @@ def _resumo_contas_local(db, usuario_id: int) -> str:
 
     if not agendamentos:
         return (
-            "✅ <b>Tudo em dia por aqui!</b>\n\n"
-            "Não encontrei contas fixas ou compromissos pendentes no momento. "
-            "Manter seus agendamentos atualizados é o segredo para nunca ser pego de surpresa. 🚀"
+            "✅ <b>Tudo em dia!</b>\n\n"
+            "Não encontrei compromissos pendentes no momento."
         )
 
     linhas = ["🗓️ <b>Compromissos Financeiros</b>\n"]
@@ -767,20 +783,16 @@ def _resumo_comparacao_local(db, usuario_id: int) -> str:
 
     if total_atual > total_anterior:
         status = f"⚠️ Seus gastos estão <b>{delta_pct:.1f}% acima</b> do mês passado."
-        insight = "Vale a pena revisar as categorias que mais pesaram para frear essa tendência."
     elif total_atual < total_anterior:
         status = f"✅ Excelente! Você reduziu seus gastos em <b>{abs(delta_pct):.1f}%</b> comparado ao mês passado."
-        insight = "Manter esse ritmo é o caminho mais rápido para atingir suas metas."
     else:
         status = "📊 Seus gastos estão estáveis em relação ao mês passado."
-        insight = "Estabilidade é bom, mas sempre há espaço para otimizar um pouco mais."
 
     return (
         f"🔍 <b>Comparativo Mensal</b>\n\n"
         f"• <b>Mês Atual:</b> <code>{_formatar_valor_brasileiro(total_atual)}</code>\n"
         f"• <b>Mês Passado:</b> <code>{_formatar_valor_brasileiro(total_anterior)}</code>\n\n"
-        f"{status}\n\n"
-        f"💡 {insight}"
+        f"{status}"
     )
 
 
@@ -802,17 +814,14 @@ def _resumo_alerta_local(db, usuario_id: int) -> str:
     if saldo_mes < 0:
         titulo = "🚨 <b>Alerta de Atenção Máxima</b>"
         msg = f"Seu mês está fechando no negativo em <code>{_formatar_valor_brasileiro(abs(saldo_mes))}</code>."
-        dica = "Recomendo travar gastos variáveis imediatamente para proteger seu caixa."
     elif saidas_mes > entradas_mes * 0.85:
         titulo = "⚠️ <b>Alerta de Margem Estreita</b>"
         msg = "Seus gastos já consumiram mais de 85% das suas entradas deste mês."
-        dica = "Estamos no limite seguro. Qualquer gasto extra pode comprometer o próximo mês."
     else:
         titulo = "✅ <b>Saúde Financeira sob Controle</b>"
         msg = "Seu padrão de gastos atual está dentro de uma margem segura."
-        dica = "Você tem fôlego para manter suas metas ou até acelerar algum aporte."
 
-    return f"{titulo}\n\n{msg}\n\n💡 {dica}"
+    return f"{titulo}\n\n{msg}"
 
 
 def _resumo_previsao_local(db, usuario_id: int, saldo: float, entradas: float, saidas: float) -> str:
@@ -846,8 +855,8 @@ def _resumo_previsao_local(db, usuario_id: int, saldo: float, entradas: float, s
 
     linhas = [
         primeira,
-        f"Seu limite seguro diário agora é {_formatar_valor_brasileiro(limite_diario)}.",
-        f"👉 Insight: sua média diária está em {_formatar_valor_brasileiro(media_diaria_saida)}; baixar isso um pouco já muda o fechamento.",
+        f"Seu limite seguro diário é {_formatar_valor_brasileiro(limite_diario)}.",
+        f"Média diária atual: {_formatar_valor_brasileiro(media_diaria_saida)}.",
     ]
     return "\n".join(linhas)
 
@@ -870,21 +879,19 @@ def _resumo_analise_gastos_local(db, usuario_id: int) -> str:
     if top_categorias:
         nome_top, valor_top = top_categorias[0]
         linhas = [
-            f"💸 Seu principal ralo hoje está em {escape(nome_top)} ({_formatar_valor_brasileiro(valor_top)}).",
+            f"💸 Principal gasto: {escape(nome_top)} ({_formatar_valor_brasileiro(valor_top)}).",
         ]
     else:
-        linhas = ["💸 Seu padrão ainda está pouco categorizado, mas dá para ajustar rápido."]
+        linhas = ["💸 Sem categorias predominantes detectadas."]
 
     if maior:
         linhas.append(
-            f"O maior gasto recente foi {escape(maior.descricao or 'Lançamento')} em {_formatar_valor_brasileiro(abs(float(maior.valor or 0)))}."
+            f"Maior gasto recente: {escape(maior.descricao or 'Lançamento')} ({_formatar_valor_brasileiro(abs(float(maior.valor or 0)))})."
         )
 
     if top_recorrentes:
         nome_rec, qtd_rec = top_recorrentes[0]
-        linhas.append(f"👉 Insight: {escape(nome_rec)} aparece {qtd_rec}x em gastos pequenos e recorrentes.")
-    else:
-        linhas.append("👉 Insight: cortar a categoria mais alta em 10% costuma dar resultado mais rápido que vários cortes pequenos.")
+        linhas.append(f"Frequência: {escape(nome_rec)} aparece {qtd_rec}x recentemente.")
     return "\n".join(linhas)
 
 
@@ -892,20 +899,16 @@ def _resumo_consultoria_local(db, usuario_id: int, saldo: float, entradas: float
     top_categorias = _resumo_categoria_gastos(db, usuario_id, limite=3)
     if saldo < 0 or saidas > entradas:
         linhas = [
-            "⚠️ Meu direcionamento direto: corta gastos variáveis agora e protege seu caixa esta semana.",
-            "Comece travando compras não essenciais até voltar para margem positiva.",
+            "⚠️ O saldo está negativo. Recomendo conter gastos variáveis.",
         ]
     else:
         linhas = [
-            "✅ Você está no controle, então a jogada certa agora é consistência e acúmulo.",
-            "Reserve parte do saldo positivo antes de aumentar gasto de estilo de vida.",
+            "✅ O fluxo está positivo.",
         ]
 
     if top_categorias:
         nome_top, valor_top = top_categorias[0]
-        linhas.append(f"👉 Insight: sua maior alavanca hoje é {escape(nome_top)} ({_formatar_valor_brasileiro(valor_top)}).")
-    else:
-        linhas.append("👉 Insight: o maior ganho agora vem de categorizar melhor seus lançamentos para cortar com precisão.")
+        linhas.append(f"Maior alavanca: {escape(nome_top)} ({_formatar_valor_brasileiro(valor_top)}).")
     return "\n".join(linhas)
 
 
@@ -927,25 +930,22 @@ def _resumo_semana_local(db, usuario_id: int) -> str:
     top_categorias = _resumo_categoria_gastos_por_lancamentos(lancamentos, limite=3)
 
     linhas = [
-        f"📊 Nessa semana você gastou {_formatar_valor_brasileiro(saidas_sem)} e entrou {_formatar_valor_brasileiro(entradas_sem)}.",
-        f"Seu saldo semanal ficou em {_formatar_valor_brasileiro(saldo_sem)}.",
+        f"📊 Nesta semana: Saídas {_formatar_valor_brasileiro(saidas_sem)} | Entradas {_formatar_valor_brasileiro(entradas_sem)}.",
+        f"Saldo semanal: {_formatar_valor_brasileiro(saldo_sem)}.",
     ]
     if top_categorias:
         nome_top, valor_top = top_categorias[0]
-        linhas.append(f"👉 Insight: {escape(nome_top)} foi a categoria que mais pesou na semana ({_formatar_valor_brasileiro(valor_top)}).")
-    else:
-        linhas.append("👉 Insight: com mais lançamentos categorizados, seus cortes ficam muito mais assertivos.")
+        linhas.append(f"Destaque: {escape(nome_top)} ({_formatar_valor_brasileiro(valor_top)}).")
     return "\n".join(linhas)
 
 
 def _resumo_saldo_local(saldo: float, entradas: float, saidas: float) -> str:
     status = "🟢 Positivo" if saldo >= 0 else "🔴 Negativo"
     return (
-        f"💰 <b>Situação Financeira Atual</b>\n\n"
+        f"💰 <b>Situação Financeira</b>\n\n"
         f"• <b>Saldo Disponível:</b> <code>{_formatar_valor_brasileiro(saldo)}</code> ({status})\n"
-        f"• <b>Entradas (Acumulado):</b> <code>{_formatar_valor_brasileiro(entradas)}</code>\n"
-        f"• <b>Saídas (Acumulado):</b> <code>{_formatar_valor_brasileiro(saidas)}</code>\n\n"
-        f"💡 <i>Lembre-se: o saldo disponível é sua ferramenta de liberdade. Use-o com estratégia.</i>"
+        f"• <b>Entradas:</b> <code>{_formatar_valor_brasileiro(entradas)}</code>\n"
+        f"• <b>Saídas:</b> <code>{_formatar_valor_brasileiro(saidas)}</code>"
     )
 
 
@@ -956,7 +956,7 @@ def _resumo_metas_local(db, usuario_id: int) -> str:
     ).order_by(Objetivo.criado_em.desc(), Objetivo.id.desc()).all()
 
     if not objetivos_ativos:
-        return "🎯 <b>Minhas Metas</b>\n\nVocê ainda não tem metas ativas. Ter um objetivo claro (como uma reserva ou viagem) torna o controle financeiro muito mais prazeroso!"
+        return "🎯 <b>Metas</b>\n\nVocê não tem metas ativas no momento."
 
     linhas = ["🎯 <b>Progresso das Metas</b>\n"]
     for obj in objetivos_ativos[:3]:
@@ -965,7 +965,6 @@ def _resumo_metas_local(db, usuario_id: int) -> str:
         perc = (v_atual / v_meta * 100) if v_meta > 0 else 0
         linhas.append(f"• <b>{escape(obj.descricao)}:</b> {perc:.0f}% (<code>{_formatar_valor_brasileiro(v_atual)}</code> de <code>{_formatar_valor_brasileiro(v_meta)}</code>)")
 
-    linhas.append("\n💡 <i>A consistência nos pequenos aportes é o que constrói grandes patrimônios.</i>")
     return "\n".join(linhas)
 
 
@@ -980,11 +979,10 @@ def _resumo_mes_local(db, usuario_id: int) -> str:
     saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith(("entr", "recei")))
     
     return (
-        f"📊 <b>Fechamento Parcial do Mês</b>\n\n"
-        f"• <b>Total Entradas:</b> <code>{_formatar_valor_brasileiro(entradas_mes)}</code>\n"
-        f"• <b>Total Saídas:</b> <code>{_formatar_valor_brasileiro(saidas_mes)}</code>\n"
-        f"• <b>Resultado:</b> <code>{_formatar_valor_brasileiro(entradas_mes - saidas_mes)}</code>\n\n"
-        f"💡 <i>Cada economia hoje é um investimento no seu eu do futuro.</i>"
+        f"📊 <b>Fechamento Parcial</b>\n\n"
+        f"• <b>Entradas:</b> <code>{_formatar_valor_brasileiro(entradas_mes)}</code>\n"
+        f"• <b>Saídas:</b> <code>{_formatar_valor_brasileiro(saidas_mes)}</code>\n"
+        f"• <b>Resultado:</b> <code>{_formatar_valor_brasileiro(entradas_mes - saidas_mes)}</code>"
     )
 
 
