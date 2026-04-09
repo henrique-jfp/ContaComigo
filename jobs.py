@@ -147,7 +147,7 @@ def configurar_jobs(job_queue):
                                 f"• Registrou {resumo['lancamentos']} lançamentos\n"
                                 f"• Criou {resumo['metas']} metas\n"
                                 f"• Usou o Alfredo {resumo['ia_questions']} vezes\n\n"
-                                "Amanhã você escolhe: continua com tudo por R$ 19,90/mês "
+                                "Amanhã você escolhe: continua com tudo por R$ 12,90/mês "
                                 "ou segue no free tier. Seus dados ficam intactos."
                             ),
                         )
@@ -159,8 +159,8 @@ def configurar_jobs(job_queue):
                     try:
                         keyboard = InlineKeyboardMarkup(
                             [
-                                [InlineKeyboardButton("💎 Premium Mensal — R$ 19,90/mês", callback_data="plan_choose_premium_monthly")],
-                                [InlineKeyboardButton("📅 Premium Anual — R$ 159,90/ano", callback_data="plan_choose_premium_annual")],
+                                [InlineKeyboardButton("💎 Premium Mensal — R$ 12,90/mês", callback_data="plan_choose_premium_monthly")],
+                                [InlineKeyboardButton("📅 Premium Anual — R$ 129,00/ano", callback_data="plan_choose_premium_annual")],
                                 [InlineKeyboardButton("Continuar no Free Tier", callback_data="plan_choose_free")],
                             ]
                         )

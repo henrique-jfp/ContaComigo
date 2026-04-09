@@ -684,16 +684,26 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
         except (ValueError, IndexError):
             pass
 
-    # 3. LIMITE (Limite de X para Y)
-    p_limite = r'\b(?:definir?|criar?|novo?|limita?r?)\b\s+limite\s+(?:de\s+)?(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)?\s*(?:para|pra|em|na|categoria)?\s*(.+)'
-    m_limite = re.search(p_limite, t)
-    if m_limite:
+    # 3. LIMITE (Limite de X em Y OU Limite em Y de X)
+    # Suporta: "limite de 300 em lazer", "limite para lazer de 300", "limita alimentação em 500"
+    p_limite_a = r'\b(?:definir?|criar?|novo?|limita?r?)\b\s+limite\s+(?:de\s+)?(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)?\s*(?:para|pra|em|na|categoria)?\s*(.+)'
+    p_limite_b = r'\b(?:definir?|criar?|novo?|limita?r?)\b\s+limite\s+(?:para|pra|em|na|categoria)?\s*(.+?)\s+(?:de|valor de|em|no valor de|r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)?$'
+    
+    m_lim_a = re.search(p_limite_a, t)
+    if m_lim_a:
         try:
-            valor = float(m_limite.group(1).replace(',', '.'))
-            cat = m_limite.group(2).strip()
+            valor = float(m_lim_a.group(1).replace(',', '.'))
+            cat = m_lim_a.group(2).strip()
             return "definir_limite_orcamento", {"valor": valor, "categoria": cat.capitalize()}
-        except (ValueError, IndexError):
-            pass
+        except (ValueError, IndexError): pass
+
+    m_lim_b = re.search(p_limite_b, t)
+    if m_lim_b:
+        try:
+            cat = m_lim_b.group(1).strip()
+            valor = float(m_lim_b.group(2).replace(',', '.'))
+            return "definir_limite_orcamento", {"valor": valor, "categoria": cat.capitalize()}
+        except (ValueError, IndexError): pass
 
     return None
 
@@ -1875,33 +1885,25 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         if not tool_calls:
             resposta_direta = (ia_message.get("content") or "Não consegui processar agora. Tente novamente.").strip()
 
-            # Fallback robusto para capturar JSON na string (ex: Markdown, JSON puro ou formato intent>JSON)
-            json_match = re.search(r'\{.*\}', resposta_direta, re.DOTALL)
+            # Fallback robuso para capturar JSON na string (Exige nome da função explícito)
+            json_match = re.search(r'(\{.*\})', resposta_direta, re.DOTALL)
             if json_match:
                 try:
-                    args_parse = json.loads(json_match.group(0))
-                    intent = "registrar_lancamento"
-                    if ">" in resposta_direta:
-                        intent = resposta_direta.split(">", 1)[0].lower()
+                    args_parse = json.loads(json_match.group(1))
+                    fn_name = args_parse.get("name") or args_parse.get("function")
                     
-                    content_lower = resposta_direta.lower()
-                    if "limite" in intent or "limite" in content_lower:
-                        fake_fn = "definir_limite_orcamento"
-                        if "valor" not in args_parse and "valor_limite" in args_parse: args_parse["valor"] = args_parse["valor_limite"]
-                        if "categoria" not in args_parse: args_parse["categoria"] = args_parse.get("descricao", "Geral")
-                    elif "meta" in intent or "objetivo" in intent or "criar_meta" in intent:
-                        fake_fn = "criar_meta"
-                        if "valor_alvo" not in args_parse and "valor" in args_parse: args_parse["valor_alvo"] = args_parse["valor"]
-                    elif "agendar_despesa" in intent or ("agenda" in content_lower and "despesa" in content_lower):
-                        fake_fn = "agendar_despesa"
-                    elif "agendar_receita" in intent or ("agenda" in content_lower and "receita" in content_lower):
-                        fake_fn = "agendar_receita"
-                    elif "duvida" in intent or "responder" in intent or "pergunta" in intent:
-                        fake_fn = "responder_duvida_financeira"
-                    else:
-                        fake_fn = "registrar_lancamento"
-                        
-                    tool_calls = [{"function": {"name": fake_fn, "arguments": json.dumps(args_parse)}}]
+                    if fn_name:
+                        real_args = args_parse.get("arguments") or args_parse.get("parameters") or args_parse
+                        tool_calls = [{"function": {"name": fn_name, "arguments": json.dumps(real_args)}}]
+                    elif ">" in resposta_direta:
+                        # Formato legado: intent>JSON
+                        intent, _ = resposta_direta.split(">", 1)
+                        intent = intent.strip().lower()
+                        if "limite" in intent: fake_fn = "definir_limite_orcamento"
+                        elif "meta" in intent: fake_fn = "criar_meta"
+                        elif "agendar" in intent: fake_fn = "agendar_despesa"
+                        else: fake_fn = "registrar_lancamento"
+                        tool_calls = [{"function": {"name": fake_fn, "arguments": json.dumps(args_parse)}}]
                 except Exception:
                     pass
 

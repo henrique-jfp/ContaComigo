@@ -33,8 +33,8 @@ PLAN_PREMIUM_ANNUAL = "premium_annual"
 ALL_PLANS = {PLAN_TRIAL, PLAN_FREE, PLAN_PREMIUM_MONTHLY, PLAN_PREMIUM_ANNUAL}
 
 PLAN_PRICES = {
-    PLAN_PREMIUM_MONTHLY: 19.90,
-    PLAN_PREMIUM_ANNUAL: 159.90,
+    PLAN_PREMIUM_MONTHLY: 12.90,
+    PLAN_PREMIUM_ANNUAL: 129.00,
 }
 
 BLOCKED_ON_FREE = {
@@ -360,6 +360,77 @@ def require_plan(feature: str) -> Callable:
                 db.close()
         return wrapper
     return decorator
+
+def trial_users_expiring_in(db: Session, days: int) -> list[Usuario]:
+    now = _now_utc()
+    target_start = now + timedelta(days=days)
+    target_end = target_start + timedelta(days=1)
+    return (
+        db.query(Usuario)
+        .filter(
+            Usuario.plan == PLAN_TRIAL,
+            Usuario.trial_expires_at >= target_start,
+            Usuario.trial_expires_at < target_end,
+        )
+        .all()
+    )
+
+def trial_users_expired(db: Session) -> list[Usuario]:
+    now = _now_utc()
+    return (
+        db.query(Usuario)
+        .filter(
+            Usuario.plan == PLAN_TRIAL,
+            Usuario.trial_expires_at.isnot(None),
+            Usuario.trial_expires_at <= now,
+        )
+        .all()
+    )
+
+def build_trial_usage_summary(db: Session, user: Usuario) -> dict:
+    trial_start = user.criado_em or (_now_utc() - timedelta(days=15))
+    lancamentos = (
+        db.query(func.count(Lancamento.id))
+        .filter(
+            Lancamento.id_usuario == user.id,
+            Lancamento.data_transacao >= trial_start,
+        )
+        .scalar()
+        or 0
+    )
+    metas = (
+        db.query(func.count(Objetivo.id))
+        .filter(
+            Objetivo.id_usuario == user.id,
+            Objetivo.criado_em >= trial_start,
+        )
+        .scalar()
+        or 0
+    )
+
+    ia_total = (
+        db.query(func.sum(UserPlanUsageMonthly.ia_questions_count))
+        .filter(UserPlanUsageMonthly.id_usuario == user.id)
+        .scalar()
+        or 0
+    )
+
+    return {
+        "lancamentos": int(lancamentos),
+        "metas": int(metas),
+        "ia_questions": int(ia_total),
+    }
+
+def downgrade_expired_trials_to_free(db: Session) -> list[Usuario]:
+    expired = trial_users_expired(db)
+    changed: list[Usuario] = []
+    for user in expired:
+        user.plan = PLAN_FREE
+        db.add(user)
+        changed.append(user)
+    if changed:
+        db.commit()
+    return changed
 
 async def handle_plan_choice_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
