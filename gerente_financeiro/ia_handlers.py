@@ -549,24 +549,33 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
     """
     t = texto.lower().strip()
     
+    # Ignorar explicitamente perguntas ou buscas sobre o passado
+    if t.startswith(("qual", "quais", "como", "onde", "por que", "quando", "tem", "você acha", "voce acha")):
+        return None
+    if "último" in t or "ultimo" in t or "histórico" in t or "historico" in t:
+        return None
+    
     # 1. LANÇAMENTO (Gastei, Paguei, Recebi, Lança, Comprei, Registra)
     # Suporta: "Gastei 50 no mercado", "Comprei uma calça de 300 reais", "Quero registrar uma compra de 300 na oakley"
-    # Verbos e variações
-    verbos = r'(?:gastei|paguei|recebi|lanç[ao]r?|registra?r?|coloque?i?|comprei|compras?|adiciona?r?|anota?r?)'
+    # Verbos e variações COM \b (word boundary) para não capturar partes de palavras (ex: "lança" em "lançamento")
+    verbos = r'\b(?:gastei|paguei|recebi|lanç[ao]r?|registra?r?|coloque?i?|comprei|compras?|adiciona?r?|anota?r?)\b'
     # Artigos e conectivos opcionais
     fillers = r'(?:\s+(?:um|uma|o|a|os|as|do|da|no|na|em|com|de|valor|compra|gasto|despesa|receita|para|pra))*'
     
-    # Padrao A: Verbo + (Fillers) + Valor + (Fillers) + Descrição
-    p_lanc_a = verbos + fillers + r'\s+(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:no|na|em|com|de)?\s*(.+)'
+    # Padrao A: Verbo + (Fillers) + Valor + (reais/real opcional) + (Fillers preposicionais) + Descrição
+    p_lanc_a = verbos + fillers + r'\s+(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)?\s*(?:no|na|em|com|de|para|pra)?\s*(.+)'
     # Padrao B: Verbo + (Fillers) + Descrição + (Fillers) + Valor no final
-    p_lanc_b = verbos + fillers + r'\s+(.+?)\s+(?:por|de|foi|valor de|r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)?$'
+    p_lanc_b = verbos + fillers + r'\s+(.+?)\s+(?:por|de|foi|valor de|custou|r\$?\s*)?\s*(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)?$'
     
+    # Lista de palavras que caracterizam uma entrada
+    palavras_entrada = ["recebi", "ganhei", "vendi", "salário", "salario", "reembolso", "receita", "entrada"]
+
     m_a = re.search(p_lanc_a, t)
     if m_a:
         try:
             valor = float(m_a.group(1).replace(',', '.'))
             desc = m_a.group(2).strip()
-            tipo = "Entrada" if any(x in t for x in ["recebi", "ganhei", "vendi", "salário", "reembolso"]) else "Saída"
+            tipo = "Entrada" if any(x in t for x in palavras_entrada) else "Saída"
             return "registrar_lancamento", {
                 "valor": valor,
                 "descricao": desc.capitalize(),
@@ -582,7 +591,7 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
         try:
             desc = m_b.group(1).strip()
             valor = float(m_b.group(2).replace(',', '.'))
-            tipo = "Entrada" if any(x in t for x in ["recebi", "ganhei", "vendi", "salário", "reembolso"]) else "Saída"
+            tipo = "Entrada" if any(x in t for x in palavras_entrada) else "Saída"
             return "registrar_lancamento", {
                 "valor": valor,
                 "descricao": desc.capitalize(),
@@ -594,7 +603,7 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
             pass
 
     # 2. META (Meta de X para Y)
-    p_meta = r'(?:criar?|nova|definir?|adiciona?r?)\s+meta\s+(?:de\s+)?(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:para|pra|de)?\s*(.+)'
+    p_meta = r'\b(?:criar?|nova|definir?|adiciona?r?)\b\s+meta\s+(?:de\s+)?(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)?\s*(?:para|pra|de)?\s*(.+)'
     m_meta = re.search(p_meta, t)
     if m_meta:
         try:
@@ -605,7 +614,7 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
             pass
 
     # 3. LIMITE (Limite de X para Y)
-    p_limite = r'(?:definir?|criar?|novo?|limita?r?)\s+limite\s+(?:de\s+)?(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:para|pra|em|na|categoria)?\s*(.+)'
+    p_limite = r'\b(?:definir?|criar?|novo?|limita?r?)\b\s+limite\s+(?:de\s+)?(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)?\s*(?:para|pra|em|na|categoria)?\s*(.+)'
     m_limite = re.search(p_limite, t)
     if m_limite:
         try:
