@@ -15,6 +15,7 @@ from gerente_financeiro.gamification_missions_service import (
     apply_monthly_performance_awards,
 )
 from database.database import get_db
+from models import Usuario
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from gerente_financeiro.monetization import (
     build_trial_usage_summary,

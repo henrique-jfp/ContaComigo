@@ -12,7 +12,8 @@ async def sincronizar_manual(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_id = update.effective_user.id
     msg = await update.message.reply_text("🔄 <i>Sincronizando seus dados bancários... Aguarde.</i>", parse_mode='HTML')
     
-    with get_db() as db:
+    db = next(get_db())
+    try:
         usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
         if not usuario or not usuario.pierre_api_key:
             await msg.edit_text("❌ Você ainda não configurou o Open Finance. Use /pierre primeiro.")
@@ -27,6 +28,8 @@ async def sincronizar_manual(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except Exception as e:
             logging.error(f"Erro no sync manual: {e}")
             await msg.edit_text("❌ Erro inesperado ao sincronizar.")
+    finally:
+        db.close()
 
 async def start_pierre(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Inicia a conversa secreta."""
@@ -49,7 +52,8 @@ async def receive_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     # Salva no banco de dados
-    with get_db() as db:
+    db = next(get_db())
+    try:
         usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
         if usuario:
             usuario.pierre_api_key = chave
@@ -69,6 +73,8 @@ async def receive_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         else:
             await update.message.reply_text("❌ Usuário não encontrado no banco de dados.")
+    finally:
+        db.close()
 
     return ConversationHandler.END
 
