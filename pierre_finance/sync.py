@@ -40,10 +40,17 @@ async def sincronizar_open_finance(usuario: Usuario, db: Session):
         conta_local = db.query(Conta).filter(Conta.external_id == str(ext_id)).first()
         
         if not conta_local:
+            # Mapeamento de tipos para o padrão local
+            pierre_type = acc.get("type", "BANK")
+            tipo_local = "Outro"
+            if pierre_type == "BANK": tipo_local = "Conta Corrente"
+            elif pierre_type == "CREDIT": tipo_local = "Cartão de Crédito"
+            elif pierre_type == "INVESTMENT": tipo_local = "Investimento"
+
             conta_local = Conta(
                 id_usuario=usuario.id,
                 nome=acc.get("name", "Conta Open Finance"),
-                tipo=acc.get("type", "BANK"), # OpenAPI usa BANK, CREDIT, etc
+                tipo=tipo_local,
                 external_id=str(ext_id)
             )
             db.add(conta_local)
@@ -80,6 +87,18 @@ async def sincronizar_open_finance(usuario: Usuario, db: Session):
         # Categorização automática pelo Alfredo
         cat_id, subcat_id = _categorizar_com_mapa_inteligente(descricao, tipo, db)
         
+        # Normalização da forma de pagamento para evitar CheckViolation no banco
+        # Valores permitidos: 'Pix', 'Crédito', 'Débito', 'Boleto', 'Dinheiro', 'Nao_informado'
+        desc_lower = descricao.lower()
+        if "pix" in desc_lower:
+            fp = "Pix"
+        elif tx.get("accountType") == "CREDIT":
+            fp = "Crédito"
+        elif tx.get("accountType") == "BANK" or tx.get("accountType") == "PAYMENT_ACCOUNT":
+            fp = "Débito"
+        else:
+            fp = "Nao_informado"
+
         novo_lancamento = Lancamento(
             id_usuario=usuario.id,
             descricao=descricao,
@@ -90,7 +109,7 @@ async def sincronizar_open_finance(usuario: Usuario, db: Session):
             external_id=str(ext_id),
             id_categoria=cat_id,
             id_subcategoria=subcat_id,
-            forma_pagamento="Cartão" if tx.get("accountType") == "CREDIT" else "Transferência"
+            forma_pagamento=fp
         )
         db.add(novo_lancamento)
         novos_lancamentos += 1
