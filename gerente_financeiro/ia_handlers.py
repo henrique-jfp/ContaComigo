@@ -530,13 +530,68 @@ def _formatar_resposta_html(texto: str) -> str:
 
 
 async def _enviar_resposta_html_segura(message, texto: str, **kwargs):
+    """
+    Formata e envia uma resposta em HTML para o usuário.
+    Garante que se a mensagem for muito longa, ela seja fatiada para evitar erro 400 do Telegram.
+    """
     texto_html = _formatar_resposta_html(texto)
-    try:
-        return await message.reply_html(texto_html, **kwargs)
-    except Exception as exc:
-        logger.warning("Falha ao enviar HTML seguro; usando texto simples: %s", exc)
-        texto_plano = re.sub(r"<[^>]+>", "", texto_html)
-        return await message.reply_text(texto_plano, **kwargs)
+    
+    # Se for pequeno, envia direto (caminho rápido)
+    if len(texto_html) <= 4000:
+        try:
+            return await message.reply_html(texto_html, **kwargs)
+        except Exception as exc:
+            if "Message is too long" in str(exc):
+                return await _enviar_mensagem_fatiada(message, texto_html, is_html=True, **kwargs)
+                
+            logger.warning("Falha ao enviar HTML seguro; usando texto simples: %s", exc)
+            texto_plano = re.sub(r"<[^>]+>", "", texto_html)
+            try:
+                return await message.reply_text(texto_plano, **kwargs)
+            except Exception as e2:
+                logger.error("Erro ao enviar texto simples: %s", e2)
+                return await _enviar_mensagem_fatiada(message, texto_plano, is_html=False, **kwargs)
+
+    # Se for longo (> 4000), fatiar
+    logger.info(f"Mensagem longa detectada ({len(texto_html)} chars). Fatiando...")
+    return await _enviar_mensagem_fatiada(message, texto_html, is_html=True, **kwargs)
+
+
+async def _enviar_mensagem_fatiada(message, texto: str, is_html: bool = True, **kwargs):
+    """Divide a mensagem em pedaços menores de 4000 caracteres."""
+    limite = 4000
+    pedaços = []
+    
+    temp_texto = texto
+    while temp_texto:
+        if len(temp_texto) <= limite:
+            pedaços.append(temp_texto)
+            break
+            
+        quebra = temp_texto.rfind('\n', 0, limite)
+        if quebra == -1:
+            quebra = limite
+            
+        fatia = temp_texto[:quebra]
+        pedaços.append(fatia)
+        temp_texto = temp_texto[quebra:].lstrip()
+    
+    for p in pedaços:
+        if not p.strip(): continue
+        try:
+            if is_html:
+                await message.reply_html(p, **kwargs)
+            else:
+                await message.reply_text(p, **kwargs)
+        except Exception as e:
+            logger.error(f"Erro ao enviar fatia: {e}")
+            # Fallback final: tenta texto plano se HTML falhar na fatia (ex: tag quebrada)
+            if is_html:
+                p_plano = re.sub(r"<[^>]+>", "", p)
+                try:
+                    await message.reply_text(p_plano, **kwargs)
+                except Exception:
+                    pass
 
 
 def _intencao_busca_compra(texto: str) -> bool:

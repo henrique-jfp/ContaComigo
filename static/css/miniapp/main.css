@@ -243,6 +243,33 @@
     }
   }
 
+  /* Pierre Button Styles */
+  .nav-btn-pierre {
+    z-index: 60;
+    box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
+  }
+  .nav-btn-pierre:not(.hidden) {
+    display: flex !important;
+  }
+  .nav-btn-pierre.tab-active {
+    transform: translate(-50%, -4px) scale(1.1);
+    box-shadow: 0 12px 30px rgba(139, 92, 246, 0.6);
+    border-color: #8b5cf6;
+  }
+  
+  /* Ajuste para desktop */
+  body.device-desktop .nav-btn-pierre {
+    position: static;
+    transform: none;
+    width: 60px;
+    height: 60px;
+    margin: 0.5rem auto;
+    border: none;
+  }
+  body.device-desktop .nav-btn-pierre.tab-active {
+    transform: scale(1.1);
+  }
+
   /* Componente Aquário - REFORMULADO */
   .aquarium-card {
     position: relative;
