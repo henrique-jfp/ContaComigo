@@ -1923,6 +1923,10 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 return ConversationHandler.END
 
         tool_call = tool_calls[0]
+        # Garante que a tool_call tenha um ID (obrigatório para Cerebras/Groq)
+        if not tool_call.get("id"):
+            tool_call["id"] = f"call_{fn_name}_{int(time.time())}"
+            
         fn = (tool_call.get("function") or {})
         fn_name = fn.get("name")
         raw_args = fn.get("arguments") or "{}"
@@ -1946,11 +1950,14 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             
             resultado_bruto = executar_tool_pierre(fn_name, args, usuario_db.pierre_api_key)
             
-            # Se o resultado for erro 401, avisar o usuário diretamente e encerrar.
-            if isinstance(resultado_bruto, dict) and (resultado_bruto.get("status_code") == 401 or "Unauthorized" in str(resultado_bruto)):
+            # Se o resultado for erro 401 ou 403, avisar o usuário diretamente.
+            if isinstance(resultado_bruto, dict) and resultado_bruto.get("status_code") in [401, 403]:
+                msg_erro = "❌ <b>Sua Chave do Open Finance é inválida ou expirou.</b>"
+                if resultado_bruto.get("type") == "no_subscription":
+                    msg_erro = "❌ <b>Assinatura Pierre Finance Inativa.</b>\n\nVerifique seu plano no site da Pierre."
+                
                 await update.message.reply_html(
-                    "❌ <b>Sua Chave do Open Finance expirou ou é inválida.</b>\n\n"
-                    "Por favor, use o comando <code>/pierre</code> novamente para reconfigurar sua chave de acesso secreta."
+                    f"{msg_erro}\n\nUse o comando <code>/pierre</code> para configurar uma nova chave se necessário."
                 )
                 return ConversationHandler.END
 
@@ -1960,13 +1967,10 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 "tool_calls": tool_calls
             })
 
-            # Adiciona o resultado da tool usando o novo padrão 'tool'
-            # Pegamos o ID real da chamada se existir, senão usamos um fixo
-            tool_id = tool_call.get("id") or f"call_{fn_name}_{int(time.time())}"
-            
+            # Adiciona o resultado da tool usando o ID consistente
             messages.append({
                 "role": "tool",
-                "tool_call_id": tool_id,
+                "tool_call_id": tool_call["id"],
                 "name": fn_name,
                 "content": str(resultado_bruto)
             })

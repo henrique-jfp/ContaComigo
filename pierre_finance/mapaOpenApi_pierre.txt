@@ -1,0 +1,2968 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Pierre Finance API",
+    "description": "API para acessar dados financeiros do Pierre Finance, incluindo contas, transações, parcelas e sincronização.",
+    "version": "v1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://www.pierre.finance"
+    }
+  ],
+  "paths": {
+    "/tools/api/get-bills": {
+      "get": {
+        "description": "Retorna faturas de cartão de crédito vencidas (apenas faturas já fechadas e com vencimento passado) do usuário autenticado. Requer API key para autenticação e assinatura ativa.",
+        "operationId": "getBills",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "description": "ID da conta de cartão de crédito para filtrar as faturas (opcional)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de faturas de cartão de crédito vencidas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "description": "Indica se a requisição foi bem-sucedida",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "description": "Lista de faturas de cartão de crédito vencidas",
+                      "items": {
+                        "$ref": "#/components/schemas/Bill"
+                      }
+                    },
+                    "count": {
+                      "type": "number",
+                      "description": "Número de faturas retornadas",
+                      "example": 1
+                    },
+                    "filters": {
+                      "type": "object",
+                      "description": "Filtros aplicados na consulta",
+                      "properties": {
+                        "accountId": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "ID da conta filtrada (null se não especificado)"
+                        },
+                        "onlyPastDue": {
+                          "type": "boolean",
+                          "description": "Indica que apenas faturas vencidas são retornadas",
+                          "example": true
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "Timestamp da requisição em formato ISO 8601",
+                      "example": "2024-05-15T10:30:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Bills"
+        ]
+      }
+    },
+    "/tools/api/get-bill-summary": {
+      "get": {
+        "description": "Retorna o resumo da fatura atual do(s) cartão(ões) de crédito do usuário: limite total, limite disponível, período considerado e o valor aproximado da fatura. Requer API key para autenticação e assinatura ativa.",
+        "operationId": "getBillSummary",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "description": "ID da conta de cartão de crédito para filtrar o cálculo (opcional)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "closingDay",
+            "in": "query",
+            "description": "Dia de fechamento manual (1–31). Se informado junto com accountId, será usado no cálculo deste cartão.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 31
+            }
+          },
+          {
+            "name": "startDate",
+            "in": "query",
+            "description": "Data de início do período para cálculo da fatura (formato ISO 8601). Sobrescreve o cálculo automático baseado no closing day.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "description": "Data de fim do período para cálculo da fatura (formato ISO 8601). Sobrescreve o cálculo automático baseado no closing day.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumo da fatura corrente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "description": "Indica se a requisição foi bem-sucedida",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "description": "Resumo da fatura corrente de cartão de crédito",
+                      "items": {
+                        "$ref": "#/components/schemas/BillSummary"
+                      }
+                    },
+                    "recommendations": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Mensagens com recomendações (ex.: ausência de closingDay e sugestão de uso do manage-closing-date)"
+                    },
+                    "transactionsInfo": {
+                      "type": "string",
+                      "description": "Informação sobre o número de transações consideradas no cálculo",
+                      "example": "Este cálculo considerou 25 transação(ões) no período da fatura atual."
+                    },
+                    "notice": {
+                      "type": "string",
+                      "description": "Aviso sobre valor aproximado e possíveis atrasos de sincronização",
+                      "example": "O valor da fatura é aproximado. Algumas transações podem ainda não ter sido lançadas e o banco pode demorar para sincronizar."
+                    },
+                    "guidance": {
+                      "type": "string",
+                      "description": "Orientação para usar get-bills em casos de faturas já fechadas/vencidas",
+                      "example": "Para faturas já fechadas/atrasadas use o endpoint get-bills. O get-bill-summary é para a fatura corrente (ainda não fechada)."
+                    },
+                    "filters": {
+                      "type": "object",
+                      "description": "Filtros aplicados na consulta (ex.: accountId, closingDay, startDate, endDate)",
+                      "properties": {
+                        "accountId": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "ID da conta filtrada"
+                        },
+                        "closingDay": {
+                          "type": "integer",
+                          "nullable": true,
+                          "description": "Dia de fechamento usado"
+                        },
+                        "startDate": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true,
+                          "description": "Data de início do período"
+                        },
+                        "endDate": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true,
+                          "description": "Data de fim do período"
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "Timestamp da requisição em formato ISO 8601",
+                      "example": "2024-05-15T10:30:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Bills"
+        ]
+      }
+    },
+    "/tools/api/manage-closing-date": {
+      "post": {
+        "description": "Gerencia datas de fechamento de cartões de crédito. Permite listar contas, criar, atualizar, deletar e consultar datas de fechamento. Requer API key para autenticação e assinatura ativa.",
+        "operationId": "manageClosingDate",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManageClosingDateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Operação realizada com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ListAccountsResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ClosingDateOperationResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetros inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "403": {
+            "description": "Acesso negado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Closing date does not belong to user"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Closing date not found or does not belong to user"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Closing Dates"
+        ]
+      }
+    },
+    "/tools/api/get-api-key-info": {
+      "get": {
+        "description": "Get information about how to generate and use API keys for Pierre Finance",
+        "operationId": "getApiKeyInfo",
+        "responses": {
+          "200": {
+            "description": "API key information and available tools",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "To use Pierre Finance API tools, you need to generate an API key."
+                    },
+                    "steps": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "example": [
+                        "1. Visit https://pierre.finance/api-key",
+                        "2. Sign in to your account",
+                        "3. Create a new API key or use the default one",
+                        "4. Copy the API key (starts with \"sk-\")",
+                        "5. Use this API key in your requests to other tools"
+                      ]
+                    },
+                    "example": {
+                      "type": "object",
+                      "properties": {
+                        "tool": {
+                          "type": "string",
+                          "example": "get-accounts"
+                        },
+                        "endpoint": {
+                          "type": "string",
+                          "example": "GET /tools/api/get-accounts"
+                        },
+                        "headers": {
+                          "type": "object",
+                          "properties": {
+                            "Authorization": {
+                              "type": "string",
+                              "example": "Bearer sk-your-api-key-here"
+                            },
+                            "Content-Type": {
+                              "type": "string",
+                              "example": "application/json"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "note": {
+                      "type": "string",
+                      "example": "API keys are required for all financial data access. Keep your API key secure and never share it publicly."
+                    },
+                    "availableTools": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "endpoint": {
+                            "type": "string"
+                          },
+                          "method": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "requiresAuth": {
+                            "type": "boolean"
+                          },
+                          "category": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Internal server error"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/tools/api/get-accounts": {
+      "get": {
+        "description": "Retorna todas as contas financeiras do usuário. Requer API key para autenticação e assinatura ativa.",
+        "operationId": "getAccounts",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de contas financeiras",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Account"
+                      }
+                    },
+                    "count": {
+                      "type": "number",
+                      "example": 3
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication or subscription error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Authorization header required"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "invalid_api_key",
+                        "no_subscription",
+                        "subscription_canceled",
+                        "subscription_expired"
+                      ]
+                    },
+                    "subscriptionStatus": {
+                      "type": "string",
+                      "enum": [
+                        "canceled",
+                        "expired"
+                      ]
+                    },
+                    "currentPeriodEnd": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "nextSteps": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Internal server error"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Accounts"
+        ]
+      }
+    },
+    "/tools/api/get-balance": {
+      "get": {
+        "description": "Retorna o saldo total e detalhes de todas as contas bancárias. Requer API key para autenticação e assinatura ativa.",
+        "operationId": "getBalance",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dados de saldo consolidado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Balance"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication or subscription error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Authorization header required"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "invalid_api_key",
+                        "no_subscription",
+                        "subscription_canceled",
+                        "subscription_expired"
+                      ]
+                    },
+                    "subscriptionStatus": {
+                      "type": "string",
+                      "enum": [
+                        "canceled",
+                        "expired"
+                      ]
+                    },
+                    "currentPeriodEnd": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "nextSteps": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Internal server error"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Balance"
+        ]
+      }
+    },
+    "/tools/api/get-balance-by-account": {
+      "get": {
+        "description": "Retorna o saldo e detalhes de uma conta bancária específica. Requer API key para autenticação e assinatura ativa.",
+        "operationId": "getBalanceByAccount",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "description": "Identificador único da conta bancária",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dados de saldo da conta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AccountBalance"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetros inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Account ID is required"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication or subscription error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Authorization header required"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "invalid_api_key",
+                        "no_subscription",
+                        "subscription_canceled",
+                        "subscription_expired"
+                      ]
+                    },
+                    "subscriptionStatus": {
+                      "type": "string",
+                      "enum": [
+                        "canceled",
+                        "expired"
+                      ]
+                    },
+                    "currentPeriodEnd": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "nextSteps": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conta não encontrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Account not found"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erro interno do servidor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Failed to get balance by account id from database"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Balance"
+        ]
+      }
+    },
+    "/tools/api/get-installments": {
+      "get": {
+        "description": "Retrieve all installments transactions of the period. Fetches ALL installments (past, current, and future) for purchases made within the specified period. Requires API key for authentication and active subscription.",
+        "operationId": "getInstallments",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "startDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "Start date for filtering (YYYY-MM-DD format)"
+            },
+            "description": "Start date for filtering. Defaults to first day 3 months ago if not provided."
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "End date for filtering (YYYY-MM-DD format)"
+            },
+            "description": "End date for filtering. Defaults to last day of current month if not provided."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Installments data and statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/InstallmentStats"
+                    },
+                    "summary": {
+                      "$ref": "#/components/schemas/InstallmentSummary"
+                    },
+                    "purchases": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/InstallmentPurchase"
+                      }
+                    },
+                    "dateRange": {
+                      "type": "object",
+                      "properties": {
+                        "startDate": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "endDate": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication or subscription error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerError"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Installments"
+        ]
+      }
+    },
+    "/tools/api/get-transactions": {
+      "get": {
+        "description": "Retrieves the user's financial transaction history within a specific period with intelligent filtering and automatic categorization. Supports filtering by account type, transaction type, category, amount ranges, and natural language queries via clientMessage parameter. Applies two processing stages: 1) LLM-powered intelligent filtering (when clientMessage is provided), 2) Automatic transaction categorization (always applied). Supports two response formats: 'raw' (default) for unprocessed data, and 'structured' for organized data with groupings and summaries. Requires API key for authentication and active subscription.",
+        "operationId": "getTransactions",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "startDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "Start date for filtering (YYYY-MM-DD format)"
+            },
+            "description": "Start date for filtering"
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "End date for filtering (YYYY-MM-DD format)"
+            },
+            "description": "End date for filtering"
+          },
+          {
+            "name": "categories",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Comma-separated list of category names to filter by"
+            },
+            "description": "Categories to filter by (comma-separated)"
+          },
+          {
+            "name": "minAmount",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "description": "Minimum amount to filter by"
+            },
+            "description": "Minimum amount to filter by"
+          },
+          {
+            "name": "maxAmount",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "description": "Maximum amount to filter by"
+            },
+            "description": "Maximum amount to filter by"
+          },
+          {
+            "name": "accountType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "BANK",
+                "CREDIT",
+                "INVESTMENT",
+                "LOAN"
+              ],
+              "description": "Account type to filter by"
+            },
+            "description": "Account type to filter by"
+          },
+          {
+            "name": "accountSubtype",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CHECKING_ACCOUNT",
+                "SAVINGS_ACCOUNT",
+                "CREDIT_CARD",
+                "PAYMENT_ACCOUNT"
+              ],
+              "description": "Account subtype to filter by"
+            },
+            "description": "Account subtype to filter by"
+          },
+          {
+            "name": "includeStatus",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Comma-separated list of transaction statuses to include (POSTED, PENDING)"
+            },
+            "description": "Transaction statuses to include (comma-separated)"
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "raw",
+                "structured"
+              ],
+              "default": "raw",
+              "description": "Response format: 'raw' returns unprocessed transaction data (default), 'structured' returns organized data with groupings, summaries, and category breakdowns."
+            },
+            "description": "Response format type (default: raw)"
+          },
+          {
+            "name": "clientMessage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Natural language message to apply intelligent filtering using LLM. When provided, filters transactions based on the intent expressed in the message (e.g., 'show me food expenses', 'transactions over 100 reais', 'payments to supermarkets')."
+            },
+            "description": "Intelligent filter message for LLM-powered transaction filtering"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of transactions (format depends on 'format' parameter)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "oneOf": [
+                        {
+                          "type": "array",
+                          "description": "Raw transaction data (when format=raw or not specified)",
+                          "items": {
+                            "$ref": "#/components/schemas/Transaction"
+                          }
+                        },
+                        {
+                          "description": "Structured formatted data (when format=structured)",
+                          "$ref": "#/components/schemas/FriendlyTransactionData"
+                        }
+                      ]
+                    },
+                    "count": {
+                      "type": "number",
+                      "example": 150,
+                      "description": "Total number of raw transactions"
+                    },
+                    "totalBeforeFilter": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "Total number of transactions before intelligent filtering (only present when clientMessage is used)",
+                      "example": 250
+                    },
+                    "clientMessageUsed": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "The client message used for intelligent filtering (only present when clientMessage is provided)",
+                      "example": "show me food expenses over 50 reais"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Descriptive message about the filtering results and processing applied",
+                      "example": "Encontradas 150 transações (de 250 totais após aplicar filtro inteligente baseado na sua mensagem). Os dados foram estruturados para facilitar a análise."
+                    },
+                    "filters": {
+                      "type": "object",
+                      "properties": {
+                        "startDate": {
+                          "type": "string"
+                        },
+                        "endDate": {
+                          "type": "string"
+                        },
+                        "categories": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "minAmount": {
+                          "type": "number"
+                        },
+                        "maxAmount": {
+                          "type": "number"
+                        },
+                        "accountType": {
+                          "type": "string"
+                        },
+                        "accountSubtype": {
+                          "type": "string"
+                        },
+                        "format": {
+                          "type": "string",
+                          "enum": [
+                            "raw",
+                            "structured"
+                          ],
+                          "description": "Indicates the format used for the response data"
+                        },
+                        "clientMessage": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "The client message used for intelligent filtering (null if not provided)",
+                          "example": "show me food expenses over 50 reais"
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Invalid accountType"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "received": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Transactions"
+        ]
+      }
+    },
+    "/tools/api/manual-update": {
+      "post": {
+        "description": "Synchronizes all connected financial accounts and transactions with the latest data from banks and credit card providers. Requires API key for authentication and active subscription.",
+        "operationId": "manualUpdate",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Manual sync initiated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "description": "Indica se a requisição foi bem-sucedida",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Mensagem de confirmação da sincronização",
+                      "example": "Accounts and transactions update process completed"
+                    },
+                    "details": {
+                      "$ref": "#/components/schemas/ManualUpdateDetails",
+                      "description": "Detalhes do processo de sincronização categorizados por status"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "Timestamp da requisição em formato ISO 8601",
+                      "example": "2024-01-15T10:30:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Sem contas conectadas encontradas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "description": "Descrição do erro",
+                      "example": "No connected accounts found"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Mensagem explicativa do erro",
+                      "example": "Please connect your financial accounts first"
+                    },
+                    "nextSteps": {
+                      "type": "array",
+                      "description": "Próximos passos sugeridos para resolver o problema",
+                      "items": {
+                        "type": "string"
+                      },
+                      "example": [
+                        "Visit https://pierre.finance/connect to connect your financial accounts",
+                        "Make sure your accounts are properly connected and synced"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Sync"
+        ]
+      }
+    },
+    "/tools/api/create-spending-limit": {
+      "post": {
+        "description": "Cria um novo limite de gastos personalizado para uma categoria específica. Requer API key para autenticação e assinatura ativa. O usuário deve ter cota disponível baseada no seu plano (Basic: 0 limites, Pro: 2 limites, Premium: 5 limites).",
+        "operationId": "createSpendingLimit",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSpendingLimitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Limite de gastos criado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SpendingLimit"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Spending limit created successfully for Alimentação"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetros inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Invalid or missing category"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Category must be a non-empty string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "403": {
+            "description": "Cota de limites excedida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Quota exceeded"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Limite de alertas atingido. Você já tem 2 alertas ativos e seu plano PRO permite até 2 alertas."
+                    },
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Spending Limits"
+        ]
+      }
+    },
+    "/tools/api/confirm-spending-limit": {
+      "post": {
+        "description": "Confirma a criação de um limite de gastos após receber aviso sobre gastos atuais. Permite agendar o limite para o próximo período se necessário. Requer API key para autenticação e assinatura ativa.",
+        "operationId": "confirmSpendingLimit",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateSpendingLimitRequest"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "startNextPeriod": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Se deve começar o limite no próximo período (recomendado quando já há gastos no período atual)"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Limite de gastos confirmado e criado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "✅ Limite RECORRENTE de R$ 500.00 criado para \"Alimentação\" (mensal) (começando no próximo mês)!"
+                    },
+                    "limit": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "category": {
+                          "type": "string"
+                        },
+                        "limitAmount": {
+                          "type": "string"
+                        },
+                        "period": {
+                          "type": "string"
+                        },
+                        "isRecurring": {
+                          "type": "boolean"
+                        },
+                        "periodStart": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "isActive": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "403": {
+            "description": "Cota de limites excedida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Quota exceeded"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Spending Limits"
+        ]
+      }
+    },
+    "/tools/api/list-spending-limits": {
+      "get": {
+        "description": "Lista todos os limites de gastos do usuário com informações detalhadas de uso atual e validação automática de quota. Para cada limite, calcula automaticamente o valor gasto no período atual, porcentagem de uso, valor restante e status visual. Por padrão retorna apenas limites ativos, mas pode incluir inativos com o parâmetro includeInactive. SEMPRE verifica e retorna informações detalhadas sobre cota do plano (Basic: 0 alertas, Pro: 2 alertas, Premium: 5 alertas) incluindo mensagens formatadas de status e upgrade quando necessário. Requer API key para autenticação e assinatura ativa.",
+        "operationId": "listSpendingLimits",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "includeInactive",
+            "in": "query",
+            "description": "Se deve incluir limites inativos na resposta",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de limites de gastos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SpendingLimitWithUsage"
+                      }
+                    },
+                    "count": {
+                      "type": "number",
+                      "description": "Número de limites retornados",
+                      "example": 3
+                    },
+                    "quota": {
+                      "$ref": "#/components/schemas/SpendingLimitQuota"
+                    },
+                    "filters": {
+                      "type": "object",
+                      "properties": {
+                        "includeInactive": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Spending Limits"
+        ]
+      }
+    },
+    "/tools/api/get-spending-limit-transactions": {
+      "get": {
+        "description": "Retorna o status detalhado de um limite de gastos específico, incluindo valor gasto atual, porcentagem do limite, próximos alertas e histórico de transações. Calcula automaticamente o período baseado na configuração do limite. Requer API key para autenticação e assinatura ativa.",
+        "operationId": "getSpendingLimitTransactions",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limitId",
+            "in": "query",
+            "description": "ID do limite de gastos para consultar o status",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status detalhado do limite de gastos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SpendingLimitStatus"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetros inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Invalid or missing limitId"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "limitId must be provided as a query parameter"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "403": {
+            "description": "Acesso negado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Access denied"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "You can only view your own spending limits"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Limite não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Spending limit not found"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "No spending limit found with ID: sl_123abc"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Spending Limits"
+        ]
+      }
+    },
+    "/tools/api/update-spending-limit": {
+      "put": {
+        "description": "Atualiza um limite de gastos existente. Permite modificar categoria, valor, período e status ativo. O usuário só pode atualizar seus próprios limites. Requer API key para autenticação e assinatura ativa.",
+        "operationId": "updateSpendingLimit",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSpendingLimitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Limite de gastos atualizado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SpendingLimit"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Spending limit updated successfully"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetros inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Invalid or missing limitId"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "403": {
+            "description": "Acesso negado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Access denied"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "You can only update your own spending limits"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Limite não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Spending limit not found"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Spending Limits"
+        ]
+      }
+    },
+    "/tools/api/delete-spending-limit": {
+      "delete": {
+        "description": "Exclui permanentemente um limite de gastos. O usuário só pode excluir seus próprios limites. Esta operação não pode ser desfeita. Requer API key para autenticação e assinatura ativa.",
+        "operationId": "deleteSpendingLimit",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "limitId"
+                ],
+                "properties": {
+                  "limitId": {
+                    "type": "string",
+                    "description": "ID do limite de gastos a ser excluído"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Limite de gastos excluído com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Spending limit for \"Alimentação\" deleted successfully"
+                    },
+                    "deletedLimit": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "category": {
+                          "type": "string"
+                        },
+                        "limitAmount": {
+                          "type": "string"
+                        },
+                        "period": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetros inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Invalid or missing limitId"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "limitId must be a non-empty string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "403": {
+            "description": "Acesso negado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Access denied"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "You can only delete your own spending limits"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Limite não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Spending limit not found"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "No spending limit found with ID: sl_123abc"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Spending Limits"
+        ]
+      }
+    },
+    "/tools/api/create-payment-reminder": {
+      "post": {
+        "description": "Cria um novo lembrete de pagamento. Permite criar lembretes únicos ou recorrentes com notificações via WhatsApp e Email. Requer API key para autenticação e assinatura ativa. O usuário deve ter cota disponível baseada no seu plano.",
+        "operationId": "createPaymentReminder",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePaymentReminderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lembrete de pagamento criado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PaymentReminder"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Payment reminder created successfully: Conta de luz"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetros inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Invalid or missing title"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "403": {
+            "description": "Cota de lembretes excedida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "Quota exceeded"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Payment Reminders"
+        ]
+      }
+    },
+    "/tools/api/list-payment-reminders": {
+      "get": {
+        "description": "Lista todos os lembretes de pagamento do usuário com informações de cota. Permite filtrar por status (active, all, upcoming, overdue). Requer API key para autenticação e assinatura ativa.",
+        "operationId": "listPaymentReminders",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "filter",
+            "in": "query",
+            "description": "Filtro de lembretes: active (padrão), all, upcoming, overdue",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "all",
+                "upcoming",
+                "overdue"
+              ],
+              "default": "active"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "description": "Número de dias para filtrar lembretes próximos (usado com filter=upcoming)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 7
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de lembretes de pagamento",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PaymentReminder"
+                      }
+                    },
+                    "count": {
+                      "type": "number",
+                      "example": 3
+                    },
+                    "filter": {
+                      "type": "string",
+                      "example": "Active reminders"
+                    },
+                    "quota": {
+                      "$ref": "#/components/schemas/PaymentReminderQuota"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Payment Reminders"
+        ]
+      }
+    },
+    "/tools/api/update-payment-reminder": {
+      "put": {
+        "description": "Atualiza um lembrete de pagamento existente. Permite modificar título, valor, datas, padrão de recorrência e status. O usuário só pode atualizar seus próprios lembretes. Requer API key para autenticação e assinatura ativa.",
+        "operationId": "updatePaymentReminder",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePaymentReminderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lembrete de pagamento atualizado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PaymentReminder"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Payment reminder updated successfully"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetros inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Invalid or missing reminderId"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "403": {
+            "description": "Acesso negado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Unauthorized"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "You do not have permission to update this reminder"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lembrete não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Reminder not found"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Payment Reminders"
+        ]
+      }
+    },
+    "/tools/api/delete-payment-reminder": {
+      "delete": {
+        "description": "Exclui ou cancela um lembrete de pagamento. Por padrão realiza exclusão lógica (marca como inactive), mas pode fazer exclusão permanente com hardDelete=true. O usuário só pode excluir seus próprios lembretes. Requer API key para autenticação e assinatura ativa.",
+        "operationId": "deletePaymentReminder",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "reminderId",
+            "in": "query",
+            "description": "ID do lembrete de pagamento a ser excluído",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hardDelete",
+            "in": "query",
+            "description": "Se deve fazer exclusão permanente (true) ou apenas cancelar (false, padrão)",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lembrete de pagamento excluído/cancelado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string",
+                          "example": "deleted permanently"
+                        },
+                        "hardDelete": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Payment reminder \"Conta de luz\" deleted permanently successfully"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetros inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Invalid or missing reminderId"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "403": {
+            "description": "Acesso negado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Permission denied"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "You do not have permission to delete this reminder"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lembrete não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Reminder not found"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Payment Reminders"
+        ]
+      }
+    },
+    "/tools/api/get-expensive-categories": {
+      "get": {
+        "description": "Retorna as 3 categorias mais caras no período especificado. Por padrão, analisa os últimos 7 dias. Requer API key para autenticação e assinatura ativa.",
+        "operationId": "getExpensiveCategories",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "startDate",
+            "in": "query",
+            "description": "Data inicial para análise (formato YYYY-MM-DD). Padrão: 7 dias atrás.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "description": "Data final para análise (formato YYYY-MM-DD). Padrão: hoje.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Top 3 categorias mais caras",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "string",
+                      "description": "Categorias formatadas para WhatsApp",
+                      "example": "1. Alimentação: R$ 450,00\n2. Transporte: R$ 320,50\n3. Lazer: R$ 180,00"
+                    },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "totalCategories": {
+                          "type": "number",
+                          "description": "Total de categorias encontradas"
+                        },
+                        "top3Categories": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "category": {
+                                "type": "string"
+                              },
+                              "totalAmount": {
+                                "type": "number"
+                              },
+                              "formattedAmount": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "totalExpenses": {
+                          "type": "number"
+                        },
+                        "formattedTotalExpenses": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "dateRange": {
+                      "type": "object",
+                      "properties": {
+                        "startDate": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "endDate": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Analytics"
+        ]
+      }
+    },
+    "/tools/api/get-book": {
+      "get": {
+        "description": "Obtém contexto financeiro e análises do usuário. Retorna informações consolidadas sobre contas, transações, saldos e categorias. Requer API key para autenticação e assinatura ativa.",
+        "operationId": "getBook",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "includeAllPeriods",
+            "in": "query",
+            "description": "Se deve incluir dados de todos os períodos",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "includeCreditCard",
+            "in": "query",
+            "description": "Se deve incluir informações de cartão de crédito",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "includeCategories",
+            "in": "query",
+            "description": "Se deve incluir análise por categorias",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contexto financeiro do usuário",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "description": "Dados financeiros consolidados"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Analytics"
+        ]
+      }
+    },
+    "/tools/api/get-memories": {
+      "get": {
+        "description": "Adiciona uma mensagem do usuário (se fornecida) e recupera memórias formatadas para uso em prompts. Requer API key para autenticação e assinatura ativa. Requer configuração do Mem0.",
+        "operationId": "getMemories",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "message",
+            "in": "query",
+            "description": "Mensagem do usuário para adicionar à memória (opcional)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Memórias formatadas para prompts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "memoriesForPrompt": {
+                      "type": "string",
+                      "description": "Memórias formatadas para uso em prompts de LLM"
+                    },
+                    "memoryAdded": {
+                      "type": "boolean",
+                      "description": "Se uma nova memória foi adicionada"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "503": {
+            "description": "Mem0 não configurado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Mem0 not configured"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "MEM0_API_KEY environment variable is not set"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Memories"
+        ]
+      }
+    },
+    "/tools/api/get-open-finance-connection-flow": {
+      "get": {
+        "description": "Inicia o fluxo de conexão Open Finance via WhatsApp. Para usuários Premium, envia um fluxo interativo com lista de bancos. Para usuários Basic/Pro, envia notificação de acesso limitado. Requer API key para autenticação e assinatura ativa.",
+        "operationId": "getOpenFinanceConnectionFlow",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fluxo iniciado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "accepted"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "WhatsApp flow sent successfully"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados do usuário incompletos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "User phone number is required for WhatsApp operations"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthError"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Open Finance"
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "string",
+        "description": "API key in Bearer token format. Example: Bearer sk-your-api-key-here"
+      }
+    },
+    "schemas": {
+      "Account": {},
+      "Balance": {},
+      "AccountBalance": {},
+      "Transaction": {},
+      "FriendlyTransactionData": {},
+      "InstallmentStats": {},
+      "InstallmentSummary": {},
+      "InstallmentPurchase": {},
+      "Bill": {},
+      "BillSummary": {},
+      "ManageClosingDateRequest": {},
+      "ListAccountsResponse": {},
+      "ClosingDateOperationResponse": {},
+      "ManualUpdateDetails": {},
+      "SyncResultItem": {},
+      "SpendingLimit": {},
+      "SpendingLimitWithUsage": {},
+      "SpendingLimitStatus": {},
+      "SpendingLimitQuota": {},
+      "CreateSpendingLimitRequest": {},
+      "UpdateSpendingLimitRequest": {},
+      "PaymentReminder": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "nullable": true
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "reminderTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "completed",
+              "inactive"
+            ]
+          },
+          "isRecurring": {
+            "type": "boolean"
+          },
+          "recurrencePattern": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreatePaymentReminderRequest": {
+        "type": "object",
+        "required": [
+          "title",
+          "dueDate"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "reminderTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isRecurring": {
+            "type": "boolean",
+            "default": false
+          },
+          "recurrencePattern": {
+            "type": "string",
+            "enum": [
+              "daily",
+              "weekly",
+              "monthly",
+              "yearly"
+            ]
+          }
+        }
+      },
+      "UpdatePaymentReminderRequest": {
+        "type": "object",
+        "required": [
+          "reminderId"
+        ],
+        "properties": {
+          "reminderId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "reminderTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "newStatus": {
+            "type": "string",
+            "enum": [
+              "active",
+              "completed",
+              "inactive"
+            ]
+          }
+        }
+      },
+      "PaymentReminderQuota": {
+        "type": "object",
+        "properties": {
+          "subscriptionType": {
+            "type": "string",
+            "enum": [
+              "basic",
+              "pro",
+              "premium"
+            ]
+          },
+          "currentCount": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "canCreate": {
+            "type": "boolean"
+          },
+          "remaining": {
+            "type": "number"
+          }
+        }
+      },
+      "AuthError": {},
+      "ServerError": {}
+    },
+    "responses": {
+      "AuthError": {
+        "description": "Authentication or subscription error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AuthError"
+            }
+          }
+        }
+      },
+      "ServerError": {
+        "description": "Internal server error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ServerError"
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Authentication",
+      "description": "API key management and authentication"
+    },
+    {
+      "name": "Accounts",
+      "description": "Financial accounts management"
+    },
+    {
+      "name": "Transactions",
+      "description": "Financial transactions"
+    },
+    {
+      "name": "Installments",
+      "description": "Credit card installments and purchases"
+    },
+    {
+      "name": "Bills",
+      "description": "Credit card bills and current bill summaries"
+    },
+    {
+      "name": "Balance",
+      "description": "Account balance information"
+    },
+    {
+      "name": "Closing Dates",
+      "description": "Credit card closing date management"
+    },
+    {
+      "name": "Sync",
+      "description": "Account synchronization"
+    },
+    {
+      "name": "Spending Limits",
+      "description": "Personal spending limits and alerts management"
+    },
+    {
+      "name": "Payment Reminders",
+      "description": "Payment reminders management with WhatsApp and Email notifications"
+    },
+    {
+      "name": "Analytics",
+      "description": "Financial analytics and insights"
+    },
+    {
+      "name": "Memories",
+      "description": "User memory management for personalized AI interactions"
+    },
+    {
+      "name": "Open Finance",
+      "description": "Open Finance connection and integration"
+    }
+  ]
+}
