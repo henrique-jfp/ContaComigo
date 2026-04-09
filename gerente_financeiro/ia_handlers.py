@@ -139,7 +139,7 @@ _ALFREDO_TOOLS = [
         "type": "function",
         "function": {
             "name": "registrar_lancamento",
-            "description": "Registra um lançamento financeiro REAL de entrada ou saída. IMPORTANTE: Use APENAS quando o usuário afirmar que JÁ pagou/recebeu ou VAI pagar/receber definitivamente. NÃO USE para simulações ou perguntas hipotéticas (ex: 'se eu comprar um tênis').",
+            "description": "Registra um lançamento financeiro NOVO (entrada ou saída). Use APENAS quando o usuário der uma ordem direta de registro (ex: 'gastei 50', 'recebi 100'). PROIBIDO usar para perguntas de histórico (ex: 'qual meu último lançamento?'), consultas de saldo ou dúvidas gerais.",
             "parameters": {
                 "type": "object",
                 "properties": {
