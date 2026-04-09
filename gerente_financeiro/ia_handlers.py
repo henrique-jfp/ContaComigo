@@ -405,6 +405,14 @@ async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | N
     Orquestrador Inteligente de Provedores de IA.
     Ordem: Cerebras (Velocidade) -> Groq (Resiliência) -> Gemini (Fallback)
     """
+    def _truncar_mensagens(msgs):
+        """Reduz agressivamente o prompt do sistema se houver falha de payload."""
+        new_msgs = [m.copy() for m in msgs]
+        for m in new_msgs:
+            if m["role"] == "system" and len(m["content"]) > 3000:
+                m["content"] = m["content"][:3000] + "... [Contexto truncado para evitar erro 413]"
+        return new_msgs
+
     # 1. Tenta Cerebras
     if config.CEREBRAS_API_KEY:
         try:
@@ -413,6 +421,9 @@ async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | N
         except Exception as e:
             if "429" in str(e):
                 logger.warning("⚠️ [CEREBRAS] Cota esgotada (429). Tentando Groq...")
+            elif "413" in str(e) or "400" in str(e):
+                logger.warning(f"⚠️ [CEREBRAS] Erro {e}. Tentando com contexto reduzido no Groq...")
+                messages = _truncar_mensagens(messages)
             else:
                 logger.error(f"❌ [CEREBRAS] Falha técnica: {e}")
 
@@ -424,11 +435,14 @@ async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | N
         except Exception as e:
             if "429" in str(e):
                 logger.warning("⚠️ [GROQ] Cota esgotada (429). Tentando Gemini...")
+            elif "413" in str(e):
+                logger.warning("⚠️ [GROQ] Contexto muito grande (413). Tentando Gemini...")
+                messages = _truncar_mensagens(messages)
             else:
                 logger.error(f"❌ [GROQ] Falha técnica: {e}")
 
-    # 3. Tenta Gemini (Apenas chat, pois Gemini tem formato de tools diferente)
-    if config.GEMINI_API_KEY and not tools:
+    # 3. Tenta Gemini (Apenas chat, pois Gemini tem formato de tools diferente nesta integração)
+    if config.GEMINI_API_KEY:
         try:
             logger.info("⚡ [AI] Tentando Gemini Fallback...")
             return await _gemini_chat_completion_async(messages)
@@ -1751,9 +1765,11 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         breakdown_mes = sorted(cats_mes.items(), key=lambda x: x[1], reverse=True)
 
         # Últimos 20 lançamentos (Versão Comprimida)
+        # 💡 Otimização: Se o usuário tem Pierre, mandamos apenas 5 para economizar tokens, já que ele tem acesso ao extrato real via tool
+        limit_lanc = 5 if (hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key) else 20
         ultimos_20 = db.query(Lancamento).filter(
             Lancamento.id_usuario == usuario_db.id
-        ).order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc()).limit(20).all()
+        ).order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc()).limit(limit_lanc).all()
         
         resumo_ultimos = [
             f"{l.data_transacao.strftime('%d/%m')} | {l.descricao[:15]} | {'+' if str(l.tipo).lower().startswith('entr') else '-'}R$ {abs(float(l.valor or 0)):.0f}"
@@ -1938,7 +1954,13 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             "consultar_extrato_bancario_real",
             "consultar_saldo_consolidado_real",
             "consultar_faturas_cartao_real",
-            "forcar_sincronizacao_bancaria"
+            "forcar_sincronizacao_bancaria",
+            "consultar_faturas_passadas",
+            "consultar_parcelamentos",
+            "gerenciar_data_fechamento_cartao",
+            "consultar_maiores_gastos",
+            "consultar_livro_caixa_analitico",
+            "consultar_memorias_ia"
         ]
         
         if fn_name in PIERRE_TOOLS_LIST and hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key:
@@ -1947,6 +1969,10 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             await update.message.reply_chat_action(action="typing")
             
             resultado_bruto = executar_tool_pierre(fn_name, args, usuario_db.pierre_api_key)
+            
+            # 🛡️ FIX 413: Truncar resultado gigante para evitar estouro de tokens no Groq/Cerebras
+            if isinstance(resultado_bruto, str) and len(resultado_bruto) > 4000:
+                resultado_bruto = resultado_bruto[:4000] + "... [Resultado truncado por ser muito longo]"
             
             # Se o resultado for erro 401 ou 403, avisar o usuário diretamente.
             if isinstance(resultado_bruto, dict) and resultado_bruto.get("status_code") in [401, 403]:
@@ -1978,7 +2004,12 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             from pierre_finance.ai_tools import obter_tools_pierre
             tools_para_ia.extend(obter_tools_pierre())
             
+            # Se a segunda chamada falhar (ex: por contexto ainda grande), tentaremos Gemini sem as definições das tools
             completion2 = await _smart_ai_completion_async(messages, tools=tools_para_ia)
+            if not completion2:
+                 logger.warning("Tentando Gemini como última esperança para interpretação (sem tools)")
+                 completion2 = await _gemini_chat_completion_async(messages)
+
             if completion2:
                 if isinstance(completion2, str):
                     final_text = completion2
