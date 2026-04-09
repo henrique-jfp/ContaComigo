@@ -121,8 +121,20 @@ def start_health_check_server():
     
     health_app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
+import threading
+
+_BOT_STARTED_LOCK = threading.Lock()
+_BOT_STARTED = False
+
 def start_telegram_bot(enable_health_server: bool = True):
-    """Inicia o bot do Telegram"""
+    \"\"\"Inicia o bot do Telegram\"\"\"
+    global _BOT_STARTED
+    with _BOT_STARTED_LOCK:
+        if _BOT_STARTED:
+            logger.warning("⚠️ Tentativa de iniciar segunda instância do bot ignorada.")
+            return
+        _BOT_STARTED = True
+
     try:
         logger.info("🤖 Iniciando bot do Telegram...")
         logger.info(f"📍 Python version: {sys.version}")

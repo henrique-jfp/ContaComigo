@@ -402,55 +402,116 @@ async def _cerebras_chat_completion_async(messages: list[dict], tools: list[dict
     return await loop.run_in_executor(None, _call)
 
 
+def _extrair_tool_calls_do_texto(content: str) -> list[dict]:
+    \"\"\"Extrai múltiplas chamadas de função de uma string de forma robusta.\"\"\"
+    tool_calls = []
+    # Busca blocos que parecem JSON { ... }
+    blocos = re.findall(r'\{[^{}]+\}', content, re.DOTALL)
+    for bloco in blocos:
+        try:
+            # Tenta limpar possíveis prefixos/sufixos comuns
+            bloco_limpo = bloco.strip().strip(';').strip()
+            obj = json.loads(bloco_limpo)
+            
+            # Formatos suportados: 
+            # 1. {"name": "func", "parameters": {...}}
+            # 2. {"function": {"name": "func", "arguments": {...}}}
+            # 3. {"type": "function", "function": {"name": "func", "arguments": "{...}"}}
+            
+            fn_name = None
+            args = {}
+
+            if "name" in obj and ("parameters" in obj or "arguments" in obj):
+                fn_name = obj["name"]
+                args = obj.get("parameters") or obj.get("arguments")
+            elif "function" in obj and isinstance(obj["function"], dict):
+                fn_name = obj["function"].get("name")
+                args = obj["function"].get("arguments") or obj["function"].get("parameters")
+            elif "type" in obj and obj.get("type") == "function" and "function" in obj:
+                fn_name = obj["function"].get("name")
+                args = obj["function"].get("arguments") or obj["function"].get("parameters")
+            
+            if fn_name:
+                # Se args for string (comum em tool_calls reais), tenta parsear
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except json.JSONDecodeError:
+                        pass
+                
+                tool_calls.append({
+                    "type": "function",
+                    "function": {
+                        "name": fn_name,
+                        "arguments": json.dumps(args) if isinstance(args, dict) else str(args)
+                    }
+                })
+        except (json.JSONDecodeError, Exception):
+            continue
+    return tool_calls
+
+
+def _contem_tool_call_json(texto: str) -> bool:
+    \"\"\"Detecta se o texto contém um JSON de chamada de função que não foi processado.\"\"\"
+    indicadores = [
+        '\"type\": \"function\"', 
+        '\"name\": \"registrar_lancamento\"', 
+        '\"name\": \"responder_duvida_financeira\"',
+        '\"name\": \"consultar_faturas_cartao_real\"',
+        '\"name\": \"consultar_livro_caixa_analitico\"'
+    ]
+    return any(ind in texto for ind in indicadores)
+
+
 async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> dict | str | None:
-    """
-    Orquestrador Inteligente de Provedores de IA.
+    \"\"\"
+    Orquestrador Inteligente de Provedores de IA com Backoff.
     Ordem: Cerebras (Velocidade) -> Groq (Resiliência) -> Gemini (Fallback)
-    """
+    \"\"\"
     def _truncar_mensagens(msgs):
-        """Reduz agressivamente o prompt do sistema se houver falha de payload."""
+        \"\"\"Reduz agressivamente o prompt do sistema se houver falha de payload.\"\"\"
         new_msgs = [m.copy() for m in msgs]
         for m in new_msgs:
-            if m["role"] == "system" and len(m["content"]) > 3000:
-                m["content"] = m["content"][:3000] + "... [Contexto truncado para evitar erro 413]"
+            if m[\"role\"] == \"system\" and len(m[\"content\"]) > 3000:
+                m[\"content\"] = m[\"content\"][:3000] + \"... [Contexto truncado para evitar erro 413]\"
         return new_msgs
 
-    # 1. Tenta Cerebras
+    providers = []
     if config.CEREBRAS_API_KEY:
-        try:
-            logger.info("⚡ [AI] Tentando Cerebras...")
-            return await _cerebras_chat_completion_async(messages, tools, tool_choice)
-        except Exception as e:
-            if "429" in str(e):
-                logger.warning("⚠️ [CEREBRAS] Cota esgotada (429). Tentando Groq...")
-            elif "413" in str(e) or "400" in str(e):
-                logger.warning(f"⚠️ [CEREBRAS] Erro {e}. Tentando com contexto reduzido no Groq...")
-                messages = _truncar_mensagens(messages)
-            else:
-                logger.error(f"❌ [CEREBRAS] Falha técnica: {e}")
-
-    # 2. Tenta Groq
+        providers.append((\"CEREBRAS\", _cerebras_chat_completion_async))
     if config.GROQ_API_KEY:
+        providers.append((\"GROQ\", _groq_chat_completion_async))
+    if config.GEMINI_API_KEY:
+        providers.append((\"GEMINI\", _gemini_chat_completion_async))
+
+    last_error = None
+    for attempt, (name, fn) in enumerate(providers):
         try:
-            logger.info("⚡ [AI] Tentando Groq...")
-            return await _groq_chat_completion_async(messages, tools, tool_choice)
+            logger.info(f\"⚡ [AI] Tentando {name} (tentativa {attempt+1})...\")
+            
+            # Execução do provedor
+            if name == \"GEMINI\":
+                return await fn(messages)
+            else:
+                return await fn(messages, tools, tool_choice)
+                
         except Exception as e:
-            if "429" in str(e):
-                logger.warning("⚠️ [GROQ] Cota esgotada (429). Tentando Gemini...")
-            elif "413" in str(e):
-                logger.warning("⚠️ [GROQ] Contexto muito grande (413). Tentando Gemini...")
+            last_error = e
+            wait = min(2 ** attempt, 8) # 1s, 2s, 4s...
+            
+            if \"429\" in str(e):
+                logger.warning(f\"⚠️ [{name}] Cota esgotada (429). Aguardando {wait}s para próximo provedor...\")
+            elif \"413\" in str(e) or \"400\" in str(e):
+                logger.warning(f\"⚠️ [{name}] Erro de Payload/Contexto ({e}). Reduzindo contexto...\")
                 messages = _truncar_mensagens(messages)
             else:
-                logger.error(f"❌ [GROQ] Falha técnica: {e}")
+                logger.error(f\"❌ [{name}] Falha técnica: {e}\")
+            
+            if attempt < len(providers) - 1:
+                await asyncio.sleep(wait)
 
-    # 3. Tenta Gemini (Apenas chat, pois Gemini tem formato de tools diferente nesta integração)
-    if config.GEMINI_API_KEY:
-        try:
-            logger.info("⚡ [AI] Tentando Gemini Fallback...")
-            return await _gemini_chat_completion_async(messages)
-        except Exception as e:
-            logger.error(f"❌ [GEMINI] Falha técnica: {e}")
-
+    if last_error:
+        logger.error(f\"🚨 [AI] Todos os provedores falharam. Último erro: {last_error}\")
     return None
 
 
@@ -1947,80 +2008,52 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         ia_message = {}
         if not tool_calls and completion:
             if isinstance(completion, str):
-                # Caso o Gemini ou Cerebras/Groq tenham retornado JSON na string de conteúdo
-                json_match = re.search(r'(\{.*\})', completion, re.DOTALL)
-                if json_match:
-                    try:
-                        potential_json = json_match.group(1)
-                        args_parse = json.loads(potential_json)
-                        # Verifica se é uma chamada de função explícita no JSON
-                        fn_name = args_parse.get("name") or args_parse.get("function") or args_parse.get("type")
-                        if fn_name and fn_name != "function":
-                             # Formato: {"name": "func", "arguments": {...}}
-                             real_args = args_parse.get("arguments") or args_parse.get("parameters") or args_parse
-                             if isinstance(real_args, str): real_args = json.loads(real_args)
-                             tool_calls = [{"type": "function", "function": {"name": fn_name, "arguments": json.dumps(real_args)}}]
-                        elif "type" in args_parse and args_parse.get("type") == "function":
-                             # Formato: {"type": "function", "name": "func", "arguments": {...}}
-                             fn_name = args_parse.get("name")
-                             real_args = args_parse.get("arguments") or args_parse.get("parameters") or {}
-                             tool_calls = [{"type": "function", "function": {"name": fn_name, "arguments": json.dumps(real_args)}}]
-                        else:
-                            # Tenta inferir se os campos batem com alguma ferramenta
-                            if "valor" in args_parse or "valor_alvo" in args_parse:
-                                content_lower = completion.lower()
-                                if "limite" in content_lower: fake_fn = "definir_limite_orcamento"
-                                elif "meta" in content_lower: fake_fn = "criar_meta"
-                                elif "agendar" in content_lower: fake_fn = "agendar_despesa"
-                                else: fake_fn = "registrar_lancamento"
-                                tool_calls = [{"type": "function", "function": {"name": fake_fn, "arguments": potential_json}}]
-                    except Exception as e:
-                        logger.debug(f"Falha ao tentar converter string para tool_call: {e}")
+                # Caso o Gemini ou Cerebras/Groq tenham retornado tool calls na string de conteúdo
+                tool_calls = _extrair_tool_calls_do_texto(completion)
                 
                 if not tool_calls:
+                    # Trava de segurança: Se o texto contém JSON que parece tool call, não envia
+                    if _contem_tool_call_json(completion):
+                        logger.error(f"⚠️ [ALFREDO] Tool call detectada mas falhou no parse: {completion[:200]}")
+                        await update.message.reply_text("Não consegui processar sua pergunta agora. Tente reformular.")
+                        return ConversationHandler.END
+
                     await _enviar_resposta_html_segura(update.message, completion)
                     return ConversationHandler.END
             else:
                 choice = ((completion or {}).get("choices") or [{}])[0]
                 ia_message = choice.get("message") or {}
                 tool_calls = ia_message.get("tool_calls") or []
+                
+                # Se não veio tool_calls nativos, tenta extrair do content como fallback
+                if not tool_calls and ia_message.get("content"):
+                    tool_calls = _extrair_tool_calls_do_texto(ia_message["content"])
 
         if not tool_calls:
             resposta_direta = (ia_message.get("content") or "Não consegui processar agora. Tente novamente.").strip()
 
-            # Fallback robuso para capturar JSON na string (Exige nome da função explícito)
-            json_match = re.search(r'(\{.*\})', resposta_direta, re.DOTALL)
-            if json_match:
-                try:
-                    args_parse = json.loads(json_match.group(1))
-                    fn_name = args_parse.get("name") or args_parse.get("function")
-                    
-                    if fn_name:
-                        real_args = args_parse.get("arguments") or args_parse.get("parameters") or args_parse
-                        tool_calls = [{"type": "function", "function": {"name": fn_name, "arguments": json.dumps(real_args)}}]
-                    elif ">" in resposta_direta:
-                        # Formato legado: intent>JSON
-                        intent, _ = resposta_direta.split(">", 1)
-                        intent = intent.strip().lower()
-                        if "limite" in intent: fake_fn = "definir_limite_orcamento"
-                        elif "meta" in intent: fake_fn = "criar_meta"
-                        elif "agendar" in intent: fake_fn = "agendar_despesa"
-                        else: fake_fn = "registrar_lancamento"
-                        tool_calls = [{"type": "function", "function": {"name": fake_fn, "arguments": json.dumps(args_parse)}}]
-                except Exception:
-                    pass
+            # Trava de segurança final contra vazamento de JSON
+            if _contem_tool_call_json(resposta_direta):
+                logger.error(f"⚠️ [ALFREDO] JSON de tool call vazou para a resposta final: {resposta_direta[:200]}")
+                await update.message.reply_text("Não consegui processar sua pergunta agora. Tente reformular.")
+                return ConversationHandler.END
 
+            # Tenta extrair do formato legado ou de texto que contenha JSON no meio (fallback final)
+            tool_calls = _extrair_tool_calls_do_texto(resposta_direta)
+            
             if not tool_calls:
                 await _enviar_resposta_html_segura(update.message, resposta_direta)
                 return ConversationHandler.END
 
+        # Se chegamos aqui, temos tool_calls para processar
         tool_call = tool_calls[0]
+        fn = (tool_call.get("function") or {})
+        fn_name = fn.get("name")
+        
         # Garante que a tool_call tenha um ID (obrigatório para Cerebras/Groq)
         if not tool_call.get("id"):
             tool_call["id"] = f"call_{fn_name}_{int(time.time())}"
             
-        fn = (tool_call.get("function") or {})
-        fn_name = fn.get("name")
         raw_args = fn.get("arguments") or "{}"
         try:
             args = json.loads(raw_args)
