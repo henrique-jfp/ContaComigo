@@ -22,7 +22,7 @@ try:
     import mercadopago
 except ImportError:
     mercadopago = None
-    logger.warning("⚠️ Biblioteca 'mercadopago' não instalada. Funções de pagamento estarão desativadas.")
+    logger.info("ℹ️ Biblioteca 'mercadopago' não encontrada. Funções de pagamento (Mercado Pago) inativas.")
 
 # --- CONSTANTES DE PLANOS ---
 PLAN_TRIAL = "trial"

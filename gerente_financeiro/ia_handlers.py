@@ -301,6 +301,7 @@ def _groq_chat_completion(messages: list[dict], tools: list[dict] | None = None,
         "model": config.GROQ_MODEL_NAME,
         "messages": messages,
         "temperature": 0.2,
+        "max_tokens": 2048,
     }
     if tools:
         payload["tools"] = tools
@@ -375,6 +376,7 @@ async def _cerebras_chat_completion_async(messages: list[dict], tools: list[dict
         "model": config.CEREBRAS_MODEL_NAME,
         "messages": messages,
         "temperature": 0.2,
+        "max_tokens": 2048,
     }
     if tools:
         payload["tools"] = tools
@@ -558,23 +560,45 @@ async def _enviar_resposta_html_segura(message, texto: str, **kwargs):
 
 
 async def _enviar_mensagem_fatiada(message, texto: str, is_html: bool = True, **kwargs):
-    """Divide a mensagem em pedaços menores de 4000 caracteres."""
+    """Divide a mensagem em pedaços menores de 4000 caracteres, garantindo HTML válido se necessário."""
     limite = 4000
     pedaços = []
-    
+    tags_abertas = []
     temp_texto = texto
+    
     while temp_texto:
         if len(temp_texto) <= limite:
-            pedaços.append(temp_texto)
-            break
+            fatia = temp_texto
+            temp_texto = ""
+        else:
+            quebra = temp_texto.rfind('\n', 0, limite)
+            if quebra == -1:
+                quebra = limite
+            fatia = temp_texto[:quebra]
+            temp_texto = temp_texto[quebra:].lstrip()
             
-        quebra = temp_texto.rfind('\n', 0, limite)
-        if quebra == -1:
-            quebra = limite
+        if is_html:
+            # Reabre as tags que ficaram abertas da fatia anterior
+            prefixo = "".join([f"<{t}>" for t in tags_abertas])
+            fatia_atual = prefixo + fatia
             
-        fatia = temp_texto[:quebra]
-        pedaços.append(fatia)
-        temp_texto = temp_texto[quebra:].lstrip()
+            # Analisa tags nesta fatia para atualizar a lista de abertas para a próxima
+            tags_re = re.compile(r'<(b|i|code|a)(?:\s+[^>]*?)?>|</(b|i|code|a)>', re.IGNORECASE)
+            for match in tags_re.finditer(fatia):
+                tag_name = match.group(1)
+                if tag_name: # Abertura
+                    tags_abertas.append(tag_name.lower())
+                else: # Fechamento
+                    tag_fechou = match.group().lower()[2:-1]
+                    if tags_abertas and tags_abertas[-1] == tag_fechou:
+                        tags_abertas.pop()
+            
+            # Fecha as tags abertas no final desta fatia para garantir HTML válido na mensagem
+            sufixo = "".join([f"</{t}>" for t in reversed(tags_abertas)])
+            fatia_atual += sufixo
+            pedaços.append(fatia_atual)
+        else:
+            pedaços.append(fatia)
     
     for p in pedaços:
         if not p.strip(): continue
@@ -584,8 +608,7 @@ async def _enviar_mensagem_fatiada(message, texto: str, is_html: bool = True, **
             else:
                 await message.reply_text(p, **kwargs)
         except Exception as e:
-            logger.error(f"Erro ao enviar fatia: {e}")
-            # Fallback final: tenta texto plano se HTML falhar na fatia (ex: tag quebrada)
+            logger.error("Erro ao enviar fatia: %s", e)
             if is_html:
                 p_plano = re.sub(r"<[^>]+>", "", p)
                 try:
