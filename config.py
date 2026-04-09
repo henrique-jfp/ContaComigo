@@ -45,6 +45,9 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL_NAME = os.getenv("GROQ_MODEL_NAME", "llama-3.1-8b-instant")
 
+CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
+CEREBRAS_MODEL_NAME = os.getenv("CEREBRAS_MODEL_NAME", "llama3.1-8b") # Ou llama3.1-70b se disponível
+
 # GEMINI MODEL NAME com validação e fallback automático
 _model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash-lite-preview-02-05")
 # Lista de modelos válidos (atualizada em Mar 2026 - API)

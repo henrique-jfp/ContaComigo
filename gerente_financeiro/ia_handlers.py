@@ -367,8 +367,79 @@ async def _gemini_chat_completion_async(messages: list[dict]) -> str | None:
             return None
 
 
+async def _cerebras_chat_completion_async(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> dict:
+    if not config.CEREBRAS_API_KEY:
+        raise RuntimeError("CEREBRAS_API_KEY nao configurada")
+
+    payload = {
+        "model": config.CEREBRAS_MODEL_NAME,
+        "messages": messages,
+        "temperature": 0.2,
+    }
+    if tools:
+        payload["tools"] = tools
+        if tool_choice:
+            payload["tool_choice"] = tool_choice
+
+    api_key = str(config.CEREBRAS_API_KEY).strip().strip("'\"").strip()
+
+    def _call():
+        response = requests.post(
+            "https://api.cerebras.ai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _call)
+
+
+async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> dict | str | None:
+    """
+    Orquestrador Inteligente de Provedores de IA.
+    Ordem: Cerebras (Velocidade) -> Groq (Resiliência) -> Gemini (Fallback)
+    """
+    # 1. Tenta Cerebras
+    if config.CEREBRAS_API_KEY:
+        try:
+            logger.info("⚡ [AI] Tentando Cerebras...")
+            return await _cerebras_chat_completion_async(messages, tools, tool_choice)
+        except Exception as e:
+            if "429" in str(e):
+                logger.warning("⚠️ [CEREBRAS] Cota esgotada (429). Tentando Groq...")
+            else:
+                logger.error(f"❌ [CEREBRAS] Falha técnica: {e}")
+
+    # 2. Tenta Groq
+    if config.GROQ_API_KEY:
+        try:
+            logger.info("⚡ [AI] Tentando Groq...")
+            return await _groq_chat_completion_async(messages, tools, tool_choice)
+        except Exception as e:
+            if "429" in str(e):
+                logger.warning("⚠️ [GROQ] Cota esgotada (429). Tentando Gemini...")
+            else:
+                logger.error(f"❌ [GROQ] Falha técnica: {e}")
+
+    # 3. Tenta Gemini (Apenas chat, pois Gemini tem formato de tools diferente)
+    if config.GEMINI_API_KEY and not tools:
+        try:
+            logger.info("⚡ [AI] Tentando Gemini Fallback...")
+            return await _gemini_chat_completion_async(messages)
+        except Exception as e:
+            logger.error(f"❌ [GEMINI] Falha técnica: {e}")
+
+    return None
+
+
 async def _groq_chat_completion_async(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> dict:
-    max_retries = 2
+    max_retries = 1
     for attempt in range(max_retries + 1):
         try:
             loop = asyncio.get_running_loop()
@@ -694,12 +765,11 @@ def _montar_resposta_local_alfredo(texto_usuario: str, texto_normalizado: str, d
 
     # Se nada bater, retorna um resumo geral elegante
     return (
-        "🤖 <b>Resumo Geral do Alfredo</b>\n\n"
-        "No momento, meu motor de análise profunda está passando por uma manutenção rápida, mas aqui estão seus números vitais:\n\n"
+        "🤖 <b>Resumo dos Seus Números</b>\n\n"
         f"• <b>Saldo Disponível:</b> <code>{_formatar_valor_brasileiro(saldo)}</code>\n"
         f"• <b>Entradas:</b> <code>{_formatar_valor_brasileiro(entradas)}</code>\n"
         f"• <b>Saídas:</b> <code>{_formatar_valor_brasileiro(saidas)}</code>\n\n"
-        "Deseja que eu busque alguma transação específica ou liste seus últimos gastos?"
+        "Como posso ajudar agora?"
     )
 
 
@@ -1746,22 +1816,9 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": texto_usuario},
             ]
-
-            try:
-                completion = await _groq_chat_completion_async(messages, tools=_ALFREDO_TOOLS, tool_choice="auto")
-            except Exception as groq_err:
-                logger.error(f"❌ [GROQ-TOOLS] Falha na chamada principal: {str(groq_err)}")
-                try:
-                    logger.info("🔄 Tentando fallback Gemini para análise...")
-                    gemini_resp = await _gemini_chat_completion_async(messages)
-                    if gemini_resp:
-                        await _enviar_resposta_html_segura(update.message, gemini_resp)
-                        return ConversationHandler.END
-                    
-                    logger.info("🔄 Tentando fallback Groq sem tools...")
-                    completion = await _groq_chat_completion_async(messages)
-                except Exception as groq_err_sem_tools:
-                    logger.error(f"❌ [GROQ-FALLBACK] Falha no fallback sem tools: {str(groq_err_sem_tools)}")
+            
+            # Orquestrador inteligente tenta Cerebras -> Groq -> Gemini
+            completion = await _smart_ai_completion_async(messages, tools=_ALFREDO_TOOLS, tool_choice="auto")
 
         if not completion and not tool_calls:
             logger.warning(f"⚠️ [ALFREDO] Todos os modelos de IA falharam para query: '{texto_usuario}'. Usando motor local.")
@@ -1769,9 +1826,14 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             await _enviar_resposta_html_segura(update.message, resposta_local)
             return ConversationHandler.END
 
-        # Extração de tool_calls (seja da IA ou do interceptor)
+        # Extração de dados da resposta (seja dict ou string do Gemini)
         ia_message = {}
         if not tool_calls and completion:
+            if isinstance(completion, str):
+                # Caso o Gemini fallback tenha retornado apenas texto
+                await _enviar_resposta_html_segura(update.message, completion)
+                return ConversationHandler.END
+            
             choice = ((completion or {}).get("choices") or [{}])[0]
             ia_message = choice.get("message") or {}
             tool_calls = ia_message.get("tool_calls") or []
