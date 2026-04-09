@@ -1830,38 +1830,70 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         ia_message = {}
         if not tool_calls and completion:
             if isinstance(completion, str):
-                # Caso o Gemini fallback tenha retornado apenas texto
-                await _enviar_resposta_html_segura(update.message, completion)
-                return ConversationHandler.END
-            
-            choice = ((completion or {}).get("choices") or [{}])[0]
-            ia_message = choice.get("message") or {}
-            tool_calls = ia_message.get("tool_calls") or []
+                # Caso o Gemini ou Cerebras/Groq tenham retornado JSON na string de conteúdo
+                json_match = re.search(r'(\{.*\})', completion, re.DOTALL)
+                if json_match:
+                    try:
+                        potential_json = json_match.group(1)
+                        args_parse = json.loads(potential_json)
+                        # Verifica se é uma chamada de função explícita no JSON
+                        fn_name = args_parse.get("name") or args_parse.get("function") or args_parse.get("type")
+                        if fn_name and fn_name != "function":
+                             # Formato: {"name": "func", "arguments": {...}}
+                             real_args = args_parse.get("arguments") or args_parse.get("parameters") or args_parse
+                             if isinstance(real_args, str): real_args = json.loads(real_args)
+                             tool_calls = [{"function": {"name": fn_name, "arguments": json.dumps(real_args)}}]
+                        elif "type" in args_parse and args_parse.get("type") == "function":
+                             # Formato: {"type": "function", "name": "func", "arguments": {...}}
+                             fn_name = args_parse.get("name")
+                             real_args = args_parse.get("arguments") or args_parse.get("parameters") or {}
+                             tool_calls = [{"function": {"name": fn_name, "arguments": json.dumps(real_args)}}]
+                        else:
+                            # Tenta inferir se os campos batem com alguma ferramenta
+                            if "valor" in args_parse or "valor_alvo" in args_parse:
+                                content_lower = completion.lower()
+                                if "limite" in content_lower: fake_fn = "definir_limite_orcamento"
+                                elif "meta" in content_lower: fake_fn = "criar_meta"
+                                elif "agendar" in content_lower: fake_fn = "agendar_despesa"
+                                else: fake_fn = "registrar_lancamento"
+                                tool_calls = [{"function": {"name": fake_fn, "arguments": potential_json}}]
+                    except Exception as e:
+                        logger.debug(f"Falha ao tentar converter string para tool_call: {e}")
+                
+                if not tool_calls:
+                    await _enviar_resposta_html_segura(update.message, completion)
+                    return ConversationHandler.END
+            else:
+                choice = ((completion or {}).get("choices") or [{}])[0]
+                ia_message = choice.get("message") or {}
+                tool_calls = ia_message.get("tool_calls") or []
 
         if not tool_calls:
             resposta_direta = (ia_message.get("content") or "Não consegui processar agora. Tente novamente.").strip()
 
-            # Fallback para capturar vazamentos de JSON na string (ex: registrar_lancamento>{"valor":...})
-            if ">" in resposta_direta and "{" in resposta_direta:
+            # Fallback robusto para capturar JSON na string (ex: Markdown, JSON puro ou formato intent>JSON)
+            json_match = re.search(r'\{.*\}', resposta_direta, re.DOTALL)
+            if json_match:
                 try:
-                    intent, json_str = resposta_direta.split(">", 1)
-                    json_str = json_str[json_str.find("{"):]
-                    args_parse = json.loads(json_str)
+                    args_parse = json.loads(json_match.group(0))
+                    intent = "registrar_lancamento"
+                    if ">" in resposta_direta:
+                        intent = resposta_direta.split(">", 1)[0].lower()
                     
-                    if "limite" in intent.lower() or "limite" in str(args_parse.get("descricao", "")).lower() or "limite" in str(args_parse.get("categoria", "")).lower():
+                    content_lower = resposta_direta.lower()
+                    if "limite" in intent or "limite" in content_lower:
                         fake_fn = "definir_limite_orcamento"
-                        if "valor" not in args_parse and "valor_limite" in args_parse:
-                            args_parse["valor"] = args_parse["valor_limite"]
-                        if "categoria" not in args_parse:
-                            args_parse["categoria"] = args_parse.get("descricao", "Geral")
-                    elif "meta" in intent.lower() or "objetivo" in intent.lower() or "criar_meta" in intent.lower():
+                        if "valor" not in args_parse and "valor_limite" in args_parse: args_parse["valor"] = args_parse["valor_limite"]
+                        if "categoria" not in args_parse: args_parse["categoria"] = args_parse.get("descricao", "Geral")
+                    elif "meta" in intent or "objetivo" in intent or "criar_meta" in intent:
                         fake_fn = "criar_meta"
-                        if "valor_alvo" not in args_parse and "valor" in args_parse:
-                            args_parse["valor_alvo"] = args_parse["valor"]
-                    elif "agendar_despesa" in intent.lower() or ("agenda" in intent.lower() and "despesa" in intent.lower()):
+                        if "valor_alvo" not in args_parse and "valor" in args_parse: args_parse["valor_alvo"] = args_parse["valor"]
+                    elif "agendar_despesa" in intent or ("agenda" in content_lower and "despesa" in content_lower):
                         fake_fn = "agendar_despesa"
-                    elif "agendar_receita" in intent.lower() or ("agenda" in intent.lower() and "receita" in intent.lower()):
+                    elif "agendar_receita" in intent or ("agenda" in content_lower and "receita" in content_lower):
                         fake_fn = "agendar_receita"
+                    elif "duvida" in intent or "responder" in intent or "pergunta" in intent:
+                        fake_fn = "responder_duvida_financeira"
                     else:
                         fake_fn = "registrar_lancamento"
                         
@@ -2110,6 +2142,33 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
 
         if fn_name == "responder_duvida_financeira":
             pergunta = str(args.get("pergunta") or texto_usuario)
+            pergunta_low = pergunta.lower()
+
+            # Caso especial: Pergunta sobre os últimos lançamentos
+            if any(x in pergunta_low for x in ["ultimo", "último", "recente", "mais novo", "extrato", "lista"]) and any(x in pergunta_low for x in ["lançamento", "lancamento", "transação", "transacao", "gasto", "compra"]):
+                # Se for plural ou pedir lista/extrato, mostra 5. Se for singular, mostra 1.
+                limite = 5 if any(x in pergunta_low for x in ["s", "lista", "extrato"]) else 1
+                
+                lancamentos = (
+                    db.query(Lancamento)
+                    .filter(Lancamento.id_usuario == usuario_db.id)
+                    .order_by(Lancamento.id.desc())
+                    .limit(limite)
+                    .all()
+                )
+                
+                if lancamentos:
+                    if len(lancamentos) == 1:
+                        card = _formatar_lancamento_card(lancamentos[0])
+                        await _enviar_resposta_html_segura(update.message, card)
+                    else:
+                        texto_lista = "<b>📋 Seus lançamentos recentes:</b>\n\n"
+                        for l in lancamentos:
+                            valor_f = _formatar_valor_brasileiro(abs(float(l.valor or 0)))
+                            emoji = "🟢" if str(l.tipo).lower().startswith(("entr", "recei")) else "🔴"
+                            texto_lista += f"{emoji} {l.data_transacao.strftime('%d/%m')} | {l.descricao[:15]} | <code>{valor_f}</code>\n"
+                        await _enviar_resposta_html_segura(update.message, texto_lista)
+                    return ConversationHandler.END
 
             ultimos_lanc = (
                 db.query(Lancamento)
@@ -2332,40 +2391,44 @@ async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 await query.edit_message_text("✅ Meta financeira criada com sucesso!")
 
             elif tipo_acao == "definir_limite_orcamento":
-                cat_nome = dados_quick.get("categoria")
+                cat_nome = str(dados_quick.get("categoria") or "").strip()
                 valor = dados_quick.get("valor_limite")
-                
-                cat = db.query(Categoria).filter(Categoria.nome.ilike(f"%{cat_nome}%")).first()
+
+                # Busca categoria com maior flexibilidade
+                cat = db.query(Categoria).filter(Categoria.nome.ilike(f"{cat_nome}%")).first()
                 if not cat:
-                    await query.edit_message_text(f"❌ Não encontrei a categoria '{cat_nome}'. Tente criar pelo MiniApp.")
+                    # Tenta busca por substring se não achou pelo prefixo
+                    cat = db.query(Categoria).filter(Categoria.nome.ilike(f"%{cat_nome}%")).first()
+
+                if not cat:
+                    await query.edit_message_text(f"❌ Não encontrei a categoria '<b>{cat_nome}</b>'.\n\nPor favor, verifique o nome ou crie a categoria no MiniApp.", parse_mode='HTML')
                     return ConversationHandler.END
-                    
+
                 orc = db.query(OrcamentoCategoria).filter(
-                    OrcamentoCategoria.id_usuario == usuario_db.id, 
+                    OrcamentoCategoria.id_usuario == usuario_db.id,
                     OrcamentoCategoria.id_categoria == cat.id
                 ).first()
-                
+
                 if orc:
+                    old_valor = orc.valor_limite
                     orc.valor_limite = valor
+                    msg_sucesso = f"🚧 <b>Limite Atualizado!</b>\n\nO teto para <i>{cat.nome}</i> mudou de {_formatar_valor_brasileiro(old_valor)} para <b>{_formatar_valor_brasileiro(valor)}</b>."
                 else:
                     db.add(OrcamentoCategoria(
-                        id_usuario=usuario_db.id, 
-                        id_categoria=cat.id, 
+                        id_usuario=usuario_db.id,
+                        id_categoria=cat.id,
                         valor_limite=valor
                     ))
+                    msg_sucesso = f"🚧 <b>Limite Configurado!</b>\n\nAgora você tem um teto de <b>{_formatar_valor_brasileiro(valor)}</b> para <i>{cat.nome}</i>."
+
                 db.commit()
-                
                 from gerente_financeiro.services import limpar_cache_usuario
                 try:
                     limpar_cache_usuario(query.from_user.id)
                 except Exception:
                     pass
                     
-                await query.edit_message_text(
-                    f"🚧 <b>Limite Configurado!</b>\n\nAgora você tem um teto de <b>{_formatar_valor_brasileiro(valor)}</b> para <i>{cat.nome}</i>.", 
-                    parse_mode='HTML'
-                )
-
+                await query.edit_message_text(msg_sucesso, parse_mode='HTML')
         except Exception as e:
             db.rollback()
             logger.error("Erro no quick_action_handler: %s", e, exc_info=True)
