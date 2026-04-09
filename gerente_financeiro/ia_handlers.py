@@ -1626,12 +1626,16 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
 
     texto_usuario = ""
     if update.message.voice:
-        wait_msg = await update.message.reply_text("🎙️ Entendi seu áudio, processando com o Alfredo...")
+        wait_msg = await update.message.reply_text("🎙️ Ouvindo seu áudio...")
         try:
             voice = update.message.voice
             tg_file = await voice.get_file()
             voice_bytes = bytes(await tg_file.download_as_bytearray())
             texto_usuario = await _groq_transcribe_voice_async(voice_bytes, voice.mime_type or "audio/ogg")
+            # Log visual para o usuário saber o que foi entendido
+            logger.info(f"🎙️ [VOICE] Transcrição: {texto_usuario}")
+            if texto_usuario:
+                await update.message.reply_html(f"<i>\"{(texto_usuario[:100] + '...') if len(texto_usuario) > 100 else texto_usuario}\"</i>")
         except Exception as exc:
             logger.error("Falha ao transcrever áudio com Groq: %s", exc, exc_info=True)
             await wait_msg.edit_text("❌ Não consegui transcrever seu áudio. Tente novamente.")
