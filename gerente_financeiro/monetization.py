@@ -172,13 +172,6 @@ def gerar_link_pagamento_mercadopago(user_id: int, plano: str) -> str:
     webhook_url = os.environ.get("MERCADOPAGO_WEBHOOK_URL", "").strip()
     if webhook_url:
         preference_data["notification_url"] = webhook_url
-        "back_urls": {
-            "success": os.environ.get("MERCADOPAGO_SUCCESS_URL", "https://t.me/ContaComigoBot"),
-            "failure": os.environ.get("MERCADOPAGO_FAILURE_URL", "https://t.me/ContaComigoBot"),
-            "pending": os.environ.get("MERCADOPAGO_PENDING_URL", "https://t.me/ContaComigoBot")
-        },
-        "auto_return": "approved"
-    }
 
     preference_response = sdk.preference().create(preference_data)
     
