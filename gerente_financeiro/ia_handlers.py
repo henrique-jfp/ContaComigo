@@ -549,12 +549,30 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
     """
     t = texto.lower().strip()
     
-    # 1. LANÇAMENTO (Gastei, Paguei, Recebi, Lança)
-    p_lanc = r'(?:gastei|paguei|recebi|lanç[ao]|registra|coloque?i?)\s+(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:no|na|em|com)?\s*(.+)'
-    m_lanc = re.search(p_lanc, t)
-    if m_lanc:
-        valor = float(m_lanc.group(1).replace(',', '.'))
-        desc = m_lanc.group(2).strip()
+    # 1. LANÇAMENTO (Gastei, Paguei, Recebi, Lança, Comprei)
+    # Suporta: "Gastei 50 no mercado", "Comprei uma calça de 300 reais", "Lança 20 reais em transporte"
+    # Padrao A: Verbo + Valor + Descrição
+    p_lanc_a = r'(?:gastei|paguei|recebi|lanç[ao]|registra|coloque?i?|comprei|compras?)\s+(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:no|na|em|com|de)?\s*(.+)'
+    # Padrao B: Verbo + Descrição + Valor no final
+    p_lanc_b = r'(?:gastei|paguei|recebi|lanç[ao]|registra|coloque?i?|comprei|compras?)\s+(.+?)\s+(?:por|de|foi|valor de)?\s*(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)?$'
+    
+    m_a = re.search(p_lanc_a, t)
+    if m_a:
+        valor = float(m_a.group(1).replace(',', '.'))
+        desc = m_a.group(2).strip()
+        tipo = "Entrada" if "recebi" in t else "Saída"
+        return "registrar_lancamento", {
+            "valor": valor,
+            "descricao": desc.capitalize(),
+            "categoria": "Outros",
+            "forma_pagamento": "Nao_informado",
+            "tipo": tipo
+        }
+        
+    m_b = re.search(p_lanc_b, t)
+    if m_b:
+        desc = m_b.group(1).strip()
+        valor = float(m_b.group(2).replace(',', '.'))
         tipo = "Entrada" if "recebi" in t else "Saída"
         return "registrar_lancamento", {
             "valor": valor,

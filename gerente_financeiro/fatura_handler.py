@@ -81,8 +81,15 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     if not config.GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY não configurada")
 
-    genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'\""))
-    model = genai.GenerativeModel('gemini-2.5-flash')
+    # A configuração global já deve estar feita em config.py, mas reforçamos aqui
+    try:
+        genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'\""))
+    except Exception as e:
+        logger.warning(f"Erro ao re-configurar genai no fatura_handler: {e}")
+
+    model_name = getattr(config, "GEMINI_MODEL_NAME", "gemini-flash-latest")
+    logger.info(f"Usando modelo {model_name} para extração de fatura")
+    model = genai.GenerativeModel(model_name)
     
     prompt = """
     Você é um extrator de dados de faturas de cartão de crédito especialista e infalível.
