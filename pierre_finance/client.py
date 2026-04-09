@@ -71,3 +71,39 @@ class PierreClient:
     def manual_update(self):
         """Força a sincronização dos bancos conectados no Pierre."""
         return self._request("POST", "/manual-update")
+
+    def get_bills(self, account_id=None):
+        """Retorna faturas de cartão de crédito vencidas/fechadas."""
+        params = {}
+        if account_id:
+            params["accountId"] = account_id
+        return self._request("GET", "/get-bills", params=params)
+
+    def get_installments(self, start_date=None, end_date=None):
+        """Retorna todas as parcelas no período."""
+        params = {}
+        if start_date: params["startDate"] = start_date
+        if end_date: params["endDate"] = end_date
+        return self._request("GET", "/get-installments", params=params)
+
+    def manage_closing_date(self, payload: dict):
+        """Gerencia datas de fechamento de cartões de crédito."""
+        return self._request("POST", "/manage-closing-date", json=payload)
+
+    def get_expensive_categories(self, start_date=None):
+        """Retorna as categorias mais caras no período."""
+        params = {}
+        if start_date: params["startDate"] = start_date
+        return self._request("GET", "/get-expensive-categories", params=params)
+
+    def get_book(self, include_all_periods=False):
+        """Obtém contexto financeiro e análises do usuário (Livro Caixa)."""
+        params = {}
+        if include_all_periods: params["includeAllPeriods"] = str(include_all_periods).lower()
+        return self._request("GET", "/get-book", params=params)
+
+    def get_memories(self, message=None):
+        """Recupera ou adiciona memórias financeiras."""
+        params = {}
+        if message: params["message"] = message
+        return self._request("GET", "/get-memories", params=params)

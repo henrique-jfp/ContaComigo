@@ -71,6 +71,116 @@ def obter_tools_pierre():
                     "required": []
                 }
             }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "consultar_faturas_passadas",
+                "description": "Consulta faturas de cartão de crédito já fechadas ou vencidas.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "accountId": {
+                            "type": "string",
+                            "description": "ID da conta de cartão de crédito para filtrar as faturas (opcional)"
+                        }
+                    },
+                    "required": []
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "consultar_parcelamentos",
+                "description": "Consulta específica das compras parceladas do usuário, vendo o passado e projetando o futuro.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "startDate": {
+                            "type": "string",
+                            "description": "Data inicial para filtro (formato YYYY-MM-DD)"
+                        },
+                        "endDate": {
+                            "type": "string",
+                            "description": "Data final para filtro (formato YYYY-MM-DD)"
+                        }
+                    },
+                    "required": []
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "gerenciar_data_fechamento_cartao",
+                "description": "Lista, cria, atualiza ou deleta a data de fechamento do cartão de crédito.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "accountId": {
+                            "type": "string",
+                            "description": "ID da conta do cartão"
+                        },
+                        "closingDay": {
+                            "type": "integer",
+                            "description": "Dia de fechamento do cartão (1 a 31)"
+                        }
+                    },
+                    "required": []
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "consultar_maiores_gastos",
+                "description": "Mapeia as categorias mais caras de despesas no período.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "startDate": {
+                            "type": "string",
+                            "description": "Data inicial para análise (formato YYYY-MM-DD). Padrão: 7 dias atrás."
+                        }
+                    },
+                    "required": []
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "consultar_livro_caixa_analitico",
+                "description": "Obtém um relatório analítico consolidado gigante (Livro Caixa) com contas, transações, saldos e categorias.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "includeAllPeriods": {
+                            "type": "boolean",
+                            "description": "Se deve incluir dados de todos os períodos (padrão false)"
+                        }
+                    },
+                    "required": []
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "consultar_memorias_ia",
+                "description": "Recupera ou adiciona memórias financeiras de longo prazo do usuário.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "description": "Mensagem do usuário para adicionar à memória (opcional)"
+                        }
+                    },
+                    "required": []
+                }
+            }
         }
     ]
 
@@ -96,6 +206,33 @@ def executar_tool_pierre(tool_name: str, arguments: dict, api_key: str) -> str:
 
     elif tool_name == "forcar_sincronizacao_bancaria":
         resultado = client.manual_update()
+        return str(resultado)
+
+    elif tool_name == "consultar_faturas_passadas":
+        resultado = client.get_bills(account_id=arguments.get("accountId"))
+        return str(resultado)
+
+    elif tool_name == "consultar_parcelamentos":
+        resultado = client.get_installments(
+            start_date=arguments.get("startDate"), 
+            end_date=arguments.get("endDate")
+        )
+        return str(resultado)
+
+    elif tool_name == "gerenciar_data_fechamento_cartao":
+        resultado = client.manage_closing_date(arguments)
+        return str(resultado)
+
+    elif tool_name == "consultar_maiores_gastos":
+        resultado = client.get_expensive_categories(start_date=arguments.get("startDate"))
+        return str(resultado)
+
+    elif tool_name == "consultar_livro_caixa_analitico":
+        resultado = client.get_book(include_all_periods=arguments.get("includeAllPeriods", False))
+        return str(resultado)
+
+    elif tool_name == "consultar_memorias_ia":
+        resultado = client.get_memories(message=arguments.get("message"))
         return str(resultado)
 
     return "Tool Open Finance não encontrada."
