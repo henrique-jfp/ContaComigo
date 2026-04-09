@@ -153,7 +153,7 @@ from database.migration_runner import apply_sql_migrations
 from models import *
 from alerts import dar_baixa_agendamento_callback, metas_confirmacao_callback
 from jobs import configurar_jobs
-from gerente_financeiro.menu_botoes import BOTAO_LANCAMENTO, BOTAO_GERENTE, BOTAO_EDITAR, BOTAO_CONFIG, BOTAO_FATURA, BOTAO_GRAFICOS, BOTAO_AGENDAMENTOS, BOTAO_METAS, BOTAO_RANKING, BOTAO_NIVEL, BOTAO_CANCELAR, BOTAO_CONTATO
+from gerente_financeiro.menu_botoes import BOTAO_LANCAMENTO, BOTAO_GERENTE, BOTAO_EDITAR, BOTAO_CONFIG, BOTAO_FATURA, BOTAO_GRAFICOS, BOTAO_AGENDAMENTOS, BOTAO_METAS, BOTAO_RANKING, BOTAO_NIVEL, BOTAO_CANCELAR, BOTAO_CONTATO, BOTAO_ATUALIZAR_MENU, toggle_painel_command
 from gerente_financeiro.monetization import reload_whitelist_command
 
 # --- IMPORTS DOS HANDLERS (AGORA ORGANIZADOS) ---
@@ -452,6 +452,12 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
     application.add_handler(CallbackQueryHandler(debug_all_callbacks))
 
     # Fallbacks finais de mensagem (grupo 0): so devem rodar se nenhum ConversationHandler capturar.
+    application.add_handler(
+        MessageHandler(
+            filters.ChatType.PRIVATE & filters.Regex(f"^{BOTAO_ATUALIZAR_MENU}$"),
+            toggle_painel_command,
+        )
+    )
     application.add_handler(
         MessageHandler(
             filters.ChatType.PRIVATE & (filters.PHOTO | filters.Document.IMAGE),

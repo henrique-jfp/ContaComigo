@@ -20,6 +20,7 @@ BOTAO_RANKING = "🏆 Ranking"
 BOTAO_NIVEL = "⭐ Seu Nível"
 BOTAO_CANCELAR = "❌ Cancelar"
 BOTAO_CONTATO = "💬 Fale com o Dev"
+BOTAO_ATUALIZAR_MENU = "🔄"
 
 
 def build_miniapp_url(source: str | None = None) -> str:
@@ -52,7 +53,11 @@ def obter_teclado_painel():
     webapp_url = build_miniapp_url(source='keyboard')
 
     botoes = [
-        [KeyboardButton("🚀 Abrir o App", web_app=WebAppInfo(url=webapp_url)), KeyboardButton(BOTAO_CONTATO)]
+        [
+            KeyboardButton("🚀 Abrir o App", web_app=WebAppInfo(url=webapp_url)), 
+            KeyboardButton(BOTAO_ATUALIZAR_MENU),
+            KeyboardButton(BOTAO_CONTATO)
+        ]
     ]
     
     return ReplyKeyboardMarkup(
