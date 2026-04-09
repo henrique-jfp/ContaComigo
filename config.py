@@ -46,22 +46,23 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL_NAME = os.getenv("GROQ_MODEL_NAME", "llama-3.1-8b-instant")
 
 # GEMINI MODEL NAME com validação e fallback automático
-_model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
-# Lista de modelos válidos (atualizada em Nov 2024 - API v1beta)
-# ⚠️ IMPORTANTE: Gemini 1.5 foi descontinuado! Agora é 2.5 ou 2.0
+_model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash-lite-preview-02-05")
+# Lista de modelos válidos (atualizada em Mar 2026 - API)
+# ⚠️ IMPORTANTE: O modelo Lite é priorizado para economia de cota em PDFs
 VALID_GEMINI_MODELS = [
-    "gemini-flash-latest",        # ⭐ Alias oficial para versão mais recente (RECOMENDADO)
+    "gemini-2.0-flash-lite-preview-02-05", # ⭐ Modelo leve e rápido, ideal para não estourar a cota (RECOMENDADO)
+    "gemini-2.0-flash",           # Modelo 2.0 (janela de 1M tokens)
     "gemini-2.5-flash",           # Modelo 2.5 estável (rápido e eficiente)
     "gemini-2.5-pro",             # Modelo 2.5 avançado (pensamento complexo)
-    "gemini-2.0-flash",           # Modelo 2.0 (janela de 1M tokens)
+    "gemini-flash-latest",        # Alias oficial para versão mais recente
     "gemini-pro-latest",          # Alias para Pro mais recente
 ]
 
 # Validar e corrigir modelo automaticamente
 if _model_env not in VALID_GEMINI_MODELS:
     logging.warning(f"⚠️ Modelo '{_model_env}' não é válido ou foi descontinuado!")
-    logging.warning(f"⚠️ Usando fallback: 'gemini-flash-latest' (alias oficial)")
-    GEMINI_MODEL_NAME = "gemini-flash-latest"
+    logging.warning(f"⚠️ Usando fallback: 'gemini-2.0-flash-lite-preview-02-05' (alias oficial leve)")
+    GEMINI_MODEL_NAME = "gemini-2.0-flash-lite-preview-02-05"
 else:
     GEMINI_MODEL_NAME = _model_env
     
