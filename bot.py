@@ -384,6 +384,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("delete_user_conv", lambda: delete_user_conv),
         ("contact_conv", lambda: contact_conv),
         ("fatura_conv", lambda: fatura_conv),
+        ("pierre_conv", lambda: get_pierre_conversation_handler()),
     ]
 
 

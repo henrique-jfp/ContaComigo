@@ -117,11 +117,19 @@ def gerar_link_pagamento_mercadopago(user_id: int, plano: str) -> str:
     if not mercadopago:
         raise RuntimeError("Biblioteca 'mercadopago' não instalada.")
         
-    mp_access_token = os.environ.get("MERCADOPAGO_ACCESS_TOKEN")
+    mp_access_token = os.environ.get("MERCADOPAGO_ACCESS_TOKEN", "").strip()
     if not mp_access_token:
         raise RuntimeError("MERCADOPAGO_ACCESS_TOKEN não configurado!")
     
-    sdk = mercadopago.SDK(mp_access_token)
+    # Log de diagnóstico seguro (primeiros e últimos 4 caracteres)
+    safe_token = f"{mp_access_token[:8]}...{mp_access_token[-4:]}" if len(mp_access_token) > 12 else "***"
+    logger.info(f"💳 Iniciando criação de preferência MP com token: {safe_token}")
+    
+    try:
+        sdk = mercadopago.SDK(mp_access_token)
+    except Exception as sdk_err:
+        logger.error(f"❌ Erro ao inicializar SDK Mercado Pago: {sdk_err}")
+        raise RuntimeError(f"Erro no SDK MP: {sdk_err}")
 
     if plano == PLAN_PREMIUM_MONTHLY:
         title = "Premium Mensal Maestro Financeiro"
@@ -159,8 +167,11 @@ def gerar_link_pagamento_mercadopago(user_id: int, plano: str) -> str:
     }
 
     preference_response = sdk.preference().create(preference_data)
+    
     if preference_response.get("status") != 201:
-        raise RuntimeError(f"Erro ao criar link Mercado Pago: {preference_response}")
+        error_detail = preference_response.get("response", "Sem detalhes")
+        logger.error(f"❌ Erro Mercado Pago (Status {preference_response.get('status')}): {error_detail}")
+        raise RuntimeError(f"Erro ao criar link Mercado Pago: {error_detail}")
     
     return preference_response["response"]["init_point"]
 

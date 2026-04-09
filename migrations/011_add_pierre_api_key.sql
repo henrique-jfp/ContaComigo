@@ -1,0 +1,1 @@
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pierre_api_key VARCHAR;

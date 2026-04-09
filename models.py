@@ -18,6 +18,7 @@ class Usuario(Base):
     email_notificacao = Column(String, nullable=True)
     alerta_gastos_ativo = Column(Boolean, default=True)
     criado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    pierre_api_key = Column(String, nullable=True)  # Feature Secreta: Open Finance
 
     # --- CAMPOS DE GAMIFICAÇÃO ---
     perfil_ia = Column(String, nullable=True)

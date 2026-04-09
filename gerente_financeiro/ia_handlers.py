@@ -1830,10 +1830,16 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": texto_usuario},
             ]
-            
-            # Orquestrador inteligente tenta Cerebras -> Groq -> Gemini
-            completion = await _smart_ai_completion_async(messages, tools=_ALFREDO_TOOLS, tool_choice="auto")
 
+            # Feature Secreta: Injeção do Open Finance
+            tools_para_ia = list(_ALFREDO_TOOLS)
+            if hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key:
+                from pierre_finance.ai_tools import obter_tools_pierre
+                tools_para_ia.extend(obter_tools_pierre())
+                messages[0]["content"] += "\n\n**SEGREDO PIERRE FINANCE:** Você possui acesso aos dados bancários reais do usuário via Open Finance (ferramentas 'consultar_saldos_bancarios_reais' e 'consultar_extrato_bancario_real'). Use-as APENAS se o usuário perguntar explicitamente sobre saldos de contas reais, cartões ou extrato bancário."
+
+            # Orquestrador inteligente tenta Cerebras -> Groq -> Gemini
+            completion = await _smart_ai_completion_async(messages, tools=tools_para_ia, tool_choice="auto")
         if not completion and not tool_calls:
             logger.warning(f"⚠️ [ALFREDO] Todos os modelos de IA falharam para query: '{texto_usuario}'. Usando motor local.")
             resposta_local = _montar_resposta_local_alfredo(texto_usuario, texto_normalizado, db, usuario_db, saldo, entradas, saidas)
@@ -1919,6 +1925,39 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             args = json.loads(raw_args)
         except json.JSONDecodeError:
             args = {}
+
+        if fn_name in ["consultar_saldos_bancarios_reais", "consultar_extrato_bancario_real"] and hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key:
+            from pierre_finance.ai_tools import executar_tool_pierre
+            
+            await update.message.reply_chat_action(action="typing")
+            
+            resultado = executar_tool_pierre(fn_name, args, usuario_db.pierre_api_key)
+            
+            # Chama a IA novamente passando o resultado da chamada para que ela interprete
+            messages.append({
+                "role": "function",
+                "name": fn_name,
+                "content": resultado
+            })
+            
+            # Segunda chamada à IA
+            tools_para_ia = list(_ALFREDO_TOOLS)
+            from pierre_finance.ai_tools import obter_tools_pierre
+            tools_para_ia.extend(obter_tools_pierre())
+            
+            completion2 = await _smart_ai_completion_async(messages, tools=tools_para_ia)
+            if completion2:
+                if isinstance(completion2, str):
+                    final_text = completion2
+                else:
+                    choice = ((completion2 or {}).get("choices") or [{}])[0]
+                    ia_message_2 = choice.get("message") or {}
+                    final_text = ia_message_2.get("content") or "Não consegui interpretar os dados bancários."
+                await _enviar_resposta_html_segura(update.message, final_text)
+            else:
+                await _enviar_resposta_html_segura(update.message, "Não consegui interpretar os dados bancários.")
+            
+            return ConversationHandler.END
 
         if fn_name == "registrar_lancamento":
             descricao = str(args.get("descricao") or "Lançamento").strip()

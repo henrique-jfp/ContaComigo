@@ -1,0 +1,1 @@
+# Módulo de integração secreta com Open Finance (Pierre)
