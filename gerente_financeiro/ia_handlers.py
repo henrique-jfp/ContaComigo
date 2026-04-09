@@ -2392,18 +2392,28 @@ async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
             elif tipo_acao == "definir_limite_orcamento":
                 cat_nome = str(dados_quick.get("categoria") or "").strip()
+                # Limpeza de ruídos comuns enviados pela IA
+                cat_nome = re.sub(r'\s+(neste|nesse|esse|do|pro)\s+mês$', '', cat_nome, flags=re.IGNORECASE)
                 valor = dados_quick.get("valor_limite")
 
                 # Busca categoria com maior flexibilidade
-                cat = db.query(Categoria).filter(Categoria.nome.ilike(f"{cat_nome}%")).first()
+                cat = db.query(Categoria).filter(Categoria.nome.ilike(f"{cat_nome}")).first()
                 if not cat:
-                    # Tenta busca por substring se não achou pelo prefixo
+                    cat = db.query(Categoria).filter(Categoria.nome.ilike(f"{cat_nome}%")).first()
+                if not cat:
                     cat = db.query(Categoria).filter(Categoria.nome.ilike(f"%{cat_nome}%")).first()
 
                 if not cat:
-                    await query.edit_message_text(f"❌ Não encontrei a categoria '<b>{cat_nome}</b>'.\n\nPor favor, verifique o nome ou crie a categoria no MiniApp.", parse_mode='HTML')
+                    # Se não achou, lista as disponíveis para ajudar o usuário
+                    cats_disponiveis = [c.nome for c in db.query(Categoria).all()]
+                    sugestao = ", ".join(cats_disponiveis[:5])
+                    await query.edit_message_text(
+                        f"❌ Não encontrei a categoria '<b>{cat_nome}</b>'.\n\n"
+                        f"Categorias comuns: {sugestao}...\n"
+                        "Por favor, verifique o nome ou crie no MiniApp.", 
+                        parse_mode='HTML'
+                    )
                     return ConversationHandler.END
-
                 orc = db.query(OrcamentoCategoria).filter(
                     OrcamentoCategoria.id_usuario == usuario_db.id,
                     OrcamentoCategoria.id_categoria == cat.id

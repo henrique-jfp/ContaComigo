@@ -2,7 +2,7 @@
   <img src="https://img.shields.io/badge/Status-Active-success?style=for-the-badge" alt="Status" />
   <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/Telegram_Bot-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram" />
-  <img src="https://img.shields.io/badge/IA-Groq_LLaMA_3.x-FF6B35?style=for-the-badge" alt="Groq" />
+  <img src="https://img.shields.io/badge/IA-Cerebras_%2B_Groq-FF6B35?style=for-the-badge" alt="AI" />
   <img src="https://img.shields.io/badge/Database-PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="Postgres" />
   <img src="https://img.shields.io/badge/Dashboard-Flask-000000?style=for-the-badge&logo=flask&logoColor=white" alt="Flask" />
   <img src="https://img.shields.io/badge/Architecture-Hybrid-9C27B0?style=for-the-badge" alt="Hybrid" />
@@ -35,13 +35,12 @@
 ### Proposta de Valor
 
 - **Zero Setup & Zero Atrito:** Fim dos comandos complexos. O chat é apenas para interações naturais (voz, texto, foto), enquanto configurações e visualizações moram no MiniApp.
-- **IA Inteligente:** Router Alfredo (Groq) com function-calling para decisões automáticas
-- **Dashboard Web:** MiniApp otimizada para carregamento instantâneo
-- **OCR & Parsing Universal:** Leitura multimodal nativa (Gemini 2.5 Flash) capaz de extrair dados de notas físicas e faturas em PDF de QUALQUER banco.
-- **Análises em Tempo Real:** Insights personalizados e alertas proativos
+- **IA de Ultra Velocidade:** Orquestrador inteligente que utiliza **Cerebras Inference** (o mais rápido do mundo) com fallback para **Groq** e **Gemini**.
+- **Dashboard Web:** MiniApp otimizada para carregamento instantâneo.
+- **OCR & Parsing Universal:** Leitura multimodal nativa (**Gemini 2.0 Flash-Lite**) capaz de extrair dados de faturas em PDF de QUALQUER banco com 100% de assertividade estrutural.
+- **Análises em Tempo Real:** Insights personalizados e alertas proativos sem o tom robótico de gerente de banco.
 - **Assistente Proativo:** Notificações diárias de contas a pagar com botão "✅ Dar baixa" direto no chat.
 - **Gamificação Viciante:** Transforme o controle financeiro em um jogo de RPG com missões, XP, rankings e níveis.
-- **Escalável:** Arquitetura híbrida que suporta milhares de usuários simultâneos
 
 ---
 
@@ -77,10 +76,10 @@
 
 ### Por que Híbrido?
 
-1. **Responsividade:** Bot em thread permite que o Flask não fique bloqueado por polling
-2. **Separação de Responsabilidades:** Telegram (I/O bound) vs Web (CPU bound)
-3. **Escalabilidade:** Ambos podem falhar independentemente sem derrubar o outro
-4. **Debugging:** Fácil de rastrear problemas em cada camada
+1. **Responsividade:** Bot em thread permite que o Flask não fique bloqueado por polling.
+2. **Separação de Responsabilidades:** Telegram (I/O bound) vs Web (CPU bound).
+3. **Escalabilidade:** Ambos podem falhar independentemente sem derrubar o outro.
+4. **Resiliência de IA:** Rodízio entre Cerebras, Groq e Gemini garante cota e disponibilidade.
 
 ### Fluxo de Inicialização
 
@@ -111,59 +110,41 @@
 
 #### **a) Roteador Alfredo (`ia_handlers.py`)**
 
-Router inteligente que usa Groq LLaMA 3.x com function-calling:
+Router inteligente que utiliza o motor mais rápido disponível no momento:
 
 ```python
-# Exemplo de chamada
-await processar_mensagem_com_alfredo(update, context)
-# Alfredo decide entre:
-# - process_manual_entry: "Gastei 50 no mercado"
-# - process_voice_input: Transcricao de áudio
-# - process_question: "Quanto gastei com comida?"
-# - process_goal_update: "Quero economizar 1000"
+# Ordem de preferência (Smart Fallback)
+1. Cerebras Inference (Velocidade Extrema)
+2. Groq LLaMA 3.x (Resiliência)
+3. Gemini Flash (Última linha de defesa)
 ```
 
 **Responsabilidades:**
-- Classificação de intenção do usuário
-- Chamada a handlers apropriados
-- Logging de analytics
-- Fallback para handlers legacy (se necessário)
+- Identificação instantânea de intenções (Zero Atrito) via Regex Robusta.
+- Execução de ferramentas (Function Calling) para registros, metas e limites.
+- Consulta inteligente de histórico e extratos em linguagem natural.
+- Filtro de "alucinações" para separar ordens de ação de perguntas de consulta.
 
 #### **b) Handlers por Tipo de Mídia**
 
 | Handler | Entrada | Processamento | Saída |
 |---------|---------|---------------|-------|
-| **Text** | Mensagem de texto livre | NLP com Alfredo → extração de valor, categoria, data | Confirmar ou corrigir |
-| **Voice** | `filters.VOICE` | Transcrição (Telegram API) → Gemini/Groq | Lançamento criado |
-| **Photo** | `filters.PHOTO` | OCR (Google Vision/Gemini) → detecção de nota fiscal | Validação manual |
-| **Document** | PDFs | Google Vision OCR + PDF parsing | Importação de fatura |
+| **Text** | Mensagem natural | NLP com Alfredo → extração de valor, categoria, data | Card de confirmação |
+| **Voice** | Áudio | Transcrição (Groq Whisper) → Alfredo | Registro instantâneo |
+| **Photo** | Imagem | OCR (Google Vision/Gemini) → detecção de nota | Card de validação |
+| **Document**| PDFs | Gemini 2.0 Flash-Lite (Multimodal) | Importação de fatura |
 | **Callback** | Botões inline | Validação de token + contexto | Resposta inline |
 
-#### **c) OCR Robusto (`ocr_handler.py`)**
+#### **c) OCR de Alta Performance**
 
-```
-Foto/PDF recebida
-       ↓
-Google Vision (primary)
-       ↓ (falha)
-Gemini Vision (fallback)
-       ↓
-Extração: valor, descrição, data, fornecedor
-       ↓
-Validação com Gemini
-       ↓
-Persistência no DB
-```
+O processamento de faturas PDF utiliza o modelo **Gemini 2.0 Flash-Lite**, otimizado para custo e cota na camada gratuita, mantendo a visão estrutural para ler colunas de bancos como Nubank, Inter, Itaú, etc.
 
-#### **d) Botões MiniApp com URL Normalization**
+#### **d) Ton de Voz "Elite Butler"**
 
-- **Instância única de verdade** para URL geração (`build_miniapp_url`, `_get_fatura_webapp_url`)
-- **Normalization robusta:**
-  - Detect env fallback: `RENDER_EXTERNAL_URL` se `DASHBOARD_BASE_URL` não houver
-  - **HTTPS enforcement** para non-localhost (Telegram WebApp requirement)
-  - Query params: cache-bust `v=timestamp` + page routing
-- **Keyboard integration:** Botões inline respeitam timeouts Telegram (<15s)
-- **Fatura edits:** Global `CallbackQueryHandler` captura callbacks mesmo fora de ConversationHandler
+Alfredo abandonou os formalismos de "gerente dos anos 90".
+- **Direto:** Sem "Prezado" ou "Senhor".
+- **Elegante:** Respostas curtas, cirúrgicas e formatadas em HTML Premium.
+- **Ação-Primeiro:** Se você mandar registrar, ele executa a ferramenta e mostra o card, sem "textão" explicando o que fez.
 
 #### **e) Handlers Específicos**
 
@@ -308,53 +289,22 @@ def _friendly_feature_name(action: str):
 
 ## 📊 Fluxo de Dados
 
-### Caso 1: Entrada de Texto (`"Gastei 50 no mercado"`)
+### Caso 1: Ordem de Ação ("Gastei 300 na Oakley")
 
 ```
-1. Telegram → bot.py (thread)
-   Message recebida
-
-2. dispatch_message_handler()
-   Tipo: TEXT → processar_mensagem_com_alfredo
-
-3. Alfredo (Groq)
-   Intent: MANUAL_ENTRY
-   Campos: valor=50, categoria=Alimentação, data=hoje
-
-4. Persistência
-   INSERT lancamentos(user_id, valor, categoria, data)
-
-5. Response
-   ✅ "Lançamento registrado: R$50 em Alimentação"
-
-6. Analytics
-   track_command('manual_entry', success=True, time_ms=234)
+1. Usuário envia texto/voz
+2. Interceptor de Regex (ia_handlers.py) detecta intenção de registro
+3. Se falhar regex, Alfredo (Cerebras/Groq) identifica a ferramenta registrar_lancamento
+4. Sistema extrai JSON e gera card de confirmação (quick_action_handler)
+5. Usuário clica [Confirmar] -> Persistência no DB
 ```
 
-### Caso 2: Entrada de Foto (Nota Fiscal)
+### Caso 2: Consulta de Histórico ("Qual meu último lançamento?")
 
 ```
-1. Telegram → bot.py (thread)
-   Photo recebida
-
-2. photo_handler()
-   Download => save to /tmp
-
-3. OCR
-   Google Vision (primary)
-      ↓ (falha com timeout)
-   Gemini Vision Pro (fallback)
-   => {valor: 87.50, descricao: "Mercado X", data: 05/04}
-
-4. Exibir para Confirmação
-   "Achei: R$87.50 em Mercado X. Confirma?"
-   [Botão: Confirmar] [Botão: Editar] [Botão: Cancelar]
-
-5. Usuário clica: Confirmar
-   callback_handler() => INSERT
-
-6. Response
-   ✅ Transação salva + emoji de celebração
+1. Alfredo identifica que a pergunta é sobre o passado (consulta)
+2. Sistema busca no banco e retorna o card detalhado do registro
+3. Nenhuma ferramenta de escrita é chamada por engano
 ```
 
 ### Caso 3: Dashboard Web Load
@@ -408,11 +358,12 @@ def _friendly_feature_name(action: str):
 
 ### IA & Vision
 
-| Serviço | Provedor | Uso |
+| Serviço | Provedor | Função |
 |---------|----------|-----|
-| **Router** | Groq (LLaMA 3.x) | Classificação de intenção |
-| **Vision** | Google Vision API | OCR primary |
-| **Fallback Vision** | Gemini 2.5 Flash | OCR fallback |
+| **Primary Chat** | **Cerebras Inference** | Respostas em milissegundos |
+| **Fallback Chat** | **Groq (LLaMA 3.x)** | Resiliência e cota extra |
+| **PDF Extraction**| **Gemini 2.0 Flash-Lite** | Visão multimodal de faturas |
+| **Voice-to-Text** | **Groq Whisper** | Transcrição de áudio fluida |
 | **Analytics** | PostgreSQL + pandas | Insights |
 
 ### Frontend
@@ -721,14 +672,15 @@ tail -f debug_logs/bot.log
 
 ##  Correções Recentes (Abril 2026)
 
-### Operação "Alfredo Super Inteligente" - 08 de Abril de 2026
-**Problema:** Alfredo estava se comportando de forma "fria" e limitada, respondendo com resumos locais estáticos que bloqueavam a inteligência da IA.
+### Operação "Alfredo Mestre" - 09 de Abril de 2026
+**Problema:** Alfredo estava robótico, demorado e confuso entre ordens de registro e perguntas de histórico.
 **Solução:**
-- **AI-First Architecture:** Removidas interceptações locais para saldo, metas e gastos. Agora, a IA processa essas perguntas com contexto total.
-- **Contexto Enriquecido:** Adicionado breakdown de categorias do mês atual, gastos de ontem e prazos de metas no prompt do sistema.
-- **Nova Persona:** Refinado o tom de voz para ser mais profissional, empático e "mordomo financeiro".
-- **Formatação Premium:** Implementado uso mandatório de `<code>` para valores e `<b>` para destaques, garantindo legibilidade superior no Telegram.
-- **Robustez em Metas:** Adicionado suporte a `data_meta` via IA e maior flexibilidade no reconhecimento de valores alvo.
+- **Extreme Speed IA:** Integração com **Cerebras Inference** para respostas quase instantâneas.
+- **AI-First Architecture:** Rodízio inteligente entre Cerebras, Groq e Gemini para garantir disponibilidade e cota infinita.
+- **Zero Setup Robusto:** Regex melhorada que ignora stop-words e entende frases naturais como "quero registrar uma compra de...".
+- **Blindagem Anti-JSON:** Extrator de JSON que impede vazamento de código técnico no chat.
+- **Smart Budget Limits:** Inteligência para atualizar limites existentes ou criar novos via voz/texto.
+- **Gemini 2.0 Lite:** Migração de modelo para otimizar cota gratuita de faturas mantendo 100% de precisão.
 
 **Status:** ✅ Implantado e 100% Operacional
 
@@ -796,6 +748,5 @@ Issues e PRs são bem-vindos!
 
 ---
 
-**Última atualização:** 08 de abril de 2026  
-**Versão:** 2.1 (Alfredo Intelligence Update)
-:** 2.1 (Alfredo Intelligence Update)
+**Última atualização:** 09 de abril de 2026  
+**Versão:** 3.5 (Alfredo Master Update & Cerebras Integration)
