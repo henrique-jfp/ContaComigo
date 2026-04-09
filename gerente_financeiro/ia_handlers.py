@@ -1931,16 +1931,31 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             
             await update.message.reply_chat_action(action="typing")
             
-            resultado = executar_tool_pierre(fn_name, args, usuario_db.pierre_api_key)
+            resultado_bruto = executar_tool_pierre(fn_name, args, usuario_db.pierre_api_key)
             
-            # Chama a IA novamente passando o resultado da chamada para que ela interprete
+            # Se o resultado for erro 401, avisar o usuário diretamente e encerrar.
+            if isinstance(resultado_bruto, dict) and (resultado_bruto.get("status_code") == 401 or "Unauthorized" in str(resultado_bruto)):
+                await update.message.reply_html(
+                    "❌ <b>Sua Chave do Open Finance expirou ou é inválida.</b>\n\n"
+                    "Por favor, use o comando <code>/pierre</code> novamente para reconfigurar sua chave de acesso secreta."
+                )
+                return ConversationHandler.END
+
+            # Adiciona a mensagem do assistente que chamou a tool (obrigatório para o histórico)
             messages.append({
-                "role": "function",
+                "role": "assistant",
+                "tool_calls": tool_calls
+            })
+
+            # Adiciona o resultado da tool usando o novo padrão 'tool'
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.get("id", "call_open_finance_1"),
                 "name": fn_name,
-                "content": resultado
+                "content": str(resultado_bruto)
             })
             
-            # Segunda chamada à IA
+            # Segunda chamada à IA para interpretar os dados
             tools_para_ia = list(_ALFREDO_TOOLS)
             from pierre_finance.ai_tools import obter_tools_pierre
             tools_para_ia.extend(obter_tools_pierre())
@@ -1950,8 +1965,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 if isinstance(completion2, str):
                     final_text = completion2
                 else:
-                    choice = ((completion2 or {}).get("choices") or [{}])[0]
-                    ia_message_2 = choice.get("message") or {}
+                    choice2 = ((completion2 or {}).get("choices") or [{}])[0]
+                    ia_message_2 = choice2.get("message") or {}
                     final_text = ia_message_2.get("content") or "Não consegui interpretar os dados bancários."
                 await _enviar_resposta_html_segura(update.message, final_text)
             else:

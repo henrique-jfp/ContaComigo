@@ -43,7 +43,8 @@ async def start_pierre(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def receive_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Recebe e salva a chave."""
-    chave = update.message.text.strip()
+    # Sanitização profunda para evitar caracteres invisíveis comuns em copiar/colar de celular
+    chave = update.message.text.strip().replace("\u200b", "").replace("\u200c", "").replace(" ", "")
     user_id = update.effective_user.id
     
     # Validação básica

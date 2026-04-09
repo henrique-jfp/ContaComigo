@@ -20,6 +20,10 @@ async def sincronizar_open_finance(usuario: Usuario, db: Session):
     
     # 1. Sincronizar Contas
     res_accounts = client.get_accounts()
+    if isinstance(res_accounts, dict) and res_accounts.get("status_code") == 401:
+        logger.warning(f"⚠️ Sincronização falhou para usuário {usuario.id}: Chave Pierre Inválida (401).")
+        return
+    
     if "error" in res_accounts:
         logger.error(f"Erro ao buscar contas no Pierre para usuário {usuario.id}: {res_accounts['error']}")
         return
