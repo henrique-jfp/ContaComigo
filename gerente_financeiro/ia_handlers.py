@@ -1682,7 +1682,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         tool_calls = []
         if acao_direta:
             fn_name, args = acao_direta
-            tool_calls = [{"function": {"name": fn_name, "arguments": json.dumps(args)}}]
+            tool_calls = [{"type": "function", "function": {"name": fn_name, "arguments": json.dumps(args)}}]
             logger.info(f"⚡ [ALFREDO] Interceptação direta: {fn_name}")
 
         # Interceptações que são comandos funcionais ou fora do escopo da IA de análise direta
@@ -1867,12 +1867,12 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                              # Formato: {"name": "func", "arguments": {...}}
                              real_args = args_parse.get("arguments") or args_parse.get("parameters") or args_parse
                              if isinstance(real_args, str): real_args = json.loads(real_args)
-                             tool_calls = [{"function": {"name": fn_name, "arguments": json.dumps(real_args)}}]
+                             tool_calls = [{"type": "function", "function": {"name": fn_name, "arguments": json.dumps(real_args)}}]
                         elif "type" in args_parse and args_parse.get("type") == "function":
                              # Formato: {"type": "function", "name": "func", "arguments": {...}}
                              fn_name = args_parse.get("name")
                              real_args = args_parse.get("arguments") or args_parse.get("parameters") or {}
-                             tool_calls = [{"function": {"name": fn_name, "arguments": json.dumps(real_args)}}]
+                             tool_calls = [{"type": "function", "function": {"name": fn_name, "arguments": json.dumps(real_args)}}]
                         else:
                             # Tenta inferir se os campos batem com alguma ferramenta
                             if "valor" in args_parse or "valor_alvo" in args_parse:
@@ -1881,7 +1881,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                                 elif "meta" in content_lower: fake_fn = "criar_meta"
                                 elif "agendar" in content_lower: fake_fn = "agendar_despesa"
                                 else: fake_fn = "registrar_lancamento"
-                                tool_calls = [{"function": {"name": fake_fn, "arguments": potential_json}}]
+                                tool_calls = [{"type": "function", "function": {"name": fake_fn, "arguments": potential_json}}]
                     except Exception as e:
                         logger.debug(f"Falha ao tentar converter string para tool_call: {e}")
                 
@@ -1905,7 +1905,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                     
                     if fn_name:
                         real_args = args_parse.get("arguments") or args_parse.get("parameters") or args_parse
-                        tool_calls = [{"function": {"name": fn_name, "arguments": json.dumps(real_args)}}]
+                        tool_calls = [{"type": "function", "function": {"name": fn_name, "arguments": json.dumps(real_args)}}]
                     elif ">" in resposta_direta:
                         # Formato legado: intent>JSON
                         intent, _ = resposta_direta.split(">", 1)
@@ -1914,7 +1914,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                         elif "meta" in intent: fake_fn = "criar_meta"
                         elif "agendar" in intent: fake_fn = "agendar_despesa"
                         else: fake_fn = "registrar_lancamento"
-                        tool_calls = [{"function": {"name": fake_fn, "arguments": json.dumps(args_parse)}}]
+                        tool_calls = [{"type": "function", "function": {"name": fake_fn, "arguments": json.dumps(args_parse)}}]
                 except Exception:
                     pass
 

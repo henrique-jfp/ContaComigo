@@ -1,0 +1,44 @@
+<div id="tab-fantasma" class="tab-content hidden pt-4 pb-24 px-4 space-y-6">
+  <div class="flex items-center justify-between mb-2">
+    <h2 class="text-xl font-bold bg-gradient-to-r from-purple-400 to-fuchsia-600 bg-clip-text text-transparent drop-shadow-md">
+      <i data-lucide="ghost" class="inline-block mr-1 text-purple-500 w-5 h-5 align-text-bottom"></i> Pierre Finance
+    </h2>
+  </div>
+
+  <div class="glass-card p-4 rounded-2xl border border-purple-500/30 bg-purple-900/10">
+    <p class="text-sm text-telegram-hint mb-4">Bem-vindo ao Modo Deus. Acesso direto e em tempo real aos seus dados do Open Finance e recursos analíticos super sêniores do Alfredo.</p>
+    
+    <div class="grid grid-cols-2 gap-3">
+      <!-- Radar de Parcelamentos -->
+      <button onclick="window.Telegram.WebApp.showAlert('Radar de Parcelamentos em breve!')" class="glass-card p-3 rounded-xl border border-telegram-separator hover:border-purple-500/50 transition-colors flex flex-col items-center justify-center gap-2">
+        <div class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
+          <i data-lucide="credit-card" class="w-5 h-5"></i>
+        </div>
+        <span class="text-xs font-semibold text-center text-telegram-text">Radar de Parcelas</span>
+      </button>
+
+      <!-- Painel de Alertas -->
+      <button onclick="window.Telegram.WebApp.showAlert('Painel de Limites e Alertas em breve!')" class="glass-card p-3 rounded-xl border border-telegram-separator hover:border-purple-500/50 transition-colors flex flex-col items-center justify-center gap-2">
+        <div class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
+          <i data-lucide="bell-ring" class="w-5 h-5"></i>
+        </div>
+        <span class="text-xs font-semibold text-center text-telegram-text">Alertas de Gastos</span>
+      </button>
+
+      <!-- Livro Caixa -->
+      <button onclick="window.Telegram.WebApp.showAlert('Download do Livro Caixa em breve!')" class="glass-card p-3 rounded-xl border border-telegram-separator hover:border-purple-500/50 transition-colors flex flex-col items-center justify-center gap-2 col-span-2">
+        <div class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
+          <i data-lucide="book-open" class="w-5 h-5"></i>
+        </div>
+        <span class="text-xs font-semibold text-center text-telegram-text">Baixar Livro Caixa Analítico (PDF)</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Zona de Perigo -->
+  <div class="mt-8">
+    <button onclick="window.Telegram.WebApp.showConfirm('Tem certeza que deseja revogar o acesso do Alfredo ao seu Open Finance? Isso não pode ser desfeito.', function(ok) { if(ok) window.Telegram.WebApp.showAlert('Integração de revogação pendente.'); })" class="w-full py-3 rounded-xl border border-red-500/30 text-red-400 text-sm font-semibold hover:bg-red-500/10 transition flex items-center justify-center gap-2">
+      <i data-lucide="shield-alert" class="w-4 h-4"></i> Revogar Chave Open Finance
+    </button>
+  </div>
+</div>

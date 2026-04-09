@@ -808,6 +808,15 @@ def telegram_auth():
     if not user:
         return jsonify({"ok": False, "error": "invalid_init_data"}), 401
 
+    db = next(get_db())
+    has_pierre = False
+    try:
+        usuario_db = db.query(Usuario).filter(Usuario.telegram_id == user.get("id")).first()
+        if usuario_db and usuario_db.pierre_api_key:
+            has_pierre = True
+    finally:
+        db.close()
+
     session_data = _create_miniapp_session(user.get("id"))
     return jsonify({
         "ok": True,
@@ -815,6 +824,7 @@ def telegram_auth():
             "id": user.get("id"),
             "first_name": user.get("first_name"),
             "username": user.get("username"),
+            "has_pierre_access": has_pierre
         },
         **session_data,
     })

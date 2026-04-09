@@ -2019,6 +2019,12 @@ lucide.createIcons();
         }
         sessionId = data.session_id;
         storeSessionId(sessionId);
+
+        // Check if the user has Open Finance integration active (Modo Deus)
+        if (data.user && data.user.has_pierre_access) {
+            const ghostTab = document.getElementById('nav-fantasma');
+            if (ghostTab) ghostTab.classList.remove('hidden');
+        }
         mainStatus.textContent = 'Sincronizado';
 
         // Abre a interface imediatamente e carrega dados em segundo plano.
