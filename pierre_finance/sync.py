@@ -20,12 +20,15 @@ async def sincronizar_open_finance(usuario: Usuario, db: Session):
     
     # 1. Sincronizar Contas
     res_accounts = client.get_accounts()
+    
+    # Se a resposta for erro 401, sair
     if isinstance(res_accounts, dict) and res_accounts.get("status_code") == 401:
         logger.warning(f"⚠️ Sincronização falhou para usuário {usuario.id}: Chave Pierre Inválida (401).")
         return
-    
-    if "error" in res_accounts:
-        logger.error(f"Erro ao buscar contas no Pierre para usuário {usuario.id}: {res_accounts['error']}")
+
+    # Se res_accounts não for uma lista, algo deu errado
+    if not isinstance(res_accounts, list):
+        logger.error(f"Erro ao buscar contas no Pierre para usuário {usuario.id}: {res_accounts}")
         return
     
     accounts_map = {} # external_id -> local_id
@@ -37,24 +40,23 @@ async def sincronizar_open_finance(usuario: Usuario, db: Session):
         conta_local = db.query(Conta).filter(Conta.external_id == str(ext_id)).first()
         
         if not conta_local:
-            # Tenta buscar por nome se for a primeira vez e o usuário já tiver cadastrado manualmente? 
-            # Melhor criar uma nova para evitar bagunça.
             conta_local = Conta(
                 id_usuario=usuario.id,
                 nome=acc.get("name", "Conta Open Finance"),
-                tipo=acc.get("type", "Conta Corrente"),
+                tipo=acc.get("type", "BANK"), # OpenAPI usa BANK, CREDIT, etc
                 external_id=str(ext_id)
             )
             db.add(conta_local)
-            db.flush() # Para pegar o ID
+            db.flush() 
             logger.info(f"Nova conta criada via Open Finance: {conta_local.nome}")
         
         accounts_map[str(ext_id)] = conta_local.id
 
     # 2. Sincronizar Transações
-    res_transactions = client.get_transactions(limit=50) # Puxa as últimas 50
-    if "error" in res_transactions:
-        logger.error(f"Erro ao buscar transações no Pierre para usuário {usuario.id}: {res_transactions['error']}")
+    res_transactions = client.get_transactions(limit=50) 
+    
+    if not isinstance(res_transactions, list):
+        logger.error(f"Erro ao buscar transações no Pierre para usuário {usuario.id}: {res_transactions}")
         return
 
     novos_lancamentos = 0
@@ -66,29 +68,29 @@ async def sincronizar_open_finance(usuario: Usuario, db: Session):
         existe = db.query(Lancamento).filter(Lancamento.external_id == str(ext_id)).first()
         if existe: continue
         
-        descricao = tx.get("description", "Transação Open Finance")
-        valor = Decimal(str(tx.get("amount", 0)))
-        tipo = "Despesa" if valor < 0 else "Receita"
-        valor = abs(valor)
+        descricao = tx.get("description") or tx.get("name") or "Transação Open Finance"
+        valor_original = Decimal(str(tx.get("amount", 0)))
+        
+        # Na maioria das APIs OF, negativo é gasto. 
+        # No Pierre OpenAPI, parece que amount é positivo para crédito e negativo para débito? 
+        # Geralmente normalizamos: Despesa (Saída) e Receita (Entrada)
+        tipo = "Despesa" if valor_original < 0 else "Receita"
+        valor = abs(valor_original)
         
         # Categorização automática pelo Alfredo
         cat_id, subcat_id = _categorizar_com_mapa_inteligente(descricao, tipo, db)
-        
-        # Determina a conta local vinculada
-        acc_ext_id = str(tx.get("account_id"))
-        id_conta = accounts_map.get(acc_ext_id)
         
         novo_lancamento = Lancamento(
             id_usuario=usuario.id,
             descricao=descricao,
             valor=valor,
             tipo=tipo,
-            data_transacao=datetime.fromisoformat(tx.get("date")).replace(tzinfo=timezone.utc) if tx.get("date") else datetime.now(timezone.utc),
+            data_transacao=datetime.fromisoformat(tx.get("date").replace("Z", "+00:00")).replace(tzinfo=timezone.utc) if tx.get("date") else datetime.now(timezone.utc),
             origem="open_finance",
             external_id=str(ext_id),
             id_categoria=cat_id,
             id_subcategoria=subcat_id,
-            forma_pagamento="Cartão" if "card" in str(tx.get("type")).lower() else "Transferência"
+            forma_pagamento="Cartão" if tx.get("accountType") == "CREDIT" else "Transferência"
         )
         db.add(novo_lancamento)
         novos_lancamentos += 1

@@ -1836,7 +1836,12 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             if hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key:
                 from pierre_finance.ai_tools import obter_tools_pierre
                 tools_para_ia.extend(obter_tools_pierre())
-                messages[0]["content"] += "\n\n**SEGREDO PIERRE FINANCE:** Você possui acesso aos dados bancários reais do usuário via Open Finance (ferramentas 'consultar_saldos_bancarios_reais' e 'consultar_extrato_bancario_real'). Use-as APENAS se o usuário perguntar explicitamente sobre saldos de contas reais, cartões ou extrato bancário."
+                messages[0]["content"] += (
+                    "\n\n**SEGREDO OPEN FINANCE (PIERRE):** Você possui acesso aos dados bancários reais do usuário. "
+                    "Use as ferramentas 'consultar_saldos_bancarios_reais' (detalhado por conta), 'consultar_saldo_consolidado_real' (total somado), "
+                    "'consultar_faturas_cartao_real' (resumo de faturas de crédito) e 'consultar_extrato_bancario_real' (histórico de transações). "
+                    "Use-as APENAS se o usuário perguntar explicitamente sobre dados reais, bancos conectados ou extratos."
+                )
 
             # Orquestrador inteligente tenta Cerebras -> Groq -> Gemini
             completion = await _smart_ai_completion_async(messages, tools=tools_para_ia, tool_choice="auto")
@@ -1926,7 +1931,15 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         except json.JSONDecodeError:
             args = {}
 
-        if fn_name in ["consultar_saldos_bancarios_reais", "consultar_extrato_bancario_real"] and hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key:
+        PIERRE_TOOLS_LIST = [
+            "consultar_saldos_bancarios_reais", 
+            "consultar_extrato_bancario_real",
+            "consultar_saldo_consolidado_real",
+            "consultar_faturas_cartao_real",
+            "forcar_sincronizacao_bancaria"
+        ]
+        
+        if fn_name in PIERRE_TOOLS_LIST and hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key:
             from pierre_finance.ai_tools import executar_tool_pierre
             
             await update.message.reply_chat_action(action="typing")
@@ -1948,9 +1961,12 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             })
 
             # Adiciona o resultado da tool usando o novo padrão 'tool'
+            # Pegamos o ID real da chamada se existir, senão usamos um fixo
+            tool_id = tool_call.get("id") or f"call_{fn_name}_{int(time.time())}"
+            
             messages.append({
                 "role": "tool",
-                "tool_call_id": tool_call.get("id", "call_open_finance_1"),
+                "tool_call_id": tool_id,
                 "name": fn_name,
                 "content": str(resultado_bruto)
             })
