@@ -113,24 +113,18 @@ def _plan_label(plan: str) -> str:
 def gerar_link_pagamento_mercadopago(user_id: int, plano: str) -> str:
     """
     Gera um link de pagamento Mercado Pago para o usuário e plano informados.
+    Utiliza chamadas diretas à API via requests para evitar dependência do SDK.
     """
-    if not mercadopago:
-        raise RuntimeError("Biblioteca 'mercadopago' não instalada.")
-        
+    import requests
+
     # Limpeza profunda do token (remove espaços, aspas simples e duplas)
     mp_access_token = os.environ.get("MERCADOPAGO_ACCESS_TOKEN", "").strip().strip('"').strip("'")
     if not mp_access_token:
         raise RuntimeError("MERCADOPAGO_ACCESS_TOKEN não configurado!")
-    
+
     # Log de diagnóstico seguro
     safe_token = f"{mp_access_token[:8]}...{mp_access_token[-4:]}" if len(mp_access_token) > 12 else "***"
-    logger.info(f"💳 Tentando criar preferência MP. Token: {safe_token}")
-    
-    try:
-        sdk = mercadopago.SDK(mp_access_token)
-    except Exception as sdk_err:
-        logger.error(f"❌ Erro ao inicializar SDK Mercado Pago: {sdk_err}")
-        raise RuntimeError(f"Erro no SDK MP: {sdk_err}")
+    logger.info(f"💳 Criando preferência MP via API Direta (Requests). Token: {safe_token}")
 
     if plano == PLAN_PREMIUM_MONTHLY:
         title = "Premium Mensal Maestro Financeiro"
@@ -143,7 +137,7 @@ def gerar_link_pagamento_mercadopago(user_id: int, plano: str) -> str:
     else:
         raise ValueError(f"Plano inválido: {plano}")
 
-    # Preferência de pagamento (Payer email é frequentemente obrigatório em algumas APIs)
+    # Preferência de pagamento
     preference_data = {
         "items": [
             {
@@ -158,7 +152,7 @@ def gerar_link_pagamento_mercadopago(user_id: int, plano: str) -> str:
         "external_reference": f"telegram_{user_id}_{plano}_{uuid.uuid4().hex[:8]}",
         "payer": {
             "name": str(user_id),
-            "email": f"usuario_{user_id}@contacomigo.bot" # E-mail fictício para satisfazer a API
+            "email": f"usuario_{user_id}@contacomigo.bot"
         },
         "back_urls": {
             "success": os.environ.get("MERCADOPAGO_SUCCESS_URL", "https://t.me/ContaComigoBot"),
@@ -173,15 +167,26 @@ def gerar_link_pagamento_mercadopago(user_id: int, plano: str) -> str:
     if webhook_url:
         preference_data["notification_url"] = webhook_url
 
-    preference_response = sdk.preference().create(preference_data)
-    
-    if preference_response.get("status") != 201:
-        error_detail = preference_response.get("response", "Sem detalhes")
-        logger.error(f"❌ Erro Mercado Pago (Status {preference_response.get('status')}): {error_detail}")
-        raise RuntimeError(f"Erro ao criar link Mercado Pago: {error_detail}")
-    
-    return preference_response["response"]["init_point"]
+    try:
+        url_api = "https://api.mercadopago.com/checkout/preferences"
+        headers = {
+            "Authorization": f"Bearer {mp_access_token}",
+            "Content-Type": "application/json"
+        }
 
+        response = requests.post(url_api, headers=headers, json=preference_data, timeout=30)
+
+        if response.status_code not in [200, 201]:
+            error_detail = response.text or "Sem detalhes"
+            logger.error(f"❌ Erro API Mercado Pago (Status {response.status_code}): {error_detail}")
+            raise RuntimeError(f"Erro ao criar link Mercado Pago: {error_detail}")
+
+        res_json = response.json()
+        return res_json["init_point"]
+
+    except Exception as e:
+        logger.error(f"❌ Falha crítica ao gerar link de pagamento: {e}")
+        raise RuntimeError(f"Falha na comunicação com Mercado Pago: {e}")
 def ensure_user_plan_state(db: Session, user: Usuario, *, commit: bool = True) -> Usuario:
     changed = False
     now = _now_utc()
