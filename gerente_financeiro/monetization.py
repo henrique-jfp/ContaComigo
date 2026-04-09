@@ -117,13 +117,14 @@ def gerar_link_pagamento_mercadopago(user_id: int, plano: str) -> str:
     if not mercadopago:
         raise RuntimeError("Biblioteca 'mercadopago' não instalada.")
         
-    mp_access_token = os.environ.get("MERCADOPAGO_ACCESS_TOKEN", "").strip()
+    # Limpeza profunda do token (remove espaços, aspas simples e duplas)
+    mp_access_token = os.environ.get("MERCADOPAGO_ACCESS_TOKEN", "").strip().strip('"').strip("'")
     if not mp_access_token:
         raise RuntimeError("MERCADOPAGO_ACCESS_TOKEN não configurado!")
     
-    # Log de diagnóstico seguro (primeiros e últimos 4 caracteres)
+    # Log de diagnóstico seguro
     safe_token = f"{mp_access_token[:8]}...{mp_access_token[-4:]}" if len(mp_access_token) > 12 else "***"
-    logger.info(f"💳 Iniciando criação de preferência MP com token: {safe_token}")
+    logger.info(f"💳 Tentando criar preferência MP. Token: {safe_token}")
     
     try:
         sdk = mercadopago.SDK(mp_access_token)
@@ -142,6 +143,7 @@ def gerar_link_pagamento_mercadopago(user_id: int, plano: str) -> str:
     else:
         raise ValueError(f"Plano inválido: {plano}")
 
+    # Preferência de pagamento (Payer email é frequentemente obrigatório em algumas APIs)
     preference_data = {
         "items": [
             {
@@ -154,10 +156,22 @@ def gerar_link_pagamento_mercadopago(user_id: int, plano: str) -> str:
             }
         ],
         "external_reference": f"telegram_{user_id}_{plano}_{uuid.uuid4().hex[:8]}",
-        "notification_url": os.environ.get("MERCADOPAGO_WEBHOOK_URL", ""),
         "payer": {
-            "name": str(user_id)
+            "name": str(user_id),
+            "email": f"usuario_{user_id}@contacomigo.bot" # E-mail fictício para satisfazer a API
         },
+        "back_urls": {
+            "success": os.environ.get("MERCADOPAGO_SUCCESS_URL", "https://t.me/ContaComigoBot"),
+            "failure": os.environ.get("MERCADOPAGO_FAILURE_URL", "https://t.me/ContaComigoBot"),
+            "pending": os.environ.get("MERCADOPAGO_PENDING_URL", "https://t.me/ContaComigoBot")
+        },
+        "auto_return": "approved"
+    }
+
+    # Adicionar URL de notificação apenas se estiver configurada
+    webhook_url = os.environ.get("MERCADOPAGO_WEBHOOK_URL", "").strip()
+    if webhook_url:
+        preference_data["notification_url"] = webhook_url
         "back_urls": {
             "success": os.environ.get("MERCADOPAGO_SUCCESS_URL", "https://t.me/ContaComigoBot"),
             "failure": os.environ.get("MERCADOPAGO_FAILURE_URL", "https://t.me/ContaComigoBot"),

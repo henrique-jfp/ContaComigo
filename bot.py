@@ -180,6 +180,9 @@ from gerente_financeiro.assistente_proativo_handler import teste_assistente_hand
 # 🎊 WRAPPED ANUAL
 from gerente_financeiro.wrapped_anual_handler import meu_wrapped_handler
 
+# 🤫 PIERRE FINANCE (OPEN FINANCE)
+from pierre_finance.handlers import get_pierre_conversation_handler, sincronizar_manual
+
 
 
 # --- COMANDOS DE DEBUG (REMOVER EM PRODUÇÃO) ---
@@ -402,6 +405,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("/debuglogs", lambda: CommandHandler("debuglogs", debug_logs_command)),
         ("/teste_assistente", lambda: teste_assistente_handler),
         ("/meu_wrapped", lambda: meu_wrapped_handler),
+        ("/sincronizar_banco", lambda: CommandHandler("sincronizar_banco", sincronizar_manual)),
         # ❌ REMOVIDO: ("/importar", ...) - função importar_of não estava definida em lugar nenhum
         # Texto/voz/foto sao registrados como fallback no grupo 0 ao final da funcao.
         # ("confirmar_importacao_callback", lambda: CallbackQueryHandler(confirmar_callback, pattern="^confirmar_importacao$")),  # Removido: confirmar_callback não existe mais

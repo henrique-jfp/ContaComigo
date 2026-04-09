@@ -21,8 +21,24 @@ from gerente_financeiro.monetization import (
     downgrade_expired_trials_to_free,
     trial_users_expiring_in,
 )
+from pierre_finance.sync import sincronizar_open_finance
 
 logger = logging.getLogger(__name__)
+
+async def job_sincronizar_open_finance_all_users(context: ContextTypes.DEFAULT_TYPE):
+    """Job que sincroniza Open Finance para todos os usuários com chave configurada."""
+    logger.info("🔄 Iniciando job de sincronização Open Finance...")
+    db = next(get_db())
+    try:
+        usuarios = db.query(Usuario).filter(Usuario.pierre_api_key.isnot(None)).all()
+        for usuario in usuarios:
+            try:
+                await sincronizar_open_finance(usuario, db)
+            except Exception as e:
+                logger.error(f"Falha ao sincronizar Open Finance para usuário {usuario.id}: {e}")
+    finally:
+        db.close()
+    logger.info("✅ Job de sincronização Open Finance finalizado.")
 
 
 
@@ -62,6 +78,14 @@ def configurar_jobs(job_queue):
             job_metas_mensal,
             time=time(hour=10, minute=0),
             name="metas_checkin_mensal"
+        )
+        
+        # Job de sincronização Open Finance a cada 6 horas
+        job_queue.run_repeating(
+            job_sincronizar_open_finance_all_users,
+            interval=6 * 3600, # 6 horas em segundos
+            first=60, # Começa 1 minuto após o boot
+            name="open_finance_sync_repeating"
         )
         
 

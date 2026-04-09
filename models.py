@@ -115,6 +115,7 @@ class Conta(Base):
     id_usuario = Column(Integer, ForeignKey('usuarios.id'), nullable=False)
     nome = Column(String, nullable=False) # Ex: "Nubank", "Inter Gold"
     tipo = Column(String, nullable=False) # "Conta Corrente", "Cartão de Crédito", "Carteira Digital", "Outro"
+    external_id = Column(String, unique=True, nullable=True) # ID Único da API Open Finance
     
     # Campos específicos para Cartão de Crédito
     dia_fechamento = Column(Integer, nullable=True)
@@ -150,8 +151,9 @@ class Lancamento(Base):
     data_transacao = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     # Zero setup: forma de pagamento simplificada e obrigatória.
     forma_pagamento = Column(String, nullable=False, default="Nao_informado")
-    origem = Column(String, nullable=True)  # manual, texto, audio, ocr, miniapp
+    origem = Column(String, nullable=True)  # manual, texto, audio, ocr, miniapp, open_finance
     documento_fiscal = Column(String, nullable=True)
+    external_id = Column(String, unique=True, nullable=True) # ID Único da API Open Finance
     
     id_usuario = Column(Integer, ForeignKey('usuarios.id'), nullable=False)
     id_categoria = Column(Integer, ForeignKey('categorias.id'), nullable=True)
