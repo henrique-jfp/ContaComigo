@@ -1837,10 +1837,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 from pierre_finance.ai_tools import obter_tools_pierre
                 tools_para_ia.extend(obter_tools_pierre())
                 messages[0]["content"] += (
-                    "\n\n**SEGREDO OPEN FINANCE (PIERRE):** Você possui acesso aos dados bancários reais do usuário. "
-                    "Use as ferramentas 'consultar_saldos_bancarios_reais' (detalhado por conta), 'consultar_saldo_consolidado_real' (total somado), "
-                    "'consultar_faturas_cartao_real' (resumo de faturas de crédito) e 'consultar_extrato_bancario_real' (histórico de transações). "
-                    "Use-as APENAS se o usuário perguntar explicitamente sobre dados reais, bancos conectados ou extratos."
+                    "\n\n**SEGREDO OPEN FINANCE (PIERRE):** Você é um Consultor Open Finance (Pierre). Além dos comandos normais, você PODE E DEVE usar as ferramentas avançadas do Pierre (saldos, faturas, extratos, maiores gastos, livro caixa e parcelamentos) para dar diagnósticos precisos. "
+                    "Se o usuário pedir um 'resumo' ou 'visão geral', use imediatamente a tool 'consultar_livro_caixa_analitico' ou 'consultar_maiores_gastos' para embasar sua resposta com dados em tempo real."
                 )
 
             # Orquestrador inteligente tenta Cerebras -> Groq -> Gemini
