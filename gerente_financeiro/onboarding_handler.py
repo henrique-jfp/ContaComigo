@@ -217,31 +217,66 @@ async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         user = get_or_create_user(db, update.effective_user.id, update.effective_user.full_name)
         user_name = user.nome_completo.split(' ')[0] if user.nome_completo else update.effective_user.first_name
         
+        # Deep link handling
+        args = context.args or []
+        is_premium_request = "premium" in args
+
         webapp_url = build_miniapp_url(source='start')
         
-        try:
-            link_premium = gerar_link_pagamento_mercadopago(update.effective_user.id, PLAN_PREMIUM_MONTHLY)
-        except Exception as e:
-            logger.warning(f"⚠️ Não foi possível gerar link premium: {e}")
-            link_premium = None
+        link_premium = None
+        # Só gera link se NÃO for premium ou se for um pedido explícito de premium
+        if is_premium_request or user.plan not in ["premium_monthly", "premium_annual"]:
+            try:
+                link_premium = gerar_link_pagamento_mercadopago(update.effective_user.id, PLAN_PREMIUM_MONTHLY)
+            except Exception as e:
+                logger.warning(f"⚠️ Não foi possível gerar link premium: {e}")
+                link_premium = None
             
+        if is_premium_request and link_premium:
+            text = (
+                "💎 <b>Upgrade para Premium</b>\n\n"
+                "Você escolheu turbinar suas finanças! Com o Premium você tem:\n"
+                "• 🧠 <b>Alfredo Ilimitado:</b> Pergunte o que quiser, quando quiser.\n"
+                "• 📸 <b>OCR Sem Limites:</b> Registre todas as suas notas fiscais por foto.\n"
+                "• 🧾 <b>PDF Expert:</b> Importe faturas completas de qualquer banco.\n"
+                "• 📊 <b>Dashboard Full:</b> Gráficos avançados e análise de tendências.\n\n"
+                "Clique no botão abaixo para ativar seu Premium agora mesmo!"
+            )
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("💎 Pagar com Mercado Pago", url=link_premium)],
+                [InlineKeyboardButton("⬅️ Voltar ao Início", callback_data="manual_menu")]
+            ])
+            if update.message:
+                await update.message.reply_html(text, reply_markup=keyboard)
+            elif update.callback_query:
+                await update.callback_query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboard)
+            return ConversationHandler.END
+
         trial_end = None
         if user.trial_expires_at:
             trial_end = user.trial_expires_at.date()
         else:
             trial_end = (datetime.now() + timedelta(days=15)).date()
+        
+        status_plano = ""
+        if user.plan in ["premium_monthly", "premium_annual"]:
+            status_plano = "💎 <b>Você é um usuário Premium!</b>\nObrigado por apoiar o projeto.\n\n"
+        else:
+            status_plano = f"<b>Seu período de teste premium começou agora e vai até <u>{trial_end.strftime('%d/%m/%Y')}</u>.</b>\nAproveite todos os recursos premium sem restrição!\n\n"
+
         text = (
             f"👋 <b>Bem-vindo ao Maestro Financeiro, {user_name}!</b>\n\n"
-            f"<b>Seu período de teste premium começou agora e vai até <u>{trial_end.strftime('%d/%m/%Y')}</u>.</b>\n"
-            "Aproveite todos os recursos premium sem restrição!\n\n"
+            f"{status_plano}"
             "O assistente financeiro inteligente que une chat e MiniApp para você controlar tudo sem planilhas.\n\n"
             "<b>O que você pode fazer aqui:</b>\n"
             "• Lançar gastos e receitas por texto, áudio, foto ou PDF\n"
             "• Criar agendamentos e metas\n"
             "• Consultar gráficos, histórico e dashboard\n"
             "• Ganhar XP, subir de nível e completar missões\n\n"
-            "<b>Experimente o Premium: lançamentos ilimitados, IA, OCR, dashboard completo e mais!\n</b>"
         )
+        
+        if user.plan not in ["premium_monthly", "premium_annual"]:
+            text += "<b>Experimente o Premium: lançamentos ilimitados, IA, OCR, dashboard completo e mais!\n</b>"
         
         keyboard_buttons = [
             [InlineKeyboardButton("🧩 Abrir MiniApp", web_app=WebAppInfo(url=webapp_url))],
@@ -257,10 +292,11 @@ async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             await update.callback_query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboard)
 
         # Atualiza o teclado persistente para a versão enxuta (2 botões).
-        await update.message.reply_text(
-            "Atalhos rápidos atualizados.",
-            reply_markup=obter_teclado_painel(),
-        )
+        if update.message:
+            await update.message.reply_text(
+                "Atalhos rápidos atualizados.",
+                reply_markup=obter_teclado_painel(),
+            )
 
         return ConversationHandler.END
         

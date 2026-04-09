@@ -7,19 +7,21 @@
               <h2 id="homeBalance" class="mt-2 text-4xl font-extrabold tracking-tight text-telegram-text">R$ 0,00</h2>
               <p id="homeBalanceHint" class="mt-1 text-sm font-semibold text-telegram-hint">Carregando seu fluxo...</p>
             </div>
-            <button id="homeLevelCard" type="button" class="shrink-0 rounded-2xl bg-telegram-card border border-telegram-separator shadow-soft p-3 w-[120px] text-left hover:border-brand/40 hover:bg-brand/5 transition" title="Abrir perfil do jogo">
-              <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.24em] text-telegram-hint mb-2">
-                <span>Nível</span>
-                <span id="homeBadgeContainer"></span>
-              </div>
-              <div class="text-2xl font-extrabold text-brand leading-none" id="homeLevel">1</div>
-              <div class="mt-1 text-[11px] text-telegram-hint"><span id="homeXp">0</span> XP</div>
-              <div class="mt-2 text-[11px] font-semibold text-telegram-text"><span id="homeStreak">0</span> dias</div>
-              <div class="mt-2 text-[10px] font-bold uppercase tracking-[0.18em] text-brand/80" id="homePlanLabel" style="display:none"></div>
-              <div id="homeUpgradeBtn" class="mt-2 w-full py-1.5 bg-brand text-white text-[10px] font-bold uppercase tracking-wider rounded-lg text-center shadow-sm hover:bg-brand-soft transition active:scale-95" style="display:none">
+            <div class="flex flex-col gap-2 shrink-0 w-[120px]">
+              <button id="homeLevelCard" type="button" class="rounded-2xl bg-telegram-card border border-telegram-separator shadow-soft p-3 text-left hover:border-brand/40 hover:bg-brand/5 transition" title="Abrir perfil do jogo">
+                <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.24em] text-telegram-hint mb-2">
+                  <span>Nível</span>
+                  <span id="homeBadgeContainer"></span>
+                </div>
+                <div class="text-2xl font-extrabold text-brand leading-none" id="homeLevel">1</div>
+                <div class="mt-1 text-[11px] text-telegram-hint"><span id="homeXp">0</span> XP</div>
+                <div class="mt-2 text-[11px] font-semibold text-telegram-text"><span id="homeStreak">0</span> dias</div>
+                <div class="mt-2 text-[10px] font-bold uppercase tracking-[0.18em] text-brand/80" id="homePlanLabel" style="display:none"></div>
+              </button>
+              <div id="homeUpgradeBtn" class="w-full py-1.5 bg-brand text-white text-[10px] font-bold uppercase tracking-wider rounded-lg text-center shadow-sm hover:bg-brand-soft transition active:scale-95 cursor-pointer" style="display:none">
                 💎 SEJA PREMIUM
               </div>
-            </button>
+            </div>
           </div>
 
           <div class="mt-6 relative z-10">
