@@ -830,6 +830,199 @@ def telegram_auth():
     })
 
 
+@app.route('/api/miniapp/pierre/health')
+def pierre_health():
+    """Busca o score de saúde financeira real via Pierre API."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 403
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario or not usuario.pierre_api_key:
+            return jsonify({"ok": False, "error": "pierre_not_configured"}), 403
+
+        client = PierreClient(usuario.pierre_api_key)
+        # Assumindo que o PierreClient tem um método get_financial_health()
+        health_data = client.get_financial_health() 
+        
+        if isinstance(health_data, dict) and health_data.get("success"):
+            return jsonify({"ok": True, "data": health_data.get("data")})
+        else:
+            logger.error(f"Erro ao buscar saúde financeira Pierre para usuário {usuario.id}: {health_data}")
+            return jsonify({"ok": False, "error": health_data.get("error", "Erro desconhecido ao buscar saúde financeira")}), 500
+    except Exception as e:
+        logger.error(f"Erro interno ao buscar saúde financeira Pierre para usuário {usuario.id}: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": "internal_server_error"}), 500
+    finally:
+        db.close()
+
+@app.route('/api/miniapp/pierre/projection')
+def pierre_projection():
+    """Calcula o total de compromissos financeiros projetados para o próximo mês via Pierre API."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 403
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario or not usuario.pierre_api_key:
+            return jsonify({"ok": False, "error": "pierre_not_configured"}), 403
+
+        client = PierreClient(usuario.pierre_api_key)
+        
+        # Obtém o primeiro dia do próximo mês
+        hoje = datetime.now(timezone.utc)
+        primeiro_dia_mes_atual = hoje.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        proximo_mes_inicio = primeiro_dia_mes_atual + timedelta(days=31) # Simplesmente avança 31 dias para pegar o início do próximo mês
+        proximo_mes_inicio = proximo_mes_inicio.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        # Obtém parcelas a partir de amanhã até o fim do próximo mês
+        # A lógica exata pode precisar de ajuste dependendo de como 'get_installments' lida com intervalos
+        data_inicial_filtro = (hoje + timedelta(days=1)).strftime('%Y-%m-%d')
+        data_final_filtro = (proximo_mes_inicio + timedelta(days=31)).replace(day=1) - timedelta(days=1) # Fim do próximo mês
+        data_final_filtro_str = data_final_filtro.strftime('%Y-%m-%d')
+
+        # Assume que get_installments retorna parcelas com 'dueDate' e 'amount'
+        installments_data = client.get_installments(startDate=data_inicial_filtro, endDate=data_final_filtro_str)
+        
+        total_next_month_commitments = 0
+        if isinstance(installments_data, dict) and installments_data.get("success"):
+            for item in installments_data.get("purchases", []): # Assumindo que 'purchases' contém as parcelas
+                due_date_str = item.get("dueDate")
+                amount = float(item.get("amount", 0))
+
+                if due_date_str:
+                    try:
+                        # Tenta parsear a data de vencimento
+                        due_date = datetime.fromisoformat(due_date_str.replace('Z', '+00:00'))
+                        # Verifica se a data de vencimento está dentro do próximo mês
+                        if proximo_mes_inicio <= due_date < (proximo_mes_inicio + timedelta(days=31)).replace(day=1):
+                            total_next_month_commitments += amount
+                    except ValueError:
+                        logger.warning(f"Data de vencimento inválida recebida do Pierre: {due_date_str}")
+            
+            return jsonify({"ok": True, "data": {"total_commitments_next_month": round(total_next_month_commitments, 2)}})
+        else:
+            logger.error(f"Erro ao buscar parcelamentos Pierre para usuário {usuario.id}: {installments_data}")
+            return jsonify({"ok": False, "error": installments_data.get("error", "Erro desconhecido ao buscar parcelamentos")}), 500
+    except Exception as e:
+        logger.error(f"Erro interno ao calcular projeção Pierre para usuário {usuario.id}: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": "internal_server_error"}), 500
+    finally:
+        db.close()
+
+@app.route('/api/miniapp/pierre/connected-banks')
+def pierre_connected_banks():
+    """Lista bancos/instituições financeiras conectadas via Pierre."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 403
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario or not usuario.pierre_api_key:
+            return jsonify({"ok": False, "error": "pierre_not_configured"}), 403
+
+        client = PierreClient(usuario.pierre_api_key)
+        accounts = client.get_accounts() # Assume que get_accounts retorna uma lista de instituições conectadas
+        
+        if isinstance(accounts, list):
+            institutions = []
+            for acc in accounts:
+                if acc.get("id") and acc.get("name"):
+                    # Extrair informações relevantes, logo seria um plus se disponível na API
+                    institutions.append({
+                        "id": acc.get("id"), 
+                        "name": acc.get("name", "Instituição Desconhecida"), 
+                        "type": acc.get("type", "BANK") # Tipo como BANK, CREDIT, INVESTMENT
+                    })
+            return jsonify({"ok": True, "data": institutions})
+        else:
+            logger.error(f"Formato de resposta inesperado ao buscar contas Pierre para usuário {usuario.id}: {accounts}")
+            return jsonify({"ok": False, "error": "unexpected_response_format"}), 500
+    except Exception as e:
+        logger.error(f"Erro ao buscar contas conectadas Pierre para usuário {usuario.id}: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": "internal_server_error"}), 500
+    finally:
+        db.close()
+
+@app.route('/api/miniapp/history')
+def miniapp_history():
+    """Lista os ultimos lancamentos para o miniapp"""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    limit = min(int(request.args.get("limit", 20)), 200)
+    offset = max(int(request.args.get("offset", 0)), 0)
+    query = (request.args.get("query") or "").strip()
+    tipo = (request.args.get("tipo") or "").strip()
+    order = (request.args.get("order") or "added_desc").strip().lower()
+    start_date = _parse_date(request.args.get("start_date"))
+    end_date = _parse_date(request.args.get("end_date"))
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        base_query = db.query(Lancamento).filter(Lancamento.id_usuario == usuario.id)
+        if query:
+            base_query = base_query.filter(Lancamento.descricao.ilike(f"%{query}%"))
+        if tipo:
+            tipo_norm = tipo.strip().lower()
+            if tipo_norm in {"entrada", "receita"}:
+                base_query = base_query.filter(func.lower(Lancamento.tipo).in_(["entrada", "receita"]))
+            elif tipo_norm in {"saída", "saida", "despesa"}:
+                base_query = base_query.filter(func.lower(Lancamento.tipo).notin_(["entrada", "receita"]))
+        if start_date:
+            base_query = base_query.filter(Lancamento.data_transacao >= start_date)
+        if end_date:
+            base_query = base_query.filter(Lancamento.data_transacao <= end_date)
+        
+        if order == "date_desc":
+            base_query = base_query.order_by(Lancamento.data_transacao.desc())
+        elif order == "date_asc":
+            base_query = base_query.order_by(Lancamento.data_transacao.asc())
+        else: # default added_desc
+            base_query = base_query.order_by(Lancamento.id.desc())
+        
+        total_count = base_query.count()
+        items = base_query.offset(offset).limit(limit).all()
+        
+        # Busca categorias para popular o nome
+        categorias_map = {c.id: c.nome for c in db.query(Categoria).all()}
+
+        lancamentos_json = []
+        for item in items:
+            lanc_json = {
+                "id": item.id,
+                "descricao": item.descricao,
+                "valor": float(item.valor),
+                "tipo": item.tipo,
+                "data_transacao": item.data_transacao.isoformat() if item.data_transacao else None,
+                "origem": item.origem,
+                "external_id": item.external_id,
+                "forma_pagamento": item.forma_pagamento,
+                "categoria_id": item.id_categoria,
+                "categoria_nome": categorias_map.get(item.id_categoria, "Sem categoria") if item.id_categoria else "Sem categoria",
+                "subcategoria_nome": item.id_subcategoria # Pode ser null
+            }
+            lancamentos_json.append(lanc_json)
+
+        return jsonify({"ok": True, "items": lancamentos_json, "total": total_count, "count": len(items)})
+
+    except Exception as e:
+        logger.error(f"Erro ao listar histórico para usuário {session['user_id']}: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": "internal_server_error"}), 500
+    finally:
+        db.close()
+
+
 @app.route('/api/miniapp/pierre/parcelamentos')
 def miniapp_pierre_parcelamentos():
     """Consulta parcelamentos reais via Pierre Finance"""
