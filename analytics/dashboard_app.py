@@ -80,6 +80,7 @@ from gerente_financeiro.fatura_draft_store import (
     pop_fatura_draft,
     pop_pending_editor_token,
 )
+from pierre_finance.client import PierreClient
 import google.generativeai as genai
 from types import SimpleNamespace
 
@@ -946,78 +947,6 @@ def pierre_connected_banks():
             return jsonify({"ok": False, "error": "unexpected_response_format"}), 500
     except Exception as e:
         logger.error(f"Erro ao buscar contas conectadas Pierre para usuário {usuario.id}: {e}", exc_info=True)
-        return jsonify({"ok": False, "error": "internal_server_error"}), 500
-    finally:
-        db.close()
-
-@app.route('/api/miniapp/history')
-def miniapp_history():
-    """Lista os ultimos lancamentos para o miniapp"""
-    session = _require_session()
-    if not session:
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-
-    limit = min(int(request.args.get("limit", 20)), 200)
-    offset = max(int(request.args.get("offset", 0)), 0)
-    query = (request.args.get("query") or "").strip()
-    tipo = (request.args.get("tipo") or "").strip()
-    order = (request.args.get("order") or "added_desc").strip().lower()
-    start_date = _parse_date(request.args.get("start_date"))
-    end_date = _parse_date(request.args.get("end_date"))
-    db = next(get_db())
-    try:
-        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
-        if not usuario:
-            return jsonify({"ok": False, "error": "user_not_found"}), 404
-
-        base_query = db.query(Lancamento).filter(Lancamento.id_usuario == usuario.id)
-        if query:
-            base_query = base_query.filter(Lancamento.descricao.ilike(f"%{query}%"))
-        if tipo:
-            tipo_norm = tipo.strip().lower()
-            if tipo_norm in {"entrada", "receita"}:
-                base_query = base_query.filter(func.lower(Lancamento.tipo).in_(["entrada", "receita"]))
-            elif tipo_norm in {"saída", "saida", "despesa"}:
-                base_query = base_query.filter(func.lower(Lancamento.tipo).notin_(["entrada", "receita"]))
-        if start_date:
-            base_query = base_query.filter(Lancamento.data_transacao >= start_date)
-        if end_date:
-            base_query = base_query.filter(Lancamento.data_transacao <= end_date)
-        
-        if order == "date_desc":
-            base_query = base_query.order_by(Lancamento.data_transacao.desc())
-        elif order == "date_asc":
-            base_query = base_query.order_by(Lancamento.data_transacao.asc())
-        else: # default added_desc
-            base_query = base_query.order_by(Lancamento.id.desc())
-        
-        total_count = base_query.count()
-        items = base_query.offset(offset).limit(limit).all()
-        
-        # Busca categorias para popular o nome
-        categorias_map = {c.id: c.nome for c in db.query(Categoria).all()}
-
-        lancamentos_json = []
-        for item in items:
-            lanc_json = {
-                "id": item.id,
-                "descricao": item.descricao,
-                "valor": float(item.valor),
-                "tipo": item.tipo,
-                "data_transacao": item.data_transacao.isoformat() if item.data_transacao else None,
-                "origem": item.origem,
-                "external_id": item.external_id,
-                "forma_pagamento": item.forma_pagamento,
-                "categoria_id": item.id_categoria,
-                "categoria_nome": categorias_map.get(item.id_categoria, "Sem categoria") if item.id_categoria else "Sem categoria",
-                "subcategoria_nome": item.id_subcategoria # Pode ser null
-            }
-            lancamentos_json.append(lanc_json)
-
-        return jsonify({"ok": True, "items": lancamentos_json, "total": total_count, "count": len(items)})
-
-    except Exception as e:
-        logger.error(f"Erro ao listar histórico para usuário {session['user_id']}: {e}", exc_info=True)
         return jsonify({"ok": False, "error": "internal_server_error"}), 500
     finally:
         db.close()
