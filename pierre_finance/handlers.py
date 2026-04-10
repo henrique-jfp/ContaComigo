@@ -10,7 +10,7 @@ from telegram.ext import (
 from database.database import get_db
 from models import Usuario
 import logging
-from .sync import sincronizar_open_finance
+from .sync import sincronizar_carga_inicial, sincronizar_incremental
 
 # Estados da conversação
 CHOOSING_ACTION, ASK_KEY = range(2)
@@ -27,8 +27,12 @@ async def sincronizar_manual(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await msg.edit_text("❌ Você ainda não configurou o Open Finance. Use /pierre primeiro.")
             return
 
+        if not usuario.pierre_initial_sync_done:
+            await msg.edit_text("⏳ Sua carga inicial ainda não foi concluída. Tente novamente em alguns minutos.")
+            return
+
         try:
-            novos = await sincronizar_open_finance(usuario, db)
+            novos = await sincronizar_incremental(usuario, db)
             if novos is not None:
                 await msg.edit_text(f"✅ <b>Sincronização concluída!</b>\n\nEncontrei <b>{novos}</b> novas transações que já foram categorizadas pelo Alfredo.", parse_mode='HTML')
             else:

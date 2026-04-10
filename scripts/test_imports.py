@@ -12,7 +12,7 @@ try:
     import jobs
     import models
     from pierre_finance.handlers import get_pierre_conversation_handler, sincronizar_manual
-    from pierre_finance.sync import sincronizar_open_finance
+    from pierre_finance.sync import sincronizar_incremental, sincronizar_carga_inicial
     print("✅ All imports passed!")
 except Exception as e:
     print(f"❌ Import failed: {e}")
