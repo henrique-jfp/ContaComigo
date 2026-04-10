@@ -952,6 +952,48 @@ def pierre_connected_banks():
         db.close()
 
 
+@app.route('/api/miniapp/pierre/dashboard')
+def miniapp_pierre_dashboard():
+    """Endpoint agregado para o Modo Deus (Pierre Finance)"""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario or not usuario.pierre_api_key:
+            return jsonify({"ok": False, "error": "pierre_not_configured"}), 403
+
+        from pierre_finance.ai_tools import executar_tool_pierre
+        
+        # 1. Buscar Saldo Consolidado
+        balance_res = executar_tool_pierre("consultar_saldo_consolidado_real", {}, usuario.pierre_api_key)
+        
+        # 2. Buscar Categorias Caras
+        # Padrão: Últimos 30 dias para o dashboard
+        thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        categories_res = executar_tool_pierre("consultar_maiores_gastos", {"startDate": thirty_days_ago}, usuario.pierre_api_key)
+        
+        # 3. Buscar Parcelamentos
+        installments_res = executar_tool_pierre("consultar_parcelamentos", {}, usuario.pierre_api_key)
+
+        return jsonify({
+            "ok": True,
+            "data": {
+                "balance": balance_res,
+                "categories": categories_res,
+                "installments": installments_res,
+                "sync_time": datetime.now().isoformat()
+            }
+        })
+    except Exception as e:
+        logger.error(f"Erro ao carregar dashboard Pierre: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
 @app.route('/api/miniapp/pierre/parcelamentos')
 def miniapp_pierre_parcelamentos():
     """Consulta parcelamentos reais via Pierre Finance"""
@@ -992,7 +1034,8 @@ def miniapp_pierre_livro_caixa():
             return jsonify({"ok": False, "error": "pierre_not_configured"}), 403
 
         from pierre_finance.ai_tools import executar_tool_pierre
-        res = executar_tool_pierre("consultar_livro_caixa_analitico", {}, usuario.pierre_api_key)
+        # Solicita o livro caixa incluindo todos os períodos para evitar PDF vazio
+        res = executar_tool_pierre("consultar_livro_caixa_analitico", {"includeAllPeriods": True}, usuario.pierre_api_key)
         
         # Gerar PDF e enviar via Bot
         try:
@@ -1065,20 +1108,29 @@ def _generate_pierre_book_pdf(data):
     elements.append(Paragraph("Livro Caixa Analítico (Pierre Finance)", styles['Title']))
     elements.append(Spacer(1, 12))
     
-    # Extrair transações do book
-    book_data = data.get("data", {}) if isinstance(data, dict) else {}
-    transactions = book_data.get("transactions", [])
+    # Extrair transações do book - Tenta múltiplos caminhos possíveis no JSON do Pierre
+    book_data = {}
+    if isinstance(data, dict):
+        book_data = data.get("data") or data
     
+    transactions = []
+    if isinstance(book_data, dict):
+        transactions = book_data.get("transactions") or book_data.get("txs") or []
+    elif isinstance(book_data, list):
+        transactions = book_data
+
     if not transactions:
-        elements.append(Paragraph("Nenhuma transação encontrada no período.", styles['Normal']))
+        elements.append(Paragraph("Nenhuma transação encontrada no período ou histórico.", styles['Normal']))
+        elements.append(Paragraph("Dica: Verifique se suas contas estão sincronizadas no app Pierre Finance.", styles['Italic']))
     else:
         table_data = [["Data", "Descrição", "Valor", "Categoria"]]
-        for tx in transactions[:100]: # Limite de 100 para o PDF
+        for tx in transactions[:200]: # Aumentado para 200 para ser mais útil
+            val = tx.get('amount') or tx.get('value') or 0
             table_data.append([
-                tx.get("date", "")[:10],
-                str(tx.get("description", "Compra"))[:30],
-                f"R$ {float(tx.get('amount', 0)):.2f}",
-                str(tx.get("category", "Geral"))
+                str(tx.get("date") or "")[:10],
+                str(tx.get("description") or tx.get("name") or "Compra")[:30],
+                f"R$ {float(val):.2f}",
+                str(tx.get("category") or tx.get("cat") or "Geral")
             ])
         
         t = Table(table_data, colWidths=[80, 200, 80, 100])

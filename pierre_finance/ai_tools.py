@@ -32,13 +32,13 @@ def obter_tools_pierre():
             "type": "function",
             "function": {
                 "name": "consultar_faturas_cartao_real",
-                "description": "Consulta o resumo da FATURA ATUAL (aberta) dos cartões de crédito: limite total, disponível e valor da fatura aberta hoje.",
+                "description": "Consulta o resumo da FATURA ATUAL (aberta) dos cartões de crédito.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "accountId": {
                             "type": "string",
-                            "description": "ID da conta do cartão de crédito (opcional)"
+                            "description": "ID da conta do cartão."
                         }
                     },
                     "required": []
@@ -49,25 +49,25 @@ def obter_tools_pierre():
             "type": "function",
             "function": {
                 "name": "consultar_extrato_bancario_real",
-                "description": "Consulta o extrato e histórico de transações reais do usuário. Use SEMPRE para perguntas sobre JUROS (use clientMessage='juros'), compras específicas ou taxas bancárias.",
+                "description": "Consulta o extrato e histórico de transações reais. Use para JUROS (clientMessage='juros'), compras ou taxas.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "startDate": {
                             "type": "string",
-                            "description": "Data inicial para filtro (formato YYYY-MM-DD)"
+                            "description": "Formato YYYY-MM-DD"
                         },
                         "endDate": {
                             "type": "string",
-                            "description": "Data final para filtro (formato YYYY-MM-DD)"
+                            "description": "Formato YYYY-MM-DD"
                         },
                         "limit": {
                             "type": "integer",
-                            "description": "Número de transações para retornar (padrão 50)"
+                            "description": "Quantidade de registros (máx 100)."
                         },
                         "clientMessage": {
                             "type": "string",
-                            "description": "Filtro em linguagem natural (ex: 'juros', 'ifood', 'supermercado')"
+                            "description": "Filtro de busca (ex: 'juros', 'ifood')."
                         }
                     },
                     "required": []
@@ -78,7 +78,7 @@ def obter_tools_pierre():
             "type": "function",
             "function": {
                 "name": "forcar_sincronizacao_bancaria",
-                "description": "Solicita que o Pierre Finance atualize os dados diretamente com os bancos agora mesmo.",
+                "description": "Atualiza os dados agora diretamente com os bancos.",
                 "parameters": {
                     "type": "object",
                     "properties": {},
@@ -90,13 +90,13 @@ def obter_tools_pierre():
             "type": "function",
             "function": {
                 "name": "consultar_faturas_passadas",
-                "description": "Consulta faturas de cartão de crédito JÁ FECHADAS ou VENCIDAS de meses anteriores. Use quando o usuário perguntar de faturas de meses que já passaram.",
+                "description": "Consulta faturas FECHADAS ou VENCIDAS de meses anteriores.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "accountId": {
                             "type": "string",
-                            "description": "ID da conta de cartão de crédito para filtrar as faturas (opcional)"
+                            "description": "ID da conta do cartão."
                         }
                     },
                     "required": []
@@ -201,8 +201,18 @@ def obter_tools_pierre():
 def executar_tool_pierre(tool_name: str, arguments: dict, api_key: str) -> any:
     """Executa a chamada da tool real do Pierre e retorna o objeto de dados."""
     client = PierreClient(api_key)
-    # Logging para debug interno (será visível nos logs do servidor)
     import logging
+    import re
+
+    # 🛡️ Sanitização de UUID (Bloqueia alucinações de texto como "ID da conta...")
+    def clean_uuid(val):
+        if not val or not isinstance(val, str): return None
+        val = val.strip()
+        # Se não tiver formato de UUID (letras/números/hifens) e for muito longo ou contiver espaços, é lixo.
+        if " " in val or len(val) > 50 or not re.match(r'^[a-f0-9\-]+$', val.lower()):
+            return None
+        return val
+
     logging.info(f"🛠️ [PIERRE TOOL] Executando {tool_name} com args: {arguments}")
 
     if tool_name == "consultar_saldos_bancarios_reais":
@@ -212,18 +222,16 @@ def executar_tool_pierre(tool_name: str, arguments: dict, api_key: str) -> any:
         return client.get_balance()
 
     elif tool_name == "consultar_faturas_cartao_real":
-        # Se a IA passar accountId ou similar, o client já lida
-        return client.get_bill_summary(account_id=arguments.get("accountId"))
+        acc_id = clean_uuid(arguments.get("accountId") or arguments.get("account_id"))
+        return client.get_bill_summary(account_id=acc_id)
 
     elif tool_name == "consultar_extrato_bancario_real":
-        # Mapeamento de camelCase da Tool para o que o Client espera (embora o client use **params, vamos ser explícitos)
         params = {
             "startDate": arguments.get("startDate") or arguments.get("start_date"),
             "endDate": arguments.get("endDate") or arguments.get("end_date"),
-            "limit": arguments.get("limit", 50), # Aumentado padrão para 50 para dar mais contexto
+            "limit": arguments.get("limit", 50),
             "clientMessage": arguments.get("clientMessage") or arguments.get("client_message")
         }
-        # Limpa None
         params = {k: v for k, v in params.items() if v is not None}
         return client.get_transactions(**params)
 
@@ -231,7 +239,8 @@ def executar_tool_pierre(tool_name: str, arguments: dict, api_key: str) -> any:
         return client.manual_update()
 
     elif tool_name == "consultar_faturas_passadas":
-        return client.get_bills(account_id=arguments.get("accountId"))
+        acc_id = clean_uuid(arguments.get("accountId") or arguments.get("account_id"))
+        return client.get_bills(account_id=acc_id)
 
     elif tool_name == "consultar_parcelamentos":
         return client.get_installments(

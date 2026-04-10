@@ -2027,12 +2027,13 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 tools_para_ia.extend(obter_tools_pierre())
                 hoje_agora = datetime.now().strftime("%Y-%m-%d")
                 messages[0]["content"] += (
-                    f"\n\n**SEGREDO OPEN FINANCE (PIERRE) - HOJE É {hoje_agora}:** Você é um Consultor Open Finance (Pierre). Além dos comandos normais, você PODE E DEVE usar as ferramentas avançadas do Pierre para dar diagnósticos precisos. "
-                    "\nREGRAS CRÍTICAS DE OPEN FINANCE:\n"
-                    "1. Para perguntas sobre a FATURA ATUAL (hoje), use 'consultar_faturas_cartao_real'.\n"
-                    "2. Para perguntas sobre FATURAS DE MESES PASSADOS (ex: fatura de fevereiro), use 'consultar_faturas_passadas'.\n"
-                    "3. Para perguntas sobre JUROS, use 'consultar_extrato_bancario_real' passando startDate/endDate do mês em questão E clientMessage='juros'.\n"
-                    "4. Se o usuário pedir um 'resumo' ou 'visão geral', use 'consultar_livro_caixa_analitico' ou 'consultar_maiores_gastos'."
+                    f"\n\n**INSTRUÇÕES OPEN FINANCE (PIERRE) - REFERÊNCIA HOJE: {hoje_agora}**\n"
+                    "Você é um Consultor Open Finance. REGRAS DE OURO:\n"
+                    f"1. A DATA DE HOJE É {hoje_agora}. Use-a para calcular meses (ex: se hoje é Abril/2026, Fevereiro é 2026-02).\n"
+                    "2. PROIBIDO retornar JSON bruto no chat. Seus pensamentos internos de tool calling devem ser convertidos em frases humanas.\n"
+                    "3. Para JUROS, use 'consultar_extrato_bancario_real' com clientMessage='juros' e as datas CORRETAS do mês solicitado.\n"
+                    "4. Se o usuário pedir fatura de Abril e hoje for Abril, use 'consultar_faturas_cartao_real' (fatura aberta).\n"
+                    "5. Se pedir fatura de mês PASSADO, use 'consultar_faturas_passadas'."
                 )
 
             # Orquestrador inteligente tenta Cerebras -> Groq -> Gemini
@@ -2173,8 +2174,15 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                     ia_message_2 = choice2.get("message") or {}
                     final_text = ia_message_2.get("content")
                 
+                # 🛡️ ANTI-LEAK: Remove JSON de tool call que o Cerebras/Groq às vezes vaza no texto
+                if final_text and ("{" in final_text and "}" in final_text and "name" in final_text):
+                    logger.warning(f"⚠️ [ALFREDO] Leak de JSON detectado na resposta final. Limpando...")
+                    # Tenta extrair apenas a parte que NÃO é JSON ou dá fallback
+                    linhas = [l for l in final_text.split("\n") if not (l.strip().startswith("{") or l.strip().endswith("}"))]
+                    final_text = "\n".join(linhas).strip()
+                
                 if not final_text or len(final_text.strip()) < 5:
-                    final_text = "Recebi os dados do banco, mas eles vieram em um formato que não consegui resumir agora. Por favor, tente perguntar de outra forma ou verifique seu extrato no MiniApp."
+                    final_text = "Recebi os dados do banco, mas eles vieram em um formato complexo. Por favor, tente perguntar de outra forma (ex: 'qual o valor total da minha fatura?') ou verifique o MiniApp."
                 
                 await _enviar_resposta_html_segura(update.message, final_text)
             else:
