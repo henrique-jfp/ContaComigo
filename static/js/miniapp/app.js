@@ -282,6 +282,10 @@ lucide.createIcons();
       const panel = document.getElementById(tabName);
       if (!panel) return;
       panel.classList.add('active');
+
+      // Garante que ícones do Lucide sejam renderizados se o painel tiver conteúdo estático novo
+      if (window.lucide) lucide.createIcons();
+
       if (!keepNav) {
         setActiveNav(tabName);
       }
@@ -296,7 +300,6 @@ lucide.createIcons();
         loadOrcamentos();
       }
     }
-
     const switchTab = (el) => {
       if (!el?.dataset?.tab) return;
       openPanel(el.dataset.tab, false);
