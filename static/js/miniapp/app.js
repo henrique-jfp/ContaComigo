@@ -1437,6 +1437,47 @@ lucide.createIcons();
       }
     }
 
+    async function loadPierreParcelamentos() {
+      if (!sessionId) return;
+      showToast('Buscando parcelamentos...', 'warning');
+      try {
+        const response = await fetchWithSession('/api/miniapp/pierre/parcelamentos');
+        const data = await response.json();
+        if (data.ok) {
+          const info = typeof data.data === 'string' ? data.data : JSON.stringify(data.data, null, 2);
+          window.Telegram.WebApp.showPopup({
+            title: 'Radar de Parcelamentos',
+            message: info.substring(0, 1000),
+            buttons: [{type: 'close'}]
+          });
+        } else {
+          showToast('Falha ao buscar dados do Pierre', 'error');
+        }
+      } catch(e) {
+        showToast('Erro de conexão', 'error');
+      }
+    }
+
+    async function downloadPierreLivroCaixa() {
+      if (!sessionId) return;
+      showToast('Gerando livro caixa analítico...', 'warning');
+      try {
+        const response = await fetchWithSession('/api/miniapp/pierre/livro-caixa');
+        const data = await response.json();
+        if (data.ok) {
+          window.Telegram.WebApp.showPopup({
+            title: 'Livro Caixa Analítico',
+            message: 'Dados processados com sucesso. O Alfredo enviará o PDF detalhado no seu chat em instantes.',
+            buttons: [{type: 'close'}]
+          });
+        } else {
+          showToast('Falha ao gerar livro caixa', 'error');
+        }
+      } catch(e) {
+        showToast('Erro ao processar', 'error');
+      }
+    }
+
     function renderGameRankingFull(items = []) {
       if (!items.length) {
         rankingFullList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-center text-xs text-telegram-hint mt-8">Sem dados no ranking deste mês ainda. Comece a usar o app!</div>';

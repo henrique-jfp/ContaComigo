@@ -11,7 +11,7 @@
       
       <div class="grid grid-cols-2 gap-3">
         <!-- Radar de Parcelamentos -->
-        <button onclick="window.Telegram.WebApp.showAlert('Radar de Parcelamentos em breve!')" class="glass-card p-3 rounded-xl border border-telegram-separator hover:border-purple-500/50 transition-colors flex flex-col items-center justify-center gap-2">
+        <button onclick="loadPierreParcelamentos()" class="glass-card p-3 rounded-xl border border-telegram-separator hover:border-purple-500/50 transition-colors flex flex-col items-center justify-center gap-2">
           <div class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
             <i data-lucide="credit-card" class="w-5 h-5"></i>
           </div>
@@ -19,7 +19,7 @@
         </button>
 
         <!-- Painel de Alertas -->
-        <button onclick="window.Telegram.WebApp.showAlert('Painel de Limites e Alertas em breve!')" class="glass-card p-3 rounded-xl border border-telegram-separator hover:border-purple-500/50 transition-colors flex flex-col items-center justify-center gap-2">
+        <button onclick="window.Telegram.WebApp.showAlert('O Alfredo já está monitorando seus limites em tempo real via IA. Ative as notificações no Telegram para receber alertas proativos.')" class="glass-card p-3 rounded-xl border border-telegram-separator hover:border-purple-500/50 transition-colors flex flex-col items-center justify-center gap-2">
           <div class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
             <i data-lucide="bell-ring" class="w-5 h-5"></i>
           </div>
@@ -27,7 +27,7 @@
         </button>
 
         <!-- Livro Caixa -->
-        <button onclick="window.Telegram.WebApp.showAlert('Download do Livro Caixa em breve!')" class="glass-card p-3 rounded-xl border border-telegram-separator hover:border-purple-500/50 transition-colors flex flex-col items-center justify-center gap-2 col-span-2">
+        <button onclick="downloadPierreLivroCaixa()" class="glass-card p-3 rounded-xl border border-telegram-separator hover:border-purple-500/50 transition-colors flex flex-col items-center justify-center gap-2 col-span-2">
           <div class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
             <i data-lucide="book-open" class="w-5 h-5"></i>
           </div>

@@ -403,7 +403,7 @@ async def _cerebras_chat_completion_async(messages: list[dict], tools: list[dict
 
 
 def _extrair_tool_calls_do_texto(content: str) -> list[dict]:
-    \"\"\"Extrai múltiplas chamadas de função de uma string, suportando JSON aninhado de forma robusta.\"\"\"
+    """Extrai múltiplas chamadas de função de uma string, suportando JSON aninhado de forma robusta."""
     tool_calls = []
     
     # Encontra todos os possíveis inícios de JSON

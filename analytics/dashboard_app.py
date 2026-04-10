@@ -830,6 +830,52 @@ def telegram_auth():
     })
 
 
+@app.route('/api/miniapp/pierre/parcelamentos')
+def miniapp_pierre_parcelamentos():
+    """Consulta parcelamentos reais via Pierre Finance"""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario or not usuario.pierre_api_key:
+            return jsonify({"ok": False, "error": "pierre_not_configured"}), 403
+
+        from pierre_finance.ai_tools import executar_tool_pierre
+        res = executar_tool_pierre("consultar_parcelamentos", {}, usuario.pierre_api_key)
+        return jsonify({"ok": True, "data": res})
+    except Exception as e:
+        logger.error(f"Erro ao buscar parcelamentos Pierre: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/pierre/livro-caixa')
+def miniapp_pierre_livro_caixa():
+    """Gera dados para o livro caixa via Pierre Finance"""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario or not usuario.pierre_api_key:
+            return jsonify({"ok": False, "error": "pierre_not_configured"}), 403
+
+        from pierre_finance.ai_tools import executar_tool_pierre
+        res = executar_tool_pierre("consultar_livro_caixa_analitico", {}, usuario.pierre_api_key)
+        return jsonify({"ok": True, "data": res})
+    except Exception as e:
+        logger.error(f"Erro ao buscar livro caixa Pierre: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
 @app.route('/api/miniapp/history')
 def miniapp_history():
     """Lista os ultimos lancamentos para o miniapp"""
