@@ -68,7 +68,7 @@ static_dir = os.path.join(parent_dir, 'static')
 sys.path.insert(0, parent_dir)
 import config
 from database.database import get_db, buscar_lancamentos_usuario
-from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Categoria, Subcategoria, XpEvent, UserMission, UserAchievement, OrcamentoCategoria
+from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Categoria, Subcategoria, XpEvent, UserMission, UserAchievement, OrcamentoCategoria, Conta, SaldoConta, FaturaCartao, ParcelamentoItem
 from gerente_financeiro.prompts import PROMPT_ALFREDO_APRIMORADO as PROMPT_ALFREDO
 from gerente_financeiro.services import preparar_contexto_financeiro_completo
 from gerente_financeiro.services import salvar_transacoes_generica
@@ -955,7 +955,7 @@ def pierre_connected_banks():
 
 @app.route('/api/miniapp/pierre/dashboard')
 def miniapp_pierre_dashboard():
-    """Endpoint agregado para o Modo Deus (Pierre Finance)"""
+    """Endpoint agregado para o Modo Deus (Pierre Finance) lendo dados locais"""
     session = _require_session()
     if not session:
         return jsonify({"ok": False, "error": "unauthorized"}), 401
@@ -966,49 +966,65 @@ def miniapp_pierre_dashboard():
         if not usuario or not usuario.pierre_api_key:
             return jsonify({"ok": False, "error": "pierre_not_configured"}), 403
 
-        from pierre_finance.ai_tools import executar_tool_pierre
-        
-        # 1. Buscar Dados
-        balance_res = executar_tool_pierre("consultar_saldo_consolidado_real", {}, usuario.pierre_api_key)
-        accounts_res = executar_tool_pierre("consultar_saldos_bancarios_reais", {}, usuario.pierre_api_key)
-        thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
-        categories_res = executar_tool_pierre("consultar_maiores_gastos", {"startDate": thirty_days_ago}, usuario.pierre_api_key)
-        installments_res = executar_tool_pierre("consultar_parcelamentos", {}, usuario.pierre_api_key)
-
-        # 2. Parsing Inteligente de Saldo
+        # 1. Buscar Contas e Saldos
+        contas = db.query(Conta).filter(Conta.id_usuario == usuario.id).all()
+        accounts_res = []
         total_balance = 0
-        if isinstance(balance_res, dict):
-            total_balance = balance_res.get("totalBalance") or balance_res.get("balance") or 0
-        elif isinstance(balance_res, (int, float)):
-            total_balance = balance_res
+        
+        for c in contas:
+            ultimo_saldo = db.query(SaldoConta).filter(SaldoConta.id_conta == c.id).order_by(SaldoConta.capturado_em.desc()).first()
+            saldo_val = float(ultimo_saldo.saldo) if ultimo_saldo else 0
             
-        # Fallback: Se saldo total vier zero ou NaN, somar contas individuais (apenas bancos, não crédito)
-        if not total_balance and isinstance(accounts_res, list):
-            for acc in accounts_res:
-                if acc.get("type") != "CREDIT":
-                    total_balance += float(acc.get("balance") or acc.get("amount") or 0)
-        elif not total_balance and isinstance(accounts_res, dict) and accounts_res.get("data"):
-            for acc in accounts_res["data"]:
-                if acc.get("type") != "CREDIT":
-                    total_balance += float(acc.get("balance") or acc.get("amount") or 0)
-
-        # 3. Parsing de Categorias (Vilões)
+            display_info = None
+            if c.tipo == "Cartão de Crédito":
+                avail = float(ultimo_saldo.saldo_disponivel) if ultimo_saldo and ultimo_saldo.saldo_disponivel is not None else float(c.limite_cartao or 0)
+                if avail:
+                    display_info = f"Limite: R$ {avail:.2f}"
+                else:
+                    display_info = f"Fatura: R$ {saldo_val:.2f}"
+            else:
+                total_balance += saldo_val
+                
+            accounts_res.append({
+                "id": c.external_id or str(c.id),
+                "name": c.nome,
+                "type": "CREDIT" if c.tipo == "Cartão de Crédito" else "BANK",
+                "balance": saldo_val,
+                "display_info": display_info
+            })
+            
+        # 2. Buscar Categorias Caras (últimos 30 dias usando dados locais)
+        trinta_dias_atras = datetime.now(timezone.utc) - timedelta(days=30)
+        lancamentos_mes = db.query(Lancamento).filter(
+            Lancamento.id_usuario == usuario.id,
+            Lancamento.origem == 'open_finance',
+            Lancamento.tipo == 'Despesa',
+            Lancamento.data_transacao >= trinta_dias_atras
+        ).all()
+        
         cleaned_categories = {}
-        cat_data = categories_res.get("data") if isinstance(categories_res, dict) else categories_res
-        if isinstance(cat_data, dict):
-            cleaned_categories = {k: abs(float(v)) for k, v in cat_data.items() if v}
-        elif isinstance(cat_data, list):
-            for item in cat_data:
-                if isinstance(item, dict):
-                    name = item.get("name") or item.get("category") or "Outros"
-                    val = item.get("value") or item.get("amount") or 0
-                    cleaned_categories[name] = abs(float(val))
+        for l in lancamentos_mes:
+            cat_name = l.categoria.nome if l.categoria else "Outros"
+            cleaned_categories[cat_name] = cleaned_categories.get(cat_name, 0) + float(l.valor)
+            
+        cleaned_categories = dict(sorted(cleaned_categories.items(), key=lambda item: item[1], reverse=True)[:5])
 
-        # 4. Cálculo Dinâmico de Saúde (Modo Deus)
-        total_balance = float(total_balance)
+        # 3. Buscar Parcelamentos (da tabela ParcelamentoItem)
+        parcelas_db = db.query(ParcelamentoItem).filter(ParcelamentoItem.id_usuario == usuario.id).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(15).all()
+        installments_res = []
+        for p in parcelas_db:
+            installments_res.append({
+                "id": p.external_id or str(p.id),
+                "description": p.descricao,
+                "amount": float(p.valor_parcela),
+                "dueDate": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None,
+                "installmentNumber": p.parcela_atual,
+                "totalInstallments": p.total_parcelas
+            })
+
+        # 4. Cálculo Dinâmico de Saúde
         total_expenses = sum(cleaned_categories.values())
         
-        # Lógica Realista: Se o saldo total for menor que R$ 100, a saúde já cai drasticamente
         if total_balance < 100:
             health_score = 25
             health_label = "Crítico"
@@ -1022,17 +1038,6 @@ def miniapp_pierre_dashboard():
             health_score = 90
             health_label = "Excelente"
 
-        # 5. Ajuste de Contas: Para cartões, tentar pegar o limite disponível se o saldo estiver estranho
-        if isinstance(accounts_res, list):
-            for acc in accounts_res:
-                if acc.get("type") == "CREDIT":
-                    # Se tiver availableLimit, usamos ele como informação principal no dashboard
-                    avail = acc.get("availableLimit") or acc.get("available_limit")
-                    if avail:
-                        acc["display_info"] = f"Limite: R$ {float(avail):.2f}"
-                    else:
-                        acc["display_info"] = f"Fatura: R$ {float(acc.get('balance', 0)):.2f}"
-        
         return jsonify({
             "ok": True,
             "data": {
@@ -1041,7 +1046,7 @@ def miniapp_pierre_dashboard():
                 "categories": cleaned_categories,
                 "installments": installments_res,
                 "health": {"score": health_score, "label": health_label},
-                "sync_time": datetime.now().isoformat()
+                "sync_time": usuario.last_pierre_sync_at.isoformat() if usuario.last_pierre_sync_at else datetime.now(timezone.utc).isoformat()
             }
         })
     except Exception as e:
@@ -1076,7 +1081,7 @@ def miniapp_pierre_sync():
 
 @app.route('/api/miniapp/pierre/parcelamentos')
 def miniapp_pierre_parcelamentos():
-    """Consulta parcelamentos reais via Pierre Finance"""
+    """Consulta parcelamentos locais sincronizados via Pierre Finance"""
     session = _require_session()
     if not session:
         return jsonify({"ok": False, "error": "unauthorized"}), 401
@@ -1084,17 +1089,26 @@ def miniapp_pierre_parcelamentos():
     db = next(get_db())
     try:
         usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
-        if not usuario or not usuario.pierre_api_key:
-            return jsonify({"ok": False, "error": "pierre_not_configured"}), 403
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 403
 
-        from pierre_finance.ai_tools import executar_tool_pierre
-        res = executar_tool_pierre("consultar_parcelamentos", {}, usuario.pierre_api_key)
+        parcelas_db = db.query(ParcelamentoItem).filter(ParcelamentoItem.id_usuario == usuario.id).order_by(ParcelamentoItem.data_proxima_parcela.asc()).all()
         
-        # Formata os dados para o popup do Telegram
-        formatted_text = _format_pierre_parcelamentos(res)
-        return jsonify({"ok": True, "data": formatted_text})
+        if not parcelas_db:
+            return jsonify({"ok": True, "data": "Não encontrei compras parceladas registradas na base local."})
+            
+        text = "🗓️ <b>Radar de Parcelamentos:</b>\n\n"
+        for p in parcelas_db[:15]:
+            desc = p.descricao[:30]
+            val = float(p.valor_parcela)
+            date_str = p.data_proxima_parcela.strftime('%d/%m/%Y') if p.data_proxima_parcela else "S/D"
+            inst_num = p.parcela_atual
+            inst_tot = p.total_parcelas
+            text += f"• {desc}\n  R$ {val:.2f} | Venc: {date_str} | Parc: {inst_num}/{inst_tot}\n\n"
+            
+        return jsonify({"ok": True, "data": text})
     except Exception as e:
-        logger.error(f"Erro ao buscar parcelamentos Pierre: {e}")
+        logger.error(f"Erro ao buscar parcelamentos locais: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
     finally:
         db.close()
@@ -1102,7 +1116,7 @@ def miniapp_pierre_parcelamentos():
 
 @app.route('/api/miniapp/pierre/livro-caixa')
 def miniapp_pierre_livro_caixa():
-    """Gera dados para o livro caixa via Pierre Finance e envia via Bot"""
+    """Gera dados para o livro caixa lendo transações locais e envia via Bot"""
     session = _require_session()
     if not session:
         return jsonify({"ok": False, "error": "unauthorized"}), 401
@@ -1110,29 +1124,30 @@ def miniapp_pierre_livro_caixa():
     db = next(get_db())
     try:
         usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
-        if not usuario or not usuario.pierre_api_key:
-            return jsonify({"ok": False, "error": "pierre_not_configured"}), 403
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 403
 
-        from pierre_finance.ai_tools import executar_tool_pierre
-        # Solicita o livro caixa incluindo todos os períodos para evitar PDF vazio
-        res = executar_tool_pierre("consultar_livro_caixa_analitico", {"includeAllPeriods": True}, usuario.pierre_api_key)
+        lancamentos = db.query(Lancamento).filter(
+            Lancamento.id_usuario == usuario.id,
+            Lancamento.origem == 'open_finance'
+        ).order_by(Lancamento.data_transacao.desc()).limit(300).all()
         
         # Gerar PDF e enviar via Bot
         try:
-            pdf_bytes = _generate_pierre_book_pdf(res)
+            pdf_bytes = _generate_local_book_pdf(lancamentos)
             _send_telegram_document(
                 usuario.telegram_id, 
                 pdf_bytes, 
-                f"Livro_Caixa_Pierre_{datetime.now().strftime('%Y%m%d')}.pdf",
-                "📄 Aqui está o seu <b>Livro Caixa Analítico</b> exportado via Open Finance."
+                f"Livro_Caixa_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf",
+                "📄 Aqui está o seu <b>Livro Caixa Analítico</b> (Dados Locais Sincronizados)."
             )
             return jsonify({"ok": True})
         except Exception as pdf_err:
-            logger.error(f"Erro ao gerar/enviar PDF Pierre: {pdf_err}")
+            logger.error(f"Erro ao gerar/enviar PDF Local: {pdf_err}")
             return jsonify({"ok": False, "error": "pdf_generation_failed"}), 500
             
     except Exception as e:
-        logger.error(f"Erro ao buscar livro caixa Pierre: {e}")
+        logger.error(f"Erro ao gerar livro caixa local: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
     finally:
         db.close()
@@ -1151,29 +1166,8 @@ def _send_telegram_document(chat_id, document_bytes, filename, caption=""):
         logger.error(f"Erro ao enviar documento Telegram: {e}")
         return False
 
-def _format_pierre_parcelamentos(data):
-    """Formata os dados de parcelamento para exibição amigável."""
-    if not isinstance(data, dict) or not data.get("success"):
-        return "Nenhum parcelamento encontrado ou erro na API."
-    
-    purchases = data.get("purchases", [])
-    if not purchases:
-        return "Não encontrei compras parceladas registradas."
-    
-    text = "🗓️ Radar de Parcelamentos:\n\n"
-    for p in purchases[:10]:
-        desc = p.get("description") or p.get("name") or "Compra"
-        val = p.get("amount", 0)
-        due = p.get("dueDate", "")[:10]
-        inst = f"{p.get('installmentNumber')}/{p.get('totalInstallments')}"
-        text += f"• {desc}\nR$ {val:.2f} | Venc: {due} | Parc: {inst}\n\n"
-    
-    if len(purchases) > 10:
-        text += f"...e mais {len(purchases) - 10} parcelas."
-    return text
-
-def _generate_pierre_book_pdf(data):
-    """Gera um PDF simplificado com o Livro Caixa do Pierre."""
+def _generate_local_book_pdf(lancamentos):
+    """Gera um PDF simplificado com o Livro Caixa usando dados locais."""
     import io
     from reportlab.lib.pagesizes import A4
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -1185,45 +1179,23 @@ def _generate_pierre_book_pdf(data):
     styles = getSampleStyleSheet()
     elements = []
     
-    elements.append(Paragraph("Livro Caixa Analítico (Pierre Finance)", styles['Title']))
+    elements.append(Paragraph("Livro Caixa Analítico (ContaComigo)", styles['Title']))
     elements.append(Spacer(1, 12))
     
-    # Extrair transações - Log para depuração
-    logger.info(f"Gerando PDF Pierre. Tipo de dado recebido: {type(data)}")
-    
-    transactions = []
-    if isinstance(data, dict):
-        # Tenta todos os caminhos possíveis no JSON do Pierre
-        transactions = data.get("transactions") or data.get("txs") or data.get("data", {}).get("transactions") or []
-        if not transactions and "purchases" in data:
-            transactions = data["purchases"]
-    elif isinstance(data, list):
-        transactions = data
-
-    if not transactions:
-        logger.warning("Nenhuma transação encontrada no payload do Pierre para o PDF.")
-        elements.append(Paragraph("Nenhuma transação encontrada no histórico sincronizado.", styles['Normal']))
-        elements.append(Paragraph("Dica: Use o botão 'Sincronizar Bancos' no app e aguarde alguns minutos.", styles['Italic']))
+    if not lancamentos:
+        elements.append(Paragraph("Nenhuma transação encontrada no histórico.", styles['Normal']))
     else:
-        logger.info(f"Encontradas {len(transactions)} transações para o PDF.")
         table_data = [["Data", "Descrição", "Valor", "Categoria"]]
-        # Ordenar transações por data (mais recentes primeiro)
-        try:
-            transactions.sort(key=lambda x: x.get("date") or x.get("dueDate") or "", reverse=True)
-        except:
-            pass
-
-        for tx in transactions[:300]: # Aumentado para 300
-            val = tx.get('amount') or tx.get('value') or tx.get('valor') or 0
-            date_str = str(tx.get("date") or tx.get("dueDate") or tx.get("vencimento") or "")[:10]
-            desc = str(tx.get("description") or tx.get("name") or tx.get("merchant") or "Compra")[:40]
-            cat = str(tx.get("category") or tx.get("cat") or tx.get("categoria") or "Geral")
-            
+        for l in lancamentos:
+            cat_name = l.categoria.nome if l.categoria else "Outros"
+            val_str = f"R$ {float(l.valor):.2f}"
+            if l.tipo == 'Despesa':
+                val_str = f"-{val_str}"
             table_data.append([
-                date_str,
-                desc,
-                f"R$ {float(val):.2f}",
-                cat
+                l.data_transacao.strftime('%d/%m/%Y'),
+                l.descricao[:40],
+                val_str,
+                cat_name
             ])
         
         t = Table(table_data, colWidths=[80, 200, 80, 100])

@@ -98,7 +98,7 @@ async def request_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ASK_KEY
 
 async def receive_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Recebe e salva a chave."""
+    """Recebe e salva a chave e dispara carga inicial."""
     # Sanitização profunda
     chave = update.message.text.strip().replace("\u200b", "").replace("\u200c", "").replace(" ", "")
     user_id = update.effective_user.id
@@ -122,16 +122,29 @@ async def receive_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logging.warning(f"Não foi possível apagar a mensagem da chave: {e}")
                 
-            await update.message.reply_text(
-                "✅ <b>Conexão Direta Estabelecida com Sucesso!</b>\n\n"
-                "A partir de agora, o Alfredo monitora seus bancos em tempo real. "
-                "Para manter tudo atualizado, o Alfredo sincroniza seus dados periodicamente, "
-                "mas você pode forçar uma atualização a qualquer momento usando /sincronizar_banco.\n\n"
-                "<b>Tente perguntar agora:</b>\n"
-                "• <i>'Qual meu saldo total em todos os bancos?'</i>\n"
-                "• <i>'Quanto eu já gastei no cartão este mês?'</i>",
-                parse_mode='HTML'
+            msg = await update.message.reply_text(
+                "✅ Chave salva! Iniciando carga inicial dos seus dados bancários... ⏳\nIsso pode levar alguns segundos."
             )
+            
+            try:
+                res = await sincronizar_carga_inicial(usuario, db)
+                if isinstance(res, dict) and "error" in res:
+                    await msg.edit_text("✅ Chave salva com sucesso, mas a carga inicial falhou.\nUse /sincronizar_banco para tentar novamente.")
+                else:
+                    await msg.edit_text(
+                        "✅ <b>Conexão Direta Estabelecida!</b>\n\n"
+                        "📊 <b>Carga inicial concluída:</b>\n"
+                        f"• <b>{res.get('contas', 0)}</b> contas bancárias importadas\n"
+                        f"• <b>{res.get('lancamentos', 0)}</b> transações dos últimos 3 meses\n"
+                        f"• <b>{res.get('faturas', 0)}</b> faturas de cartão importadas\n"
+                        f"• <b>{res.get('parcelamentos', 0)}</b> parcelamentos mapeados\n\n"
+                        "A partir de agora o Alfredo monitora tudo com seus próprios dados.\n"
+                        "Use /sincronizar_banco para forçar uma atualização manual.",
+                        parse_mode='HTML'
+                    )
+            except Exception as sync_err:
+                logging.error(f"Erro na carga inicial Pierre: {sync_err}", exc_info=True)
+                await msg.edit_text("✅ Chave salva com sucesso, mas ocorreu um erro na carga inicial.\nUse /sincronizar_banco para tentar novamente.")
         else:
             await update.message.reply_text("❌ Usuário não encontrado no banco de dados.")
     finally:

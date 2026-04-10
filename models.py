@@ -158,10 +158,12 @@ class Lancamento(Base):
     id_usuario = Column(Integer, ForeignKey('usuarios.id'), nullable=False)
     id_categoria = Column(Integer, ForeignKey('categorias.id'), nullable=True)
     id_subcategoria = Column(Integer, ForeignKey('subcategorias.id'), nullable=True)
+    id_conta = Column(Integer, ForeignKey('contas.id'), nullable=True)
     
     usuario = relationship("Usuario", back_populates="lancamentos")
     categoria = relationship("Categoria", back_populates="lancamentos")
     subcategoria = relationship("Subcategoria", back_populates="lancamentos")
+    conta = relationship("Conta", back_populates="lancamentos")
     itens = relationship("ItemLancamento", back_populates="lancamento", cascade="all, delete-orphan")
 
 class ItemLancamento(Base):
@@ -460,3 +462,52 @@ class UserAchievement(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     usuario = relationship("Usuario")
+
+
+class SaldoConta(Base):
+    __tablename__ = 'saldos_conta'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_conta = Column(Integer, ForeignKey('contas.id'), nullable=False)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id'), nullable=False)
+    saldo = Column(Numeric(15, 2), nullable=False)
+    saldo_disponivel = Column(Numeric(15, 2), nullable=True)
+    capturado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    conta = relationship("Conta", back_populates="saldos")
+    usuario = relationship("Usuario", back_populates="saldos_conta")
+
+
+class FaturaCartao(Base):
+    __tablename__ = 'faturas_cartao'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_conta = Column(Integer, ForeignKey('contas.id'), nullable=False)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id'), nullable=False)
+    external_id = Column(String, unique=True, nullable=True)
+    valor_total = Column(Numeric(12, 2), nullable=False)
+    data_vencimento = Column(Date, nullable=True)
+    data_fechamento = Column(Date, nullable=True)
+    status = Column(String, nullable=False, default='fechada')  # 'fechada', 'paga', 'em_aberto'
+    mes_referencia = Column(Date, nullable=True)  # primeiro dia do mês da fatura
+    criado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    conta = relationship("Conta", back_populates="faturas")
+    usuario = relationship("Usuario", back_populates="faturas_cartao")
+
+
+class ParcelamentoItem(Base):
+    __tablename__ = 'parcelamentos'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id'), nullable=False)
+    id_conta = Column(Integer, ForeignKey('contas.id'), nullable=True)
+    external_id = Column(String, unique=True, nullable=True)
+    descricao = Column(String, nullable=False)
+    valor_total = Column(Numeric(12, 2), nullable=False)
+    valor_parcela = Column(Numeric(12, 2), nullable=False)
+    parcela_atual = Column(Integer, nullable=False)
+    total_parcelas = Column(Integer, nullable=False)
+    data_compra = Column(Date, nullable=True)
+    data_proxima_parcela = Column(Date, nullable=True)
+    criado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    conta = relationship("Conta", back_populates="parcelamentos")
+    usuario = relationship("Usuario", back_populates="parcelamentos_item")
