@@ -61,11 +61,13 @@ class PierreClient:
         """Retorna saldo consolidado."""
         return self._request("GET", "/get-balance")
 
-    def get_bill_summary(self, account_id=None):
+    def get_bill_summary(self, account_id=None, closing_day=None, **kwargs):
         """Retorna resumo da fatura atual."""
-        params = {}
+        params = kwargs.copy()
         if account_id:
             params["accountId"] = account_id
+        if closing_day is not None:
+            params["closingDay"] = closing_day
         return self._request("GET", "/get-bill-summary", params=params)
 
     def manual_update(self):
@@ -107,3 +109,45 @@ class PierreClient:
         params = {}
         if message: params["message"] = message
         return self._request("GET", "/get-memories", params=params)
+
+    def get_closing_dates(self):
+        """Retorna a lista de datas de fechamento configuradas."""
+        return self._request("POST", "/manage-closing-date", json={})
+
+    def list_spending_limits(self, include_inactive=False):
+        """Lista os limites de gastos."""
+        params = {}
+        if include_inactive: params["includeInactive"] = str(include_inactive).lower()
+        return self._request("GET", "/list-spending-limits", params=params)
+
+    def create_spending_limit(self, payload: dict):
+        """Cria um limite de gastos."""
+        return self._request("POST", "/create-spending-limit", json=payload)
+
+    def update_spending_limit(self, payload: dict):
+        """Atualiza um limite de gastos."""
+        return self._request("PUT", "/update-spending-limit", json=payload)
+
+    def delete_spending_limit(self, limit_id: str):
+        """Exclui um limite de gastos."""
+        return self._request("DELETE", "/delete-spending-limit", json={"limitId": limit_id})
+
+    def list_payment_reminders(self, filter_status=None):
+        """Lista lembretes de pagamento."""
+        params = {}
+        if filter_status: params["filter"] = filter_status
+        return self._request("GET", "/list-payment-reminders", params=params)
+
+    def create_payment_reminder(self, payload: dict):
+        """Cria um lembrete de pagamento."""
+        return self._request("POST", "/create-payment-reminder", json=payload)
+
+    def update_payment_reminder(self, payload: dict):
+        """Atualiza um lembrete de pagamento."""
+        return self._request("PUT", "/update-payment-reminder", json=payload)
+
+    def delete_payment_reminder(self, reminder_id: str, hard_delete=False):
+        """Exclui um lembrete de pagamento."""
+        payload = {"reminderId": reminder_id}
+        if hard_delete: payload["hardDelete"] = True
+        return self._request("DELETE", "/delete-payment-reminder", json=payload)

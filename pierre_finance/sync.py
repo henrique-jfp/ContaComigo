@@ -60,7 +60,11 @@ async def sincronizar_open_finance(usuario: Usuario, db: Session):
         accounts_map[str(ext_id)] = conta_local.id
 
     # 2. Sincronizar Transações
-    res_transactions = client.get_transactions(limit=50) 
+    sync_params = {"limit": 100}
+    if hasattr(usuario, "last_sync_at") and usuario.last_sync_at:
+        sync_params["startDate"] = usuario.last_sync_at.strftime("%Y-%m-%d")
+        
+    res_transactions = client.get_transactions(**sync_params) 
     
     if not isinstance(res_transactions, list):
         logger.error(f"Erro ao buscar transações no Pierre para usuário {usuario.id}: {res_transactions}")
@@ -115,5 +119,13 @@ async def sincronizar_open_finance(usuario: Usuario, db: Session):
         novos_lancamentos += 1
 
     db.commit()
+    
+    if hasattr(usuario, "last_sync_at"):
+        usuario.last_sync_at = datetime.now(timezone.utc)
+        db.commit()
+    else:
+        # TODO: Adicionar campo last_sync_at no model Usuario via migration
+        pass
+
     logger.info(f"Sincronização concluída para usuário {usuario.id}. {novos_lancamentos} novas transações.")
     return novos_lancamentos
