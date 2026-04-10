@@ -274,7 +274,7 @@ async def cancel_fii(update: Update, context: ContextTypes.DEFAULT_TYPE):
 add_fii_conv = ConversationHandler(
     entry_points=[
         CommandHandler("adicionar_fii", start_add_fii),
-        MessageHandler(filters.Regex(r'^(?i)(adicionar fii|comprei fii)'), start_add_fii)
+        MessageHandler(filters.Regex(r'(?i)^(adicionar fii|comprei fii)'), start_add_fii)
     ],
     states={
         TICKER: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_ticker)],
