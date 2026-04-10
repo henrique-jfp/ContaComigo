@@ -1004,21 +1004,35 @@ def miniapp_pierre_dashboard():
                     val = item.get("value") or item.get("amount") or 0
                     cleaned_categories[name] = abs(float(val))
 
-        # 4. Cálculo Dinâmico de Saúde
+        # 4. Cálculo Dinâmico de Saúde (Modo Deus)
+        total_balance = float(total_balance)
         total_expenses = sum(cleaned_categories.values())
-        health_score = 100
-        health_label = "Excelente"
         
-        if total_balance <= 0 and total_expenses > 0:
-            health_score = 30
+        # Lógica Realista: Se o saldo total for menor que R$ 100, a saúde já cai drasticamente
+        if total_balance < 100:
+            health_score = 25
             health_label = "Crítico"
-        elif total_expenses > total_balance and total_balance > 0:
+        elif total_balance < 1000:
             health_score = 50
             health_label = "Atenção"
-        elif total_expenses > (total_balance * 0.7):
-            health_score = 70
-            health_label = "Bom"
+        elif total_expenses > total_balance:
+            health_score = 40
+            health_label = "Risco"
+        else:
+            health_score = 90
+            health_label = "Excelente"
 
+        # 5. Ajuste de Contas: Para cartões, tentar pegar o limite disponível se o saldo estiver estranho
+        if isinstance(accounts_res, list):
+            for acc in accounts_res:
+                if acc.get("type") == "CREDIT":
+                    # Se tiver availableLimit, usamos ele como informação principal no dashboard
+                    avail = acc.get("availableLimit") or acc.get("available_limit")
+                    if avail:
+                        acc["display_info"] = f"Limite: R$ {float(avail):.2f}"
+                    else:
+                        acc["display_info"] = f"Fatura: R$ {float(acc.get('balance', 0)):.2f}"
+        
         return jsonify({
             "ok": True,
             "data": {
