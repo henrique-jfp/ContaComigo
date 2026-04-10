@@ -304,6 +304,7 @@ lucide.createIcons();
       if (!el?.dataset?.tab) return;
       openPanel(el.dataset.tab, false);
     };
+    window.switchTab = switchTab;
 
     const switchTabByName = (tabName) => {
       if (!tabName) return;
@@ -314,6 +315,7 @@ lucide.createIcons();
         openPanel(tabName, true);
       }
     };
+    window.switchTabByName = switchTabByName;
 
     function isEntradaTipo(tipo, value) {
       const tipoNorm = String(tipo || '').toLowerCase();
@@ -1444,10 +1446,10 @@ lucide.createIcons();
         const response = await fetchWithSession('/api/miniapp/pierre/parcelamentos');
         const data = await response.json();
         if (data.ok) {
-          const info = typeof data.data === 'string' ? data.data : JSON.stringify(data.data, null, 2);
+          // O backend já envia o texto formatado em data.data
           window.Telegram.WebApp.showPopup({
             title: 'Radar de Parcelamentos',
-            message: info.substring(0, 1000),
+            message: data.data,
             buttons: [{type: 'close'}]
           });
         } else {

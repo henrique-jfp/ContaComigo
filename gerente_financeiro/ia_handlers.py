@@ -328,33 +328,40 @@ def _groq_chat_completion(messages: list[dict], tools: list[dict] | None = None,
 
 
 async def _gemini_chat_completion_async(messages: list[dict]) -> str | None:
-    """Fallback para análise usando Gemini se o Groq falhar."""
+    """Fallback para análise usando Gemini se o Groq/Cerebras falharem."""
     if not config.GEMINI_API_KEY:
         return None
     
-    # Limpeza rigorosa da chave
     api_key = str(config.GEMINI_API_KEY).strip().strip("'\"").strip()
     
     max_retries = 1
     for attempt in range(max_retries + 1):
         try:
-            # Tenta configurar globalmente apenas se necessário, mas passa explicitamente se falhar
-            try:
-                genai.configure(api_key=api_key)
-            except Exception:
-                pass
-                
+            genai.configure(api_key=api_key)
             model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
             
-            # Converte formato OpenAI/Groq para Gemini
             prompt_parts = []
             for m in messages:
-                role = "User" if m["role"] == "user" else "System"
-                prompt_parts.append(f"{role}: {m['content']}")
+                role_raw = m.get("role", "system")
+                content = m.get("content") or ""
+                
+                if role_raw == "user":
+                    role = "User"
+                elif role_raw == "assistant":
+                    role = "Assistant"
+                    # Se for uma chamada de ferramenta sem conteúdo textual
+                    if not content and m.get("tool_calls"):
+                        t_calls = m.get("tool_calls", [])
+                        content = f"[Chamando ferramenta: {t_calls[0].get('function', {}).get('name')}]"
+                elif role_raw == "tool":
+                    role = "Tool Result"
+                else:
+                    role = "System"
+                
+                prompt_parts.append(f"{role}: {content}")
             
             full_prompt = "\n\n".join(prompt_parts)
             
-            # Chama com timeout e passando a chave novamente se o interceptor falhar
             response = await model.generate_content_async(full_prompt)
             if response and response.text:
                 return response.text
@@ -490,11 +497,17 @@ async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | N
     Ordem: Cerebras (Velocidade) -> Groq (Resiliência) -> Gemini (Fallback)
     """
     def _truncar_mensagens(msgs):
-        """Reduz agressivamente o prompt do sistema se houver falha de payload."""
+        """Reduz agressivamente o prompt do sistema e mensagens de ferramentas se houver falha de payload."""
         new_msgs = [m.copy() for m in msgs]
         for m in new_msgs:
-            if m["role"] == "system" and len(m["content"]) > 3000:
+            # Trunca System Prompt (instruções longas)
+            if m.get("role") == "system" and len(m.get("content", "")) > 3000:
                 m["content"] = m["content"][:3000] + "... [Contexto truncado para evitar erro 413]"
+            
+            # Trunca Tool Result (dados bancários gigantes)
+            if m.get("role") == "tool" and len(m.get("content", "")) > 2500:
+                m["content"] = m["content"][:2500] + "... [Dados truncados para evitar erro 413]"
+                
         return new_msgs
 
     providers = []
@@ -2014,7 +2027,11 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 tools_para_ia.extend(obter_tools_pierre())
                 messages[0]["content"] += (
                     "\n\n**SEGREDO OPEN FINANCE (PIERRE):** Você é um Consultor Open Finance (Pierre). Além dos comandos normais, você PODE E DEVE usar as ferramentas avançadas do Pierre (saldos, faturas, extratos, maiores gastos, livro caixa e parcelamentos) para dar diagnósticos precisos. "
-                    "Se o usuário pedir um 'resumo' ou 'visão geral', use imediatamente a tool 'consultar_livro_caixa_analitico' ou 'consultar_maiores_gastos' para embasar sua resposta com dados em tempo real."
+                    "REGRAS CRÍTICAS:\n"
+                    "1. Para perguntas sobre a FATURA ATUAL ou LIMITE, use 'consultar_faturas_cartao_real'.\n"
+                    "2. Para perguntas sobre FATURAS PASSADAS (ex: fatura de fevereiro), use 'consultar_faturas_passadas'.\n"
+                    "3. Para perguntas sobre JUROS, use 'consultar_extrato_bancario_real' filtrando o período e buscando por 'juros' ou use 'consultar_livro_caixa_analitico'.\n"
+                    "4. Se o usuário pedir um 'resumo' ou 'visão geral', use 'consultar_livro_caixa_analitico' ou 'consultar_maiores_gastos'."
                 )
 
             # Orquestrador inteligente tenta Cerebras -> Groq -> Gemini
@@ -2102,9 +2119,10 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             
             resultado_bruto = executar_tool_pierre(fn_name, args, usuario_db.pierre_api_key)
             
-            # 🛡️ FIX 413: Truncar resultado gigante para evitar estouro de tokens no Groq/Cerebras
-            if isinstance(resultado_bruto, str) and len(resultado_bruto) > 4000:
-                resultado_bruto = resultado_bruto[:4000] + "... [Resultado truncado por ser muito longo]"
+            # 🛡️ FIX 413: Converter para JSON e truncar resultado gigante
+            res_str = json.dumps(resultado_bruto, ensure_ascii=False) if not isinstance(resultado_bruto, str) else resultado_bruto
+            if len(res_str) > 6000:
+                res_str = res_str[:6000] + "... [Resultado truncado por ser muito longo]"
             
             # Se o resultado for erro 401 ou 403, avisar o usuário diretamente.
             if isinstance(resultado_bruto, dict) and resultado_bruto.get("status_code") in [401, 403]:
@@ -2128,7 +2146,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 "role": "tool",
                 "tool_call_id": tool_call["id"],
                 "name": fn_name,
-                "content": str(resultado_bruto)
+                "content": res_str
             })
             
             # Segunda chamada à IA para interpretar os dados

@@ -967,7 +967,10 @@ def miniapp_pierre_parcelamentos():
 
         from pierre_finance.ai_tools import executar_tool_pierre
         res = executar_tool_pierre("consultar_parcelamentos", {}, usuario.pierre_api_key)
-        return jsonify({"ok": True, "data": res})
+        
+        # Formata os dados para o popup do Telegram
+        formatted_text = _format_pierre_parcelamentos(res)
+        return jsonify({"ok": True, "data": formatted_text})
     except Exception as e:
         logger.error(f"Erro ao buscar parcelamentos Pierre: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -977,7 +980,7 @@ def miniapp_pierre_parcelamentos():
 
 @app.route('/api/miniapp/pierre/livro-caixa')
 def miniapp_pierre_livro_caixa():
-    """Gera dados para o livro caixa via Pierre Finance"""
+    """Gera dados para o livro caixa via Pierre Finance e envia via Bot"""
     session = _require_session()
     if not session:
         return jsonify({"ok": False, "error": "unauthorized"}), 401
@@ -990,12 +993,106 @@ def miniapp_pierre_livro_caixa():
 
         from pierre_finance.ai_tools import executar_tool_pierre
         res = executar_tool_pierre("consultar_livro_caixa_analitico", {}, usuario.pierre_api_key)
-        return jsonify({"ok": True, "data": res})
+        
+        # Gerar PDF e enviar via Bot
+        try:
+            pdf_bytes = _generate_pierre_book_pdf(res)
+            _send_telegram_document(
+                usuario.telegram_id, 
+                pdf_bytes, 
+                f"Livro_Caixa_Pierre_{datetime.now().strftime('%Y%m%d')}.pdf",
+                "📄 Aqui está o seu <b>Livro Caixa Analítico</b> exportado via Open Finance."
+            )
+            return jsonify({"ok": True})
+        except Exception as pdf_err:
+            logger.error(f"Erro ao gerar/enviar PDF Pierre: {pdf_err}")
+            return jsonify({"ok": False, "error": "pdf_generation_failed"}), 500
+            
     except Exception as e:
         logger.error(f"Erro ao buscar livro caixa Pierre: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
     finally:
         db.close()
+
+def _send_telegram_document(chat_id, document_bytes, filename, caption=""):
+    """Envia um documento via API direta do Telegram."""
+    if not config.TELEGRAM_TOKEN:
+        return False
+    url = f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}/sendDocument"
+    files = {'document': (filename, document_bytes, 'application/pdf')}
+    data = {'chat_id': chat_id, 'caption': caption, 'parse_mode': 'HTML'}
+    try:
+        res = requests.post(url, data=data, files=files, timeout=30)
+        return res.status_code == 200
+    except Exception as e:
+        logger.error(f"Erro ao enviar documento Telegram: {e}")
+        return False
+
+def _format_pierre_parcelamentos(data):
+    """Formata os dados de parcelamento para exibição amigável."""
+    if not isinstance(data, dict) or not data.get("success"):
+        return "Nenhum parcelamento encontrado ou erro na API."
+    
+    purchases = data.get("purchases", [])
+    if not purchases:
+        return "Não encontrei compras parceladas registradas."
+    
+    text = "🗓️ Radar de Parcelamentos:\n\n"
+    for p in purchases[:10]:
+        desc = p.get("description") or p.get("name") or "Compra"
+        val = p.get("amount", 0)
+        due = p.get("dueDate", "")[:10]
+        inst = f"{p.get('installmentNumber')}/{p.get('totalInstallments')}"
+        text += f"• {desc}\nR$ {val:.2f} | Venc: {due} | Parc: {inst}\n\n"
+    
+    if len(purchases) > 10:
+        text += f"...e mais {len(purchases) - 10} parcelas."
+    return text
+
+def _generate_pierre_book_pdf(data):
+    """Gera um PDF simplificado com o Livro Caixa do Pierre."""
+    import io
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet
+    
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    styles = getSampleStyleSheet()
+    elements = []
+    
+    elements.append(Paragraph("Livro Caixa Analítico (Pierre Finance)", styles['Title']))
+    elements.append(Spacer(1, 12))
+    
+    # Extrair transações do book
+    book_data = data.get("data", {}) if isinstance(data, dict) else {}
+    transactions = book_data.get("transactions", [])
+    
+    if not transactions:
+        elements.append(Paragraph("Nenhuma transação encontrada no período.", styles['Normal']))
+    else:
+        table_data = [["Data", "Descrição", "Valor", "Categoria"]]
+        for tx in transactions[:100]: # Limite de 100 para o PDF
+            table_data.append([
+                tx.get("date", "")[:10],
+                str(tx.get("description", "Compra"))[:30],
+                f"R$ {float(tx.get('amount', 0)):.2f}",
+                str(tx.get("category", "Geral"))
+            ])
+        
+        t = Table(table_data, colWidths=[80, 200, 80, 100])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.gray),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(t)
+    
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
 
 
 @app.route('/api/miniapp/history')

@@ -193,55 +193,44 @@ def obter_tools_pierre():
         }
     ]
 
-def executar_tool_pierre(tool_name: str, arguments: dict, api_key: str) -> str:
-    """Executa a chamada da tool real do Pierre."""
+def executar_tool_pierre(tool_name: str, arguments: dict, api_key: str) -> any:
+    """Executa a chamada da tool real do Pierre e retorna o objeto de dados."""
     client = PierreClient(api_key)
 
     if tool_name == "consultar_saldos_bancarios_reais":
-        resultado = client.get_accounts()
-        return json.dumps(resultado, ensure_ascii=False)
+        return client.get_accounts()
 
     elif tool_name == "consultar_saldo_consolidado_real":
-        resultado = client.get_balance()
-        return json.dumps(resultado, ensure_ascii=False)
+        return client.get_balance()
 
     elif tool_name == "consultar_faturas_cartao_real":
-        resultado = client.get_bill_summary()
-        return json.dumps(resultado, ensure_ascii=False)
+        return client.get_bill_summary()
 
     elif tool_name == "consultar_extrato_bancario_real":
-        resultado = client.get_transactions(**arguments)
-        return json.dumps(resultado, ensure_ascii=False)
+        return client.get_transactions(**arguments)
 
     elif tool_name == "forcar_sincronizacao_bancaria":
-        resultado = client.manual_update()
-        return json.dumps(resultado, ensure_ascii=False)
+        return client.manual_update()
 
     elif tool_name == "consultar_faturas_passadas":
-        resultado = client.get_bills(account_id=arguments.get("accountId"))
-        return json.dumps(resultado, ensure_ascii=False)
+        return client.get_bills(account_id=arguments.get("accountId"))
 
     elif tool_name == "consultar_parcelamentos":
-        resultado = client.get_installments(
+        return client.get_installments(
             start_date=arguments.get("startDate"), 
             end_date=arguments.get("endDate")
         )
-        return json.dumps(resultado, ensure_ascii=False)
 
     elif tool_name == "gerenciar_data_fechamento_cartao":
-        resultado = client.manage_closing_date(arguments)
-        return json.dumps(resultado, ensure_ascii=False)
+        return client.manage_closing_date(arguments)
 
     elif tool_name == "consultar_maiores_gastos":
-        resultado = client.get_expensive_categories(start_date=arguments.get("startDate"))
-        return json.dumps(resultado, ensure_ascii=False)
+        return client.get_expensive_categories(start_date=arguments.get("startDate"))
 
     elif tool_name == "consultar_livro_caixa_analitico":
-        resultado = client.get_book(include_all_periods=arguments.get("includeAllPeriods", False))
-        return json.dumps(resultado, ensure_ascii=False)
+        return client.get_book(include_all_periods=arguments.get("includeAllPeriods", False))
 
     elif tool_name == "consultar_memorias_ia":
-        resultado = client.get_memories(message=arguments.get("message"))
-        return json.dumps(resultado, ensure_ascii=False)
+        return client.get_memories(message=arguments.get("message"))
 
-    return "Tool Open Finance não encontrada."
+    return {"error": "Tool Open Finance não encontrada."}

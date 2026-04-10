@@ -312,6 +312,10 @@
   body.device-desktop .nav-btn-pierre.tab-active {
     transform: scale(1.1) !important;
   }
+  body.device-desktop .nav-btn-pierre i {
+    width: 28px !important;
+    height: 28px !important;
+  }
   
   /* No mobile ele flutua com destaque */
   @media (max-width: 768px) {
