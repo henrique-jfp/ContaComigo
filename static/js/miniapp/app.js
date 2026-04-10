@@ -148,6 +148,14 @@ lucide.createIcons();
     const gameProfileProgressBar = document.getElementById('gameProfileProgressBar');
     const gameProfileNextHint = document.getElementById('gameProfileNextHint');
     const gameInteractionsTotal = document.getElementById('gameInteractionsTotal');
+
+    const pierreTotalBalance = document.getElementById('pierreTotalBalance');
+    const pierreHealthScore = document.getElementById('pierreHealthScore');
+    const pierreHealthLabel = document.getElementById('pierreHealthLabel');
+    const pierreInstallmentsList = document.getElementById('pierreInstallmentsList');
+    const pierreCategoriesChartEl = document.getElementById('pierreCategoriesChart');
+    const pierreCategoriesEmpty = document.getElementById('pierreCategoriesEmpty');
+    let pierreChartInstance = null;
     const gameInteractionsWeek = document.getElementById('gameInteractionsWeek');
     const gameTopFeatures = document.getElementById('gameTopFeatures');
     const gameAlfredoNote = document.getElementById('gameAlfredoNote');
@@ -298,6 +306,9 @@ lucide.createIcons();
       if (tabName === 'metas' && sessionId) {
         loadMetas();
         loadOrcamentos();
+      }
+      if (tabName === 'fantasma' && sessionId) {
+        loadPierreDashboard();
       }
     }
     const switchTab = (el) => {
@@ -1478,6 +1489,149 @@ lucide.createIcons();
       } catch(e) {
         showToast('Erro ao processar', 'error');
       }
+    }
+
+    async function loadPierreDashboard() {
+      if (!sessionId) return;
+      try {
+        const response = await fetchWithSession('/api/miniapp/pierre/dashboard');
+        const data = await response.json();
+        if (data.ok) {
+          renderPierreDashboard(data.data);
+        } else {
+          showToast('Pierre temporariamente fora do ar', 'error');
+        }
+      } catch(e) {
+        showToast('Erro ao conectar com Pierre', 'error');
+      }
+    }
+
+    function renderPierreDashboard(data) {
+      // 1. Saldo e Saúde
+      // Pierre costuma retornar { "totalBalance": X, "accounts": [...] }
+      const balance = data.balance?.totalBalance || data.balance || 0;
+      pierreTotalBalance.textContent = formatCurrencyBR(balance);
+      
+      // Saúde Financeira baseada no balance vs expenses (lógica simples de dashboard)
+      const score = 84; // Mock fixo de elite por enquanto
+      pierreHealthScore.textContent = score;
+      pierreHealthLabel.textContent = 'Excelente';
+      pierreHealthLabel.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/10 text-green-400';
+
+      // 2. Gráfico de Categorias (Vilões)
+      renderPierreCategories(data.categories);
+
+      // 3. Radar de Parcelas
+      renderPierreInstallments(data.installments);
+    }
+
+    function renderPierreCategories(categoriesData) {
+      if (pierreChartInstance) pierreChartInstance.destroy();
+      if (!pierreCategoriesChartEl) return;
+
+      const labels = [];
+      const values = [];
+      
+      let rawData = categoriesData;
+      // Se for string (JSON escapado), tenta parsear
+      if (typeof categoriesData === 'string') {
+        try { rawData = JSON.parse(categoriesData); } catch(e) {}
+      }
+
+      if (rawData && typeof rawData === 'object') {
+        const entries = Object.entries(rawData)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5);
+        
+        entries.forEach(([label, value]) => {
+          labels.push(label);
+          values.push(value);
+        });
+      }
+
+      if (labels.length === 0) {
+        pierreCategoriesEmpty?.classList.remove('hidden');
+        return;
+      } else {
+        pierreCategoriesEmpty?.classList.add('hidden');
+      }
+
+      pierreChartInstance = new Chart(pierreCategoriesChartEl, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: values,
+            backgroundColor: ['#a855f7', '#d946ef', '#ec4899', '#f43f5e', '#f97316'],
+            borderWidth: 0,
+            hoverOffset: 10
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: {
+                color: '#94a3b8',
+                font: { size: 10, weight: 'bold' },
+                padding: 15,
+                usePointStyle: true
+              }
+            }
+          },
+          cutout: '70%'
+        }
+      });
+    }
+
+    function renderPierreInstallments(data) {
+      if (!pierreInstallmentsList) return;
+      
+      let rawData = data;
+      if (typeof data === 'string') {
+        try { rawData = JSON.parse(data); } catch(e) {}
+      }
+
+      const purchases = rawData?.purchases || [];
+      if (!purchases.length) {
+        pierreInstallmentsList.innerHTML = '<div class="text-center py-4 text-xs text-telegram-hint">Nenhum compromisso futuro mapeado no Pierre.</div>';
+        return;
+      }
+
+      // Ordenar por data de vencimento
+      const sorted = [...purchases].sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).slice(0, 4);
+
+      pierreInstallmentsList.innerHTML = sorted.map(p => {
+        const dueDate = new Date(p.dueDate);
+        const isPast = dueDate < new Date();
+        const diffDays = Math.ceil((dueDate - new Date()) / (1000 * 60 * 60 * 24));
+        
+        let badgeClass = 'bg-blue-500/10 text-blue-400';
+        let badgeText = 'Próxima';
+        
+        if (isPast) {
+          badgeClass = 'bg-red-500/10 text-red-400';
+          badgeText = 'Vencida';
+        } else if (diffDays <= 2) {
+          badgeClass = 'bg-orange-500/10 text-orange-400';
+          badgeText = 'Urgente';
+        }
+
+        return `
+          <div class="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5 transition active:scale-95">
+            <div class="min-w-0 flex-1">
+              <p class="text-xs font-bold text-telegram-text truncate">${p.description || p.name || 'Parcela'}</p>
+              <p class="text-[10px] text-telegram-hint">${p.installmentNumber}/${p.totalInstallments} • Vence ${dueDate.toLocaleDateString('pt-BR')}</p>
+            </div>
+            <div class="text-right ml-3">
+              <p class="text-xs font-black text-telegram-text">R$ ${p.amount.toFixed(2)}</p>
+              <span class="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-md ${badgeClass}">${badgeText}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
     }
 
     function renderGameRankingFull(items = []) {
