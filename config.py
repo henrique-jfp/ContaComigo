@@ -74,6 +74,7 @@ logging.info(f"🤖 Modelo Gemini ativo: {GEMINI_MODEL_NAME}")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID")
 DATABASE_URL = os.getenv("DATABASE_URL")
+BRAPI_TOKEN = os.getenv("BRAPI_TOKEN") # Token opcional da brapi.dev para FIIs
 GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
 # ----- ADICIONANDO VARIÁVEL DE CHAVE PIX E CONTATO -----
