@@ -403,7 +403,7 @@ async def _cerebras_chat_completion_async(messages: list[dict], tools: list[dict
 
 
 def _extrair_tool_calls_do_texto(content: str) -> list[dict]:
-    \"\"\"Extrai múltiplas chamadas de função de uma string de forma robusta.\"\"\"
+    """Extrai múltiplas chamadas de função de uma string de forma robusta."""
     tool_calls = []
     # Busca blocos que parecem JSON { ... }
     blocos = re.findall(r'\{[^{}]+\}', content, re.DOTALL)
@@ -452,45 +452,45 @@ def _extrair_tool_calls_do_texto(content: str) -> list[dict]:
 
 
 def _contem_tool_call_json(texto: str) -> bool:
-    \"\"\"Detecta se o texto contém um JSON de chamada de função que não foi processado.\"\"\"
+    """Detecta se o texto contém um JSON de chamada de função que não foi processado."""
     indicadores = [
-        '\"type\": \"function\"', 
-        '\"name\": \"registrar_lancamento\"', 
-        '\"name\": \"responder_duvida_financeira\"',
-        '\"name\": \"consultar_faturas_cartao_real\"',
-        '\"name\": \"consultar_livro_caixa_analitico\"'
+        '"type": "function"', 
+        '"name": "registrar_lancamento"', 
+        '"name": "responder_duvida_financeira"',
+        '"name": "consultar_faturas_cartao_real"',
+        '"name": "consultar_livro_caixa_analitico"'
     ]
     return any(ind in texto for ind in indicadores)
 
 
 async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> dict | str | None:
-    \"\"\"
+    """
     Orquestrador Inteligente de Provedores de IA com Backoff.
     Ordem: Cerebras (Velocidade) -> Groq (Resiliência) -> Gemini (Fallback)
-    \"\"\"
+    """
     def _truncar_mensagens(msgs):
-        \"\"\"Reduz agressivamente o prompt do sistema se houver falha de payload.\"\"\"
+        """Reduz agressivamente o prompt do sistema se houver falha de payload."""
         new_msgs = [m.copy() for m in msgs]
         for m in new_msgs:
-            if m[\"role\"] == \"system\" and len(m[\"content\"]) > 3000:
-                m[\"content\"] = m[\"content\"][:3000] + \"... [Contexto truncado para evitar erro 413]\"
+            if m["role"] == "system" and len(m["content"]) > 3000:
+                m["content"] = m["content"][:3000] + "... [Contexto truncado para evitar erro 413]"
         return new_msgs
 
     providers = []
     if config.CEREBRAS_API_KEY:
-        providers.append((\"CEREBRAS\", _cerebras_chat_completion_async))
+        providers.append(("CEREBRAS", _cerebras_chat_completion_async))
     if config.GROQ_API_KEY:
-        providers.append((\"GROQ\", _groq_chat_completion_async))
+        providers.append(("GROQ", _groq_chat_completion_async))
     if config.GEMINI_API_KEY:
-        providers.append((\"GEMINI\", _gemini_chat_completion_async))
+        providers.append(("GEMINI", _gemini_chat_completion_async))
 
     last_error = None
     for attempt, (name, fn) in enumerate(providers):
         try:
-            logger.info(f\"⚡ [AI] Tentando {name} (tentativa {attempt+1})...\")
+            logger.info(f"⚡ [AI] Tentando {name} (tentativa {attempt+1})...")
             
             # Execução do provedor
-            if name == \"GEMINI\":
+            if name == "GEMINI":
                 return await fn(messages)
             else:
                 return await fn(messages, tools, tool_choice)
@@ -499,19 +499,19 @@ async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | N
             last_error = e
             wait = min(2 ** attempt, 8) # 1s, 2s, 4s...
             
-            if \"429\" in str(e):
-                logger.warning(f\"⚠️ [{name}] Cota esgotada (429). Aguardando {wait}s para próximo provedor...\")
-            elif \"413\" in str(e) or \"400\" in str(e):
-                logger.warning(f\"⚠️ [{name}] Erro de Payload/Contexto ({e}). Reduzindo contexto...\")
+            if "429" in str(e):
+                logger.warning(f"⚠️ [{name}] Cota esgotada (429). Aguardando {wait}s para próximo provedor...")
+            elif "413" in str(e) or "400" in str(e):
+                logger.warning(f"⚠️ [{name}] Erro de Payload/Contexto ({e}). Reduzindo contexto...")
                 messages = _truncar_mensagens(messages)
             else:
-                logger.error(f\"❌ [{name}] Falha técnica: {e}\")
+                logger.error(f"❌ [{name}] Falha técnica: {e}")
             
             if attempt < len(providers) - 1:
                 await asyncio.sleep(wait)
 
     if last_error:
-        logger.error(f\"🚨 [AI] Todos os provedores falharam. Último erro: {last_error}\")
+        logger.error(f"🚨 [AI] Todos os provedores falharam. Último erro: {last_error}")
     return None
 
 

@@ -127,7 +127,7 @@ _BOT_STARTED_LOCK = threading.Lock()
 _BOT_STARTED = False
 
 def start_telegram_bot(enable_health_server: bool = True):
-    \"\"\"Inicia o bot do Telegram\"\"\"
+    """Inicia o bot do Telegram"""
     global _BOT_STARTED
     with _BOT_STARTED_LOCK:
         if _BOT_STARTED:
