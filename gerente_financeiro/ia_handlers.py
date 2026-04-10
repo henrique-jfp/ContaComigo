@@ -403,52 +403,73 @@ async def _cerebras_chat_completion_async(messages: list[dict], tools: list[dict
 
 
 def _extrair_tool_calls_do_texto(content: str) -> list[dict]:
-    """Extrai múltiplas chamadas de função de uma string de forma robusta."""
+    \"\"\"Extrai múltiplas chamadas de função de uma string, suportando JSON aninhado de forma robusta.\"\"\"
     tool_calls = []
-    # Busca blocos que parecem JSON { ... }
-    blocos = re.findall(r'\{[^{}]+\}', content, re.DOTALL)
-    for bloco in blocos:
-        try:
-            # Tenta limpar possíveis prefixos/sufixos comuns
-            bloco_limpo = bloco.strip().strip(';').strip()
-            obj = json.loads(bloco_limpo)
-            
-            # Formatos suportados: 
-            # 1. {"name": "func", "parameters": {...}}
-            # 2. {"function": {"name": "func", "arguments": {...}}}
-            # 3. {"type": "function", "function": {"name": "func", "arguments": "{...}"}}
-            
-            fn_name = None
-            args = {}
-
-            if "name" in obj and ("parameters" in obj or "arguments" in obj):
-                fn_name = obj["name"]
-                args = obj.get("parameters") or obj.get("arguments")
-            elif "function" in obj and isinstance(obj["function"], dict):
-                fn_name = obj["function"].get("name")
-                args = obj["function"].get("arguments") or obj["function"].get("parameters")
-            elif "type" in obj and obj.get("type") == "function" and "function" in obj:
-                fn_name = obj["function"].get("name")
-                args = obj["function"].get("arguments") or obj["function"].get("parameters")
-            
-            if fn_name:
-                # Se args for string (comum em tool_calls reais), tenta parsear
-                if isinstance(args, str):
-                    try:
-                        args = json.loads(args)
-                    except json.JSONDecodeError:
-                        pass
+    
+    # Encontra todos os possíveis inícios de JSON
+    for match in re.finditer(r'\{', content):
+        start_idx = match.start()
+        balance = 0
+        end_idx = -1
+        
+        # Percorre para encontrar o fechamento correspondente (suporta aninhamento)
+        for i in range(start_idx, len(content)):
+            if content[i] == '{':
+                balance += 1
+            elif content[i] == '}':
+                balance -= 1
+                if balance == 0:
+                    end_idx = i + 1
+                    break
+        
+        if end_idx != -1:
+            bloco = content[start_idx:end_idx]
+            try:
+                # Limpeza básica de caracteres que a IA costuma colocar ao redor
+                bloco_limpo = bloco.strip().strip(';').strip()
+                obj = json.loads(bloco_limpo)
                 
-                tool_calls.append({
-                    "type": "function",
-                    "function": {
-                        "name": fn_name,
-                        "arguments": json.dumps(args) if isinstance(args, dict) else str(args)
-                    }
-                })
-        except (json.JSONDecodeError, Exception):
-            continue
+                fn_name = None
+                args = {}
+
+                # Mapeamento de formatos variados que as LLMs retornam
+                if isinstance(obj, dict):
+                    if "name" in obj and ("parameters" in obj or "arguments" in obj):
+                        fn_name = obj["name"]
+                        args = obj.get("parameters") or obj.get("arguments")
+                    elif "function" in obj and isinstance(obj["function"], dict):
+                        fn_name = obj["function"].get("name")
+                        args = obj["function"].get("arguments") or obj["function"].get("parameters")
+                    elif "type" in obj and obj.get("type") == "function" and "function" in obj:
+                        fn_name = obj["function"].get("name")
+                        args = obj["function"].get("arguments") or obj["function"].get("parameters")
+                    # Formato ultra-simples: {"registrar_lancamento": {...}}
+                    elif len(obj) == 1 and list(obj.keys())[0] in _ALFREDO_TOOLS_NAMES:
+                        fn_name = list(obj.keys())[0]
+                        args = obj[fn_name]
+                
+                if fn_name:
+                    if isinstance(args, str):
+                        try: args = json.loads(args)
+                        except: pass
+                    
+                    tool_calls.append({
+                        "type": "function",
+                        "function": {
+                            "name": fn_name,
+                            "arguments": json.dumps(args) if isinstance(args, dict) else str(args)
+                        }
+                    })
+            except:
+                continue
     return tool_calls
+
+# Lista global para ajudar o extrator
+_ALFREDO_TOOLS_NAMES = {
+    "registrar_lancamento", "agendar_despesa", "agendar_receita", "criar_meta", 
+    "responder_duvida_financeira", "definir_limite_orcamento", "categorizar_lancamentos_pendentes",
+    "consultar_saldos_bancarios_reais", "consultar_faturas_cartao_real", "consultar_livro_caixa_analitico"
+}
 
 
 def _contem_tool_call_json(texto: str) -> bool:
