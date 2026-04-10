@@ -32,10 +32,15 @@ def obter_tools_pierre():
             "type": "function",
             "function": {
                 "name": "consultar_faturas_cartao_real",
-                "description": "Consulta o resumo da fatura atual dos cartões de crédito: limite total, disponível e valor da fatura aberta.",
+                "description": "Consulta o resumo da FATURA ATUAL (aberta) dos cartões de crédito: limite total, disponível e valor da fatura aberta hoje.",
                 "parameters": {
                     "type": "object",
-                    "properties": {},
+                    "properties": {
+                        "accountId": {
+                            "type": "string",
+                            "description": "ID da conta do cartão de crédito (opcional)"
+                        }
+                    },
                     "required": []
                 }
             }
@@ -44,7 +49,7 @@ def obter_tools_pierre():
             "type": "function",
             "function": {
                 "name": "consultar_extrato_bancario_real",
-                "description": "Consulta o extrato e histórico de transações reais do usuário nas suas contas conectadas.",
+                "description": "Consulta o extrato e histórico de transações reais do usuário. Use SEMPRE para perguntas sobre JUROS (use clientMessage='juros'), compras específicas ou taxas bancárias.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -58,11 +63,11 @@ def obter_tools_pierre():
                         },
                         "limit": {
                             "type": "integer",
-                            "description": "Número de transações para retornar (padrão 10)"
+                            "description": "Número de transações para retornar (padrão 50)"
                         },
                         "clientMessage": {
                             "type": "string",
-                            "description": "Filtro em linguagem natural (ex: 'gastos com mercado')"
+                            "description": "Filtro em linguagem natural (ex: 'juros', 'ifood', 'supermercado')"
                         }
                     },
                     "required": []
@@ -85,7 +90,7 @@ def obter_tools_pierre():
             "type": "function",
             "function": {
                 "name": "consultar_faturas_passadas",
-                "description": "Consulta faturas de cartão de crédito já fechadas ou vencidas.",
+                "description": "Consulta faturas de cartão de crédito JÁ FECHADAS ou VENCIDAS de meses anteriores. Use quando o usuário perguntar de faturas de meses que já passaram.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -196,6 +201,9 @@ def obter_tools_pierre():
 def executar_tool_pierre(tool_name: str, arguments: dict, api_key: str) -> any:
     """Executa a chamada da tool real do Pierre e retorna o objeto de dados."""
     client = PierreClient(api_key)
+    # Logging para debug interno (será visível nos logs do servidor)
+    import logging
+    logging.info(f"🛠️ [PIERRE TOOL] Executando {tool_name} com args: {arguments}")
 
     if tool_name == "consultar_saldos_bancarios_reais":
         return client.get_accounts()
@@ -204,10 +212,20 @@ def executar_tool_pierre(tool_name: str, arguments: dict, api_key: str) -> any:
         return client.get_balance()
 
     elif tool_name == "consultar_faturas_cartao_real":
-        return client.get_bill_summary()
+        # Se a IA passar accountId ou similar, o client já lida
+        return client.get_bill_summary(account_id=arguments.get("accountId"))
 
     elif tool_name == "consultar_extrato_bancario_real":
-        return client.get_transactions(**arguments)
+        # Mapeamento de camelCase da Tool para o que o Client espera (embora o client use **params, vamos ser explícitos)
+        params = {
+            "startDate": arguments.get("startDate") or arguments.get("start_date"),
+            "endDate": arguments.get("endDate") or arguments.get("end_date"),
+            "limit": arguments.get("limit", 50), # Aumentado padrão para 50 para dar mais contexto
+            "clientMessage": arguments.get("clientMessage") or arguments.get("client_message")
+        }
+        # Limpa None
+        params = {k: v for k, v in params.items() if v is not None}
+        return client.get_transactions(**params)
 
     elif tool_name == "forcar_sincronizacao_bancaria":
         return client.manual_update()
@@ -217,18 +235,18 @@ def executar_tool_pierre(tool_name: str, arguments: dict, api_key: str) -> any:
 
     elif tool_name == "consultar_parcelamentos":
         return client.get_installments(
-            start_date=arguments.get("startDate"), 
-            end_date=arguments.get("endDate")
+            start_date=arguments.get("startDate") or arguments.get("start_date"), 
+            end_date=arguments.get("endDate") or arguments.get("end_date")
         )
 
     elif tool_name == "gerenciar_data_fechamento_cartao":
         return client.manage_closing_date(arguments)
 
     elif tool_name == "consultar_maiores_gastos":
-        return client.get_expensive_categories(start_date=arguments.get("startDate"))
+        return client.get_expensive_categories(start_date=arguments.get("startDate") or arguments.get("start_date"))
 
     elif tool_name == "consultar_livro_caixa_analitico":
-        return client.get_book(include_all_periods=arguments.get("includeAllPeriods", False))
+        return client.get_book(include_all_periods=arguments.get("includeAllPeriods", arguments.get("include_all_periods", False)))
 
     elif tool_name == "consultar_memorias_ia":
         return client.get_memories(message=arguments.get("message"))

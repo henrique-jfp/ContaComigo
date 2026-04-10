@@ -2025,12 +2025,13 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             if hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key:
                 from pierre_finance.ai_tools import obter_tools_pierre
                 tools_para_ia.extend(obter_tools_pierre())
+                hoje_agora = datetime.now().strftime("%Y-%m-%d")
                 messages[0]["content"] += (
-                    "\n\n**SEGREDO OPEN FINANCE (PIERRE):** Você é um Consultor Open Finance (Pierre). Além dos comandos normais, você PODE E DEVE usar as ferramentas avançadas do Pierre (saldos, faturas, extratos, maiores gastos, livro caixa e parcelamentos) para dar diagnósticos precisos. "
-                    "REGRAS CRÍTICAS:\n"
-                    "1. Para perguntas sobre a FATURA ATUAL ou LIMITE, use 'consultar_faturas_cartao_real'.\n"
-                    "2. Para perguntas sobre FATURAS PASSADAS (ex: fatura de fevereiro), use 'consultar_faturas_passadas'.\n"
-                    "3. Para perguntas sobre JUROS, use 'consultar_extrato_bancario_real' filtrando o período e buscando por 'juros' ou use 'consultar_livro_caixa_analitico'.\n"
+                    f"\n\n**SEGREDO OPEN FINANCE (PIERRE) - HOJE É {hoje_agora}:** Você é um Consultor Open Finance (Pierre). Além dos comandos normais, você PODE E DEVE usar as ferramentas avançadas do Pierre para dar diagnósticos precisos. "
+                    "\nREGRAS CRÍTICAS DE OPEN FINANCE:\n"
+                    "1. Para perguntas sobre a FATURA ATUAL (hoje), use 'consultar_faturas_cartao_real'.\n"
+                    "2. Para perguntas sobre FATURAS DE MESES PASSADOS (ex: fatura de fevereiro), use 'consultar_faturas_passadas'.\n"
+                    "3. Para perguntas sobre JUROS, use 'consultar_extrato_bancario_real' passando startDate/endDate do mês em questão E clientMessage='juros'.\n"
                     "4. Se o usuário pedir um 'resumo' ou 'visão geral', use 'consultar_livro_caixa_analitico' ou 'consultar_maiores_gastos'."
                 )
 
@@ -2120,7 +2121,11 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             resultado_bruto = executar_tool_pierre(fn_name, args, usuario_db.pierre_api_key)
             
             # 🛡️ FIX 413: Converter para JSON e truncar resultado gigante
-            res_str = json.dumps(resultado_bruto, ensure_ascii=False) if not isinstance(resultado_bruto, str) else resultado_bruto
+            if not resultado_bruto:
+                res_str = "Nenhum dado encontrado para esta consulta bancária no período ou com estes critérios."
+            else:
+                res_str = json.dumps(resultado_bruto, ensure_ascii=False) if not isinstance(resultado_bruto, str) else resultado_bruto
+            
             if len(res_str) > 6000:
                 res_str = res_str[:6000] + "... [Resultado truncado por ser muito longo]"
             
@@ -2166,10 +2171,14 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 else:
                     choice2 = ((completion2 or {}).get("choices") or [{}])[0]
                     ia_message_2 = choice2.get("message") or {}
-                    final_text = ia_message_2.get("content") or "Não consegui interpretar os dados bancários."
+                    final_text = ia_message_2.get("content")
+                
+                if not final_text or len(final_text.strip()) < 5:
+                    final_text = "Recebi os dados do banco, mas eles vieram em um formato que não consegui resumir agora. Por favor, tente perguntar de outra forma ou verifique seu extrato no MiniApp."
+                
                 await _enviar_resposta_html_segura(update.message, final_text)
             else:
-                await _enviar_resposta_html_segura(update.message, "Não consegui interpretar os dados bancários.")
+                await _enviar_resposta_html_segura(update.message, "Não consegui interpretar os dados bancários agora. Pode ser uma instabilidade momentânea na conexão com o banco.")
             
             return ConversationHandler.END
 
