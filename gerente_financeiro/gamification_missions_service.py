@@ -28,6 +28,11 @@ def get_monthly_xp_ranking(db: Session, year: int, month: int, limit: int = 2):
 
 def award_monthly_xp_competition_premium(db: Session, reference_date: date | None = None) -> int:
     """Premia os 2 primeiros do ranking mensal de XP com 1 mês de premium grátis."""
+    # Verificação de ativação da competição
+    awards_enabled = os.getenv("GAMIFICATION_AWARDS_ENABLED", "1").lower() in ("1", "true", "yes", "on")
+    if not awards_enabled:
+        return 0
+
     reference_date = reference_date or date.today()
     if reference_date.day != 1:
         return 0

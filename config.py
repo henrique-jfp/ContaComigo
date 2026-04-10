@@ -83,6 +83,9 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
 EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER")
 PIX_KEY = os.getenv("PIX_KEY")
 
+# --- GAMIFICAÇÃO E MONETIZAÇÃO ---
+GAMIFICATION_AWARDS_ENABLED = os.getenv("GAMIFICATION_AWARDS_ENABLED", "1").lower() in ("1", "true", "yes", "on")
+
 
 
 

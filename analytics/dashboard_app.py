@@ -979,6 +979,26 @@ def miniapp_pierre_dashboard():
         # 3. Buscar Parcelamentos
         installments_res = executar_tool_pierre("consultar_parcelamentos", {}, usuario.pierre_api_key)
 
+        # 4. Cálculo Dinâmico de Saúde (Modo Deus)
+        # Se saldo > 0 e despesas controladas = Score Alto. Se saldo < 0 ou despesas > saldo = Alerta.
+        total_balance = float(balance_res.get("totalBalance", 0) if isinstance(balance_res, dict) else (balance_res or 0))
+        total_expenses = 0
+        if isinstance(categories_res, dict):
+            total_expenses = sum(float(v) for v in categories_res.values() if isinstance(v, (int, float, str)))
+        
+        health_score = 100
+        health_label = "Excelente"
+        
+        if total_balance <= 0:
+            health_score = 30
+            health_label = "Crítico"
+        elif total_expenses > total_balance:
+            health_score = 50
+            health_label = "Atenção"
+        elif total_expenses > (total_balance * 0.7):
+            health_score = 75
+            health_label = "Bom"
+
         return jsonify({
             "ok": True,
             "data": {
@@ -986,6 +1006,7 @@ def miniapp_pierre_dashboard():
                 "accounts": accounts_res,
                 "categories": categories_res,
                 "installments": installments_res,
+                "health": {"score": health_score, "label": health_label},
                 "sync_time": datetime.now().isoformat()
             }
         })
