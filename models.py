@@ -19,6 +19,9 @@ class Usuario(Base):
     alerta_gastos_ativo = Column(Boolean, default=True)
     criado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     pierre_api_key = Column(String, nullable=True)  # Feature Secreta: Open Finance
+    pierre_sync_enabled = Column(Boolean, default=True)
+    pierre_initial_sync_done = Column(Boolean, default=False)
+    last_pierre_sync = Column(DateTime, nullable=True)
 
     # --- CAMPOS DE GAMIFICAÇÃO ---
     perfil_ia = Column(String, nullable=True)
