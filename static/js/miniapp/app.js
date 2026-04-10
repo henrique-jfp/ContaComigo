@@ -1508,13 +1508,9 @@ lucide.createIcons();
     }
 
     function renderPierreDashboard(data) {
-      // 1. Patrimônio e Saúde (Parsing robusto)
-      let balance = 0;
-      if (typeof data.balance === 'number') balance = data.balance;
-      else if (data.balance?.totalBalance) balance = Number(data.balance.totalBalance);
-      else if (typeof data.balance === 'string') balance = Number(data.balance);
-      
-      pierreTotalBalance.textContent = formatCurrencyBR(isNaN(balance) ? 0 : balance);
+      // 1. Patrimônio e Saúde (Utiliza valor exato do backend ou parsing robusto)
+      const balanceValue = typeof data.balance === 'number' ? data.balance : Number(data.balance || 0);
+      pierreTotalBalance.textContent = formatCurrencyBR(isNaN(balanceValue) ? 0 : balanceValue);
       
       const health = data.health || { score: '--', label: '---' };
       pierreHealthScore.textContent = health.score;
@@ -1672,7 +1668,9 @@ lucide.createIcons();
       }
       if (rawData?.data) rawData = rawData.data;
 
-      const purchases = rawData?.purchases || rawData || [];
+      // O Pierre pode retornar as parcelas direto no array ou dentro de .purchases ou .installments
+      const purchases = rawData?.purchases || rawData?.installments || (Array.isArray(rawData) ? rawData : []);
+      
       if (!Array.isArray(purchases) || !purchases.length) {
         pierreInstallmentsList.innerHTML = '<div class="text-center py-4 text-xs text-telegram-hint">Nenhum compromisso futuro mapeado no Pierre.</div>';
         return;
@@ -1681,16 +1679,19 @@ lucide.createIcons();
       const now = new Date();
       // Ordenar: Primeiro as vencidas, depois as mais próximas
       const sorted = [...purchases]
-        .filter(p => p && (p.description || p.name))
+        .filter(p => p && (p.description || p.name || p.merchant))
         .sort((a, b) => {
-          const dA = a.dueDate ? new Date(a.dueDate) : new Date(8640000000000000);
-          const dB = b.dueDate ? new Date(b.dueDate) : new Date(8640000000000000);
+          const dateA = a.dueDate || a.date || a.vencimento;
+          const dateB = b.dueDate || b.date || b.vencimento;
+          const dA = dateA ? new Date(dateA) : new Date(8640000000000000);
+          const dB = dateB ? new Date(dateB) : new Date(8640000000000000);
           return dA - dB;
         })
-        .slice(0, 6);
+        .slice(0, 8);
 
       pierreInstallmentsList.innerHTML = sorted.map(p => {
-        const dueDate = p.dueDate ? new Date(p.dueDate) : null;
+        const dateRaw = p.dueDate || p.date || p.vencimento;
+        const dueDate = dateRaw ? new Date(dateRaw) : null;
         const isValidDate = dueDate && !isNaN(dueDate.getTime());
         const isPast = isValidDate && dueDate < now && dueDate.toDateString() !== now.toDateString();
         const diffDays = isValidDate ? Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24)) : 999;
@@ -1706,14 +1707,14 @@ lucide.createIcons();
           badgeText = 'Urgente';
         }
 
-        const instNum = p.installmentNumber || '?';
-        const instTot = p.totalInstallments || '?';
-        const amount = Number(p.amount || 0);
+        const instNum = p.installmentNumber || p.currentInstallment || p.parcela || '?';
+        const instTot = p.totalInstallments || p.totalParcelas || '?';
+        const amount = Number(p.amount || p.value || p.valor || 0);
 
         return `
           <div class="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5 transition active:scale-95">
             <div class="min-w-0 flex-1">
-              <p class="text-xs font-bold text-telegram-text truncate">${p.description || p.name || 'Parcela'}</p>
+              <p class="text-xs font-bold text-telegram-text truncate">${p.description || p.name || p.merchant || 'Parcela'}</p>
               <p class="text-[10px] text-telegram-hint">${instNum}/${instTot} • ${isValidDate ? dueDate.toLocaleDateString('pt-BR') : 'Sem data'}</p>
             </div>
             <div class="text-right ml-3">

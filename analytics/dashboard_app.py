@@ -968,50 +968,70 @@ def miniapp_pierre_dashboard():
 
         from pierre_finance.ai_tools import executar_tool_pierre
         
-        # 1. Buscar Saldo Consolidado e Lista de Contas
+        # 1. Buscar Dados
         balance_res = executar_tool_pierre("consultar_saldo_consolidado_real", {}, usuario.pierre_api_key)
         accounts_res = executar_tool_pierre("consultar_saldos_bancarios_reais", {}, usuario.pierre_api_key)
-        
-        # 2. Buscar Categorias Caras (últimos 30 dias)
         thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
         categories_res = executar_tool_pierre("consultar_maiores_gastos", {"startDate": thirty_days_ago}, usuario.pierre_api_key)
-        
-        # 3. Buscar Parcelamentos
         installments_res = executar_tool_pierre("consultar_parcelamentos", {}, usuario.pierre_api_key)
 
-        # 4. Cálculo Dinâmico de Saúde (Modo Deus)
-        # Se saldo > 0 e despesas controladas = Score Alto. Se saldo < 0 ou despesas > saldo = Alerta.
-        total_balance = float(balance_res.get("totalBalance", 0) if isinstance(balance_res, dict) else (balance_res or 0))
-        total_expenses = 0
-        if isinstance(categories_res, dict):
-            total_expenses = sum(float(v) for v in categories_res.values() if isinstance(v, (int, float, str)))
-        
+        # 2. Parsing Inteligente de Saldo
+        total_balance = 0
+        if isinstance(balance_res, dict):
+            total_balance = balance_res.get("totalBalance") or balance_res.get("balance") or 0
+        elif isinstance(balance_res, (int, float)):
+            total_balance = balance_res
+            
+        # Fallback: Se saldo total vier zero ou NaN, somar contas individuais (apenas bancos, não crédito)
+        if not total_balance and isinstance(accounts_res, list):
+            for acc in accounts_res:
+                if acc.get("type") != "CREDIT":
+                    total_balance += float(acc.get("balance") or acc.get("amount") or 0)
+        elif not total_balance and isinstance(accounts_res, dict) and accounts_res.get("data"):
+            for acc in accounts_res["data"]:
+                if acc.get("type") != "CREDIT":
+                    total_balance += float(acc.get("balance") or acc.get("amount") or 0)
+
+        # 3. Parsing de Categorias (Vilões)
+        cleaned_categories = {}
+        cat_data = categories_res.get("data") if isinstance(categories_res, dict) else categories_res
+        if isinstance(cat_data, dict):
+            cleaned_categories = {k: abs(float(v)) for k, v in cat_data.items() if v}
+        elif isinstance(cat_data, list):
+            for item in cat_data:
+                if isinstance(item, dict):
+                    name = item.get("name") or item.get("category") or "Outros"
+                    val = item.get("value") or item.get("amount") or 0
+                    cleaned_categories[name] = abs(float(val))
+
+        # 4. Cálculo Dinâmico de Saúde
+        total_expenses = sum(cleaned_categories.values())
         health_score = 100
         health_label = "Excelente"
         
-        if total_balance <= 0:
+        if total_balance <= 0 and total_expenses > 0:
             health_score = 30
             health_label = "Crítico"
-        elif total_expenses > total_balance:
+        elif total_expenses > total_balance and total_balance > 0:
             health_score = 50
             health_label = "Atenção"
         elif total_expenses > (total_balance * 0.7):
-            health_score = 75
+            health_score = 70
             health_label = "Bom"
 
         return jsonify({
             "ok": True,
             "data": {
-                "balance": balance_res,
+                "balance": total_balance,
                 "accounts": accounts_res,
-                "categories": categories_res,
+                "categories": cleaned_categories,
                 "installments": installments_res,
                 "health": {"score": health_score, "label": health_label},
                 "sync_time": datetime.now().isoformat()
             }
         })
     except Exception as e:
-        logger.error(f"Erro ao carregar dashboard Pierre: {e}")
+        logger.error(f"Erro ao carregar dashboard Pierre: {e}", exc_info=True)
         return jsonify({"ok": False, "error": str(e)}), 500
     finally:
         db.close()
@@ -1154,29 +1174,42 @@ def _generate_pierre_book_pdf(data):
     elements.append(Paragraph("Livro Caixa Analítico (Pierre Finance)", styles['Title']))
     elements.append(Spacer(1, 12))
     
-    # Extrair transações do book - Tenta múltiplos caminhos possíveis no JSON do Pierre
-    book_data = {}
-    if isinstance(data, dict):
-        book_data = data.get("data") or data
+    # Extrair transações - Log para depuração
+    logger.info(f"Gerando PDF Pierre. Tipo de dado recebido: {type(data)}")
     
     transactions = []
-    if isinstance(book_data, dict):
-        transactions = book_data.get("transactions") or book_data.get("txs") or []
-    elif isinstance(book_data, list):
-        transactions = book_data
+    if isinstance(data, dict):
+        # Tenta todos os caminhos possíveis no JSON do Pierre
+        transactions = data.get("transactions") or data.get("txs") or data.get("data", {}).get("transactions") or []
+        if not transactions and "purchases" in data:
+            transactions = data["purchases"]
+    elif isinstance(data, list):
+        transactions = data
 
     if not transactions:
-        elements.append(Paragraph("Nenhuma transação encontrada no período ou histórico.", styles['Normal']))
-        elements.append(Paragraph("Dica: Verifique se suas contas estão sincronizadas no app Pierre Finance.", styles['Italic']))
+        logger.warning("Nenhuma transação encontrada no payload do Pierre para o PDF.")
+        elements.append(Paragraph("Nenhuma transação encontrada no histórico sincronizado.", styles['Normal']))
+        elements.append(Paragraph("Dica: Use o botão 'Sincronizar Bancos' no app e aguarde alguns minutos.", styles['Italic']))
     else:
+        logger.info(f"Encontradas {len(transactions)} transações para o PDF.")
         table_data = [["Data", "Descrição", "Valor", "Categoria"]]
-        for tx in transactions[:200]: # Aumentado para 200 para ser mais útil
-            val = tx.get('amount') or tx.get('value') or 0
+        # Ordenar transações por data (mais recentes primeiro)
+        try:
+            transactions.sort(key=lambda x: x.get("date") or x.get("dueDate") or "", reverse=True)
+        except:
+            pass
+
+        for tx in transactions[:300]: # Aumentado para 300
+            val = tx.get('amount') or tx.get('value') or tx.get('valor') or 0
+            date_str = str(tx.get("date") or tx.get("dueDate") or tx.get("vencimento") or "")[:10]
+            desc = str(tx.get("description") or tx.get("name") or tx.get("merchant") or "Compra")[:40]
+            cat = str(tx.get("category") or tx.get("cat") or tx.get("categoria") or "Geral")
+            
             table_data.append([
-                str(tx.get("date") or "")[:10],
-                str(tx.get("description") or tx.get("name") or "Compra")[:30],
+                date_str,
+                desc,
                 f"R$ {float(val):.2f}",
-                str(tx.get("category") or tx.get("cat") or "Geral")
+                cat
             ])
         
         t = Table(table_data, colWidths=[80, 200, 80, 100])
