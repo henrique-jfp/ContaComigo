@@ -1508,14 +1508,22 @@ lucide.createIcons();
     }
 
     function renderPierreDashboard(data) {
-      // 1. Patrimônio e Saúde
-      const balance = data.balance?.totalBalance || data.balance || 0;
-      pierreTotalBalance.textContent = formatCurrencyBR(balance);
+      // 1. Patrimônio e Saúde (Parsing robusto)
+      let balance = 0;
+      if (typeof data.balance === 'number') balance = data.balance;
+      else if (data.balance?.totalBalance) balance = Number(data.balance.totalBalance);
+      else if (typeof data.balance === 'string') balance = Number(data.balance);
       
-      const score = 84; 
-      pierreHealthScore.textContent = score;
-      pierreHealthLabel.textContent = 'Excelente';
-      pierreHealthLabel.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/10 text-green-400';
+      pierreTotalBalance.textContent = formatCurrencyBR(isNaN(balance) ? 0 : balance);
+      
+      const health = data.health || { score: '--', label: '---' };
+      pierreHealthScore.textContent = health.score;
+      pierreHealthLabel.textContent = health.label;
+      
+      // Cores dinâmicas para o score
+      if (health.score >= 80) pierreHealthLabel.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/10 text-green-400';
+      else if (health.score >= 60) pierreHealthLabel.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400';
+      else pierreHealthLabel.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-400';
 
       // 2. Lista de Contas
       renderPierreAccounts(data.accounts);
@@ -1534,15 +1542,16 @@ lucide.createIcons();
       if (typeof accounts === 'string') {
         try { items = JSON.parse(accounts); } catch(e) { items = []; }
       }
+      if (items?.data && Array.isArray(items.data)) items = items.data;
 
-      if (!items || !items.length) {
+      if (!Array.isArray(items) || !items.length) {
         pierreAccountsList.innerHTML = '<p class="text-xs text-telegram-hint text-center py-2">Nenhuma conta mapeada.</p>';
         return;
       }
 
       pierreAccountsList.innerHTML = items.map(acc => {
         const type = acc.type === 'CREDIT' ? 'Cartão' : 'Conta';
-        const color = acc.type === 'CREDIT' ? 'text-fuchsia-400' : 'text-blue-400';
+        const balance = Number(acc.balance || 0);
         return `
           <div class="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5">
             <div class="flex items-center gap-3">
@@ -1555,7 +1564,7 @@ lucide.createIcons();
               </div>
             </div>
             <div class="text-right">
-              <p class="text-xs font-black text-telegram-text">${formatCurrencyBR(acc.balance || 0)}</p>
+              <p class="text-xs font-black text-telegram-text">${formatCurrencyBR(isNaN(balance) ? 0 : balance)}</p>
             </div>
           </div>
         `;
@@ -1566,6 +1575,8 @@ lucide.createIcons();
 
     async function forcePierreSync() {
       const btn = document.getElementById('pierreSyncBtn');
+      if (!btn || btn.disabled) return;
+      
       const originalHtml = btn.innerHTML;
       btn.disabled = true;
       btn.innerHTML = '<i class="w-3 h-3 animate-spin" data-lucide="refresh-cw"></i> Sincronizando...';
@@ -1576,7 +1587,7 @@ lucide.createIcons();
         const data = await response.json();
         if (data.ok) {
           showToast('Bancos sincronizados!', 'success');
-          loadPierreDashboard();
+          await loadPierreDashboard();
         } else {
           showToast('Falha na sincronia', 'error');
         }
@@ -1602,15 +1613,16 @@ lucide.createIcons();
       if (typeof categoriesData === 'string') {
         try { rawData = JSON.parse(categoriesData); } catch(e) {}
       }
+      if (rawData?.data) rawData = rawData.data;
 
-      if (rawData && typeof rawData === 'object') {
+      if (rawData && typeof rawData === 'object' && !Array.isArray(rawData)) {
         const entries = Object.entries(rawData)
-          .sort((a, b) => b[1] - a[1])
+          .sort((a, b) => Number(b[1]) - Number(a[1]))
           .slice(0, 5);
         
         entries.forEach(([label, value]) => {
           labels.push(label);
-          values.push(value);
+          values.push(Number(value));
         });
       }
 
@@ -1658,21 +1670,30 @@ lucide.createIcons();
       if (typeof data === 'string') {
         try { rawData = JSON.parse(data); } catch(e) {}
       }
+      if (rawData?.data) rawData = rawData.data;
 
-      const purchases = rawData?.purchases || [];
-      if (!purchases.length) {
+      const purchases = rawData?.purchases || rawData || [];
+      if (!Array.isArray(purchases) || !purchases.length) {
         pierreInstallmentsList.innerHTML = '<div class="text-center py-4 text-xs text-telegram-hint">Nenhum compromisso futuro mapeado no Pierre.</div>';
         return;
       }
 
       const now = new Date();
       // Ordenar: Primeiro as vencidas, depois as mais próximas
-      const sorted = [...purchases].sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).slice(0, 6);
+      const sorted = [...purchases]
+        .filter(p => p && (p.description || p.name))
+        .sort((a, b) => {
+          const dA = a.dueDate ? new Date(a.dueDate) : new Date(8640000000000000);
+          const dB = b.dueDate ? new Date(b.dueDate) : new Date(8640000000000000);
+          return dA - dB;
+        })
+        .slice(0, 6);
 
       pierreInstallmentsList.innerHTML = sorted.map(p => {
-        const dueDate = new Date(p.dueDate);
-        const isPast = dueDate < now && dueDate.toDateString() !== now.toDateString();
-        const diffDays = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+        const dueDate = p.dueDate ? new Date(p.dueDate) : null;
+        const isValidDate = dueDate && !isNaN(dueDate.getTime());
+        const isPast = isValidDate && dueDate < now && dueDate.toDateString() !== now.toDateString();
+        const diffDays = isValidDate ? Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24)) : 999;
         
         let badgeClass = 'bg-blue-500/10 text-blue-400';
         let badgeText = 'Próxima';
@@ -1685,14 +1706,18 @@ lucide.createIcons();
           badgeText = 'Urgente';
         }
 
+        const instNum = p.installmentNumber || '?';
+        const instTot = p.totalInstallments || '?';
+        const amount = Number(p.amount || 0);
+
         return `
           <div class="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5 transition active:scale-95">
             <div class="min-w-0 flex-1">
               <p class="text-xs font-bold text-telegram-text truncate">${p.description || p.name || 'Parcela'}</p>
-              <p class="text-[10px] text-telegram-hint">${p.installmentNumber}/${p.totalInstallments} • ${dueDate.toLocaleDateString('pt-BR')}</p>
+              <p class="text-[10px] text-telegram-hint">${instNum}/${instTot} • ${isValidDate ? dueDate.toLocaleDateString('pt-BR') : 'Sem data'}</p>
             </div>
             <div class="text-right ml-3">
-              <p class="text-xs font-black text-telegram-text">${formatCurrencyBR(p.amount)}</p>
+              <p class="text-xs font-black text-telegram-text">${formatCurrencyBR(isNaN(amount) ? 0 : amount)}</p>
               <span class="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-md ${badgeClass}">${badgeText}</span>
             </div>
           </div>
