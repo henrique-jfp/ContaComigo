@@ -23,6 +23,7 @@ from gerente_financeiro.monetization import (
     trial_users_expiring_in,
 )
 from pierre_finance.sync import sincronizar_incremental
+from fiis.alertas import enviar_alertas_fii
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,17 @@ def configurar_jobs(job_queue):
             time=time(hour=1, minute=0),
             name="agendador_mestre_diario"
         )
+        
+        # Job diário às 08:00 - Alertas de FIIs
+        async def job_alertas_fii_diario(context: ContextTypes.DEFAULT_TYPE):
+            await enviar_alertas_fii(context.application, lambda: next(get_db()))
+
+        job_queue.run_daily(
+            job_alertas_fii_diario,
+            time=time(hour=8, minute=0),
+            name="alertas_fii_diario"
+        )
+
         # Job diario que roda no dia 1 - Check-in mensal de metas
         job_queue.run_daily(
             job_metas_mensal,

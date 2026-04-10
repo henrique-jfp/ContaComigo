@@ -44,6 +44,9 @@ class Usuario(Base):
     xp_daily_counters = relationship("XpDailyCounter", back_populates="usuario", cascade="all, delete-orphan")
     monthly_gamification_awards = relationship("MonthlyGamificationAward", back_populates="usuario", cascade="all, delete-orphan")
     plan_usage_monthly = relationship("UserPlanUsageMonthly", back_populates="usuario", cascade="all, delete-orphan")
+    saldos_conta = relationship("SaldoConta", back_populates="usuario", cascade="all, delete-orphan")
+    faturas_cartao = relationship("FaturaCartao", back_populates="usuario", cascade="all, delete-orphan")
+    parcelamentos_item = relationship("ParcelamentoItem", back_populates="usuario", cascade="all, delete-orphan")
 
 
 class UserPlanUsageMonthly(Base):
@@ -124,6 +127,10 @@ class Conta(Base):
     email_notificacao = Column(String, nullable=True)
     
     usuario = relationship("Usuario", back_populates="contas")
+    lancamentos = relationship("Lancamento", back_populates="conta", cascade="all, delete-orphan")
+    saldos = relationship("SaldoConta", back_populates="conta", cascade="all, delete-orphan")
+    faturas = relationship("FaturaCartao", back_populates="conta", cascade="all, delete-orphan")
+    parcelamentos = relationship("ParcelamentoItem", back_populates="conta", cascade="all, delete-orphan")
 
 class Categoria(Base):
     __tablename__ = 'categorias'
@@ -511,3 +518,37 @@ class ParcelamentoItem(Base):
 
     conta = relationship("Conta", back_populates="parcelamentos")
     usuario = relationship("Usuario", back_populates="parcelamentos_item")
+
+
+# ==================== MODELS DE FIIs ====================
+
+class CarteiraFII(Base):
+    __tablename__ = 'carteira_fiis'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id', ondelete='CASCADE'), nullable=False, index=True)
+    ticker = Column(String(10), nullable=False)           # Ex: KNRI11, XPML11
+    quantidade_cotas = Column(Numeric(10, 2), nullable=False)
+    preco_medio = Column(Numeric(10, 2), nullable=False)  # Preço médio de compra por cota
+    data_entrada = Column(Date, nullable=True)            # Data da primeira compra
+    ativo = Column(Boolean, default=True, nullable=False) # False = vendeu
+    criado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    atualizado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    usuario = relationship("Usuario", backref="carteira_fiis")
+
+    __table_args__ = (
+        UniqueConstraint('id_usuario', 'ticker', name='uq_carteira_fii_usuario_ticker'),
+    )
+
+
+class HistoricoAlertaFII(Base):
+    __tablename__ = 'historico_alertas_fii'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id', ondelete='CASCADE'), nullable=False, index=True)
+    ticker = Column(String(10), nullable=False)
+    tipo_alerta = Column(String(50), nullable=False)  # 'rendimento_pago', 'pvp_alto', 'vacancia_alta'
+    valor_referencia = Column(Numeric(10, 4), nullable=True)  # valor que disparou o alerta
+    enviado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    usuario = relationship("Usuario", backref="historico_alertas_fii")

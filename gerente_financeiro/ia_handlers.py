@@ -37,6 +37,7 @@ from gerente_financeiro.monetization import (
     plan_allows_feature,
     upgrade_prompt_for_feature,
 )
+from fiis.fii_handler import detect_fii_intent, route_fii_intent
 
 logger = logging.getLogger(__name__)
 
@@ -1851,6 +1852,12 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
 
     db = next(get_db())
     try:
+        # --- NOVO: INTERCEPTOR DE FIIs ---
+        fii_intent = detect_fii_intent(texto_usuario)
+        if fii_intent:
+            await route_fii_intent(fii_intent, update, context, db)
+            return ConversationHandler.END
+
         usuario_db, saldo, entradas, saidas = _usuario_e_saldo(db, update.effective_user)
         ensure_user_plan_state(db, usuario_db, commit=True)
 

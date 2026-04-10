@@ -180,6 +180,9 @@ from gerente_financeiro.assistente_proativo_handler import teste_assistente_hand
 # 🎊 WRAPPED ANUAL
 from gerente_financeiro.wrapped_anual_handler import meu_wrapped_handler
 
+# 🏢 FII HANDLER
+from fiis.fii_handler import add_fii_conv
+
 # 🤫 PIERRE FINANCE (OPEN FINANCE)
 from pierre_finance.handlers import get_pierre_conversation_handler, sincronizar_manual
 
@@ -388,6 +391,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("contact_conv", lambda: contact_conv),
         ("fatura_conv", lambda: fatura_conv),
         ("pierre_conv", lambda: get_pierre_conversation_handler()),
+        ("add_fii_conv", lambda: add_fii_conv),
     ]
 
 
