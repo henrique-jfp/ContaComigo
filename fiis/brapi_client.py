@@ -3,6 +3,8 @@ import requests
 import logging
 import time
 from datetime import datetime, timedelta
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +18,23 @@ class BrapiClient:
     def __init__(self):
         self.token = os.getenv("BRAPI_TOKEN")
         self.session = requests.Session()
-        self.session.headers.update({"User-Agent": "ContaComigo-Bot/1.0"})
+        
+        # Configuração de Headers
+        headers = {"User-Agent": "ContaComigo-Bot/1.0"}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        self.session.headers.update(headers)
+        
+        # Configuração de Resiliência (Auto-Retry)
+        retries = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[500, 502, 503, 504],
+            allowed_methods=["GET"]
+        )
+        adapter = HTTPAdapter(max_retries=retries)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
 
     def _get_from_cache(self, ticker: str) -> dict | None:
         if ticker in self._cache:
@@ -47,7 +65,8 @@ class BrapiClient:
         try:
             params = {
                 "modules": "financials,summaryProfile,defaultKeyStatistics",
-                "token": self.token
+                "dividends": "true",
+                "fundamental": "true"
             }
             url = f"{self.BASE_URL}/quote/{ticker}"
             response = self.session.get(url, params=params, timeout=15)
@@ -105,7 +124,8 @@ class BrapiClient:
             tickers_str = ",".join(tickers_to_fetch)
             params = {
                 "modules": "financials,summaryProfile",
-                "token": self.token
+                "dividends": "true",
+                "fundamental": "true"
             }
             url = f"{self.BASE_URL}/quote/{tickers_str}"
             response = self.session.get(url, params=params, timeout=20)
@@ -138,8 +158,7 @@ class BrapiClient:
                 "type": "fii",
                 "sortBy": "dividendYield",
                 "sortOrder": "desc",
-                "limit": 100,
-                "token": self.token
+                "limit": 100
             }
             url = f"{self.BASE_URL}/quote/list"
             response = self.session.get(url, params=params, timeout=15)
