@@ -398,6 +398,20 @@ def trial_users_expiring_in(db: Session, days: int) -> list[Usuario]:
         .all()
     )
 
+def premium_users_expiring_in(db: Session, days: int) -> list[Usuario]:
+    now = _now_utc()
+    target_start = now + timedelta(days=days)
+    target_end = target_start + timedelta(days=1)
+    return (
+        db.query(Usuario)
+        .filter(
+            Usuario.plan.in_([PLAN_PREMIUM_MONTHLY, PLAN_PREMIUM_ANNUAL]),
+            Usuario.premium_expires_at >= target_start,
+            Usuario.premium_expires_at < target_end,
+        )
+        .all()
+    )
+
 def trial_users_expired(db: Session) -> list[Usuario]:
     now = _now_utc()
     return (

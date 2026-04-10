@@ -4,12 +4,12 @@
       <h2 class="text-xl font-bold bg-gradient-to-r from-purple-400 to-fuchsia-600 bg-clip-text text-transparent drop-shadow-md">
         <i data-lucide="ghost" class="inline-block mr-1 text-purple-500 w-5 h-5 align-text-bottom"></i> Pierre Finance
       </h2>
-      <button id="pierreRefreshBtn" onclick="loadPierreDashboard()" class="p-2 rounded-xl bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition">
-        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+      <button id="pierreSyncBtn" onclick="forcePierreSync()" class="p-2 rounded-xl bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition flex items-center gap-2 text-[10px] font-bold">
+        <i data-lucide="refresh-cw" class="w-3 h-3"></i> Sincronizar Bancos
       </button>
     </div>
 
-    <!-- MODO DEUS: KPIs PRINCIPAIS -->
+    <!-- MODO DEUS: PATRIMÔNIO E SAÚDE -->
     <div class="grid grid-cols-2 gap-3">
       <div class="glass-card p-4 rounded-2xl border border-purple-500/20 bg-purple-900/5">
         <p class="text-[10px] font-bold uppercase tracking-wider text-purple-400/80 mb-1">Patrimônio Total</p>
@@ -25,13 +25,29 @@
       </div>
     </div>
 
+    <!-- LISTA DE CONTAS CONECTADAS -->
+    <div class="glass-card p-5 rounded-3xl border border-purple-500/20 bg-purple-900/5">
+      <h3 class="text-sm font-bold text-telegram-text mb-4 flex items-center gap-2">
+        <i data-lucide="landmark" class="w-4 h-4 text-purple-500"></i> Suas Contas (Open Finance)
+      </h3>
+      <div id="pierreAccountsList" class="space-y-3">
+        <!-- Injetado via JS -->
+        <div class="animate-pulse flex space-x-4">
+          <div class="rounded-full bg-slate-700 h-10 w-10"></div>
+          <div class="flex-1 space-y-6 py-1">
+            <div class="h-2 bg-slate-700 rounded"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- GRÁFICO: VILÕES DO OPEN FINANCE -->
     <div class="glass-card p-5 rounded-3xl border border-purple-500/20 bg-purple-900/5">
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-sm font-bold text-telegram-text flex items-center gap-2">
-          <i data-lucide="pie-chart" class="w-4 h-4 text-purple-500"></i> Vilões do Open Finance
+          <i data-lucide="flame" class="w-4 h-4 text-purple-500"></i> Vilões do Mês (Real)
         </h3>
-        <span class="text-[10px] text-telegram-hint">Últimos 30 dias</span>
+        <span class="text-[10px] text-telegram-hint">Dados do Banco</span>
       </div>
       <div class="h-[200px] relative">
         <canvas id="pierreCategoriesChart"></canvas>
@@ -50,24 +66,24 @@
         <button onclick="loadPierreParcelamentos()" class="text-[10px] font-bold text-purple-400">Ver Todas</button>
       </div>
       <div id="pierreInstallmentsList" class="space-y-3">
-        <div class="text-center py-4 text-xs text-telegram-hint">Buscando compromissos...</div>
+        <!-- Injetado via JS com separação de expiradas -->
       </div>
     </div>
 
     <!-- AÇÕES ADICIONAIS -->
     <div class="grid grid-cols-2 gap-3">
       <button onclick="downloadPierreLivroCaixa()" class="flex items-center justify-center gap-2 p-3 rounded-2xl bg-slate-800/40 border border-slate-700 text-xs font-bold text-slate-300 hover:bg-slate-800 transition">
-        <i data-lucide="file-text" class="w-4 h-4"></i> Exportar PDF
+        <i data-lucide="file-text" class="w-4 h-4"></i> Livro Caixa (PDF)
       </button>
       <button onclick="window.Telegram.WebApp.showAlert('O Alfredo sincroniza seus bancos a cada 6 horas automaticamente.')" class="flex items-center justify-center gap-2 p-3 rounded-2xl bg-slate-800/40 border border-slate-700 text-xs font-bold text-slate-300 hover:bg-slate-800 transition">
-        <i data-lucide="refresh-cw" class="w-4 h-4"></i> Info Sincronia
+        <i data-lucide="info" class="w-4 h-4"></i> Status Sincronia
       </button>
     </div>
 
     <!-- Zona de Perigo -->
-    <div class="pt-4 border-t border-red-500/10">
-      <button id="pierreRevogarBtn" onclick="window.Telegram.WebApp.showConfirm('Tem certeza que deseja revogar o acesso do Alfredo ao seu Open Finance? Isso não pode ser desfeito.', function(ok) { if(ok) window.Telegram.WebApp.showAlert('Integração de revogação pendente.'); })" class="w-full py-3 rounded-xl border border-red-500/30 text-red-400 text-[10px] font-bold uppercase tracking-widest hover:bg-red-500/10 transition flex items-center justify-center gap-2">
-        <i data-lucide="shield-alert" class="w-3 h-3"></i> Revogar Acesso Open Finance
+    <div class="pt-4 border-t border-red-500/10 text-center">
+      <button id="pierreRevogarBtn" onclick="window.Telegram.WebApp.showConfirm('Tem certeza que deseja revogar o acesso do Alfredo ao seu Open Finance? Isso não pode ser desfeito.', function(ok) { if(ok) window.Telegram.WebApp.showAlert('Integração de revogação pendente.'); })" class="inline-flex items-center gap-2 text-red-400/60 text-[9px] font-bold uppercase tracking-widest hover:text-red-400 transition">
+        <i data-lucide="shield-alert" class="w-3 h-3"></i> Revogar Acesso Bancário
       </button>
     </div>
   </div>

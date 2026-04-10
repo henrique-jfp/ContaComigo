@@ -793,7 +793,8 @@ def dashboard():
 @app.route('/webapp', strict_slashes=False)
 def miniapp_shell():
     """Shell do miniapp Telegram"""
-    response = make_response(render_template('miniapp.html'))
+    bot_username = os.getenv("TELEGRAM_BOT_USERNAME", "ContaComigoBot")
+    response = make_response(render_template('miniapp.html', bot_username=bot_username))
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
@@ -967,11 +968,11 @@ def miniapp_pierre_dashboard():
 
         from pierre_finance.ai_tools import executar_tool_pierre
         
-        # 1. Buscar Saldo Consolidado
+        # 1. Buscar Saldo Consolidado e Lista de Contas
         balance_res = executar_tool_pierre("consultar_saldo_consolidado_real", {}, usuario.pierre_api_key)
+        accounts_res = executar_tool_pierre("consultar_saldos_bancarios_reais", {}, usuario.pierre_api_key)
         
-        # 2. Buscar Categorias Caras
-        # Padrão: Últimos 30 dias para o dashboard
+        # 2. Buscar Categorias Caras (últimos 30 dias)
         thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
         categories_res = executar_tool_pierre("consultar_maiores_gastos", {"startDate": thirty_days_ago}, usuario.pierre_api_key)
         
@@ -982,6 +983,7 @@ def miniapp_pierre_dashboard():
             "ok": True,
             "data": {
                 "balance": balance_res,
+                "accounts": accounts_res,
                 "categories": categories_res,
                 "installments": installments_res,
                 "sync_time": datetime.now().isoformat()
@@ -989,6 +991,29 @@ def miniapp_pierre_dashboard():
         })
     except Exception as e:
         logger.error(f"Erro ao carregar dashboard Pierre: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/pierre/sync', methods=['POST'])
+def miniapp_pierre_sync():
+    """Força a sincronização dos bancos via Pierre Finance"""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario or not usuario.pierre_api_key:
+            return jsonify({"ok": False, "error": "pierre_not_configured"}), 403
+
+        from pierre_finance.ai_tools import executar_tool_pierre
+        res = executar_tool_pierre("forcar_sincronizacao_bancaria", {}, usuario.pierre_api_key)
+        return jsonify({"ok": True, "data": res})
+    except Exception as e:
+        logger.error(f"Erro ao sincronizar Pierre: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
     finally:
         db.close()

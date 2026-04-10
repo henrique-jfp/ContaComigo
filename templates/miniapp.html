@@ -29,7 +29,7 @@
     root.style.setProperty('--cc-brand', accentColor);
     root.style.setProperty('--cc-brand-soft', accentSoft);
     root.classList.toggle('dark', tg?.colorScheme === 'dark');
-    window.botUsername = 'ContaComigoBot'; // Define globalmente para o MiniApp
+    window.botUsername = '{{ bot_username }}'; // Passado pelo Flask
   })();
 
   tailwind.config = {

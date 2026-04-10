@@ -153,6 +153,7 @@ lucide.createIcons();
     const pierreHealthScore = document.getElementById('pierreHealthScore');
     const pierreHealthLabel = document.getElementById('pierreHealthLabel');
     const pierreInstallmentsList = document.getElementById('pierreInstallmentsList');
+    const pierreAccountsList = document.getElementById('pierreAccountsList');
     const pierreCategoriesChartEl = document.getElementById('pierreCategoriesChart');
     const pierreCategoriesEmpty = document.getElementById('pierreCategoriesEmpty');
     let pierreChartInstance = null;
@@ -1507,23 +1508,88 @@ lucide.createIcons();
     }
 
     function renderPierreDashboard(data) {
-      // 1. Saldo e Saúde
-      // Pierre costuma retornar { "totalBalance": X, "accounts": [...] }
+      // 1. Patrimônio e Saúde
       const balance = data.balance?.totalBalance || data.balance || 0;
       pierreTotalBalance.textContent = formatCurrencyBR(balance);
       
-      // Saúde Financeira baseada no balance vs expenses (lógica simples de dashboard)
-      const score = 84; // Mock fixo de elite por enquanto
+      const score = 84; 
       pierreHealthScore.textContent = score;
       pierreHealthLabel.textContent = 'Excelente';
       pierreHealthLabel.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/10 text-green-400';
 
-      // 2. Gráfico de Categorias (Vilões)
+      // 2. Lista de Contas
+      renderPierreAccounts(data.accounts);
+
+      // 3. Gráfico de Categorias (Vilões)
       renderPierreCategories(data.categories);
 
-      // 3. Radar de Parcelas
+      // 4. Radar de Parcelas
       renderPierreInstallments(data.installments);
     }
+
+    function renderPierreAccounts(accounts) {
+      if (!pierreAccountsList) return;
+      
+      let items = accounts;
+      if (typeof accounts === 'string') {
+        try { items = JSON.parse(accounts); } catch(e) { items = []; }
+      }
+
+      if (!items || !items.length) {
+        pierreAccountsList.innerHTML = '<p class="text-xs text-telegram-hint text-center py-2">Nenhuma conta mapeada.</p>';
+        return;
+      }
+
+      pierreAccountsList.innerHTML = items.map(acc => {
+        const type = acc.type === 'CREDIT' ? 'Cartão' : 'Conta';
+        const color = acc.type === 'CREDIT' ? 'text-fuchsia-400' : 'text-blue-400';
+        return `
+          <div class="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-400">
+                <i data-lucide="${acc.type === 'CREDIT' ? 'credit-card' : 'landmark'}" class="w-5 h-5"></i>
+              </div>
+              <div class="min-w-0">
+                <p class="text-xs font-bold text-telegram-text truncate">${acc.name || 'Banco'}</p>
+                <p class="text-[10px] text-telegram-hint">${type}</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <p class="text-xs font-black text-telegram-text">${formatCurrencyBR(acc.balance || 0)}</p>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      if (window.lucide) lucide.createIcons();
+    }
+
+    async function forcePierreSync() {
+      const btn = document.getElementById('pierreSyncBtn');
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="w-3 h-3 animate-spin" data-lucide="refresh-cw"></i> Sincronizando...';
+      if (window.lucide) lucide.createIcons();
+
+      try {
+        const response = await fetchWithSession('/api/miniapp/pierre/sync', { method: 'POST' });
+        const data = await response.json();
+        if (data.ok) {
+          showToast('Bancos sincronizados!', 'success');
+          loadPierreDashboard();
+        } else {
+          showToast('Falha na sincronia', 'error');
+        }
+      } catch(e) {
+        showToast('Erro de conexão', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        if (window.lucide) lucide.createIcons();
+      }
+    }
+
+    window.forcePierreSync = forcePierreSync;
 
     function renderPierreCategories(categoriesData) {
       if (pierreChartInstance) pierreChartInstance.destroy();
@@ -1533,7 +1599,6 @@ lucide.createIcons();
       const values = [];
       
       let rawData = categoriesData;
-      // Se for string (JSON escapado), tenta parsear
       if (typeof categoriesData === 'string') {
         try { rawData = JSON.parse(categoriesData); } catch(e) {}
       }
@@ -1600,13 +1665,14 @@ lucide.createIcons();
         return;
       }
 
-      // Ordenar por data de vencimento
-      const sorted = [...purchases].sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).slice(0, 4);
+      const now = new Date();
+      // Ordenar: Primeiro as vencidas, depois as mais próximas
+      const sorted = [...purchases].sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).slice(0, 6);
 
       pierreInstallmentsList.innerHTML = sorted.map(p => {
         const dueDate = new Date(p.dueDate);
-        const isPast = dueDate < new Date();
-        const diffDays = Math.ceil((dueDate - new Date()) / (1000 * 60 * 60 * 24));
+        const isPast = dueDate < now && dueDate.toDateString() !== now.toDateString();
+        const diffDays = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
         
         let badgeClass = 'bg-blue-500/10 text-blue-400';
         let badgeText = 'Próxima';
@@ -1623,10 +1689,10 @@ lucide.createIcons();
           <div class="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5 transition active:scale-95">
             <div class="min-w-0 flex-1">
               <p class="text-xs font-bold text-telegram-text truncate">${p.description || p.name || 'Parcela'}</p>
-              <p class="text-[10px] text-telegram-hint">${p.installmentNumber}/${p.totalInstallments} • Vence ${dueDate.toLocaleDateString('pt-BR')}</p>
+              <p class="text-[10px] text-telegram-hint">${p.installmentNumber}/${p.totalInstallments} • ${dueDate.toLocaleDateString('pt-BR')}</p>
             </div>
             <div class="text-right ml-3">
-              <p class="text-xs font-black text-telegram-text">R$ ${p.amount.toFixed(2)}</p>
+              <p class="text-xs font-black text-telegram-text">${formatCurrencyBR(p.amount)}</p>
               <span class="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-md ${badgeClass}">${badgeText}</span>
             </div>
           </div>
@@ -2696,7 +2762,7 @@ lucide.createIcons();
       homeUpgradeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         if (window.Telegram?.WebApp) {
-          const botUsername = 'ContaComigoBot'; // Username oficial do bot
+          const botUsername = window.botUsername || 'ContaComigoBot';
           window.Telegram.WebApp.openTelegramLink(`https://t.me/${botUsername}?start=premium`);
           setTimeout(() => window.Telegram.WebApp.close(), 100);
         }

@@ -159,6 +159,82 @@ def configurar_jobs(job_queue):
         async def job_trial_monetizacao(context: ContextTypes.DEFAULT_TYPE):
             db = next(get_db())
             try:
+                # Alerta 72h (3 dias) - TRIAL
+                users_72h = trial_users_expiring_in(db, days=3)
+                for user in users_72h:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=user.telegram_id,
+                            parse_mode="HTML",
+                            text=(
+                                "⏳ <b>Faltam 72 horas para seu teste grátis expirar!</b>\n\n"
+                                "O Alfredo está adorando te ajudar a organizar as contas. "
+                                "Não deixe o ritmo cair! Assine o Premium para manter todos os recursos liberados."
+                            ),
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("💎 Seja Premium Agora", callback_data="plan_choose_premium_monthly")]
+                            ])
+                        )
+                    except Exception as e:
+                        logger.warning(f"Erro alerta 72h para {user.telegram_id}: {e}")
+
+                # Alerta 72h (3 dias) - PREMIUM
+                from gerente_financeiro.monetization import premium_users_expiring_in
+                premium_72h = premium_users_expiring_in(db, days=3)
+                for user in premium_72h:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=user.telegram_id,
+                            parse_mode="HTML",
+                            text=(
+                                "⏳ <b>Sua assinatura Premium expira em 72 horas!</b>\n\n"
+                                "Garante a renovação para não perder acesso aos gráficos avançados e OCR ilimitado."
+                            ),
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("💎 Renovar Premium", callback_data="plan_choose_premium_monthly")]
+                            ])
+                        )
+                    except Exception as e:
+                        logger.warning(f"Erro alerta premium 72h para {user.telegram_id}: {e}")
+
+                # Alerta 48h (2 dias) - TRIAL
+                users_48h = trial_users_expiring_in(db, days=2)
+                for user in users_48h:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=user.telegram_id,
+                            parse_mode="HTML",
+                            text=(
+                                "⏳ <b>Faltam 48 horas para seu teste grátis expirar!</b>\n\n"
+                                "Ainda dá tempo de garantir sua assinatura Premium e continuar com "
+                                "lançamentos ilimitados, OCR e a inteligência total do Alfredo."
+                            ),
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("💎 Seja Premium Agora", callback_data="plan_choose_premium_monthly")]
+                            ])
+                        )
+                    except Exception as e:
+                        logger.warning(f"Erro alerta 48h para {user.telegram_id}: {e}")
+
+                # Alerta 48h (2 dias) - PREMIUM
+                premium_48h = premium_users_expiring_in(db, days=2)
+                for user in premium_48h:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=user.telegram_id,
+                            parse_mode="HTML",
+                            text=(
+                                "⏳ <b>Sua assinatura Premium expira em 48 horas!</b>\n\n"
+                                "Não fique sem o Alfredo! Renove agora e mantenha seu dashboard completo ativo."
+                            ),
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("💎 Renovar Premium", callback_data="plan_choose_premium_monthly")]
+                            ])
+                        )
+                    except Exception as e:
+                        logger.warning(f"Erro alerta premium 48h para {user.telegram_id}: {e}")
+
+                # Alerta 24h (1 dia) - TRIAL
                 users_expiring_tomorrow = trial_users_expiring_in(db, days=1)
                 for user in users_expiring_tomorrow:
                     resumo = build_trial_usage_summary(db, user)
@@ -167,7 +243,7 @@ def configurar_jobs(job_queue):
                             chat_id=user.telegram_id,
                             parse_mode="HTML",
                             text=(
-                                "⏳ <b>Seu trial premium acaba amanhã.</b>\n\n"
+                                "⏳ <b>Faltam 24 horas para seu teste grátis expirar!</b>\n\n"
                                 "Nestes 15 dias você:\n"
                                 f"• Registrou {resumo['lancamentos']} lançamentos\n"
                                 f"• Criou {resumo['metas']} metas\n"
@@ -175,9 +251,30 @@ def configurar_jobs(job_queue):
                                 "Amanhã você escolhe: continua com tudo por R$ 12,90/mês "
                                 "ou segue no free tier. Seus dados ficam intactos."
                             ),
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("💎 Seja Premium Agora", callback_data="plan_choose_premium_monthly")]
+                            ])
                         )
                     except Exception as send_err:
                         logger.warning("Falha ao enviar aviso de trial para %s: %s", user.telegram_id, send_err)
+                
+                # Alerta 24h (1 dia) - PREMIUM
+                premium_24h = premium_users_expiring_in(db, days=1)
+                for user in premium_24h:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=user.telegram_id,
+                            parse_mode="HTML",
+                            text=(
+                                "⏳ <b>Sua assinatura Premium expira em 24 horas!</b>\n\n"
+                                "Amanhã você retornará ao plano Free. Renove hoje para manter todos os seus benefícios!"
+                            ),
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("💎 Renovar Premium", callback_data="plan_choose_premium_monthly")]
+                            ])
+                        )
+                    except Exception as e:
+                        logger.warning(f"Erro alerta premium 24h para {user.telegram_id}: {e}")
 
                 users_expired = downgrade_expired_trials_to_free(db)
                 for user in users_expired:
