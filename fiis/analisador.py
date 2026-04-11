@@ -9,22 +9,21 @@ def scoring_fii(dados_brapi: dict) -> str:
     """
     Retorna uma avaliação qualitativa baseada em critérios objetivos.
     """
+    # Plano Free pode não retornar DY em percentual direto ou pode vir nulo
     dy = (dados_brapi.get("dividendYield", 0) or 0) / 100.0 if "dividendYield" in dados_brapi else 0
+    
+    # Se não tiver bookValue, não calculamos P/VP real, usamos o que vier ou zero
     pvp = dados_brapi.get("pvp", 0) or 0
-    # Vacância pode vir em diferentes lugares dependendo do módulo da Brapi
-    vacancia = 0 # Fallback
     
-    # Tentar extrair vacância se disponível no summaryProfile ou similar
-    # (Brapi nem sempre retorna vacância de forma direta em todos os planos)
+    if dy > 0:
+        if dy >= 0.10 and (0.8 <= pvp <= 1.05 or pvp == 0):
+            return "Excelente"
+        elif dy >= 0.08:
+            return "Bom"
+        elif dy >= 0.06:
+            return "Atenção"
     
-    if dy >= 0.10 and 0.8 <= pvp <= 1.05:
-        return "Excelente"
-    elif dy >= 0.08 and pvp <= 1.15:
-        return "Bom"
-    elif dy >= 0.06 and pvp <= 1.30:
-        return "Atenção"
-    else:
-        return "Revisar"
+    return "Revisar (Dados Limitados)"
 
 def analisar_carteira(id_usuario: int, db: Session) -> dict:
     """
@@ -54,11 +53,12 @@ def analisar_carteira(id_usuario: int, db: Session) -> dict:
     for pos in posicoes:
         dados = dados_mercado.get(pos.ticker, {})
         cotacao = dados.get("regularMarketPrice", 0) or 0
+        
+        # Fallbacks para Plano Free
         dy = (dados.get("dividendYield", 0) or 0) / 100.0
         pvp = dados.get("pvp", 0) or 0
         
-        # Último rendimento
-        # Brapi: dividendsData.cashDividends[-1].rate
+        # Último rendimento (Pode vir nulo no Free)
         ultimo_rend_valor = 0.0
         div_data = dados.get("dividendsData", {})
         if div_data and div_data.get("cashDividends"):
@@ -91,9 +91,11 @@ def analisar_carteira(id_usuario: int, db: Session) -> dict:
             "avaliacao": scoring_fii(dados)
         })
         
-        # Alertas simples de análise
-        if pvp > 1.25:
-            alertas.append(f"⚠️ {pos.ticker} está com P/VP muito alto ({pvp:.2f}).")
+        if pvp > 1.30:
+            alertas.append(f"⚠️ {pos.ticker} pode estar caro (P/VP {pvp:.2f}).")
+        
+        if dy == 0:
+            alertas.append(f"ℹ️ Dados de dividendos de {pos.ticker} não disponíveis no momento.")
 
     # Calcular % segmentos
     distribuicao_segmentos = {}

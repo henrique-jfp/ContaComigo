@@ -96,6 +96,10 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session):
     date_90 = (datetime.now(timezone.utc) - timedelta(days=90)).strftime('%Y-%m-%d')
     res_txs = client.get_transactions(startDate=date_90, limit=1000, format="raw")
     
+    # Cache de categorias para evitar queries no loop
+    cat_cache = {c.nome: c.id for c in db.query(Categoria).all()}
+    subcat_cache = {(s.id_categoria, s.nome): s.id for s in db.query(Subcategoria).all()}
+
     txs_count = 0
     if isinstance(res_txs, list):
         for tx in res_txs:
@@ -106,12 +110,22 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session):
                 continue
                 
             valor_bruto = Decimal(str(tx.get("amount") or tx.get("value") or 0))
-            tipo = "Despesa" if valor_bruto < 0 else "Receita"
+            # Pierre API: Transações de cartão costumam vir positivas, mas são despesas.
+            # Se accountType for CREDIT e valor for positivo, tratamos como Despesa.
+            # Se for BANK e positivo, é Receita. Se for negativo, sempre Despesa.
+            acc_type = tx.get("accountType", "BANK")
+            if valor_bruto < 0:
+                tipo = "Despesa"
+            elif acc_type == "CREDIT":
+                tipo = "Despesa"
+            else:
+                tipo = "Receita"
+                
             valor = abs(valor_bruto)
             descricao = tx.get("description") or tx.get("name") or "Transação Open Finance"
             
-            # Categorização Inteligente Local
-            cat_id, subcat_id = categorizar_transacao(descricao, tipo, db)
+            # Categorização Inteligente Local com Cache
+            cat_id, subcat_id = categorizar_transacao(descricao, tipo, db, cat_cache, subcat_cache)
             
             # Normalização de Pagamento
             fp = _normalizar_forma_pagamento(descricao, tx.get("accountType"))
@@ -209,6 +223,11 @@ async def sincronizar_incremental(usuario: Usuario, db: Session):
 
     # 1. Transações Novas
     res_txs = client.get_transactions(startDate=start_date, limit=100, format="raw")
+    
+    # Cache de categorias
+    cat_cache = {c.nome: c.id for c in db.query(Categoria).all()}
+    subcat_cache = {(s.id_categoria, s.nome): s.id for s in db.query(Subcategoria).all()}
+    
     novos = 0
     if isinstance(res_txs, list):
         for tx in res_txs:
@@ -217,8 +236,15 @@ async def sincronizar_incremental(usuario: Usuario, db: Session):
                 continue
                 
             valor_bruto = Decimal(str(tx.get("amount") or 0))
-            tipo = "Despesa" if valor_bruto < 0 else "Receita"
-            cat_id, subcat_id = categorizar_transacao(tx.get("description", ""), tipo, db)
+            acc_type = tx.get("accountType", "BANK")
+            if valor_bruto < 0:
+                tipo = "Despesa"
+            elif acc_type == "CREDIT":
+                tipo = "Despesa"
+            else:
+                tipo = "Receita"
+                
+            cat_id, subcat_id = categorizar_transacao(tx.get("description", ""), tipo, db, cat_cache, subcat_cache)
             
             db.add(Lancamento(
                 id_usuario=usuario.id, id_conta=accounts_map.get(str(tx.get("accountId"))),

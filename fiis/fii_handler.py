@@ -98,13 +98,16 @@ async def cmd_recomendar_fii_handler(update: Update, context: ContextTypes.DEFAU
 
 async def cmd_analisar_fii_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, ticker: str):
     """Analisa um FII específico via IA."""
+    logger.info(f"📊 [FII] Iniciando análise para ticker: {ticker}")
     client = BrapiClient()
     dados = client.get_fii(ticker)
     
     if not dados:
+        logger.warning(f"⚠️ [FII] Ticker {ticker} não encontrado na Brapi.")
         await update.message.reply_text(f"Não encontrei dados para o ticker {ticker}. Verifique se ele está correto.")
         return
 
+    logger.info(f"✅ [FII] Dados obtidos da Brapi para {ticker}. Chamando IA...")
     # Usar Alfredo para gerar análise
     from gerente_financeiro.ia_handlers import _smart_ai_completion_async
     

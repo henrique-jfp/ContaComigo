@@ -82,7 +82,7 @@ MAPA_CATEGORIAS = {
     }
 }
 
-def categorizar_transacao(descricao: str, tipo: str, db: Session) -> tuple[int|None, int|None]:
+def categorizar_transacao(descricao: str, tipo: str, db: Session, cat_cache: dict = None, subcat_cache: dict = None) -> tuple[int|None, int|None]:
     desc_norm = remove_accents(descricao)
     
     cat_nome = None
@@ -110,24 +110,39 @@ def categorizar_transacao(descricao: str, tipo: str, db: Session) -> tuple[int|N
             cat_nome = "Outros"
             subcat_nome = "Geral"
 
-    # CAMADA 3: Persistência no Banco
+    # CAMADA 3: Persistência no Banco com Cache
     try:
-        categoria_db = db.query(Categoria).filter(Categoria.nome == cat_nome).first()
-        if not categoria_db:
-            categoria_db = Categoria(nome=cat_nome)
-            db.add(categoria_db)
-            db.flush()
+        # Busca Categoria
+        if cat_cache is not None and cat_nome in cat_cache:
+            cat_id = cat_cache[cat_nome]
+        else:
+            categoria_db = db.query(Categoria).filter(Categoria.nome == cat_nome).first()
+            if not categoria_db:
+                categoria_db = Categoria(nome=cat_nome)
+                db.add(categoria_db)
+                db.flush()
+            cat_id = categoria_db.id
+            if cat_cache is not None:
+                cat_cache[cat_nome] = cat_id
 
-        subcat_db = db.query(Subcategoria).filter(
-            Subcategoria.nome == subcat_nome,
-            Subcategoria.id_categoria == categoria_db.id
-        ).first()
-        if not subcat_db:
-            subcat_db = Subcategoria(nome=subcat_nome, id_categoria=categoria_db.id)
-            db.add(subcat_db)
-            db.flush()
+        # Busca Subcategoria
+        sub_key = (cat_id, subcat_nome)
+        if subcat_cache is not None and sub_key in subcat_cache:
+            subcat_id = subcat_cache[sub_key]
+        else:
+            subcat_db = db.query(Subcategoria).filter(
+                Subcategoria.nome == subcat_nome,
+                Subcategoria.id_categoria == cat_id
+            ).first()
+            if not subcat_db:
+                subcat_db = Subcategoria(nome=subcat_nome, id_categoria=cat_id)
+                db.add(subcat_db)
+                db.flush()
+            subcat_id = subcat_db.id
+            if subcat_cache is not None:
+                subcat_cache[sub_key] = subcat_id
 
-        return categoria_db.id, subcat_db.id
+        return cat_id, subcat_id
     except Exception as e:
         logger.error(f"Erro ao persistir categoria/subcat: {e}")
         return None, None

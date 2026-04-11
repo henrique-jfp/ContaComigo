@@ -63,9 +63,9 @@ class BrapiClient:
             return cached
 
         try:
+            # Ajustado para o Plano Free (apenas summaryProfile e fundamental=true)
             params = {
-                "modules": "financials,summaryProfile,defaultKeyStatistics",
-                "dividends": "true",
+                "modules": "summaryProfile",
                 "fundamental": "true"
             }
             url = f"{self.BASE_URL}/quote/{ticker}"
@@ -122,9 +122,9 @@ class BrapiClient:
         try:
             # Brapi aceita múltiplos tickers separados por vírgula
             tickers_str = ",".join(tickers_to_fetch)
+            # Ajustado para o Plano Free
             params = {
-                "modules": "financials,summaryProfile",
-                "dividends": "true",
+                "modules": "summaryProfile",
                 "fundamental": "true"
             }
             url = f"{self.BASE_URL}/quote/{tickers_str}"
