@@ -1520,6 +1520,57 @@ def miniapp_modo_deus():
         # --- SEÇÃO 9: ALERTAS ---
         try:
             alertas = []
+            
+            # --- CÁLCULO PROATIVO DE JUROS E ENCARGOS ---
+            # Se a flag de notif_alertas_risco estiver ativada, geramos o alerta
+            if getattr(usuario, 'notif_alertas_risco', True):
+                keywords_juros = ['juros', 'encargos', 'multa', 'iof', 'rotativo']
+                regex_juros = '|'.join(keywords_juros)
+                
+                # Gastos com juros no mês atual
+                juros_atual = db.query(func.sum(Lancamento.valor)).filter(
+                    Lancamento.id_usuario == user_id,
+                    Lancamento.tipo.in_(['Saída', 'Despesa']),
+                    func.lower(Lancamento.descricao).op('~')(regex_juros),
+                    Lancamento.data_transacao >= datetime.combine(start_month, time.min),
+                    Lancamento.data_transacao <= datetime.combine(end_month, time.max)
+                ).scalar() or 0
+                
+                # Gastos com juros no mês passado
+                last_month_start = (start_month - timedelta(days=1)).replace(day=1)
+                last_month_end = start_month - timedelta(days=1)
+                
+                juros_passado = db.query(func.sum(Lancamento.valor)).filter(
+                    Lancamento.id_usuario == user_id,
+                    Lancamento.tipo.in_(['Saída', 'Despesa']),
+                    func.lower(Lancamento.descricao).op('~')(regex_juros),
+                    Lancamento.data_transacao >= datetime.combine(last_month_start, time.min),
+                    Lancamento.data_transacao <= datetime.combine(last_month_end, time.max)
+                ).scalar() or 0
+                
+                juros_atual = abs(float(juros_atual))
+                juros_passado = abs(float(juros_passado))
+                
+                if juros_atual > 0:
+                    alerta_texto = f"Você pagou R$ {juros_atual:.2f} de juros/multas neste mês"
+                    if juros_passado > 0:
+                        dif = juros_atual - juros_passado
+                        if dif > 0:
+                            alerta_texto += f" (R$ {dif:.2f} a mais que o mês passado)."
+                        elif dif < 0:
+                            alerta_texto += f" (R$ {abs(dif):.2f} a menos que o mês passado)."
+                        else:
+                            alerta_texto += " (o mesmo valor do mês passado)."
+                    else:
+                        alerta_texto += "."
+                        
+                    alertas.append({
+                        "tipo": "critico", 
+                        "titulo": "🚨 Gastos com Juros Detectados", 
+                        "detalhe": alerta_texto, 
+                        "data": datetime.now().isoformat()
+                    })
+
             for o in result.get('orcamentos', []):
                 if o['status'] == 'estourado': alertas.append({"tipo": "critico", "titulo": f"Limite de {o['categoria']} estourado", "detalhe": f"Gasto {o['percentual_usado']:.0f}% do limite.", "data": datetime.now().isoformat()})
             for c in result.get('cartoes', []):
@@ -1959,7 +2010,7 @@ def miniapp_lancamento_update(lancamento_id: int):
 
 @app.route('/api/miniapp/configuracoes', methods=['GET', 'PUT'])
 def miniapp_configuracoes():
-    """Lê e atualiza dados de onboarding do MiniApp."""
+    """Lê e atualiza dados de onboarding e notificações do MiniApp."""
     session = _require_session()
     if not session:
         return jsonify({"ok": False, "error": "unauthorized"}), 401
@@ -1978,6 +2029,11 @@ def miniapp_configuracoes():
                     "perfil_investidor": usuario.perfil_investidor,
                     "horario_notificacao": usuario.horario_notificacao.strftime('%H:%M') if usuario.horario_notificacao else "09:00",
                     "alerta_gastos_ativo": bool(usuario.alerta_gastos_ativo),
+                    # Novas flags de notificações
+                    "notif_lembretes": bool(getattr(usuario, 'notif_lembretes', True)),
+                    "notif_alertas_risco": bool(getattr(usuario, 'notif_alertas_risco', True)),
+                    "notif_insights": bool(getattr(usuario, 'notif_insights', True)),
+                    "notif_gamificacao": bool(getattr(usuario, 'notif_gamificacao', True)),
                 },
             })
 
@@ -1993,6 +2049,16 @@ def miniapp_configuracoes():
                     return jsonify({"ok": False, "error": "invalid_time"}), 400
         if "alerta_gastos_ativo" in payload:
             usuario.alerta_gastos_ativo = bool(payload.get("alerta_gastos_ativo"))
+
+        # Atualiza novas flags
+        if "notif_lembretes" in payload:
+            usuario.notif_lembretes = bool(payload.get("notif_lembretes"))
+        if "notif_alertas_risco" in payload:
+            usuario.notif_alertas_risco = bool(payload.get("notif_alertas_risco"))
+        if "notif_insights" in payload:
+            usuario.notif_insights = bool(payload.get("notif_insights"))
+        if "notif_gamificacao" in payload:
+            usuario.notif_gamificacao = bool(payload.get("notif_gamificacao"))
 
         db.commit()
         return jsonify({"ok": True})

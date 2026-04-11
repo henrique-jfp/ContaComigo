@@ -1,0 +1,65 @@
+<div class="modal-overlay hidden" id="notificacoesModal">
+    <div class="modal-content !max-h-[85vh] !overflow-y-auto">
+      <div class="modal-header sticky top-0 bg-telegram-card z-10 pb-4 border-b border-brand/10 mb-4">
+        <h2 class="text-lg font-bold text-telegram-text flex items-center gap-2">
+          <i data-lucide="bell" class="w-5 h-5 text-brand"></i> Avisos do Alfredo
+        </h2>
+        <button class="modal-close-btn" onclick="document.getElementById('notificacoesModal').classList.add('hidden')"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+      <div class="modal-body space-y-5">
+        <p class="text-xs text-telegram-hint leading-relaxed">Você está no controle! Escolha o nível de proatividade do Alfredo. Se desativar os alertas, ele deixará de te mandar mensagens na aba principal.</p>
+        
+        <div class="space-y-3">
+          <!-- Toggle 1 -->
+          <div class="glass-card rounded-2xl p-4 flex items-center justify-between border border-brand/5 hover:border-brand/20 transition">
+            <div class="pr-3">
+              <p class="text-sm font-bold text-telegram-text">Vencimentos e Faturas</p>
+              <p class="text-[10px] text-telegram-hint mt-0.5 leading-tight">Lembretes proativos de contas e faturas de cartão prestes a vencer.</p>
+            </div>
+            <label class="relative inline-flex cursor-pointer items-center">
+              <input type="checkbox" id="toggle_notif_lembretes" class="peer sr-only" onchange="saveNotificationPreferences()">
+              <div class="peer h-6 w-11 rounded-full bg-black/20 after:absolute after:start-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-brand peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+            </label>
+          </div>
+          
+          <!-- Toggle 2 -->
+          <div class="glass-card rounded-2xl p-4 flex items-center justify-between border border-brand/5 hover:border-brand/20 transition">
+            <div class="pr-3">
+              <p class="text-sm font-bold text-telegram-text">Alertas de Risco</p>
+              <p class="text-[10px] text-telegram-hint mt-0.5 leading-tight">Avisos urgentes de orçamento estourado, juros do cartão e saldo no vermelho.</p>
+            </div>
+            <label class="relative inline-flex cursor-pointer items-center">
+              <input type="checkbox" id="toggle_notif_alertas_risco" class="peer sr-only" onchange="saveNotificationPreferences()">
+              <div class="peer h-6 w-11 rounded-full bg-black/20 after:absolute after:start-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-brand peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+            </label>
+          </div>
+          
+          <!-- Toggle 3 -->
+          <div class="glass-card rounded-2xl p-4 flex items-center justify-between border border-brand/5 hover:border-brand/20 transition">
+            <div class="pr-3">
+              <p class="text-sm font-bold text-telegram-text">Resumos e Insights</p>
+              <p class="text-[10px] text-telegram-hint mt-0.5 leading-tight">Análise inteligente da sua semana, mês e visão do Modo Deus.</p>
+            </div>
+            <label class="relative inline-flex cursor-pointer items-center">
+              <input type="checkbox" id="toggle_notif_insights" class="peer sr-only" onchange="saveNotificationPreferences()">
+              <div class="peer h-6 w-11 rounded-full bg-black/20 after:absolute after:start-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-brand peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+            </label>
+          </div>
+          
+          <!-- Toggle 4 -->
+          <div class="glass-card rounded-2xl p-4 flex items-center justify-between border border-brand/5 hover:border-brand/20 transition">
+            <div class="pr-3">
+              <p class="text-sm font-bold text-telegram-text">Gamificação (XP e Nível)</p>
+              <p class="text-[10px] text-telegram-hint mt-0.5 leading-tight">Avisos e comemorações a cada missão completada e nível atingido.</p>
+            </div>
+            <label class="relative inline-flex cursor-pointer items-center">
+              <input type="checkbox" id="toggle_notif_gamificacao" class="peer sr-only" onchange="saveNotificationPreferences()">
+              <div class="peer h-6 w-11 rounded-full bg-black/20 after:absolute after:start-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-brand peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+            </label>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>

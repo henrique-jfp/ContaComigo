@@ -69,11 +69,11 @@
               <i data-lucide="target" class="w-4 h-4 text-brand"></i>
             </div>
           </button>
-          <button onclick="window.Telegram.WebApp.showAlert('Configurações avançadas em breve!')" class="glass-card rounded-2xl p-4 text-left border border-brand/10 hover:border-brand/30 transition group">
+          <button onclick="document.getElementById('notificacoesModal').classList.remove('hidden')" class="glass-card rounded-2xl p-4 text-left border border-brand/10 hover:border-brand/30 transition group">
             <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-telegram-hint group-hover:text-brand transition">Preferências</p>
             <div class="flex items-center justify-between mt-2">
-              <span class="text-sm font-bold text-telegram-text">Ajustes App</span>
-              <i data-lucide="settings" class="w-4 h-4 text-brand"></i>
+              <span class="text-sm font-bold text-telegram-text">Notificações</span>
+              <i data-lucide="bell" class="w-4 h-4 text-brand"></i>
             </div>
           </button>
         </div>

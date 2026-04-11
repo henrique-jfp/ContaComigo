@@ -2134,8 +2134,51 @@ lucide.createIcons();
         if (perfilInvestidor) perfilInvestidor.value = data.usuario?.perfil_investidor || '';
         if (horarioNotificacao) horarioNotificacao.value = data.usuario?.horario_notificacao || '09:00';
         if (alertaGastosAtivoToggle) alertaGastosAtivoToggle.checked = Boolean(data.usuario?.alerta_gastos_ativo);
+        
+        // Notificações do Alfredo
+        const tgLembretes = document.getElementById('toggle_notif_lembretes');
+        if (tgLembretes) tgLembretes.checked = Boolean(data.usuario?.notif_lembretes ?? true);
+        
+        const tgRisco = document.getElementById('toggle_notif_alertas_risco');
+        if (tgRisco) tgRisco.checked = Boolean(data.usuario?.notif_alertas_risco ?? true);
+        
+        const tgInsights = document.getElementById('toggle_notif_insights');
+        if (tgInsights) tgInsights.checked = Boolean(data.usuario?.notif_insights ?? true);
+        
+        const tgGamificacao = document.getElementById('toggle_notif_gamificacao');
+        if (tgGamificacao) tgGamificacao.checked = Boolean(data.usuario?.notif_gamificacao ?? true);
+
       } catch (e) {}
     }
+
+    // Expor função para salvar configurações de notificação ao trocar o toggle
+    window.saveNotificationPreferences = async function() {
+      const sessionId = localStorage.getItem('contacomigo_session_id') || window.Telegram?.WebApp?.initData;
+      if (!sessionId) return;
+      
+      const payload = {
+        notif_lembretes: document.getElementById('toggle_notif_lembretes')?.checked ?? true,
+        notif_alertas_risco: document.getElementById('toggle_notif_alertas_risco')?.checked ?? true,
+        notif_insights: document.getElementById('toggle_notif_insights')?.checked ?? true,
+        notif_gamificacao: document.getElementById('toggle_notif_gamificacao')?.checked ?? true,
+      };
+
+      try {
+        const response = await fetch('/api/miniapp/configuracoes', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (data.ok) {
+          showToast('Preferências salvas!', 'success');
+        } else {
+          showToast('Erro ao salvar preferências.', 'error');
+        }
+      } catch (e) {
+        showToast('Erro de conexão.', 'error');
+      }
+    };
 
     async function saveConfiguracoes() {
       if (!sessionId || !perfilInvestidor || !horarioNotificacao) return;

@@ -35,6 +35,12 @@ class Usuario(Base):
     premium_expires_at = Column(DateTime, nullable=True)
     subscription_id = Column(String(100), nullable=True)
     
+    # --- PREFERÊNCIAS DE NOTIFICAÇÕES ---
+    notif_lembretes = Column(Boolean, default=True, nullable=False)
+    notif_alertas_risco = Column(Boolean, default=True, nullable=False)
+    notif_insights = Column(Boolean, default=True, nullable=False)
+    notif_gamificacao = Column(Boolean, default=True, nullable=False)
+    
     lancamentos = relationship("Lancamento", back_populates="usuario", cascade="all, delete-orphan")
     contas = relationship("Conta", back_populates="usuario", cascade="all, delete-orphan")
     objetivos = relationship("Objetivo", back_populates="usuario", cascade="all, delete-orphan")
