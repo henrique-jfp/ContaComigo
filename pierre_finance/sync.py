@@ -63,29 +63,25 @@ def _normalizar_forma_pagamento(descricao: str, account_type: str) -> str:
 # Lógica de tipo (Receita / Despesa) — coração do sync
 # ---------------------------------------------------------------------------
 
-# Palavras que indicam RECEITA mesmo em conta corrente
-_SINAIS_RECEITA = {
+# Palavras que indicam RECEITA independentemente do sinal ou conta
+_SINAIS_RECEITA_FORTE = {
     "salario", "salário", "pagamento salario", "pagamento salário",
     "pix recebido", "ted recebida", "ted recebido", "doc recebido",
-    "transferencia recebida", "deposito recebido",
+    "transferencia recebida", "deposito recebido", "transf.recebida",
     "reembolso", "estorno", "devolucao", "devolução",
-    "rendimento", "rendimentos", "juros recebidos",
-    "dividendo", "dividendos", "jcp",
-    "bolsa", "beneficio", "benefício", "auxilio", "auxílio",
-    "fgts", "seguro desemprego", "inss recebido",
-    "venda ", "mercado livre", "mercadolivre", "olx", "enjoei",
+    "rendimento", "rendimentos", "juros recebidos", "pro-labore",
+    "dividendo", "dividendos", "jcp", "venda", "resgate",
 }
 
-# Palavras que indicam DESPESA mesmo com valor positivo (ex: crédito liberado)
-_SINAIS_DESPESA_FORCADOS = {
+# Palavras que indicam DESPESA independentemente do sinal ou conta
+_SINAIS_DESPESA_FORTE = {
     "debito automatico", "débito automático",
     "debito em conta", "débito em conta",
     "pagamento fatura", "pagto fatura", "pgt fatura",
-    "compra credito", "compra debito",
+    "compra credito", "compra debito", "pix enviado",
+    "transferencia enviada", "transf.enviada", "iof", "tarifa",
 }
 
-# Para cartão de crédito: transações com valor NEGATIVO geralmente são créditos/estornos
-# e com valor POSITIVO são compras (despesas)
 def _inferir_tipo(
     descricao: str,
     valor_bruto: Decimal,
@@ -93,27 +89,30 @@ def _inferir_tipo(
 ) -> str:
     desc_norm = (descricao or "").lower()
 
-    # 🛡️ PRIORIDADE MÁXIMA: Sinais claros de ganho
-    ganhos = ["recebido", "salario", "salário", "reembolso", "estorno", "rendimento", "dividendo", "recebimento"]
-    if any(g in desc_norm for g in ganhos):
-        return "Receita"
-
-    # Verifica sinais de despesa forçada
-    for sinal in _SINAIS_DESPESA_FORCADOS:
+    # 🛡️ PRIORIDADE 1: Sinais textuais explícitos (overrides)
+    for sinal in _SINAIS_RECEITA_FORTE:
+        if sinal in desc_norm:
+            return "Receita"
+            
+    for sinal in _SINAIS_DESPESA_FORTE:
         if sinal in desc_norm:
             return "Despesa"
 
+    # 🛡️ PRIORIDADE 2: Lógica por tipo de conta e sinal numérico
     if account_type == "CREDIT":
-        # No cartão: positivo = compra (despesa), negativo = estorno (receita)
+        # No cartão de crédito (Pierre/Pluggy): 
+        # Geralmente valor POSITIVO é COMPRA (Despesa)
+        # Valor NEGATIVO é ESTORNO/PAGAMENTO (Receita)
         if valor_bruto < 0:
             return "Receita"
         return "Despesa"
 
-    # Conta corrente / pagamento:
+    # Conta corrente / pagamento / investimento:
+    # Valor NEGATIVO é SAÍDA (Despesa)
+    # Valor POSITIVO é ENTRADA (Receita)
     if valor_bruto < 0:
         return "Despesa"
 
-    # Valor positivo em conta corrente
     return "Receita"
 
 
@@ -122,95 +121,56 @@ def _inferir_tipo(
 # ---------------------------------------------------------------------------
 
 def _extrair_lista_de_resposta(res) -> list:
-    """
-    A API Pierre pode retornar dados em vários formatos:
-    - Uma lista direta
-    - Um dict com chave 'data' sendo lista
-    - Um dict com chave 'data' sendo dict (objeto único)
-    Retorna sempre uma lista.
-    """
-    if res is None:
-        return []
-    if isinstance(res, list):
-        return res
+    if res is None: return []
+    if isinstance(res, list): return res
     if isinstance(res, dict):
-        if "error" in res:
-            logger.warning(f"[PIERRE SYNC] Resposta de erro: {res.get('error')}")
-            return []
-        data = res.get("data") or res.get("purchases") or res.get("bills")
-        if isinstance(data, list):
-            return data
-        if isinstance(data, dict):
-            return [data]
-        # Pode ser o próprio objeto
-        if "accountId" in res or "id" in res:
+        # Tenta extrair de chaves comuns de listas
+        for key in ["data", "purchases", "bills", "accounts", "transactions"]:
+            data = res.get(key)
+            if isinstance(data, list): return data
+            if isinstance(data, dict): return [data]
+        # Se tem chaves de objeto único, retorna como lista de 1
+        if any(k in res for k in ["accountId", "id", "transactionId"]):
             return [res]
     return []
 
 
 def _extrair_sumarios_fatura(res) -> list:
-    """
-    Parser específico para get-bill-summary que tem um formato único.
-    Retorna lista de summaries normalizados.
-    """
-    if res is None:
-        return []
-
-    summaries = []
-
-    if isinstance(res, list):
-        summaries = res
-    elif isinstance(res, dict):
-        if "error" in res:
-            logger.warning(f"[PIERRE SYNC] Erro em get-bill-summary: {res}")
-            return []
-
-        data = res.get("data")
-        if isinstance(data, list):
-            summaries = data
-        elif isinstance(data, dict):
-            summaries = [data]
-        # Formato legado onde o próprio dict é o summary
-        elif "accountId" in res:
-            summaries = [res]
-        elif "billAmount" in res:
-            summaries = [res]
-
-    logger.info(f"[PIERRE SYNC] Summaries de fatura encontrados: {len(summaries)}")
-    return summaries
+    """Extrai sumários de fatura com múltiplos fallbacks de schema."""
+    if not res: return []
+    
+    # Se vier em 'data', usa o conteúdo de 'data'
+    if isinstance(res, dict) and "data" in res:
+        res = res["data"]
+        
+    if isinstance(res, list): return res
+    
+    if isinstance(res, dict):
+        # Formato { "bills": [...] }
+        if "bills" in res and isinstance(res["bills"], list):
+            return res["bills"]
+        # Formato objeto único
+        if "billAmount" in res or "accountId" in res:
+            return [res]
+            
+    return []
 
 
 def _extrair_parcelamentos(res) -> list:
-    """
-    Parser específico para get-installments.
-    O endpoint retorna { data: { purchases: [...], stats: {...} } } ou similar.
-    """
-    if res is None:
-        return []
-
-    if isinstance(res, list):
-        return res
-
+    """Extrai parcelas garantindo que pegamos a lista de 'purchases'."""
+    if not res: return []
+    
+    # O Pierre costuma retornar { "data": { "purchases": [...] } }
     if isinstance(res, dict):
-        if "error" in res:
-            logger.warning(f"[PIERRE SYNC] Erro em get-installments: {res}")
-            return []
-
-        # Formato real: { purchases: [...] }
-        purchases = res.get("purchases")
-        if isinstance(purchases, list):
-            return purchases
-
-        # Formato: { data: { purchases: [...] } }
-        data = res.get("data")
+        data = res.get("data", res)
         if isinstance(data, dict):
-            purchases = data.get("purchases")
+            purchases = data.get("purchases", data.get("installments"))
             if isinstance(purchases, list):
                 return purchases
         elif isinstance(data, list):
             return data
-
-    logger.warning(f"[PIERRE SYNC] Não foi possível extrair parcelamentos. Tipo: {type(res)}")
+            
+    if isinstance(res, list): return res
     return []
 
 
@@ -219,344 +179,163 @@ def _extrair_parcelamentos(res) -> list:
 # ---------------------------------------------------------------------------
 
 async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
-    logger.info("🚀 [PIERRE SYNC] Iniciando carga inicial Open Finance")
+    logger.info(f"🚀 [PIERRE SYNC] Iniciando carga inicial para {usuario.telegram_id}")
 
     if not usuario.pierre_api_key:
         return {"error": "Sem chave API configurada"}
 
     client = PierreClient(usuario.pierre_api_key)
 
-    # Força atualização dos dados nos bancos antes de buscar
-    logger.info("[PIERRE SYNC] Solicitando atualização nos bancos...")
-    client.manual_update()
-    await asyncio.sleep(3)  # Aguarda propagação
-
     # ------------------------------------------------------------------
-    # ETAPA 1: Upsert de Contas
+    # ETAPA 1: Upsert de Contas e Saldos
     # ------------------------------------------------------------------
-    logger.info("[PIERRE SYNC] Buscando contas...")
     res_accounts = client.get_accounts()
     accounts_raw = _extrair_lista_de_resposta(res_accounts)
-    logger.info(f"[PIERRE SYNC] {len(accounts_raw)} conta(s) encontrada(s)")
-
-    accounts_map: dict[str, int] = {}  # external_id → conta.id local
-    contas_count = 0
-
+    
+    accounts_map: dict[str, int] = {} 
     for acc in accounts_raw:
         ext_id = str(acc.get("id") or acc.get("accountId") or "")
-        if not ext_id:
-            continue
+        if not ext_id: continue
 
+        conta = db.query(Conta).filter(Conta.external_id == ext_id, Conta.id_usuario == usuario.id).first()
+        if not conta:
+            conta = Conta(id_usuario=usuario.id, external_id=ext_id)
+            db.add(conta)
+        
+        conta.nome = acc.get("name") or acc.get("displayName") or "Conta Bancária"
         p_type = acc.get("type", "BANK")
-        tipo_local = {
+        conta.tipo = {
             "CREDIT": "Cartão de Crédito",
             "INVESTMENT": "Investimento",
             "LOAN": "Empréstimo",
         }.get(p_type, "Conta Corrente")
 
-        conta = (
-            db.query(Conta)
-            .filter(Conta.external_id == ext_id, Conta.id_usuario == usuario.id)
-            .first()
-        )
-        if not conta:
-            conta = Conta(id_usuario=usuario.id, external_id=ext_id)
-            db.add(conta)
-            contas_count += 1
-
-        conta.nome = acc.get("name") or acc.get("displayName") or "Conta Open Finance"
-        conta.tipo = tipo_local
-
-        # Dados de cartão de crédito
         cc = acc.get("creditCard") or {}
         if cc:
-            if cc.get("limit") is not None:
-                conta.limite_cartao = _safe_decimal(cc["limit"])
-            if cc.get("closingDay") is not None:
-                conta.dia_fechamento = int(cc["closingDay"])
-            if cc.get("dueDay") is not None:
-                conta.dia_vencimento = int(cc["dueDay"])
+            conta.limite_cartao = _safe_decimal(cc.get("limit"))
+            conta.dia_fechamento = int(cc.get("closingDay") or 0) or conta.dia_fechamento
+            conta.dia_vencimento = int(cc.get("dueDay") or 0) or conta.dia_vencimento
 
         db.flush()
         accounts_map[ext_id] = conta.id
 
-    logger.info(f"[PIERRE SYNC] Contas processadas: {contas_count} novas, {len(accounts_map)} total")
+        # Salva Saldo Atual
+        saldo_total = _safe_decimal(acc.get("balance"))
+        saldo_disp = _safe_decimal(acc.get("availableBalance") or acc.get("balance"))
+        
+        db.add(SaldoConta(
+            id_usuario=usuario.id,
+            id_conta=conta.id,
+            saldo=saldo_total,
+            saldo_disponivel=saldo_disp,
+            capturado_em=datetime.now(timezone.utc)
+        ))
 
     # ------------------------------------------------------------------
     # ETAPA 2: Transações (últimos 90 dias)
     # ------------------------------------------------------------------
     date_90 = (datetime.now(timezone.utc) - timedelta(days=90)).strftime('%Y-%m-%d')
-    logger.info(f"[PIERRE SYNC] Buscando transações desde {date_90}...")
-
     res_txs = client.get_transactions(startDate=date_90, limit=1000, format="raw")
     txs_raw = _extrair_lista_de_resposta(res_txs)
-    logger.info(f"[PIERRE SYNC] {len(txs_raw)} transação(ões) brutas recebidas")
 
-    # Pré-carrega caches de categoria/subcategoria
-    cat_cache: dict[str, int] = {c.nome: c.id for c in db.query(Categoria).all()}
-    subcat_cache: dict[tuple, int] = {
-        (s.id_categoria, s.nome): s.id for s in db.query(Subcategoria).all()
-    }
+    cat_cache = {c.nome: c.id for c in db.query(Categoria).all()}
+    subcat_cache = {(s.id_categoria, s.nome): s.id for s in db.query(Subcategoria).all()}
 
     txs_count = 0
-    txs_skip = 0
-
     for tx in txs_raw:
         ext_id = str(tx.get("id") or tx.get("transactionId") or "")
-        if not ext_id:
-            txs_skip += 1
+        if not ext_id or db.query(Lancamento).filter(Lancamento.external_id == ext_id).first():
             continue
 
-        # Evita duplicatas
-        if db.query(Lancamento).filter(Lancamento.external_id == ext_id).first():
-            txs_skip += 1
-            continue
-
-        valor_bruto = _safe_decimal(tx.get("amount") or tx.get("value") or 0)
+        valor_bruto = _safe_decimal(tx.get("amount") or tx.get("value"))
         acc_type = tx.get("accountType") or tx.get("type") or "BANK"
-        descricao = (
-            tx.get("description")
-            or tx.get("name")
-            or tx.get("memo")
-            or "Transação"
-        ).strip()
+        descricao = (tx.get("description") or tx.get("name") or "Transação").strip()
 
-        # Inferir tipo com a lógica robusta
         tipo = _inferir_tipo(descricao, valor_bruto, acc_type)
-
-        # Categorizar
-        cat_id, subcat_id = categorizar_transacao(
-            descricao, tipo, db, cat_cache, subcat_cache
-        )
-
-        # Data da transação
-        data_tx = (
-            _parse_iso_date(tx.get("date"))
-            or _parse_iso_date(tx.get("createdAt"))
-            or _parse_iso_date(tx.get("transactionDate"))
-            or datetime.now(timezone.utc)
-        )
-
-        # Conta associada
-        acc_id_tx = str(tx.get("accountId") or "")
-        conta_id = accounts_map.get(acc_id_tx)
+        cat_id, subcat_id = categorizar_transacao(descricao, tipo, db, cat_cache, subcat_cache)
 
         db.add(Lancamento(
             id_usuario=usuario.id,
-            id_conta=conta_id,
+            id_conta=accounts_map.get(str(tx.get("accountId"))),
             external_id=ext_id,
             descricao=descricao,
             valor=abs(valor_bruto),
             tipo=tipo,
-            data_transacao=data_tx,
+            data_transacao=_parse_iso_date(tx.get("date")) or datetime.now(timezone.utc),
             origem="open_finance",
             forma_pagamento=_normalizar_forma_pagamento(descricao, acc_type),
             id_categoria=cat_id,
             id_subcategoria=subcat_id,
         ))
         txs_count += 1
-
-        # Flush a cada 100 para não acumular memória
-        if txs_count % 100 == 0:
-            db.flush()
-            logger.info(f"[PIERRE SYNC] {txs_count} transações processadas...")
-
-    logger.info(f"[PIERRE SYNC] Transações: {txs_count} importadas, {txs_skip} ignoradas")
+        if txs_count % 100 == 0: db.flush()
 
     # ------------------------------------------------------------------
-    # ETAPA 3: Fatura Atual (bill-summary)
+    # ETAPA 3: Faturas Atuais e Próximas
     # ------------------------------------------------------------------
-    logger.info("[PIERRE SYNC] Buscando sumário de faturas...")
     res_summary = client.get_bill_summary()
-    logger.error(f"🔍 [DEBUG FATURA] Resposta bruta: {str(res_summary)[:500]}")
     summaries = _extrair_sumarios_fatura(res_summary)
 
-    faturas_count = 0
-    for summary in summaries:
-        acc_id = str(summary.get("accountId") or summary.get("account_id") or "")
+    for s in summaries:
+        acc_id = str(s.get("accountId") or s.get("account_id") or "")
         conta_id = accounts_map.get(acc_id)
+        if not conta_id: continue
 
-        if not conta_id:
-            logger.warning(f"[PIERRE SYNC] Fatura sem conta mapeada. accountId={acc_id}")
-            continue
-
-        # Cria ID único por conta + mês para upsert seguro
-        agora = datetime.now()
-        fake_ext_id = f"fatura_aberta_{acc_id}_{agora.year}_{agora.month:02d}"
+        # Identificador por mês/ano para não duplicar fatura do mesmo período
+        dv = _parse_iso_date(s.get("dueDate") or s.get("due_date"))
+        ref_date = dv or datetime.now()
+        fake_ext_id = f"bill_{acc_id}_{ref_date.year}_{ref_date.month}"
 
         fatura = db.query(FaturaCartao).filter(FaturaCartao.external_id == fake_ext_id).first()
         if not fatura:
-            fatura = FaturaCartao(
-                id_usuario=usuario.id,
-                id_conta=conta_id,
-                external_id=fake_ext_id,
-            )
+            fatura = FaturaCartao(id_usuario=usuario.id, id_conta=conta_id, external_id=fake_ext_id)
             db.add(fatura)
-            faturas_count += 1
 
-        # Tenta vários campos possíveis para o valor
-        valor_fatura = (
-            summary.get("billAmount")
-            or summary.get("amount")
-            or summary.get("currentBillAmount")
-            or summary.get("totalAmount")
-            or 0
-        )
-        fatura.valor_total = _safe_decimal(valor_fatura)
+        fatura.valor_total = _safe_decimal(s.get("billAmount") or s.get("amount") or s.get("totalAmount"))
+        fatura.data_vencimento = ref_date.date()
         fatura.status = "em_aberto"
-
-        # Data de vencimento
-        data_venc_raw = (
-            summary.get("dueDate")
-            or summary.get("due_date")
-            or summary.get("closeDate")
-        )
-        if data_venc_raw:
-            dt = _parse_iso_date(str(data_venc_raw))
-            if dt:
-                fatura.data_vencimento = dt.date()
-
-        logger.info(
-            f"[PIERRE SYNC] Fatura {fake_ext_id}: R$ {fatura.valor_total} "
-            f"| venc: {fatura.data_vencimento}"
-        )
-
-    logger.info(f"[PIERRE SYNC] Faturas: {faturas_count} salvas")
+        fatura.mes_referencia = ref_date.replace(day=1).date()
+        
+        # Tenta extrair data de fechamento se disponível
+        df = _parse_iso_date(s.get("closeDate") or s.get("closing_date"))
+        if df: fatura.data_fechamento = df.date()
 
     # ------------------------------------------------------------------
-    # ETAPA 4: Faturas Passadas (bills)
+    # ETAPA 4: Parcelamentos (O coração do Modo Deus)
     # ------------------------------------------------------------------
-    logger.info("[PIERRE SYNC] Buscando faturas passadas...")
-    res_bills = client.get_bills()
-    bills_raw = _extrair_lista_de_resposta(res_bills)
-
-    faturas_passadas_count = 0
-    for bill in bills_raw:
-        ext_id = str(bill.get("id") or bill.get("billId") or "")
-        if not ext_id:
-            continue
-
-        acc_id = str(bill.get("accountId") or "")
-        conta_id = accounts_map.get(acc_id)
-        if not conta_id:
-            continue
-
-        fatura = db.query(FaturaCartao).filter(FaturaCartao.external_id == ext_id).first()
-        if not fatura:
-            fatura = FaturaCartao(
-                id_usuario=usuario.id,
-                id_conta=conta_id,
-                external_id=ext_id,
-            )
-            db.add(fatura)
-            faturas_passadas_count += 1
-
-        fatura.valor_total = _safe_decimal(
-            bill.get("amount") or bill.get("totalAmount") or bill.get("value") or 0
-        )
-        fatura.status = bill.get("status") or "fechada"
-
-        due_raw = bill.get("dueDate") or bill.get("due_date")
-        if due_raw:
-            dt = _parse_iso_date(str(due_raw))
-            if dt:
-                fatura.data_vencimento = dt.date()
-
-    logger.info(f"[PIERRE SYNC] Faturas passadas: {faturas_passadas_count} salvas")
-
-    # ------------------------------------------------------------------
-    # ETAPA 5: Parcelamentos
-    # ------------------------------------------------------------------
-    logger.info("[PIERRE SYNC] Buscando parcelamentos...")
     res_inst = client.get_installments(start_date=date_90)
-    logger.error(f"🔍 [DEBUG PARCELAS] Resposta bruta: {str(res_inst)[:500]}")
     inst_list = _extrair_parcelamentos(res_inst)
-    logger.info(f"[PIERRE SYNC] {len(inst_list)} parcelamento(s) encontrado(s)")
 
-    parcelas_count = 0
     for inst in inst_list:
-        # Tenta vários campos de ID que o schema pode usar
-        ext_id = str(
-            inst.get("id")
-            or inst.get("purchaseId")
-            or inst.get("installmentId")
-            or ""
-        )
-        if not ext_id or ext_id.lower() in ("none", "null"):
-            continue
+        ext_id = str(inst.get("id") or inst.get("purchaseId") or "")
+        if not ext_id: continue
 
-        parcela = db.query(ParcelamentoItem).filter(
-            ParcelamentoItem.external_id == ext_id,
-            ParcelamentoItem.id_usuario == usuario.id,
-        ).first()
+        parcela = db.query(ParcelamentoItem).filter(ParcelamentoItem.external_id == ext_id, ParcelamentoItem.id_usuario == usuario.id).first()
         if not parcela:
             parcela = ParcelamentoItem(id_usuario=usuario.id, external_id=ext_id)
             db.add(parcela)
-            parcelas_count += 1
 
-        acc_id = str(inst.get("accountId") or "")
-        parcela.id_conta = accounts_map.get(acc_id)
-        parcela.descricao = (
-            inst.get("description")
-            or inst.get("name")
-            or inst.get("merchantName")
-            or "Parcelamento"
-        )
-
-        v_total = _safe_decimal(inst.get("totalAmount") or inst.get("total") or 0)
-        total_parc = max(1, int(inst.get("totalInstallments") or inst.get("installments") or 1))
+        parcela.id_conta = accounts_map.get(str(inst.get("accountId")))
+        parcela.descricao = inst.get("description") or inst.get("name") or "Compra Parcelada"
+        
+        v_total = _safe_decimal(inst.get("totalAmount") or inst.get("total"))
+        total_p = max(1, int(inst.get("totalInstallments") or inst.get("installments") or 1))
+        
         parcela.valor_total = v_total
-        parcela.total_parcelas = total_parc
-        parcela.valor_parcela = _safe_decimal(
-            inst.get("installmentAmount")
-            or inst.get("installmentValue")
-            or (float(v_total) / total_parc if v_total else 0)
-        )
-        parcela.parcela_atual = int(
-            inst.get("installmentNumber")
-            or inst.get("installmentsPaid")
-            or inst.get("currentInstallment")
-            or 1
-        )
+        parcela.total_parcelas = total_p
+        parcela.valor_parcela = _safe_decimal(inst.get("installmentAmount") or (float(v_total)/total_p))
+        parcela.parcela_atual = int(inst.get("installmentNumber") or inst.get("currentInstallment") or 1)
+        
+        dp = _parse_iso_date(inst.get("dueDate") or inst.get("nextDueDate"))
+        if dp: parcela.data_proxima_parcela = dp.date()
+        
+        dc = _parse_iso_date(inst.get("date") or inst.get("purchaseDate"))
+        if dc: parcela.data_compra = dc.date()
 
-        data_raw = (
-            inst.get("purchaseDate")
-            or inst.get("date")
-            or inst.get("createdAt")
-        )
-        if data_raw:
-            dt = _parse_iso_date(str(data_raw))
-            if dt:
-                parcela.data_compra = dt.date()
-
-        logger.debug(
-            f"[PIERRE SYNC] Parcela {ext_id}: {parcela.descricao} "
-            f"| {parcela.parcela_atual}/{parcela.total_parcelas} "
-            f"| R$ {parcela.valor_parcela}"
-        )
-
-    logger.info(f"[PIERRE SYNC] Parcelamentos: {parcelas_count} novos")
-
-    # ------------------------------------------------------------------
-    # Finalização
-    # ------------------------------------------------------------------
     usuario.pierre_initial_sync_done = True
     usuario.last_pierre_sync_at = datetime.now(timezone.utc)
     db.commit()
-
-    logger.info(
-        f"✅ [PIERRE SYNC] Carga concluída: "
-        f"{contas_count} contas | {txs_count} transações | "
-        f"{faturas_count + faturas_passadas_count} faturas | {parcelas_count} parcelas"
-    )
-
-    return {
-        "contas": contas_count,
-        "lancamentos": txs_count,
-        "faturas": faturas_count + faturas_passadas_count,
-        "parcelamentos": parcelas_count,
-    }
-
+    return {"status": "success"}
 
 # ---------------------------------------------------------------------------
 # Sincronização incremental

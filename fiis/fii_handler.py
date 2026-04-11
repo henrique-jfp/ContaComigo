@@ -329,14 +329,21 @@ def detect_fii_intent(message: str) -> str | None:
         return "recomendar_fii"
         
     # 4. Conceitos (Expandido para capturar erros comuns antes da IA genérica)
-    conceitos = [
+    conceitos_estritos = ["ir", "dy", "pvp"]
+    m_clean = re.sub(r'[^\w\s]', '', m) # Remove pontuação
+    palavras = m_clean.split()
+    
+    if any(c in palavras for c in conceitos_estritos):
+        return "explicar_conceito"
+
+    conceitos_frases = [
         "o que é dy", "o que é pvp", "explica pvp", "explica dy", 
         "o que é vacância", "o que é vacancia", "fii de tijolo", 
         "fii de papel", "fii de tijolo e papel", "fundo de tijolo", "fundo de papel",
         "dividend yield", "p/vp", "valor patrimonial", "vacancia", "fof", "fundo de fundos",
-        "imposto", "ir ", "ir?", "tributação", "isento", "isenção", "liquidez"
+        "imposto", "tributação", "isento", "isenção", "liquidez", "lucro", "reinvestir"
     ]
-    if any(p in m for p in conceitos):
+    if any(p in m for p in conceitos_frases):
         return "explicar_conceito"
         
     # 5. Adicionar
@@ -344,9 +351,11 @@ def detect_fii_intent(message: str) -> str | None:
         return "adicionar_fii"
 
     # 6. Remover (Regex mais flexível)
-    match_remover = re.search(r'(?i)(remover|vendi|deletar|excluir)\s+(?:o|a|os|as|do|da|fundo|ativo|fii)?\s*([a-z]{4}11)', m)
-    if match_remover:
-        return f"remover_fii:{match_remover.group(2).upper()}"
+    if any(g in m for g in ["remover", "vendi", "deletar", "excluir", "tirar"]):
+        ticker_match = re.search(r'([a-z]{4}11)', m)
+        if ticker_match:
+            return f"remover_fii:{ticker_match.group(1).upper()}"
+        return "explicar_remover"
 
     return None
 
@@ -356,6 +365,8 @@ async def route_fii_intent(intent: str, update: Update, context: ContextTypes.DE
         await cmd_carteira_fii(update, context)
     elif intent == "recomendar_fii":
         await cmd_recomendar_fii_handler(update, context)
+    elif intent == "explicar_remover":
+        await update.message.reply_html("Para remover um FII da sua carteira, use o comando: <b>remover [TICKER]</b> (ex: <i>remover HGLG11</i>).")
     elif intent == "explicar_conceito":
         explica = explicar_conceito(update.message.text)
         # Limpeza defensiva de tags HTML para o Telegram

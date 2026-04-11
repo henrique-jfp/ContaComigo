@@ -86,16 +86,30 @@ def _get_webapp_url(tab: str | None = None, draft: dict | None = None) -> str:
 
 
 def _inferir_tipo_lancamento(texto_usuario: str, categoria: str, tipo_ia: str | None = None) -> str:
+    """Inferência inteligente de tipo baseada em semântica e contexto."""
     tipo_raw = str(tipo_ia or "").strip().lower()
-    if tipo_raw in {"entrada", "receita"}:
+    if tipo_raw in {"entrada", "receita", "recebi", "credit"}:
         return "Entrada"
-    if tipo_raw in {"saida", "saída", "despesa"}:
+    if tipo_raw in {"saida", "saída", "despesa", "gastei", "debit"}:
         return "Saída"
 
     texto = f"{texto_usuario} {categoria}".lower()
-    sinais_entrada = ["receita", "entrada", "recebi", "ganhei", "salario", "salário", "venda", "reembolso"]
-    sinais_saida = ["despesa", "saida", "saída", "gastei", "paguei", "compra", "debito", "débito"]
+    
+    # Sinais semânticos fortes de entrada
+    sinais_entrada = [
+        "receita", "entrada", "recebi", "ganhei", "salario", "salário", "venda", 
+        "reembolso", "estorno", "dividendo", "rendimento", "pix recebido", "ted recebida",
+        "lucro", "comissao", "comissão", "bonus", "bônus", "ganho", "pro-labore"
+    ]
+    
+    # Sinais semânticos fortes de saída
+    sinais_saida = [
+        "despesa", "saida", "saída", "gastei", "paguei", "compra", "debito", "débito",
+        "pagamento", "transferi", "enviei", "pix enviado", "ted enviada", "custo",
+        "perdi", "assinatura", "mensalidade", "fatura", "boleto", "tarifa"
+    ]
 
+    # Prioridade para sinais de entrada (mais raros de falar por engano)
     tem_entrada = any(s in texto for s in sinais_entrada)
     tem_saida = any(s in texto for s in sinais_saida)
 
@@ -103,6 +117,11 @@ def _inferir_tipo_lancamento(texto_usuario: str, categoria: str, tipo_ia: str | 
         return "Entrada"
     if tem_saida and not tem_entrada:
         return "Saída"
+        
+    # Se ambos ou nenhum, e a categoria for Financeiro/Salário, tende a ser Entrada
+    if "salario" in texto or "rendimento" in texto:
+        return "Entrada"
+        
     return "Saída"
 
 

@@ -1459,13 +1459,25 @@ def miniapp_modo_deus():
 
         # --- SEÇÃO 5: CARTÕES ---
         try:
+            # Busca faturas que estão em aberto OU que vencem nos próximos 45 dias
+            v_limit_cards = today + timedelta(days=45)
             faturas = db.query(FaturaCartao).join(Conta).filter(
                 FaturaCartao.id_usuario == user_id,
-                or_(and_(extract('month', FaturaCartao.mes_referencia) == today.month, extract('year', FaturaCartao.mes_referencia) == today.year), FaturaCartao.data_vencimento >= today)
-            ).all()
+                or_(
+                    FaturaCartao.status == 'em_aberto',
+                    and_(FaturaCartao.data_vencimento >= today, FaturaCartao.data_vencimento <= v_limit_cards)
+                )
+            ).order_by(FaturaCartao.data_vencimento.asc()).all()
+            
             colors_c = ["#534AB7","#378ADD","#1D9E75","#D85A30"]
             lista_c = []
+            seen_accounts = set()
+            
             for i, f in enumerate(faturas):
+                # Evita duplicatas de fatura para a mesma conta (pega a mais próxima do vencimento)
+                if f.id_conta in seen_accounts: continue
+                seen_accounts.add(f.id_conta)
+                
                 limite = float(f.conta.limite_cartao or 0)
                 lista_c.append({
                     "nome_conta": f.conta.nome, "valor_total": float(f.valor_total),
@@ -1604,10 +1616,27 @@ def miniapp_modo_deus():
         try:
             v_limit = today + timedelta(days=30)
             agends = db.query(Agendamento).filter(Agendamento.id_usuario == user_id, Agendamento.ativo == True, Agendamento.proxima_data_execucao <= v_limit).all()
-            fats = db.query(FaturaCartao).filter(FaturaCartao.id_usuario == user_id, FaturaCartao.data_vencimento >= today, FaturaCartao.data_vencimento <= v_limit, FaturaCartao.status != 'paga').all()
+            
+            # Busca faturas em aberto para vencimentos (limitado a 30 dias)
+            fats = db.query(FaturaCartao).filter(
+                FaturaCartao.id_usuario == user_id, 
+                FaturaCartao.data_vencimento >= today, 
+                FaturaCartao.data_vencimento <= v_limit, 
+                FaturaCartao.status != 'paga'
+            ).all()
+            
             lista_v = [{"descricao": a.descricao, "valor": float(a.valor), "data": a.proxima_data_execucao.isoformat(), "tipo": "agendamento", "cor_hex": "#378ADD"} for a in agends]
             lista_v += [{"descricao": f"Fatura {f.conta.nome}", "valor": float(f.valor_total), "data": f.data_vencimento.isoformat(), "tipo": "fatura", "cor_hex": "#534AB7"} for f in fats]
-            result['proximos_vencimentos'] = sorted(lista_v, key=lambda x: x['data'])[:6]
+            
+            # Adiciona parcelamentos que vencem nos próximos 30 dias
+            parcelas_prox = db.query(ParcelamentoItem).filter(
+                ParcelamentoItem.id_usuario == user_id,
+                ParcelamentoItem.data_proxima_parcela >= today,
+                ParcelamentoItem.data_proxima_parcela <= v_limit
+            ).all()
+            lista_v += [{"descricao": f"Parc: {p.descricao}", "valor": float(p.valor_parcela), "data": p.data_proxima_parcela.isoformat(), "tipo": "parcelamento", "cor_hex": "#D85A30"} for p in parcelas_prox]
+            
+            result['proximos_vencimentos'] = sorted(lista_v, key=lambda x: x['data'])[:8]
         except Exception as e:
             logger.error(f"Erro Modo Deus (vencimentos): {e}")
             result['proximos_vencimentos'] = []
