@@ -355,7 +355,7 @@ async def _enviar_resposta_html_segura(message, texto: str, **kwargs):
     # Se for pequeno, envia direto (caminho rápido)
     if len(texto_html) <= 4000:
         try:
-            return await message.reply_html(texto_html, **kwargs)
+            return await _enviar_resposta_html_segura(message, texto_html, **kwargs)
         except Exception as exc:
             if "Message is too long" in str(exc):
                 return await _enviar_mensagem_fatiada(message, texto_html, is_html=True, **kwargs)
@@ -428,7 +428,7 @@ async def _enviar_mensagem_fatiada(message, texto: str, is_html: bool = True, **
         if not p.strip(): continue
         try:
             if is_html:
-                await message.reply_html(p, **kwargs)
+                await _enviar_resposta_html_segura(message, p, **kwargs)
             else:
                 await message.reply_text(p, **kwargs)
         except Exception as e:
@@ -1561,7 +1561,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             # Log visual para o usuário saber o que foi entendido
             logger.info(f"🎙️ [VOICE] Transcrição: {texto_usuario}")
             if texto_usuario:
-                await update.message.reply_html(f"<i>\"{(texto_usuario[:100] + '...') if len(texto_usuario) > 100 else texto_usuario}\"</i>")
+                await _enviar_resposta_html_segura(update.message, f"<i>\"{(texto_usuario[:100] + '...') if len(texto_usuario) > 100 else texto_usuario}\"</i>")
         except Exception as exc:
             logger.error("Falha ao transcrever áudio com Groq: %s", exc, exc_info=True)
             await wait_msg.edit_text("❌ Não consegui transcrever seu áudio. Tente novamente.")
@@ -1592,7 +1592,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         gate_ia = plan_allows_feature(db, usuario_db, "ia_questions")
         if not gate_ia.allowed:
             text, keyboard = upgrade_prompt_for_feature("ia_questions")
-            await update.message.reply_html(text, reply_markup=keyboard)
+            await _enviar_resposta_html_segura(update.message, text, reply_markup=keyboard)
             return ConversationHandler.END
 
         consume_feature_quota(db, usuario_db, "ia_questions", amount=1)
@@ -1611,14 +1611,14 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         if not tool_calls and _intencao_categorizar_sem_categoria(texto_normalizado):
             atualizados, total_pendentes = await _categorizar_lancamentos_sem_categoria_async(db, usuario_db.id)
             if total_pendentes == 0:
-                await update.message.reply_html(
+                await _enviar_resposta_html_segura(update.message, 
                     "🏷️ <b>Categorização automática</b>\n\n"
                     "Não encontrei lançamentos pendentes sem categoria."
                 )
                 return ConversationHandler.END
 
             nao_classificados = max(0, total_pendentes - atualizados)
-            await update.message.reply_html(
+            await _enviar_resposta_html_segura(update.message, 
                 "🏷️ <b>Categorização automática concluída</b>\n\n"
                 f"• <b>Pendentes analisados:</b> {total_pendentes}\n"
                 f"• <b>Categorizados:</b> {atualizados}\n"
@@ -1871,7 +1871,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 if resultado_bruto.get("type") == "no_subscription":
                     msg_erro = "❌ <b>Assinatura Pierre Finance Inativa.</b>\n\nVerifique seu plano no site da Pierre."
                 
-                await update.message.reply_html(
+                await _enviar_resposta_html_segura(update.message, 
                     f"{msg_erro}\n\nUse o comando <code>/pierre</code> para configurar uma nova chave se necessário."
                 )
                 return ConversationHandler.END
@@ -1937,7 +1937,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 valor = 0.0
 
             if valor <= 0:
-                await update.message.reply_html(
+                await _enviar_resposta_html_segura(update.message, 
                     "❌ <b>Valor inválido</b>\n\n"
                     "Preciso de um valor maior que zero para preparar o lançamento."
                 )
@@ -1946,7 +1946,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             gate_lanc = plan_allows_feature(db, usuario_db, "lancamentos")
             if not gate_lanc.allowed:
                 text, keyboard = upgrade_prompt_for_feature("lancamentos")
-                await update.message.reply_html(text, reply_markup=keyboard)
+                await _enviar_resposta_html_segura(update.message, text, reply_markup=keyboard)
                 return ConversationHandler.END
 
             dados_quick = {
@@ -1980,7 +1980,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 [InlineKeyboardButton("✏️ Editar", web_app=WebAppInfo(url=webapp_url))],
                 [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")],
             ])
-            await update.message.reply_html(preview, reply_markup=keyboard)
+            await _enviar_resposta_html_segura(update.message, preview, reply_markup=keyboard)
             return ConversationHandler.END
 
         if fn_name in {"agendar_despesa", "agendar_receita"}:
@@ -2000,7 +2000,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 parcelas = None
 
             if valor <= 0 or not data_str:
-                await update.message.reply_html(
+                await _enviar_resposta_html_segura(update.message, 
                     "❌ <b>Dados incompletos</b>\n\n"
                     "Informe descrição, valor (&gt; 0) e data de início em <code>YYYY-MM-DD</code>."
                 )
@@ -2009,7 +2009,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             try:
                 data_primeiro = datetime.fromisoformat(data_str).date()
             except ValueError:
-                await update.message.reply_html(
+                await _enviar_resposta_html_segura(update.message, 
                     "❌ <b>Data inválida</b>\n\n"
                     "Use <code>YYYY-MM-DD</code> (ex.: <code>2026-12-12</code>)."
                 )
@@ -2045,7 +2045,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 [InlineKeyboardButton("✏️ Editar", callback_data="quick_edit")],
                 [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")],
             ])
-            await update.message.reply_html(preview, reply_markup=keyboard)
+            await _enviar_resposta_html_segura(update.message, preview, reply_markup=keyboard)
             return ConversationHandler.END
 
         if fn_name == "criar_meta":
@@ -2057,7 +2057,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             data_meta_str = str(args.get("data_meta") or "").strip()
 
             if valor_alvo <= 0:
-                await update.message.reply_html(
+                await _enviar_resposta_html_segura(update.message, 
                     "❌ <b>Valor inválido</b>\n\n"
                     "Preciso de um valor alvo maior que zero."
                 )
@@ -2068,7 +2068,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 try:
                     data_meta = datetime.fromisoformat(data_meta_str).date()
                 except ValueError:
-                    await update.message.reply_html(
+                    await _enviar_resposta_html_segura(update.message, 
                         "❌ <b>Prazo inválido</b>\n\n"
                         "Use <code>YYYY-MM-DD</code> para data da meta."
                     )
@@ -2095,7 +2095,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 [InlineKeyboardButton("✏️ Editar", callback_data="quick_edit")],
                 [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")],
             ])
-            await update.message.reply_html(preview, reply_markup=keyboard)
+            await _enviar_resposta_html_segura(update.message, preview, reply_markup=keyboard)
             return ConversationHandler.END
 
         if fn_name == "definir_limite_orcamento":
@@ -2106,7 +2106,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 valor = 0.0
 
             if not categoria or valor <= 0:
-                await update.message.reply_html(
+                await _enviar_resposta_html_segura(update.message, 
                     "❌ <b>Dados incompletos</b>\n\n"
                     "Preciso do nome da categoria e um valor maior que zero para criar o limite."
                 )
@@ -2129,20 +2129,20 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 [InlineKeyboardButton("✅ Confirmar", callback_data="quick_confirm")],
                 [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")],
             ])
-            await update.message.reply_html(preview, reply_markup=keyboard)
+            await _enviar_resposta_html_segura(update.message, preview, reply_markup=keyboard)
             return ConversationHandler.END
 
         if fn_name == "categorizar_lancamentos_pendentes":
             atualizados, total_pendentes = await _categorizar_lancamentos_sem_categoria_async(db, usuario_db.id)
             if total_pendentes == 0:
-                await update.message.reply_html(
+                await _enviar_resposta_html_segura(update.message, 
                     "🏷️ <b>Categorização automática</b>\n\n"
                     "Não encontrei lançamentos pendentes sem categoria no seu histórico."
                 )
                 return ConversationHandler.END
 
             nao_classificados = max(0, total_pendentes - atualizados)
-            await update.message.reply_html(
+            await _enviar_resposta_html_segura(update.message, 
                 "🏷️ <b>Categorização automática concluída!</b>\n\n"
                 f"• <b>Lançamentos analisados:</b> {total_pendentes}\n"
                 f"• <b>Categorizados com sucesso:</b> {atualizados}\n"
