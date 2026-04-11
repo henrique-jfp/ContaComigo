@@ -79,7 +79,7 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
             'netflix', 'spotify', 'amazon prime', 'amazonprime', 'disney', 'hbo', 'globoplay',
             'youtube premium', 'deezer', 'apple tv', 'crunchyroll', 'paramount', 'claro flex',
             'claro rec', 'vivo', 'tim', 'oi', 'net virtua', 'sky', 'starlink', 'assinatura',
-            'subscription', 'plano mensal', 'gympass', 'totalpass', 'canva', 'chatgpt', 'openai',
+            'subscription', 'plano mensal', 'gympass', 'totalpass', 'canva', 'chatgpt', 'openai', 'wellhub',
             'midjourney', 'icloud', 'google one', 'dropbox', 'microsoft 365', 'adobe',
         ],
         'Financeiro': [

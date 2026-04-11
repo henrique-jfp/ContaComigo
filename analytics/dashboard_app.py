@@ -1399,7 +1399,7 @@ def miniapp_modo_deus():
 
         # --- SEÇÃO 3: ASSINATURAS ---
         try:
-            keywords = ['netflix', 'spotify', 'amazon', 'disney', 'hbo', 'globoplay', 'youtube', 'deezer', 'apple', 'crunchyroll', 'paramount', 'claro', 'vivo', 'tim', 'oi', 'net', 'sky', 'starlink', 'academia', 'gym', 'assinatura', 'subscription', 'plano mensal', 'totalpass', 'gympass']
+            keywords = ['netflix', 'spotify', 'amazon', 'disney', 'hbo', 'globoplay', 'youtube', 'deezer', 'apple', 'crunchyroll', 'paramount', 'claro', 'vivo', 'tim', 'oi', 'net', 'sky', 'starlink', 'academia', 'gym', 'assinatura', 'subscription', 'plano mensal', 'totalpass', 'gympass', 'wellhub']
             keywords_excluir = ['juros', 'multa', 'encargo', 'iof', 'rotativo']
             
             regex_kw = '|'.join(keywords)
