@@ -37,15 +37,19 @@ def limpar_descricao(descricao: str) -> str:
         "compra no cartao ", "compra no debito ", "compra no credito ",
         "transferencia enviada ", "transferencia recebida ", "pagamento fatura ",
         "transf.enviada ", "transf.recebida ", "pgto ", "pagto ", "liquidacao ",
-        "pagamento de conta ", "compra ", "venda "
+        "pagamento de conta ", "compra ", "venda ", "pago por ", "enviado por ",
+        "pagamento ", "liquidação "
     ]
     
     for p in prefixos:
         if desc.startswith(p):
             desc = desc[len(p):].strip()
             
+    # Remover IDs de transação e datas comuns no final (ex: '20240325' ou '12345678')
+    desc = re.sub(r'\d{6,20}', '', desc)
     # Remover caracteres especiais repetidos que o Open Finance às vezes envia
-    desc = re.sub(r'[\-\*\#\@\(\)]+', ' ', desc)
+    desc = re.sub(r'[\-\*\#\@\(\)\.]+ ', ' ', desc)
+    desc = re.sub(r' +', ' ', desc)
     return desc.strip()
 
 
@@ -69,11 +73,13 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
             'youtube premium', 'deezer', 'apple tv', 'crunchyroll', 'paramount', 'claro flex',
             'claro rec', 'vivo', 'tim', 'oi', 'net virtua', 'sky', 'starlink', 'assinatura',
             'subscription', 'plano mensal', 'gympass', 'totalpass', 'canva', 'chatgpt', 'openai', 'wellhub',
-            'midjourney', 'icloud', 'google one', 'dropbox', 'microsoft 365', 'adobe',
+            'midjourney', 'icloud', 'google one', 'dropbox', 'microsoft 365', 'adobe', 'smartfit',
+            'bluefit', 'selfit', 'sky', 'directv', 'globomail', 'uol', 'terra', 'globo.com',
         ],
         'Financeiro': [
             'iof', 'tarifa', 'taxa bancaria', 'anuidade cartao', 'seguro', 'encargos', 'juros',
-            'multa', 'mora', 'tbi', 'tar ', 'cesta servicos',
+            'multa', 'mora', 'tbi', 'tar ', 'cesta servicos', 'manutencao conta', 'mensalidade banco',
+            'pacote servicos', 'seguro vida', 'seguro residencial', 'seguro celular', 'pagamento seguro',
         ],
     },
     'ALIMENTAÇÃO': {
@@ -81,82 +87,86 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
             'ifood', 'rappi', 'uber eats', 'mcdonalds', 'burger king', 'subway', 'pizza', 'lanche',
             'restaurante', 'padaria', 'cafeteria', 'pastelaria', 'sushi', 'japones', 'churrascaria',
             'espetinho', 'outback', 'bacio di latte', 'madeiro', 'coco bambu', 'starbucks', 'habibs',
+            'giraffas', 'spoleto', 'bob s', 'domino s', 'pizzaria', 'chocolates', 'cacau show', 'kopenhagen',
+            'sorveteria', 'doceria', 'bar ', 'boteco', 'cervejaria', 'pub', 'gastrobar',
         ],
         'Mercado/Supermercado': [
             'mercado', 'supermercado', 'extra', 'pao de acucar', 'carrefour', 'atacadao', 'assai',
             'hortifruti', 'sacolao', 'feira', 'acougue', 'hortifrutti', 'zona sul', 'mundial', 'prezunic',
-            'superprix', 'guanabara', 'st marche', 'obahortifruti',
+            'superprix', 'guanabara', 'st marche', 'obahortifruti', 'supermercados', 'minimercado', 'mercantil',
+            'bahamas', 'dia ', 'condor', 'muffato', 'angeloni', 'zaffari', 'supermkt',
         ],
-        'Delivery': ['delivery', 'entrega', 'motoboy'],
+        'Delivery': ['delivery', 'entrega', 'motoboy', 'taxa entrega', 'loggi'],
     },
     'TRANSPORTE': {
-        'Aplicativos': ['uber', '99pop', 'cabify', 'taxi', 'ladydriver', 'indriver'],
+        'Aplicativos': ['uber', '99pop', 'cabify', 'taxi', 'ladydriver', 'indriver', '99app', 'uber trip'],
         'Combustivel': [
             'posto', 'combustivel', 'gasolina', 'etanol', 'shell', 'ipiranga',
-            'br distribuidora', 'ale combustiveis', 'petrobras',
+            'br distribuidora', 'ale combustiveis', 'petrobras', 'texaco', 'dislub', 'posto ',
         ],
-        'Estacionamento': ['estacionamento', 'parking', 'park', 'zona azul', 'sem parar', 'veloe'],
+        'Estacionamento': ['estacionamento', 'parking', 'park', 'zona azul', 'sem parar', 'veloe', 'taggy', 'estac '],
         'Transporte Publico': [
-            'metro', 'metrô', 'onibus', 'oônibus', 'bilhete', 'riocard', 'cartao bom', 'sptrans',
+            'metro', 'metrô', 'onibus', 'oônibus', 'bilhete', 'riocard', 'cartao bom', 'sptrans', 'trem', 'barcas',
         ],
     },
     'MORADIA': {
-        'Aluguel': ['aluguel', 'locacao', 'imobiliaria', 'quinto andar', 'quintoandar'],
-        'Condominio': ['condominio', 'taxa condominial', 'lume'],
+        'Aluguel': ['aluguel', 'locacao', 'imobiliaria', 'quinto andar', 'quintoandar', 'loft', 'zap imoveis'],
+        'Condominio': ['condominio', 'taxa condominial', 'lume', 'boleto condominio', 'admin condominio'],
         'Energia': [
             'cemig', 'copel', 'light', 'enel', 'energisa', 'coelba', 'celesc',
-            'elektro', 'cpfl', 'electropaulo',
+            'elektro', 'cpfl', 'electropaulo', 'conta luz', 'aneel',
         ],
-        'Agua': ['sabesp', 'cedae', 'copasa', 'embasa', 'saneago'],
-        'Gas': ['comgas', 'ceg', 'ultragaz', 'liquigas'],
+        'Agua': ['sabesp', 'cedae', 'copasa', 'embasa', 'saneago', 'caesb', 'corsan', 'cagece', 'conta agua'],
+        'Gas': ['comgas', 'ceg', 'ultragaz', 'liquigas', 'fogas', 'supergasbras'],
     },
     'SAÚDE': {
         'Farmacia': [
             'farmacia', 'drogasil', 'drogaria', 'ultrafarma', 'panvel',
-            'onofre', 'nissei', 'pacheco', 'venancio', 'raia', 'droga raia',
+            'onofre', 'nissei', 'pacheco', 'venancio', 'raia', 'droga raia', 'drogarias', 'poupafarma',
         ],
         'Plano de Saude': [
             'plano saude', 'unimed', 'amil', 'bradesco saude', 'sulamerica saude',
-            'hapvida', 'notredame', 'bradesco saude', 'saude bradesco',
+            'hapvida', 'notredame', 'bradesco saude', 'saude bradesco', 'intermedica', 'porto saude',
         ],
-        'Consultas': ['consulta medica', 'medico', 'clinica', 'hospital', 'pronto socorro', 'exame'],
+        'Consultas': ['consulta medica', 'medico', 'clinica', 'hospital', 'pronto socorro', 'exame', 'laboratorio', 'odontologia', 'dentista', 'psicologo'],
     },
     'EDUCAÇÃO': {
-        'Mensalidade': ['mensalidade', 'escola', 'faculdade', 'universidade', 'colegio', 'curso', 'udemy', 'alura', 'hotmart'],
-        'Material': ['livraria', 'papelaria', 'saraiva', 'amazon livros', 'leitura'],
+        'Mensalidade': ['mensalidade', 'escola', 'faculdade', 'universidade', 'colegio', 'curso', 'udemy', 'alura', 'hotmart', 'coursera', 'edx', 'ingles', 'idiomas'],
+        'Material': ['livraria', 'papelaria', 'saraiva', 'amazon livros', 'leitura', 'cultura', 'nobel'],
     },
     'VESTUÁRIO E BELEZA': {
         'Roupas e Calcados': [
-            'zara', 'renner', 'cea', 'riachuelo', 'hering', 'marisa',
-            'netshoes', 'centauro', 'lojas americanas', 'nike', 'adidas', 'arezzo',
+            'zara', 'renner', 'cea', 'riachuelo', 'hering', 'marisa', 'calcados',
+            'netshoes', 'centauro', 'lojas americanas', 'nike', 'adidas', 'arezzo', 'havainas', 'shoestock',
+            'kanui', 'dafiti', 'hering', 'hope', 'intimissimi', 'puket', 'lojas americanas',
         ],
-        'Beleza': ['salao', 'barbearia', 'estetica', 'manicure', 'spa', 'oboticario', 'natura', 'sephora'],
+        'Beleza': ['salao', 'barbearia', 'estetica', 'manicure', 'spa', 'oboticario', 'natura', 'sephora', 'quem disse berenice', 'l occitane', 'ikesaki'],
     },
     'PET': {
-        'Veterinario': ['veterinario', 'clinica veterinaria', 'petshop', 'pet shop', 'petz', 'cobasi'],
+        'Veterinario': ['veterinario', 'clinica veterinaria', 'petshop', 'pet shop', 'petz', 'cobasi', 'doghero', 'banho e tosa', 'petlove'],
     },
     'LAZER E ENTRETENIMENTO': {
-        'Cinema/Teatro': ['cinema', 'teatro', 'show', 'ingresso', 'ticket', 'sympla', 'eventbrite', 'cinemark', 'kinoplex'],
-        'Jogos': ['steam', 'psn', 'xbox', 'nintendo', 'nuuvem', 'playstation', 'razer', 'epic games', 'roblox'],
+        'Cinema/Teatro': ['cinema', 'teatro', 'show', 'ingresso', 'ticket', 'sympla', 'eventbrite', 'cinemark', 'kinoplex', 'uci', 'ingresso.com', 'bilheteria'],
+        'Jogos': ['steam', 'psn', 'xbox', 'nintendo', 'nuuvem', 'playstation', 'razer', 'epic games', 'roblox', 'free fire', 'fortnite', 'league of legends'],
         'Viagem': [
             'hotel', 'pousada', 'airbnb', 'booking', 'decolar', 'latam', 'gol',
-            'azul', 'ryanair', 'passagem', 'voegol',
+            'azul', 'ryanair', 'passagem', 'voegol', 'cvc', '123 milhas', 'hurb', 'trivago',
         ],
     },
     'FINANÇAS E INVESTIMENTOS': {
-        'Salario': ['salario', 'pagamento folha', 'folha pagamento', 'vencimento', 'prolabore'],
+        'Salario': ['salario', 'pagamento folha', 'folha pagamento', 'vencimento', 'prolabore', 'holerite'],
         'Investimentos': [
-            'cdb', 'lci', 'lca', 'tesouro', 'dividendo', 'rendimento',
-            'juros recebidos', 'fundo', 'xp investimentos', 'btg pactual', 'nu invest',
+            'cdb', 'lci', 'lca', 'tesouro', 'dividendo', 'rendimento', 'aporte', 'poupanca', 'resgate',
+            'juros recebidos', 'fundo', 'xp investimentos', 'btg pactual', 'nu invest', 'avenue', 'inter dtvm',
         ],
         'Transferencia Recebida': ['transferencia recebida', 'pix recebido', 'ted recebido', 'ted recebida'],
     },
     'IMPOSTOS E TAXAS': {
-        'Impostos': ['iptu', 'ipva', 'receita federal', 'sefaz', 'detran', 'multa', 'darf', 'irpf'],
+        'Impostos': ['iptu', 'ipva', 'receita federal', 'sefaz', 'detran', 'multa', 'darf', 'irpf', 'das '],
     },
     'TRANSFERÊNCIAS': {
         'Enviada': ['pix enviado', 'ted enviado', 'doc enviado', 'transferencia enviada', 'ted enviada'],
-        'Fatura': ['pagamento fatura', 'fatura cartao', 'pgto fatura'],
+        'Fatura': ['pagamento fatura', 'fatura cartao', 'pgto fatura', 'pagamento cartao', 'pagto fatura'],
     },
 }
 
