@@ -271,10 +271,15 @@
     border-bottom: none;
     border-radius: 52px 52px 0 0;
     z-index: 45;
-    display: block;
+    display: none; /* Escondido por padrão */
     backdrop-filter: blur(16px);
     box-shadow: 0 -12px 30px rgba(15, 23, 42, 0.08);
     pointer-events: none;
+  }
+
+  /* Mostrar recorte apenas se o botão do Modo Deus NÃO estiver escondido */
+  #bottomNav:has(#nav-fantasma:not(.hidden))::before {
+    display: block;
   }
   
   body.device-desktop #bottomNav::before {
@@ -386,3 +391,14 @@
   }
   .percentage-receita { border-left: 3px solid #10b981; }
   .percentage-despesa { border-left: 3px solid #ef4444; }
+
+  /* Animação de Flutuação (Pierre Ghost) */
+  @keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-6px); }
+    100% { transform: translateY(0px); }
+  }
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+    display: inline-block;
+  }
