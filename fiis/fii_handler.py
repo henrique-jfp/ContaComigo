@@ -9,7 +9,7 @@ from database.database import get_db, get_or_create_user
 from models import Usuario, CarteiraFII
 from fiis.brapi_client import BrapiClient
 from fiis.analisador import analisar_carteira, scoring_fii, recomendar_fiis, explicar_conceito
-from gerente_financeiro.ia_handlers import _smart_ai_completion_async
+from gerente_financeiro.ai_service import _smart_ai_completion_async
 
 logger = logging.getLogger(__name__)
 
