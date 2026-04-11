@@ -316,15 +316,21 @@ def _formatar_valor_brasileiro(valor: float) -> str:
 
 def _formatar_resposta_html(texto: str) -> str:
     texto = (texto or "").strip().replace("\r\n", "\n")
+    # Remover blocos de código markdown que a IA costuma colocar
     texto = re.sub(r"```(?:html|json|markdown|md)?\s*", "", texto, flags=re.IGNORECASE)
     texto = texto.replace("```", "")
-    texto = re.sub(r"<[^>]+>", "", texto)
+    
+    # Escapar caracteres HTML especiais ANTES de converter markdown em HTML básico
+    from html import escape
     texto = escape(texto)
+    
+    # Converter padrões básicos de markdown para HTML suportado pelo Telegram
     texto = re.sub(r"^#{1,6}\s*(.+)$", r"<b>\1</b>", texto, flags=re.MULTILINE)
     texto = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", texto)
     texto = re.sub(r"(?<!\w)_(.+?)_(?!\w)", r"<i>\1</i>", texto)
     texto = re.sub(r"^\s*[-*]\s+", "• ", texto, flags=re.MULTILINE)
     texto = re.sub(r"\n{3,}", "\n\n", texto)
+    
     return texto.strip()
 
 

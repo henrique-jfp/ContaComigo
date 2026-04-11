@@ -116,26 +116,34 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session):
             descricao = tx.get("description") or tx.get("name") or "Transação Open Finance"
             desc_lower = descricao.lower()
 
-            # 🛡️ FILTRO ANTI-FANTASMA (INTER): 
-            # Se for PIX no CRÉDITO e o valor for POSITIVO, é o lançamento de ajuste interno do Inter. IGNORAR.
-            if acc_type == "CREDIT" and "pix" in desc_lower and valor_bruto > 0:
+            # 🛡️ FILTRO ANTI-FANTASMA (INTER) - ULTRA AGRESSIVO
+            # Ignora lançamentos internos de ajuste do Inter que não são gastos reais
+            fantasmas = ["crédito liberado", "pix no crédito", "limite liberado"]
+            if any(f in desc_lower for f in fantasmas) and valor_bruto > 0:
                 continue
 
-            # 🛡️ LÓGICA DE FERRO PARA TIPO (RECEITA VS DESPESA)
-            # 1. Se valor for negativo -> Sempre Despesa
-            # 2. Se for Cartão (CREDIT) e positivo -> Despesa (Pierre envia positivo no cartão)
-            # 3. Se for Conta (BANK) e positivo -> Receita
+            # 🛡️ NOVA LÓGICA DE SINAL (RECEITA VS DESPESA)
+            # Como a API do Pierre manda quase tudo positivo, vamos inverter a lógica:
+            # Por padrão, em contas BANK/CREDIT, TUDO É DESPESA.
+            # Só vira RECEITA se:
+            # 1. O valor for POSITIVO E contiver palavras-chave de ganho real.
+            # 2. O valor for NEGATIVO (estorno de débito - raro).
+            
+            ganhos_reais = [
+                "salario", "salário", "pix recebido", "ted recebida", "doc recebido", 
+                "rendimento", "dividendo", "reembolso", "estorno", "venda", "transferência recebida"
+            ]
+            
             if valor_bruto < 0:
+                # Na maioria das APIs financeiras, negativo é gasto. Se o Pierre mandar negativo, é gasto.
                 tipo = "Despesa"
-            elif acc_type == "CREDIT":
-                # Pierre costuma mandar positivo para gastos de cartão.
-                # Só seria Receita se fosse um estorno muito claro (que costuma vir negativo na API deles ou com nome 'Estorno')
-                if "estorno" in desc_lower or "reembolso" in desc_lower:
+            else:
+                # Se o valor é positivo, checamos se é um ganho real
+                if any(g in desc_lower for g in ganhos_reais):
                     tipo = "Receita"
                 else:
+                    # Se não é ganho conhecido e está em conta bancária/cartão, é gasto!
                     tipo = "Despesa"
-            else:
-                tipo = "Receita"
                 
             valor = abs(valor_bruto)
             
@@ -298,20 +306,24 @@ async def sincronizar_incremental(usuario: Usuario, db: Session):
             descricao = tx.get("description", "")
             desc_lower = descricao.lower()
 
-            # 🛡️ FILTRO ANTI-FANTASMA (INTER):
-            if acc_type == "CREDIT" and "pix" in desc_lower and valor_bruto > 0:
+            # 🛡️ FILTRO ANTI-FANTASMA (INTER)
+            fantasmas = ["crédito liberado", "pix no crédito", "limite liberado"]
+            if any(f in desc_lower for f in fantasmas) and valor_bruto > 0:
                 continue
 
-            # 🛡️ LÓGICA DE FERRO PARA TIPO
+            # 🛡️ LÓGICA DE SINAL INVERSA
+            ganhos_reais = [
+                "salario", "salário", "pix recebido", "ted recebida", "doc recebido", 
+                "rendimento", "dividendo", "reembolso", "estorno", "venda", "transferência recebida"
+            ]
+            
             if valor_bruto < 0:
                 tipo = "Despesa"
-            elif acc_type == "CREDIT":
-                if "estorno" in desc_lower or "reembolso" in desc_lower:
+            else:
+                if any(g in desc_lower for g in ganhos_reais):
                     tipo = "Receita"
                 else:
                     tipo = "Despesa"
-            else:
-                tipo = "Receita"
                 
             cat_id, subcat_id = categorizar_transacao(descricao, tipo, db, cat_cache, subcat_cache)
             
