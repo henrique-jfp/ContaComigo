@@ -309,8 +309,9 @@ def detect_fii_intent(message: str) -> str | None:
         ticker = ticker_match.group(1).upper()
         # Gatilhos de análise
         gatilhos_analise = [
-            "analisa", "acha de", "vale a pena", "sobre", "info", "detalhes", 
-            "comprar", "vender", "estudo", "opinião", "opiniao", "fundo", "fii"
+            "analisa", "acha", "vale a pena", "sobre", "info", "detalhes", 
+            "comprar", "vender", "estudo", "opinião", "opiniao", "fundo", "fii",
+            "bom", "boa", "indica", "recomenda", "mostra"
         ]
         if any(g in m for g in gatilhos_analise):
             return f"analisar_fii:{ticker}"
