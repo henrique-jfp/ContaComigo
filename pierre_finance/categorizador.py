@@ -3,6 +3,7 @@ import re
 from sqlalchemy.orm import Session
 from models import Categoria, Subcategoria
 import logging
+from finance_utils import normalize_financial_type
 
 logger = logging.getLogger(__name__)
 
@@ -50,21 +51,9 @@ def limpar_descricao(descricao: str) -> str:
 
 # Mapeamento de tipos retornados pela API Open Finance (Pluggy/Pierre)
 # para o padrão interno do sistema.
-TIPO_OPEN_FINANCE_MAP: dict[str, str] = {
-    # Padrão Pluggy / Pierre
-    "CREDIT":  "Receita",
-    "DEBIT":   "Despesa",
-    # Variações defensivas
-    "credit":  "Receita",
-    "debit":   "Despesa",
-    "Receita": "Receita",
-    "Despesa": "Despesa",
-}
-
-
 def normalizar_tipo(tipo_raw: str) -> str:
     """Converte o tipo retornado pela API para 'Receita' ou 'Despesa'."""
-    return TIPO_OPEN_FINANCE_MAP.get(tipo_raw, "Despesa")
+    return normalize_financial_type(tipo_raw, default="Despesa")
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +190,46 @@ _PADROES_COMPILADOS: dict[tuple[str, str, str], re.Pattern] = {
     for kw in keywords
 }
 
+_TERMOS_TRANSFERENCIA_EXPLICTA = (
+    "pix enviado", "ted enviado", "ted enviada", "doc enviado",
+    "transferencia enviada", "transferência enviada",
+    "transferencia recebida", "transferência recebida",
+    "pagamento fatura", "fatura cartao", "fatura cartão",
+)
+
+_TERMOS_GENERICOS_TRANSFERENCIA = {
+    "", "pix", "ted", "doc", "transferencia", "transferência", "pagamento",
+    "pagamento pix", "mesma titularidade", "titularidade",
+}
+
+_INDICADORES_TRANSFERENCIA_REAL = {
+    "nubank", "nu pagamentos", "inter", "itau", "itaú", "bradesco", "santander",
+    "caixa", "bb", "banco do brasil", "mercado pago", "picpay", "pagbank",
+    "c6", "next", "neon", "agencia", "agência", "conta", "poupanca", "poupança",
+    "mesma titularidade", "cpf", "cnpj",
+}
+
+
+def _deve_classificar_como_transferencia(descricao_original: str, descricao_limpa: str) -> bool:
+    desc_original_norm = remove_accents(descricao_original)
+    desc_limpa_norm = remove_accents(descricao_limpa)
+
+    if not any(term in desc_original_norm for term in _TERMOS_TRANSFERENCIA_EXPLICTA):
+        return False
+
+    if desc_limpa_norm in _TERMOS_GENERICOS_TRANSFERENCIA:
+        return True
+
+    if any(indicador in desc_limpa_norm for indicador in _INDICADORES_TRANSFERENCIA_REAL):
+        return True
+
+    if re.search(r"\b\d{11,14}\b", re.sub(r"\D", "", descricao_limpa)):
+        return True
+
+    # Se a descrição limpa ainda preserva um merchant ou serviço identificável,
+    # preferimos cair em "Outros" a rotular incorretamente como transferência.
+    return False
+
 
 # ---------------------------------------------------------------------------
 # Função principal
@@ -264,7 +293,7 @@ def categorizar_transacao(
     # ------------------------------------------------------------------
     # CAMADA 1.5: Busca específica para TRANSFERÊNCIAS (baixa prioridade)
     # ------------------------------------------------------------------
-    if not cat_nome:
+    if not cat_nome and _deve_classificar_como_transferencia(descricao, desc_limpa):
         c_nome = 'TRANSFERÊNCIAS'
         subcategorias = MAPA_CATEGORIAS[c_nome]
         # Aqui usamos a descrição ORIGINAL pois os prefixos são as keywords de transferência

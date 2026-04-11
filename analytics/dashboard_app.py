@@ -81,6 +81,7 @@ from gerente_financeiro.fatura_draft_store import (
     pop_pending_editor_token,
 )
 from pierre_finance.client import PierreClient
+from finance_utils import is_expense_type
 import google.generativeai as genai
 from types import SimpleNamespace
 
@@ -757,7 +758,7 @@ def _format_lancamentos_for_chat(lancamentos: list) -> str:
     for lanc in lancamentos:
         data = lanc.data_transacao.strftime('%d/%m/%Y')
         valor = float(lanc.valor)
-        prefix = '-' if lanc.tipo == 'Saída' else '+'
+        prefix = '-' if is_expense_type(lanc.tipo) else '+'
         lines.append(
             f"• {lanc.descricao} ({data}) <code>{prefix}R$ {abs(valor):.2f}</code>"
         )
@@ -998,7 +999,7 @@ def miniapp_pierre_dashboard():
         lancamentos_mes = db.query(Lancamento).filter(
             Lancamento.id_usuario == usuario.id,
             Lancamento.origem == 'open_finance',
-            Lancamento.tipo == 'Despesa',
+            Lancamento.tipo.in_(['Saída', 'Despesa']),
             Lancamento.data_transacao >= trinta_dias_atras
         ).all()
         
@@ -1189,7 +1190,7 @@ def _generate_local_book_pdf(lancamentos):
         for l in lancamentos:
             cat_name = l.categoria.nome if l.categoria else "Outros"
             val_str = f"R$ {float(l.valor):.2f}"
-            if l.tipo == 'Despesa':
+            if is_expense_type(l.tipo):
                 val_str = f"-{val_str}"
             table_data.append([
                 l.data_transacao.strftime('%d/%m/%Y'),
@@ -1399,23 +1400,40 @@ def miniapp_modo_deus():
 
         # --- SEÇÃO 3: ASSINATURAS ---
         try:
-            keywords = ['netflix', 'spotify', 'amazon', 'disney', 'hbo', 'globoplay', 'youtube', 'deezer', 'apple', 'crunchyroll', 'paramount', 'claro', 'vivo', 'tim', 'oi', 'net', 'sky', 'starlink', 'academia', 'gym', 'assinatura', 'subscription', 'plano mensal', 'totalpass', 'gympass', 'wellhub']
+            keywords = [
+                'netflix', 'spotify', 'amazon', 'disney', 'hbo', 'globoplay', 'youtube',
+                'deezer', 'apple', 'crunchyroll', 'paramount', 'claro', 'vivo', 'tim',
+                'oi', 'net', 'sky', 'starlink', 'academia', 'gym', 'assinatura',
+                'subscription', 'plano mensal', 'totalpass', 'gympass', 'wellhub',
+                'chatgpt', 'openai', 'google one', 'icloud', 'dropbox', 'microsoft 365',
+                'adobe', 'prime video', 'amazon prime', 'youtube premium'
+            ]
             keywords_excluir = ['juros', 'multa', 'encargo', 'iof', 'rotativo']
             
             regex_kw = '|'.join(keywords)
             regex_excluir = '|'.join(keywords_excluir)
+            start_assinaturas = datetime.combine(today - timedelta(days=90), time.min)
+            categoria_ass_ids = db.query(Categoria.id).filter(
+                or_(
+                    func.lower(Categoria.nome).like('%assinatura%'),
+                    func.lower(Categoria.nome).like('%serviços e assinaturas%'),
+                    func.lower(Categoria.nome).like('%servicos e assinaturas%')
+                )
+            )
+            subcategoria_ass_ids = db.query(Subcategoria.id).filter(
+                func.lower(Subcategoria.nome).like('%assinatura%')
+            )
 
             # Busca por palavras-chave OU pela categoria específica de Assinaturas
             # Mas EXCLUI explicitamente termos financeiros (juros, iof, etc)
             lanc_ass = db.query(Lancamento).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.tipo.in_(['Saída', 'Despesa']),
-                Lancamento.data_transacao >= datetime.combine(start_month, time.min),
+                Lancamento.data_transacao >= start_assinaturas,
                 or_(
                     func.lower(Lancamento.descricao).op('~')(regex_kw),
-                    Lancamento.id_categoria.in_(
-                        db.query(Categoria.id).filter(func.lower(Categoria.nome).like('%assinatura%'))
-                    )
+                    Lancamento.id_categoria.in_(categoria_ass_ids),
+                    Lancamento.id_subcategoria.in_(subcategoria_ass_ids),
                 ),
                 func.lower(Lancamento.descricao).op('!~')(regex_excluir)
             ).all()
@@ -1434,13 +1452,15 @@ def miniapp_modo_deus():
             lista_ass = []
             seen = set()
             for l in lanc_ass:
-                if l.descricao.lower() not in seen:
+                desc_key = re.sub(r'\d+/\d+|\d{4,}', '', (l.descricao or '').lower()).strip()
+                if desc_key and desc_key not in seen:
                     lista_ass.append({"descricao": l.descricao, "valor": abs(float(l.valor)), "proxima_data": None})
-                    seen.add(l.descricao.lower())
+                    seen.add(desc_key)
             for a in agend_ass:
-                if a.descricao.lower() not in seen:
+                desc_key = re.sub(r'\d+/\d+|\d{4,}', '', (a.descricao or '').lower()).strip()
+                if desc_key and desc_key not in seen:
                     lista_ass.append({"descricao": a.descricao, "valor": float(a.valor), "proxima_data": a.proxima_data_execucao.isoformat() if a.proxima_data_execucao else None})
-                    seen.add(a.descricao.lower())
+                    seen.add(desc_key)
             
             result['assinaturas'] = {"lista": lista_ass, "total_mensal": sum(x['valor'] for x in lista_ass)}
         except Exception as e:
@@ -1449,9 +1469,15 @@ def miniapp_modo_deus():
 
         # --- SEÇÃO 4: PARCELAMENTOS ---
         try:
-            parcelas = db.query(ParcelamentoItem).filter(ParcelamentoItem.id_usuario == user_id).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(6).all()
+            parcelas = db.query(ParcelamentoItem).filter(
+                ParcelamentoItem.id_usuario == user_id,
+                or_(ParcelamentoItem.data_proxima_parcela.is_(None), ParcelamentoItem.data_proxima_parcela >= today)
+            ).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(6).all()
             lista_p = [{"descricao": p.descricao, "valor_parcela": float(p.valor_parcela), "parcela_atual": p.parcela_atual, "total_parcelas": p.total_parcelas, "data_proxima_parcela": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None, "percentual_concluido": (p.parcela_atual / p.total_parcelas * 100) if p.total_parcelas > 0 else 0} for p in parcelas]
-            total_p = db.query(func.sum(ParcelamentoItem.valor_parcela)).filter(ParcelamentoItem.id_usuario == user_id).scalar() or 0
+            total_p = db.query(func.sum(ParcelamentoItem.valor_parcela)).filter(
+                ParcelamentoItem.id_usuario == user_id,
+                or_(ParcelamentoItem.data_proxima_parcela.is_(None), ParcelamentoItem.data_proxima_parcela >= today)
+            ).scalar() or 0
             result['parcelamentos'] = {"lista": lista_p, "total_mensal_parcelas": float(total_p)}
         except Exception as e:
             logger.error(f"Erro Modo Deus (parcelamentos): {e}")
@@ -2234,7 +2260,7 @@ def miniapp_orcamentos():
                 gasto = db.query(func.sum(Lancamento.valor)).filter(
                     Lancamento.id_usuario == usuario.id,
                     Lancamento.id_categoria == o.id_categoria,
-                    Lancamento.tipo == 'Saída',
+                    Lancamento.tipo.in_(['Saída', 'Despesa']),
                     Lancamento.data_transacao >= start_date
                 ).scalar() or 0
                 items.append({

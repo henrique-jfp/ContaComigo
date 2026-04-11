@@ -24,6 +24,8 @@ from models import Usuario, Lancamento, Objetivo, Categoria
 
 logger = logging.getLogger(__name__)
 
+TIPOS_DESPESA = ("Saída", "Despesa")
+
 
 # ============================================================================
 # ANÁLISE DE GASTOS ELEVADOS
@@ -38,7 +40,7 @@ def calcular_gastos_mes_atual(usuario_id: int) -> float:
         total = db.query(func.sum(Lancamento.valor)).filter(
             and_(
                 Lancamento.id_usuario == usuario_id,
-                Lancamento.tipo == 'Saída',
+                Lancamento.tipo.in_(TIPOS_DESPESA),
                 extract('year', Lancamento.data_transacao) == hoje.year,
                 extract('month', Lancamento.data_transacao) == hoje.month
             )
@@ -62,7 +64,7 @@ def calcular_media_historica(usuario_id: int, meses: int = 6) -> float:
         total = db.query(func.sum(Lancamento.valor)).filter(
             and_(
                 Lancamento.id_usuario == usuario_id,
-                Lancamento.tipo == 'Saída',
+                Lancamento.tipo.in_(TIPOS_DESPESA),
                 Lancamento.data_transacao >= data_inicio,
                 Lancamento.data_transacao < primeiro_dia_mes_atual
             )
@@ -107,7 +109,7 @@ def identificar_categorias_infladas(usuario_id: int, percentual_minimo: float = 
             gasto_atual = db.query(func.sum(Lancamento.valor)).filter(
                 and_(
                     Lancamento.id_usuario == usuario_id,
-                    Lancamento.tipo == 'Saída',
+                    Lancamento.tipo.in_(TIPOS_DESPESA),
                     Lancamento.id_categoria == categoria.id,
                     extract('year', Lancamento.data_transacao) == hoje.year,
                     extract('month', Lancamento.data_transacao) == hoje.month
@@ -123,7 +125,7 @@ def identificar_categorias_infladas(usuario_id: int, percentual_minimo: float = 
             gasto_historico = db.query(func.sum(Lancamento.valor)).filter(
                 and_(
                     Lancamento.id_usuario == usuario_id,
-                    Lancamento.tipo == 'Saída',
+                    Lancamento.tipo.in_(TIPOS_DESPESA),
                     Lancamento.id_categoria == categoria.id,
                     Lancamento.data_transacao >= data_inicio_historico,
                     Lancamento.data_transacao < primeiro_dia_mes_atual
@@ -210,7 +212,7 @@ def detectar_assinaturas_recorrentes(usuario_id: int, meses: int = 3) -> List[Di
         lancamentos = db.query(Lancamento).filter(
             and_(
                 Lancamento.id_usuario == usuario_id,
-                Lancamento.tipo == 'Saída',
+                Lancamento.tipo.in_(TIPOS_DESPESA),
                 Lancamento.data_transacao >= data_inicio
             )
         ).order_by(Lancamento.data_transacao).all()
@@ -220,7 +222,7 @@ def detectar_assinaturas_recorrentes(usuario_id: int, meses: int = 3) -> List[Di
         
         for lanc in lancamentos:
             # Normalizar descrição (minúsculas, sem números de fatura)
-            desc_normalizada = lanc.descricao.lower()
+            desc_normalizada = (lanc.descricao or "").lower()
             
             # Remover números de fatura/parcela
             import re
@@ -241,6 +243,14 @@ def detectar_assinaturas_recorrentes(usuario_id: int, meses: int = 3) -> List[Di
         
         for desc, transacoes in grupos_descricao.items():
             if len(transacoes) >= 2:
+                meses_distintos = {
+                    (t['data'].year, t['data'].month)
+                    for t in transacoes
+                    if t.get('data') is not None
+                }
+                if len(meses_distintos) < 2:
+                    continue
+
                 # Verificar se valores são similares (±10%)
                 valores = [t['valor'] for t in transacoes]
                 valor_medio = sum(valores) / len(valores)
