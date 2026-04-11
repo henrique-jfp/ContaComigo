@@ -478,11 +478,16 @@ def executar_tool_pierre(tool_name: str, arguments: dict, api_key: str) -> any:
         return client.get_expensive_categories(start_date=arguments.get("startDate") or arguments.get("start_date"))
 
     elif tool_name == "consultar_livro_caixa_analitico":
-        return client.get_book(
+        res = client.get_book(
             include_all_periods=arguments.get("includeAllPeriods", arguments.get("include_all_periods", False)),
             include_credit_card=arguments.get("includeCreditCard", arguments.get("include_credit_card", False)),
             include_categories=arguments.get("includeCategories", arguments.get("include_categories", False))
         )
+        # Otimização: Se o retorno for gigante, remover lista de transações detalhadas
+        if isinstance(res, dict) and "transactions" in res and len(res["transactions"]) > 20:
+            res["_summary"] = f"Total de {len(res['transactions'])} transações omitidas para brevidade."
+            res["transactions"] = res["transactions"][:5] # Mantém apenas as 5 mais recentes
+        return res
 
     elif tool_name == "consultar_memorias_ia":
         return client.get_memories(message=arguments.get("message"))
