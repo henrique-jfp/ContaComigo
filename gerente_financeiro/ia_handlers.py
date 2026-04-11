@@ -316,20 +316,30 @@ def _formatar_valor_brasileiro(valor: float) -> str:
 
 def _formatar_resposta_html(texto: str) -> str:
     texto = (texto or "").strip().replace("\r\n", "\n")
-    # Remover blocos de código markdown que a IA costuma colocar
+    
+    # 1. Limpeza total: Remover blocos de código e caracteres que o Telegram confunde com tags
     texto = re.sub(r"```(?:html|json|markdown|md)?\s*", "", texto, flags=re.IGNORECASE)
     texto = texto.replace("```", "")
     
-    # Escapar caracteres HTML especiais ANTES de converter markdown em HTML básico
-    from html import escape
-    texto = escape(texto)
+    # 2. Remover tags HTML que a IA possa ter inventado (limpeza bruta)
+    texto = texto.replace("<", "&lt;").replace(">", "&gt;")
     
-    # Converter padrões básicos de markdown para HTML suportado pelo Telegram
+    # 3. Converter Markdown para o NOSSO HTML seguro (re-adicionando as tags permitidas)
+    # Títulos
     texto = re.sub(r"^#{1,6}\s*(.+)$", r"<b>\1</b>", texto, flags=re.MULTILINE)
-    texto = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", texto)
-    texto = re.sub(r"(?<!\w)_(.+?)_(?!\w)", r"<i>\1</i>", texto)
+    # Negrito (Markdown ** ou __)
+    texto = re.sub(r"(\*\*|__)(.+?)\1", r"<b>\2</b>", texto)
+    # Itálico (Markdown * ou _)
+    texto = re.sub(r"(?<!\w)([*_])(.+?)\1(?!\w)", r"<i>\2</i>", texto)
+    # Listas
     texto = re.sub(r"^\s*[-*]\s+", "• ", texto, flags=re.MULTILINE)
+    # Espaçamento
     texto = re.sub(r"\n{3,}", "\n\n", texto)
+    
+    # 4. Des-escapar as tags que NÓS colocamos (reverter apenas o necessário)
+    texto = texto.replace("&lt;b&gt;", "<b>").replace("&lt;/b&gt;", "</b>")
+    texto = texto.replace("&lt;i&gt;", "<i>").replace("&lt;/i&gt;", "</i>")
+    texto = texto.replace("&lt;code&gt;", "<code>").replace("&lt;/code&gt;", "</code>")
     
     return texto.strip()
 
