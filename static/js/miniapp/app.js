@@ -2950,6 +2950,45 @@ lucide.createIcons();
 
     window.loadModoDeus = loadModoDeus;
 
+    function getBrandLogoHtml(name) {
+      const normalized = String(name).toLowerCase();
+      const brands = {
+        'netflix': 'netflix.com',
+        'spotify': 'spotify.com',
+        'amazon': 'amazon.com',
+        'prime': 'amazon.com',
+        'apple': 'apple.com',
+        'google': 'google.com',
+        'youtube': 'youtube.com',
+        'gympass': 'gympass.com',
+        'wellhub': 'wellhub.com',
+        'openai': 'openai.com',
+        'chatgpt': 'openai.com',
+        'disney': 'disney.com',
+        'hbo': 'hbo.com',
+        'max': 'max.com',
+        'claro': 'claro.com.br',
+        'vivo': 'vivo.com.br',
+        'tim': 'tim.com.br',
+        'ifood': 'ifood.com.br',
+        'uber': 'uber.com',
+        '99': '99app.com',
+        'nubank': 'nubank.com.br',
+        'inter': 'bancointer.com.br',
+        'itau': 'itau.com.br',
+        'bradesco': 'bradesco.com.br',
+        'santander': 'santander.com.br',
+        'bb': 'bb.com.br'
+      };
+
+      for (const [key, domain] of Object.entries(brands)) {
+        if (normalized.includes(key)) {
+          return `<div class="w-6 h-6 shrink-0 rounded-full overflow-hidden bg-white flex items-center justify-center shadow-sm border border-telegram-separator"><img src="https://logo.clearbit.com/${domain}" class="w-full h-full object-contain" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"><i data-lucide="tag" class="w-3 h-3 text-telegram-hint hidden"></i></div>`;
+        }
+      }
+      return `<div class="w-6 h-6 shrink-0 rounded-full overflow-hidden bg-brand/10 flex items-center justify-center shadow-sm border border-brand/20"><i data-lucide="tag" class="w-3 h-3 text-brand"></i></div>`;
+    }
+
     function renderModoDeus(data) {
       const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
       const dtFmt = (d) => d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '--';
@@ -2981,7 +3020,7 @@ lucide.createIcons();
       const vpcEl = document.getElementById('mdPatrimonioVar');
       if (vpcEl) {
         vpcEl.textContent = vpc !== null ? `${vpc > 0 ? '+' : ''}${vpc.toFixed(1)}% vs mês ant.` : '--';
-        vpcEl.className = `text-[9px] mt-1 ${vpc >= 0 ? 'text-green-600' : 'text-red-600'}`;
+        vpcEl.className = `text-[10px] mt-1 font-semibold ${vpc >= 0 ? 'text-green-600' : 'text-red-600'}`;
       }
 
       const mdDisponivel = document.getElementById('mdDisponivel');
@@ -2994,7 +3033,7 @@ lucide.createIcons();
       const rEl = document.getElementById('mdResultado');
       if (rEl) {
         rEl.textContent = fmt.format(rMes);
-        rEl.className = `text-sm font-bold truncate ${rMes >= 0 ? 'text-green-600' : 'text-red-600'}`;
+        rEl.className = `text-lg font-bold truncate ${rMes >= 0 ? 'text-green-600' : 'text-red-600'}`;
       }
 
       const mdEntradas = document.getElementById('mdEntradas');
@@ -3022,7 +3061,7 @@ lucide.createIcons();
         const topCats = data.top_categorias || [];
         const maxT = topCats.length > 0 ? topCats[0].total : 1;
         topCats.forEach(c => {
-          catsL.innerHTML += `<div><div class="flex justify-between text-[11px] mb-1"><span class="text-telegram-text font-medium">${c.nome}</span><span class="text-telegram-text font-bold">${fmt.format(c.total)}</span></div><div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-full rounded-full" style="width: ${(c.total / maxT * 100)}%; background-color: ${c.cor_hex}"></div></div></div>`;
+          catsL.innerHTML += `<div><div class="flex justify-between text-[11px] mb-1"><span class="text-telegram-text font-bold">${c.nome}</span><span class="text-telegram-text font-black">${fmt.format(c.total)}</span></div><div class="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-full rounded-full" style="width: ${(c.total / maxT * 100)}%; background-color: ${c.cor_hex}"></div></div></div>`;
         });
       }
 
@@ -3033,7 +3072,8 @@ lucide.createIcons();
         const assObj = data.assinaturas || { lista: [], total_mensal: 0 };
         if (mdTotalAssinaturas) mdTotalAssinaturas.textContent = fmt.format(assObj.total_mensal);
         assObj.lista.slice(0, 5).forEach(a => {
-          assL.innerHTML += `<div class="flex justify-between text-[11px]"><span class="text-telegram-text truncate mr-2">${a.descricao}</span><span class="text-telegram-hint font-bold whitespace-nowrap">${fmt.format(a.valor)}</span></div>`;
+          const logo = getBrandLogoHtml(a.descricao);
+          assL.innerHTML += `<div class="flex items-center justify-between gap-3"><div class="flex items-center gap-3 min-w-0">${logo}<span class="text-[12px] font-bold text-telegram-text truncate">${a.descricao}</span></div><span class="text-[12px] text-telegram-text font-black whitespace-nowrap">${fmt.format(a.valor)}</span></div>`;
         });
       }
 

@@ -289,29 +289,35 @@ add_fii_conv = ConversationHandler(
 def detect_fii_intent(message: str) -> str | None:
     m = message.lower()
     
-    # 1. Analisar FII específico
-    match_analisar = re.search(r'(?i)(analisa|o que acha de|vale a pena|sobre o) ([a-z]{4}11)', m)
+    # 1. Analisar FII específico (Regex mais flexível com fillers)
+    match_analisar = re.search(r'(?i)(analisa|o que acha de|vale a pena|sobre o|mostra o|detalhes do|info do|fundo|fii)\s+(?:o|a|os|as|do|da|fundo|ativo|fii)?\s*([a-z]{4}11)', m)
     if match_analisar:
-        return f"analisar_fii:{match_analisar.group(2).upper()}"
+        ticker = match_analisar.group(2).upper()
+        return f"analisar_fii:{ticker}"
     
     # 2. Carteira
-    if any(p in m for p in ["meus fiis", "carteira de fii", "minha carteira fii", "meus fundos"]):
+    if any(p in m for p in ["meus fiis", "carteira de fii", "minha carteira fii", "meus fundos", "meus ativos"]):
         return "carteira_fii"
         
     # 3. Recomendações
-    if any(p in m for p in ["recomenda", "quais fiis", "bons fiis", "sugestão de fii"]):
+    if any(p in m for p in ["recomenda", "quais fiis", "bons fiis", "sugestão de fii", "sugestao de fii", "indica algum"]):
         return "recomendar_fii"
         
-    # 4. Conceitos
-    if any(p in m for p in ["o que é dy", "o que é pvp", "explica pvp", "explica dy", "o que é vacância", "o que é vacancia"]):
+    # 4. Conceitos (Expandido para capturar erros comuns antes da IA genérica)
+    conceitos = [
+        "o que é dy", "o que é pvp", "explica pvp", "explica dy", 
+        "o que é vacância", "o que é vacancia", "fii de tijolo", 
+        "fii de papel", "fii de tijolo e papel", "fundo de tijolo", "fundo de papel"
+    ]
+    if any(p in m for p in conceitos):
         return "explicar_conceito"
         
-    # 5. Adicionar (Interceptado pelo ConvHandler, mas útil para o roteador saber)
-    if any(p in m for p in ["adicionar fii", "comprei fii"]):
+    # 5. Adicionar
+    if any(p in m for p in ["adicionar fii", "comprei fii", "cadastrar fii"]):
         return "adicionar_fii"
 
-    # 6. Remover
-    match_remover = re.search(r'(?i)(remover|vendi) ([a-z]{4}11)', m)
+    # 6. Remover (Regex mais flexível)
+    match_remover = re.search(r'(?i)(remover|vendi|deletar|excluir)\s+(?:o|a|os|as|do|da|fundo|ativo|fii)?\s*([a-z]{4}11)', m)
     if match_remover:
         return f"remover_fii:{match_remover.group(2).upper()}"
 

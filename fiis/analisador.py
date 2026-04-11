@@ -187,13 +187,14 @@ def explicar_conceito(conceito: str) -> str:
         "vacância": "Vacância é o percentual de imóveis do fundo que estão desocupados (sem gerar aluguel). Vacância 0% = 100% dos imóveis alugados, máxima eficiência. Vacância acima de 15% é sinal de alerta — menos receita, menos rendimento.",
         "rendimento": "É o valor distribuído mensalmente por cota. Se o fundo paga R$1,20/cota e você tem 100 cotas, recebe R$120 por mês direto na conta da corretora. É isento de IR para pessoa física.",
         "liquidez": "Volume médio negociado por dia. Liquidez baixa = difícil vender sem impactar o preço. Prefira FIIs com liquidez diária acima de R$500 mil.",
-        "fundo de papel": "Investe em CRIs (Certificados de Recebíveis Imobiliários), não em imóveis físicos. Geralmente paga DY mais alto mas tem risco de crédito. Ideal para perfil moderado/arrojado.",
-        "fundo de tijolo": "Investe diretamente em imóveis físicos (shoppings, galpões, lajes). Renda mais previsível. Ideal para perfil conservador.",
+        "papel": "<b>FII de Papel (Recebíveis):</b> Investe em títulos de dívida imobiliária, como o CRI (Certificado de Recebíveis Imobiliários). É como se você emprestasse dinheiro para o setor imobiliário em troca de juros e correção monetária. Geralmente pagam dividendos mais altos, mas não possuem o imóvel físico.",
+        "tijolo": "<b>FII de Tijolo:</b> Investe diretamente em imóveis físicos reais (shoppings, galpões logísticos, prédios de escritórios). O rendimento vem do aluguel pago pelos inquilinos. É um investimento mais tangível e focado na valorização dos imóveis e renda constante.",
+        "fof": "<b>FOF (Fundo de Fundos):</b> É um fundo que compra cotas de outros FIIs. É ótimo para diversificar com pouco dinheiro, pois com uma cota você se torna dono de pedacinhos de dezenas de outros fundos.",
     }
     
     # Busca por palavra-chave parcial
     for k, v in mapa.items():
-        if k in conceito or conceito in k:
+        if k in conceito:
             return v
             
-    return "Desculpe, ainda não sei explicar esse conceito específico de FII. Tente perguntar sobre DY, P/VP ou Vacância."
+    return "Desculpe, ainda não sei explicar esse conceito específico de FII. Tente perguntar sobre DY, P/VP, Vacância, FII de Tijolo ou FII de Papel."

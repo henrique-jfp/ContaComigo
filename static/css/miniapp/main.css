@@ -335,7 +335,7 @@
     }
   }
 
-  /* Componente Aquário - REFORMULADO */
+  /* Componente Aquário - REFORMULADO com Ondas Reais */
   .aquarium-card {
     position: relative;
     width: 100%;
@@ -356,23 +356,34 @@
     width: 100%;
     height: 0%;
     transition: height 1.5s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.8s ease;
+    background: rgba(255, 255, 255, 0.15); /* Corpo da água */
     z-index: 5;
     min-height: 2px;
   }
-  .aquarium-water::before {
+  .aquarium-water::before,
+  .aquarium-water::after {
     content: "";
     position: absolute;
     width: 200%;
-    height: 200%;
-    top: -180%;
-    left: -50%;
-    border-radius: 40%;
-    background: rgba(255, 255, 255, 0.2);
-    animation: wave-move 10s infinite linear;
+    height: 18px; /* Altura da onda */
+    top: -17px;   /* Flutuando na borda superior da água */
+    left: 0;
+    background-repeat: repeat-x;
+    background-size: 50% 100%;
   }
-  @keyframes wave-move {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+  .aquarium-water::before {
+    background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTAwMCAxMDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTAsNTAgQzI1MCwxMDAgMjUwLDAgNTAwLDUwIEM3NTAsMTAwIDc1MCwwIDEwMDAsNTAgTDEwMDAsMTAwIEwwLDEwMCBaIiBmaWxsPSJyZ2JhKDI1NSwgMjU1LCAyNTUsIDAuMikiLz48L3N2Zz4=");
+    animation: wave-move-x 4s linear infinite;
+    z-index: 2;
+  }
+  .aquarium-water::after {
+    background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTAwMCAxMDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTAsNTAgQzI1MCwwIDI1MCwxMDAgNTAwLDUwIEM3NTAsMCA3NTAsMTAwIDEwMDAsNTAgTDEwMDAsMTAwIEwwLDEwMCBaIiBmaWxsPSJyZ2JhKDI1NSwgMjU1LCAyNTUsIDAuMTUpIi8+PC9zdmc+");
+    animation: wave-move-x 6s linear infinite;
+    z-index: 1;
+  }
+  @keyframes wave-move-x {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
   }
   .aquarium-percentage {
     position: relative;
