@@ -630,6 +630,12 @@ async def job_assistente_proativo(context):
         logger.info(f"📊 Analisando {total_usuarios} usuários ativos...")
         
         for usuario in usuarios_ativos:
+            # Trava de preferências de notificação
+            notif_insights = getattr(usuario, 'notif_insights', True)
+            notif_alertas_risco = getattr(usuario, 'notif_alertas_risco', True)
+            if not notif_insights and not notif_alertas_risco:
+                continue
+
             try:
                 enviou_alerta = await analisar_e_notificar_usuario(context.bot, usuario)
                 if enviou_alerta:
