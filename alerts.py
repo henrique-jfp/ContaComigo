@@ -62,10 +62,12 @@ async def agendar_notificacoes_diarias(context: ContextTypes.DEFAULT_TYPE):
         hoje = datetime.now().date()
         
         # Buscar agendamentos que vencem HOJE ou já passaram e ainda estão ativos
+        # E que o usuário tenha alertas ativados
         agendamentos_hoje = db.query(Agendamento).join(Usuario).filter(
             Agendamento.proxima_data_execucao <= hoje,
             Agendamento.ativo == True,
-            Usuario.alerta_gastos_ativo == True
+            Usuario.alerta_gastos_ativo == True,
+            Usuario.notif_lembretes == True
         ).all()
         
         # Agrupar por usuário

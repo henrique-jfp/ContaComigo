@@ -131,16 +131,12 @@ async def cmd_analisar_fii_handler(update: Update, context: ContextTypes.DEFAULT
     ]
     
     await update.message.reply_chat_action("typing")
-    try:
-        resposta = await _smart_ai_completion_async(messages)
-        
-        if isinstance(resposta, dict): # se retornou tool calls ou algo assim
-            texto = "Desculpe, tive um problema ao processar a análise agora."
-        else:
-            texto = resposta or "Não consegui gerar a análise agora. Tente novamente em instantes."
-    except Exception as e:
-        logger.error(f"❌ [FII] Erro crítico na chamada da IA: {e}", exc_info=True)
+    resposta = await _smart_ai_completion_async(messages)
+    
+    if isinstance(resposta, dict): # se retornou tool calls ou algo assim
         texto = "Desculpe, tive um problema ao processar a análise agora."
+    else:
+        texto = resposta or "Não consegui gerar a análise agora. Tente novamente em instantes."
         
     # Garantir que a nota de rodapé esteja presente
     if "recomendação" not in texto.lower():
