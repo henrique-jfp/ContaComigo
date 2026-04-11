@@ -19,6 +19,11 @@ TIPO_OPEN_FINANCE_MAP: dict[str, str] = {
 def normalizar_tipo(tipo_raw: str) -> str:
     return TIPO_OPEN_FINANCE_MAP.get(tipo_raw, "Despesa")
 
+def normalizar_descricao(descricao: str) -> str:
+    """Normaliza a descrição para exibição e log, removendo espaços excessivos."""
+    if not descricao: return ""
+    return re.sub(r'\s+', ' ', descricao).strip()
+
 MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
     'Serviços e Assinaturas': {
         'Assinaturas': [
