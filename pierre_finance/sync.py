@@ -19,9 +19,8 @@ from .client import PierreClient
 from finance_utils import normalize_financial_type
 from models import (
     Usuario, Conta, Lancamento, SaldoConta,
-    FaturaCartao, ParcelamentoItem, Categoria, Subcategoria,
+    FaturaCartao, ParcelamentoItem,
 )
-from .categorizador import categorizar_transacao
 
 logger = logging.getLogger(__name__)
 
@@ -333,9 +332,6 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
     res_txs = client.get_transactions(startDate=date_90, limit=1000, format="raw")
     txs_raw = _extrair_lista_de_resposta(res_txs)
 
-    cat_cache = {c.nome: c.id for c in db.query(Categoria).all()}
-    subcat_cache = {(s.id_categoria, s.nome): s.id for s in db.query(Subcategoria).all()}
-
     txs_count = 0
     for tx in txs_raw:
         ext_id = str(tx.get("id") or tx.get("transactionId") or "")
@@ -348,7 +344,6 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
         descricao = (tx.get("description") or tx.get("name") or "Transação").strip()
 
         tipo = _inferir_tipo(descricao, valor_bruto, acc_type, tx_type)
-        cat_id, subcat_id = categorizar_transacao(descricao, tipo, db, cat_cache, subcat_cache)
 
         db.add(Lancamento(
             id_usuario=usuario.id,
@@ -360,11 +355,10 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
             data_transacao=_parse_iso_date(tx.get("date")) or datetime.now(timezone.utc),
             origem="open_finance",
             forma_pagamento=_normalizar_forma_pagamento(descricao, acc_type),
-            id_categoria=cat_id,
-            id_subcategoria=subcat_id,
+            id_categoria=None,
+            id_subcategoria=None,
         ))
         txs_count += 1
-        if txs_count % 100 == 0: db.flush()
 
     # ------------------------------------------------------------------
     # ETAPA 3: Faturas Atuais e Próximas
@@ -379,6 +373,9 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
     usuario.pierre_initial_sync_done = True
     usuario.last_pierre_sync_at = datetime.now(timezone.utc)
     db.commit()
+
+    # Categorização (regras + LLM) fica fora do sync — ver pipeline_categorizacao_pos_ingestao.
+
     return {
         "status": "success",
         "lancamentos": txs_count,
@@ -409,11 +406,6 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
     res_txs = client.get_transactions(startDate=date_48h, limit=200, format="raw")
     txs_raw = _extrair_lista_de_resposta(res_txs)
 
-    cat_cache: dict[str, int] = {c.nome: c.id for c in db.query(Categoria).all()}
-    subcat_cache: dict[tuple, int] = {
-        (s.id_categoria, s.nome): s.id for s in db.query(Subcategoria).all()
-    }
-
     novos = 0
     for tx in txs_raw:
         ext_id = str(tx.get("id") or "")
@@ -428,7 +420,6 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
         descricao = (tx.get("description") or tx.get("name") or "Transação").strip()
 
         tipo = _inferir_tipo(descricao, valor_bruto, acc_type, tx_type)
-        cat_id, subcat_id = categorizar_transacao(descricao, tipo, db, cat_cache, subcat_cache)
 
         data_tx = (
             _parse_iso_date(tx.get("date"))
@@ -447,8 +438,8 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
             data_transacao=data_tx,
             origem="open_finance",
             forma_pagamento=_normalizar_forma_pagamento(descricao, acc_type),
-            id_categoria=cat_id,
-            id_subcategoria=subcat_id,
+            id_categoria=None,
+            id_subcategoria=None,
         ))
         novos += 1
 

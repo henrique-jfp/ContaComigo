@@ -12,11 +12,31 @@ from models import Usuario
 import logging
 import asyncio
 from .sync import sincronizar_carga_inicial, sincronizar_incremental
+from .categorizador_llm import pipeline_categorizacao_pos_ingestao, processar_fallback_outros_llm
+from .categorizador import aplicar_regras_lancamentos_open_finance
 
 # Estados da conversação
 CHOOSING_ACTION, ASK_KEY = range(2)
 
 logger = logging.getLogger(__name__)
+
+
+async def _pipeline_categorizacao_em_segundo_plano(usuario_id: int) -> None:
+    """Nova sessão DB — regras + LLM após ingestão; não compartilha sessão com o handler."""
+    db = next(get_db())
+    try:
+        res = await pipeline_categorizacao_pos_ingestao(db, usuario_id)
+        logger.info(
+            "Pipeline pós-ingestão (Open Finance) usuário %s: regras=%s llm=%s",
+            usuario_id,
+            res.get("regras"),
+            res.get("llm"),
+        )
+    except Exception as e:
+        logger.error("Falha no pipeline de categorização em segundo plano: %s", e, exc_info=True)
+    finally:
+        db.close()
+
 
 async def sincronizar_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Comando /sincronizar_banco para forçar a leitura do Open Finance."""
@@ -36,15 +56,59 @@ async def sincronizar_manual(update: Update, context: ContextTypes.DEFAULT_TYPE)
             # Tenta disparar a carga inicial se não estiver marcada como feita
             res = await sincronizar_carga_inicial(usuario, db)
             if isinstance(res, dict) and "error" not in res:
-                await msg.edit_text(f"✅ <b>Carga inicial concluída agora!</b>\n\nImportei {res.get('lancamentos')} transações. Agora o Alfredo monitora tudo!", parse_mode='HTML')
+                asyncio.create_task(_pipeline_categorizacao_em_segundo_plano(usuario.id))
+                await msg.edit_text(
+                    f"✅ <b>Carga inicial concluída agora!</b>\n\n"
+                    f"Importei <b>{res.get('lancamentos')}</b> transações. "
+                    f"Categorização (regras + IA) roda em segundo plano. 🧠",
+                    parse_mode='HTML',
+                )
             return
 
         try:
             novos = await sincronizar_incremental(usuario, db)
-            await msg.edit_text(f"✅ <b>Sincronização concluída!</b>\n\nEncontrei <b>{novos}</b> novas transações que já foram processadas localmente.", parse_mode='HTML')
+            asyncio.create_task(_pipeline_categorizacao_em_segundo_plano(usuario.id))
+            await msg.edit_text(
+                f"✅ <b>Sincronização concluída!</b>\n\n"
+                f"• <b>{novos}</b> novas transações importadas.\n"
+                f"• Categorização (regras + IA) em segundo plano. 🧠",
+                parse_mode='HTML',
+            )
         except Exception as e:
             logger.error(f"Erro no sync manual: {e}")
             await msg.edit_text("❌ Ocorreu um erro na comunicação com o banco. Tente novamente mais tarde.")
+    finally:
+        db.close()
+
+
+async def recategorizar_tudo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Reaplica todas as regras locais aos lançamentos Open Finance e, em seguida,
+    envia ao LLM o que ainda estiver em Outros — sem chamar a API Pierre.
+    """
+    user_id = update.effective_user.id
+    msg = await update.message.reply_text(
+        "🔄 <i>Reaplicando regras e refinando categorias (sem sincronizar com o banco externo)...</i>",
+        parse_mode="HTML",
+    )
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
+        if not usuario or not usuario.pierre_api_key:
+            await msg.edit_text("❌ Open Finance não configurado. Use /pierre primeiro.")
+            return
+        n_regras = aplicar_regras_lancamentos_open_finance(db, usuario.id, escopo="tudo")
+        n_llm = await processar_fallback_outros_llm(db, usuario.id)
+        await msg.edit_text(
+            f"✅ <b>Recategorização local concluída!</b>\n\n"
+            f"• <b>{n_regras}</b> lançamentos atualizados pelas regras.\n"
+            f"• <b>{n_llm}</b> refinados pela IA (fallback Outros).\n\n"
+            f"Isso não consumiu chamadas ao Open Finance.",
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        logger.error("Erro em /recategorizar_tudo: %s", e, exc_info=True)
+        await msg.edit_text("❌ Não foi possível concluir. Tente de novo em instantes.")
     finally:
         db.close()
 
@@ -136,16 +200,15 @@ async def receive_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if isinstance(res, dict) and "error" in res:
                     await status_msg.edit_text("✅ Chave salva com sucesso, mas a carga inicial falhou.\nUse /sincronizar_banco para tentar novamente.")
                 else:
+                    asyncio.create_task(_pipeline_categorizacao_em_segundo_plano(usuario.id))
                     await status_msg.edit_text(
                         "✅ <b>Conexão Direta Estabelecida!</b>\n\n"
-                        "📊 <b>Carga inicial concluída:</b>\n"
-                        f"• <b>{res.get('contas', 0)}</b> contas bancárias importadas\n"
-                        f"• <b>{res.get('lancamentos', 0)}</b> transações dos últimos 3 meses\n"
-                        f"• <b>{res.get('faturas', 0)}</b> faturas de cartão importadas\n"
-                        f"• <b>{res.get('parcelamentos', 0)}</b> parcelamentos mapeados\n\n"
-                        "A partir de agora o Alfredo monitora tudo com seus próprios dados locais.\n"
-                        "Use /sincronizar_banco para atualizações.",
-                        parse_mode='HTML'
+                        "📊 <b>Relatório de Importação:</b>\n"
+                        f"• <b>{res.get('contas', 0)}</b> contas bancárias mapeadas\n"
+                        f"• <b>{res.get('lancamentos', 0)}</b> transações importadas\n"
+                        f"• Categorização (regras + IA) em segundo plano. 🧠\n\n"
+                        "O Alfredo agora conhece seu histórico financeiro real. Use /sincronizar_banco para atualizações.",
+                        parse_mode='HTML',
                     )
             except Exception as sync_err:
                 logger.error(f"Erro na carga inicial Pierre: {sync_err}", exc_info=True)

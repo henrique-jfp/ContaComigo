@@ -23,6 +23,7 @@ from gerente_financeiro.monetization import (
     trial_users_expiring_in,
 )
 from pierre_finance.sync import sincronizar_incremental
+from pierre_finance.categorizador_llm import pipeline_categorizacao_pos_ingestao
 from fiis.alertas import enviar_alertas_fii
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,7 @@ async def job_sincronizar_pierre_incremental_all_users(context: ContextTypes.DEF
         for usuario in usuarios:
             try:
                 await sincronizar_incremental(usuario, db)
+                await pipeline_categorizacao_pos_ingestao(db, usuario.id)
             except Exception as e:
                 logger.error(f"Falha ao sincronizar Open Finance para usuário {usuario.id}: {e}")
     finally:
