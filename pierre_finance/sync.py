@@ -379,7 +379,11 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
     usuario.pierre_initial_sync_done = True
     usuario.last_pierre_sync_at = datetime.now(timezone.utc)
     db.commit()
-    return {"status": "success"}
+    return {
+        "status": "success",
+        "lancamentos": txs_count,
+        "contas": len(accounts_map)
+    }
 
 # ---------------------------------------------------------------------------
 # Sincronização incremental

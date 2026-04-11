@@ -1,0 +1,29 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - text: █████ CRISIS MONITORING SYSTEM █████
+    - heading "🚨 CONTACOMIGO CRISIS SENSOR" [level=1] [ref=e3]
+    - generic [ref=e6]: "SISTEMA ATIVO • ÚLTIMA VARREDURA: 11/04/2026, 18:16:45"
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - button "📊 OVERVIEW" [ref=e9] [cursor=pointer]
+      - button "👥 USUÁRIOS" [ref=e10] [cursor=pointer]
+      - button "⚡ COMANDOS" [ref=e11] [cursor=pointer]
+      - button "🚀 PERFORMANCE" [ref=e12] [cursor=pointer]
+      - button "🚨 ALERTAS" [ref=e13] [cursor=pointer]
+    - generic [ref=e14]:
+      - generic [ref=e16]: INICIALIZANDO SENSORES...
+      - generic [ref=e18]:
+        - generic [ref=e19]:
+          - heading "📈 ATIVIDADE SISTEMA - 24H" [level=3] [ref=e20]
+          - generic [ref=e21]: ▲ SYSTEM MONITORING ▲
+        - generic [ref=e23]:
+          - heading "🏆 COMANDOS CRÍTICOS" [level=3] [ref=e24]
+          - generic [ref=e25]: ▲ SYSTEM MONITORING ▲
+        - generic [ref=e27]:
+          - heading "⚡ LATÊNCIA SISTEMA" [level=3] [ref=e28]
+          - generic [ref=e29]: ▲ SYSTEM MONITORING ▲
+        - generic [ref=e31]:
+          - heading "👤 USUÁRIOS EM ALERTA" [level=3] [ref=e32]
+          - generic [ref=e34]: ESCANEANDO USUÁRIOS...
+    - text: ▲ SYSTEM MONITORING ▲ ▲ SYSTEM MONITORING ▲ ▲ SYSTEM MONITORING ▲ ▲ SYSTEM MONITORING ▲
+  - paragraph [ref=e36]: ContaComigo Analytics Dashboard • Atualização automática a cada 30 segundos
