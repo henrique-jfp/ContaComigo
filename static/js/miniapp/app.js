@@ -2545,6 +2545,33 @@ lucide.createIcons();
     }
 
     // --- Lógica de Orçamentos ---
+    const tabToggleMetas = document.getElementById('tabToggleMetas');
+    const tabToggleOrcamentos = document.getElementById('tabToggleOrcamentos');
+    const viewMetas = document.getElementById('viewMetas');
+    const viewOrcamentos = document.getElementById('viewOrcamentos');
+
+    if (tabToggleMetas && tabToggleOrcamentos) {
+      tabToggleMetas.addEventListener('click', () => {
+        tabToggleMetas.classList.add('bg-brand', 'text-white', 'shadow-sm');
+        tabToggleMetas.classList.remove('text-telegram-hint', 'hover:text-telegram-text');
+        tabToggleOrcamentos.classList.remove('bg-brand', 'text-white', 'shadow-sm');
+        tabToggleOrcamentos.classList.add('text-telegram-hint', 'hover:text-telegram-text');
+        viewMetas.classList.remove('hidden');
+        viewOrcamentos.classList.add('hidden');
+        loadMetas();
+      });
+
+      tabToggleOrcamentos.addEventListener('click', () => {
+        tabToggleOrcamentos.classList.add('bg-brand', 'text-white', 'shadow-sm');
+        tabToggleOrcamentos.classList.remove('text-telegram-hint', 'hover:text-telegram-text');
+        tabToggleMetas.classList.remove('bg-brand', 'text-white', 'shadow-sm');
+        tabToggleMetas.classList.add('text-telegram-hint', 'hover:text-telegram-text');
+        viewOrcamentos.classList.remove('hidden');
+        viewMetas.classList.add('hidden');
+        loadOrcamentos();
+      });
+    }
+
     function openOrcamentoModal() {
       orcamentoValor.value = '';
       orcamentoModal.classList.add('active');
