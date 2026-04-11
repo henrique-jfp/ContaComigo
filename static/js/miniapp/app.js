@@ -308,6 +308,9 @@ lucide.createIcons();
         loadMetas();
         loadOrcamentos();
       }
+      if (tabName === 'modo-deus' && sessionId) {
+        loadModoDeus();
+      }
       if (tabName === 'fantasma' && sessionId) {
         loadPierreDashboard();
       }
@@ -2844,3 +2847,209 @@ lucide.createIcons();
     bindAdaptiveLayoutListeners();
     setupHomeChartsCarousel();
     authTelegram();
+
+    // --- MODO DEUS ---
+    async function loadModoDeus(force = false) {
+      const skeleton = document.getElementById('modoDeusSkeleton');
+      const content = document.getElementById('modoDeusContent');
+
+      // Se não for forçado e já estiver visível, não recarrega (opcional)
+      if (!force && content && !content.classList.contains('hidden')) return;
+
+      if (skeleton) skeleton.classList.remove('hidden');
+      if (content) content.classList.add('hidden');
+
+      try {
+        const response = await fetchWithSession('/api/miniapp/modo_deus');
+        const data = await response.json();
+
+        if (data.ok === false) {
+          showToast('Erro ao carregar Modo Deus', 'error');
+          return;
+        }
+
+        renderModoDeus(data);
+
+        if (skeleton) skeleton.classList.add('hidden');
+        if (content) content.classList.remove('hidden');
+        if (window.lucide) lucide.createIcons();
+      } catch (err) {
+        console.error('Erro Modo Deus:', err);
+        showToast('Falha na conexão do Modo Deus', 'error');
+      }
+    }
+
+    window.loadModoDeus = loadModoDeus;
+
+    function renderModoDeus(data) {
+      const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+      const dtFmt = (d) => d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '--';
+      const vg = data.visao_geral || {};
+
+      const mdMonthYear = document.getElementById('modoDeusMonthYear');
+      if (mdMonthYear) {
+        mdMonthYear.textContent = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
+      }
+
+      // Cálculo do Score no Frontend
+      let score = 100;
+      if (vg.resultado_mes < 0) score -= 20;
+      (data.orcamentos || []).forEach(o => { if (o.status === 'estourado') score -= 10; });
+      (data.cartoes || []).forEach(c => { if (c.dias_para_vencer <= 3) score -= 5; });
+      (data.metas || []).forEach(m => { if (m.percentual > 50) score += 5; });
+      score = Math.max(0, Math.min(100, score));
+
+      const sEl = document.getElementById('modoDeusScore');
+      if (sEl) {
+        sEl.textContent = score;
+        sEl.style.color = score >= 80 ? '#3B6D11' : (score >= 60 ? '#854F0B' : '#A32D2D');
+      }
+
+      const mdPatrimonio = document.getElementById('mdPatrimonio');
+      if (mdPatrimonio) mdPatrimonio.textContent = fmt.format(vg.patrimonio_liquido || 0);
+
+      const vpc = vg.variacao_patrimonio_pct;
+      const vpcEl = document.getElementById('mdPatrimonioVar');
+      if (vpcEl) {
+        vpcEl.textContent = vpc !== null ? `${vpc > 0 ? '+' : ''}${vpc.toFixed(1)}% vs mês ant.` : '--';
+        vpcEl.className = `text-[9px] mt-1 ${vpc >= 0 ? 'text-green-600' : 'text-red-600'}`;
+      }
+
+      const mdDisponivel = document.getElementById('mdDisponivel');
+      if (mdDisponivel) mdDisponivel.textContent = fmt.format(vg.saldo_disponivel || 0);
+
+      const mdLimiteDiario = document.getElementById('mdLimiteDiario');
+      if (mdLimiteDiario) mdLimiteDiario.textContent = `${fmt.format(vg.limite_diario_seguro || 0)}/dia`;
+
+      const rMes = vg.resultado_mes || 0;
+      const rEl = document.getElementById('mdResultado');
+      if (rEl) {
+        rEl.textContent = fmt.format(rMes);
+        rEl.className = `text-sm font-bold truncate ${rMes >= 0 ? 'text-green-600' : 'text-red-600'}`;
+      }
+
+      const mdEntradas = document.getElementById('mdEntradas');
+      if (mdEntradas) mdEntradas.textContent = `Entradas ${fmt.format(vg.entradas_mes || 0)}`;
+
+      const mdSaidas = document.getElementById('mdSaidas');
+      if (mdSaidas) mdSaidas.textContent = `Saídas ${fmt.format(vg.saidas_mes || 0)}`;
+
+      const tFlow = (vg.entradas_mes || 0) + (vg.saidas_mes || 0);
+      const pEnt = tFlow > 0 ? ((vg.entradas_mes || 0) / tFlow * 100) : 50;
+      const mdBarEntrada = document.getElementById('mdBarEntrada');
+      const mdBarSaida = document.getElementById('mdBarSaida');
+      if (mdBarEntrada) mdBarEntrada.style.width = `${pEnt}%`;
+      if (mdBarSaida) mdBarSaida.style.width = `${100 - pEnt}%`;
+
+      const mdNetResult = document.getElementById('mdNetResult');
+      if (mdNetResult) mdNetResult.textContent = rMes >= 0 ? `Sobra de ${fmt.format(rMes)}` : `Déficit de ${fmt.format(Math.abs(rMes))}`;
+
+      const mdDiasRestantes = document.getElementById('mdDiasRestantes');
+      if (mdDiasRestantes) mdDiasRestantes.textContent = `${vg.dias_restantes_mes || 0} dias restantes`;
+
+      const catsL = document.getElementById('mdTopCategories');
+      if (catsL) {
+        catsL.innerHTML = '';
+        const topCats = data.top_categorias || [];
+        const maxT = topCats.length > 0 ? topCats[0].total : 1;
+        topCats.forEach(c => {
+          catsL.innerHTML += `<div><div class="flex justify-between text-[11px] mb-1"><span class="text-telegram-text font-medium">${c.nome}</span><span class="text-telegram-text font-bold">${fmt.format(c.total)}</span></div><div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-full rounded-full" style="width: ${(c.total / maxT * 100)}%; background-color: ${c.cor_hex}"></div></div></div>`;
+        });
+      }
+
+      const mdTotalAssinaturas = document.getElementById('mdTotalAssinaturas');
+      const assL = document.getElementById('mdAssinaturasList');
+      if (assL) {
+        assL.innerHTML = '';
+        const assObj = data.assinaturas || { lista: [], total_mensal: 0 };
+        if (mdTotalAssinaturas) mdTotalAssinaturas.textContent = fmt.format(assObj.total_mensal);
+        assObj.lista.slice(0, 5).forEach(a => {
+          assL.innerHTML += `<div class="flex justify-between text-[11px]"><span class="text-telegram-text truncate mr-2">${a.descricao}</span><span class="text-telegram-hint font-bold whitespace-nowrap">${fmt.format(a.valor)}</span></div>`;
+        });
+      }
+
+      const mdTotalParcelas = document.getElementById('mdTotalParcelas');
+      const parcL = document.getElementById('mdParcelasList');
+      if (parcL) {
+        parcL.innerHTML = '';
+        const parcObj = data.parcelamentos || { lista: [], total_mensal_parcelas: 0 };
+        if (mdTotalParcelas) mdTotalParcelas.textContent = fmt.format(parcObj.total_mensal_parcelas);
+        parcObj.lista.slice(0, 5).forEach(p => {
+          parcL.innerHTML += `<div><div class="flex justify-between text-[11px] mb-1"><span class="text-telegram-text truncate mr-2">${p.descricao}</span><span class="text-telegram-hint">${p.parcela_atual}/${p.total_parcelas}</span></div><div class="h-1 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-amber-500" style="width: ${p.percentual_concluido}%"></div></div></div>`;
+        });
+      }
+
+      const cartL = document.getElementById('mdCartoesList');
+      if (cartL) {
+        cartL.innerHTML = '';
+        (data.cartoes || []).forEach(c => {
+          const v = c.dias_para_vencer;
+          const b = v <= 7 ? `<span class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[8px] font-bold">VENCE EM ${v}D</span>` : (v <= 14 ? `<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[8px] font-bold">VENCE EM ${v}D</span>` : '');
+          cartL.innerHTML += `<div class="flex items-center gap-3"><div class="w-2 h-2 rounded-full" style="background-color: ${c.cor_hex}"></div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="text-[11px] font-bold text-telegram-text truncate">${c.nome_conta}</span>${b}</div><p class="text-[9px] text-telegram-hint">Vence ${dtFmt(c.data_vencimento)}</p></div><div class="text-right"><div class="text-[11px] font-bold text-telegram-text">${fmt.format(c.valor_total)}</div><p class="text-[9px] text-telegram-hint">de ${fmt.format(c.limite_cartao)}</p></div></div>`;
+        });
+      }
+
+      const mL = document.getElementById('mdMetasList');
+      if (mL) {
+        mL.innerHTML = '';
+        (data.metas || []).forEach(m => {
+          mL.innerHTML += `<div><div class="flex justify-between text-[11px] mb-1"><span class="text-telegram-text truncate mr-2">${m.descricao}</span><span class="text-telegram-text font-bold">${m.percentual.toFixed(0)}%</span></div><div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-green-500" style="width: ${m.percentual}%"></div></div></div>`;
+        });
+      }
+
+      const oL = document.getElementById('mdOrcamentosList');
+      if (oL) {
+        oL.innerHTML = '';
+        (data.orcamentos || []).forEach(o => {
+          const cC = o.status === 'estourado' ? 'bg-red-100 text-red-700' : (o.status === 'atencao' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700');
+          oL.innerHTML += `<div class="flex items-center justify-between"><span class="text-[11px] text-telegram-text font-medium">${o.categoria}</span><span class="px-2 py-0.5 rounded-full ${cC} text-[9px] font-bold">${o.percentual_usado.toFixed(0)}% usado</span></div>`;
+        });
+      }
+
+      const fBlock = document.getElementById('mdFiisBlock');
+      if (data.fiis && data.fiis.lista && data.fiis.lista.length > 0) {
+        if (fBlock) fBlock.classList.remove('hidden');
+        const mdRendaFII = document.getElementById('mdRendaFII');
+        if (mdRendaFII) mdRendaFII.textContent = data.fiis.renda_mensal_estimada ? fmt.format(data.fiis.renda_mensal_estimada) + '/mês' : '—';
+        const fL = document.getElementById('mdFiisList');
+        if (fL) {
+          fL.innerHTML = '';
+          data.fiis.lista.forEach(f => {
+            fL.innerHTML += `<div class="flex justify-between items-center text-[11px]"><div><span class="font-bold text-telegram-text">${f.ticker}</span><p class="text-[9px] text-telegram-hint">${f.quantidade_cotas} cotas</p></div><div class="text-right"><span class="text-telegram-text font-bold">${fmt.format(f.valor_posicao)}</span><p class="text-[9px] text-telegram-hint">PM: ${fmt.format(f.preco_medio)}</p></div></div>`;
+          });
+        }
+      } else if (fBlock) {
+        fBlock.classList.add('hidden');
+      }
+
+      const aBlock = document.getElementById('mdAlertasBlock');
+      if (data.alertas && data.alertas.length > 0) {
+        if (aBlock) aBlock.classList.remove('hidden');
+        const aI = document.getElementById('mdAlertasList');
+        if (aI) {
+          aI.innerHTML = '';
+          data.alertas.forEach(a => {
+            const dC = a.tipo === 'critico' ? 'bg-red-500' : (a.tipo === 'aviso' ? 'bg-amber-500' : 'bg-blue-500');
+            aI.innerHTML += `<div class="flex items-start gap-3"><div class="w-2 h-2 rounded-full mt-1.5 ${dC}"></div><div><p class="text-[11px] font-bold text-telegram-text">${a.titulo}</p><p class="text-[10px] text-telegram-hint">${a.detalhe}</p></div></div>`;
+          });
+        }
+      } else if (aBlock) {
+        aBlock.classList.add('hidden');
+      }
+
+      const vL = document.getElementById('mdVencimentosList');
+      if (vL) {
+        vL.innerHTML = '';
+        (data.proximos_vencimentos || []).forEach(v => {
+          vL.innerHTML += `<div class="flex items-center justify-between text-[11px]"><div class="flex items-center gap-2"><div class="w-1.5 h-1.5 rounded-full" style="background-color: ${v.cor_hex}"></div><span class="text-telegram-text truncate max-w-[120px]">${v.descricao}</span><span class="text-[9px] text-telegram-hint">${dtFmt(v.data)}</span></div><span class="font-bold text-telegram-text">${fmt.format(v.valor)}</span></div>`;
+        });
+      }
+
+      const iL = document.getElementById('mdInsightsList');
+      if (iL) {
+        iL.innerHTML = '';
+        (data.insights_rapidos || []).forEach(i => {
+          iL.innerHTML += `<p>— ${i}</p>`;
+        });
+      }
+    }
