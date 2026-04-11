@@ -19,7 +19,7 @@ from functools import wraps
 from sqlalchemy import and_, func, desc, or_, extract
 from flask import Flask, render_template, jsonify, request, g, make_response
 from sqlalchemy.orm import joinedload
-from datetime import datetime, timedelta, date, timezone
+from datetime import datetime, timedelta, date, timezone, time
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
