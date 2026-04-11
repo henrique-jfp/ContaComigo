@@ -1399,21 +1399,31 @@ def miniapp_modo_deus():
 
         # --- SEÇÃO 3: ASSINATURAS ---
         try:
-            keywords = ['netflix', 'spotify', 'amazon', 'disney', 'hbo', 'globoplay', 'youtube', 'deezer', 'apple', 'crunchyroll', 'paramount', 'claro', 'vivo', 'tim', 'oi', 'net', 'sky', 'starlink', 'academia', 'gym', 'assinatura', 'subscription', 'plano mensal']
+            keywords = ['netflix', 'spotify', 'amazon', 'disney', 'hbo', 'globoplay', 'youtube', 'deezer', 'apple', 'crunchyroll', 'paramount', 'claro', 'vivo', 'tim', 'oi', 'net', 'sky', 'starlink', 'academia', 'gym', 'assinatura', 'subscription', 'plano mensal', 'totalpass', 'gympass']
             regex_kw = '|'.join(keywords)
-            
+
+            # Busca por palavras-chave OU pela categoria específica de Assinaturas
             lanc_ass = db.query(Lancamento).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.data_transacao >= datetime.combine(start_month, time.min),
-                func.lower(Lancamento.descricao).op('~')(regex_kw)
+                or_(
+                    func.lower(Lancamento.descricao).op('~')(regex_kw),
+                    Lancamento.id_categoria.in_(
+                        db.query(Categoria.id).filter(func.lower(Categoria.nome).like('%assinatura%'))
+                    )
+                )
             ).all()
-            
+
             agend_ass = db.query(Agendamento).filter(
                 Agendamento.id_usuario == user_id, Agendamento.ativo == True,
                 Agendamento.frequencia == 'mensal',
-                func.lower(Agendamento.descricao).op('~')(regex_kw)
-            ).all()
-            
+                or_(
+                    func.lower(Agendamento.descricao).op('~')(regex_kw),
+                    Agendamento.id_categoria.in_(
+                        db.query(Categoria.id).filter(func.lower(Categoria.nome).like('%assinatura%'))
+                    )
+                )
+            ).all()            
             lista_ass = []
             seen = set()
             for l in lanc_ass:

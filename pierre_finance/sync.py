@@ -169,6 +169,7 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session):
     faturas_count = 0
     # 5.1 Faturas Fechadas/Vencidas
     res_bills = client.get_bills()
+    logger.info(f"🔍 [DEBUG PIERRE] res_bills count: {len(res_bills) if isinstance(res_bills, list) else 'NOT LIST'}")
     if isinstance(res_bills, dict) and "data" in res_bills: res_bills = res_bills["data"]
     if isinstance(res_bills, list):
         for bill in res_bills:
@@ -198,6 +199,7 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session):
 
     # 5.2 Faturas EM ABERTO (Atuais)
     res_summary = client.get_bill_summary()
+    logger.info(f"🔍 [DEBUG PIERRE] res_summary count: {len(res_summary) if isinstance(res_summary, list) else 'NOT LIST'}")
     if isinstance(res_summary, list):
         for summary in res_summary:
             acc_id = str(summary.get("accountId"))
@@ -223,6 +225,7 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session):
     # 6. Parcelamentos
     parcelas_count = 0
     res_inst = client.get_installments(start_date=date_90)
+    logger.info(f"🔍 [DEBUG PIERRE] res_inst raw: {res_inst}")
     inst_list = []
     if isinstance(res_inst, dict): inst_list = res_inst.get("purchases") or res_inst.get("installments") or []
     elif isinstance(res_inst, list): inst_list = res_inst
