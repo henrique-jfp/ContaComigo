@@ -1,7 +1,7 @@
 import unicodedata
 import re
 from sqlalchemy.orm import Session
-from models import Categoria, Subcategoria
+from models import Categoria, Subcategoria, Lancamento
 import logging
 from finance_utils import normalize_financial_type
 
@@ -186,6 +186,10 @@ _MAPA_NOME_CATEGORIA: dict[str, str] = {
     'TRANSFERÊNCIAS':            'Transferências',
 }
 
+# Fallbacks após regras — candidatos ao refinamento por LLM (híbrido)
+NOME_CATEGORIA_OUTROS_DESPESA = "Outros"
+NOME_CATEGORIA_OUTROS_RECEITA = "Receita / Outros"
+
 
 def _build_pattern(keyword_norm: str) -> re.Pattern:
     """Compila um regex com word-boundary para a keyword normalizada."""
@@ -242,6 +246,151 @@ def _deve_classificar_como_transferencia(descricao_original: str, descricao_limp
 
 
 # ---------------------------------------------------------------------------
+# Classificação por regras (sem I/O) + persistência
+# ---------------------------------------------------------------------------
+
+def classificar_nomes_por_regras(descricao: str, tipo_raw: str) -> tuple[str, str]:
+    """
+    Aplica apenas o mapa de palavras-chave e fallbacks Outros / Receita / Outros.
+    Retorna (nome_categoria_no_banco, nome_subcategoria).
+    """
+    tipo = normalizar_tipo(tipo_raw)
+
+    desc_limpa = limpar_descricao(descricao)
+    desc_norm = remove_accents(desc_limpa)
+
+    cat_nome: str | None = None
+    subcat_nome: str | None = None
+
+    for c_nome, subcategorias in MAPA_CATEGORIAS.items():
+        if c_nome == 'FINANÇAS E INVESTIMENTOS' and tipo != 'Receita':
+            continue
+        if c_nome == 'TRANSFERÊNCIAS':
+            continue
+
+        for s_nome, keywords in subcategorias.items():
+            for kw in keywords:
+                pattern = _PADROES_COMPILADOS[(c_nome, s_nome, kw)]
+                if pattern.search(desc_norm):
+                    cat_nome = c_nome
+                    subcat_nome = s_nome
+                    break
+            if cat_nome:
+                break
+        if cat_nome:
+            break
+
+    if not cat_nome and _deve_classificar_como_transferencia(descricao, desc_limpa):
+        c_nome = 'TRANSFERÊNCIAS'
+        desc_original_norm = remove_accents(descricao)
+        subcategorias = MAPA_CATEGORIAS[c_nome]
+        for s_nome, keywords in subcategorias.items():
+            for kw in keywords:
+                pattern = _PADROES_COMPILADOS[(c_nome, s_nome, kw)]
+                if pattern.search(desc_original_norm):
+                    cat_nome = c_nome
+                    subcat_nome = s_nome
+                    break
+            if cat_nome:
+                break
+
+    if not cat_nome:
+        if tipo == 'Receita':
+            cat_nome = 'Receita / Outros'
+            subcat_nome = 'Outras Receitas'
+        else:
+            cat_nome = 'Outros'
+            subcat_nome = 'Geral'
+
+    cat_nome_db = _MAPA_NOME_CATEGORIA.get(cat_nome, cat_nome)
+    return cat_nome_db, subcat_nome
+
+
+def persistir_ids_categoria(
+    db: Session,
+    cat_nome_db: str,
+    subcat_nome: str,
+    cat_cache: dict | None = None,
+    subcat_cache: dict | None = None,
+) -> tuple[int | None, int | None]:
+    """Resolve ou cria Categoria/Subcategoria e retorna os IDs."""
+    if cat_cache is not None and cat_nome_db in cat_cache:
+        cat_id = cat_cache[cat_nome_db]
+    else:
+        categoria_db = db.query(Categoria).filter(Categoria.nome == cat_nome_db).first()
+        if not categoria_db:
+            categoria_db = Categoria(nome=cat_nome_db)
+            db.add(categoria_db)
+            db.flush()
+        cat_id = categoria_db.id
+        if cat_cache is not None:
+            cat_cache[cat_nome_db] = cat_id
+
+    sub_key = (cat_id, subcat_nome)
+    if subcat_cache is not None and sub_key in subcat_cache:
+        subcat_id = subcat_cache[sub_key]
+    else:
+        subcat_db = db.query(Subcategoria).filter(
+            Subcategoria.nome == subcat_nome,
+            Subcategoria.id_categoria == cat_id,
+        ).first()
+        if not subcat_db:
+            subcat_db = Subcategoria(nome=subcat_nome, id_categoria=cat_id)
+            db.add(subcat_db)
+            db.flush()
+        subcat_id = subcat_db.id
+        if subcat_cache is not None:
+            subcat_cache[sub_key] = subcat_id
+
+    return cat_id, subcat_id
+
+
+def aplicar_regras_lancamentos_open_finance(
+    db: Session,
+    usuario_id: int,
+    escopo: str = "sem_categoria",
+) -> int:
+    """
+    Reaplica regras locais aos lançamentos Open Finance, sem chamar a API Pierre.
+
+    escopo:
+        - sem_categoria: apenas id_categoria IS NULL (pós-ingestão).
+        - tudo: todos os lançamentos open_finance (para /recategorizar_tudo).
+    """
+    q = db.query(Lancamento).filter(
+        Lancamento.id_usuario == usuario_id,
+        Lancamento.origem == "open_finance",
+    )
+    if escopo == "sem_categoria":
+        q = q.filter(Lancamento.id_categoria.is_(None))
+    elif escopo != "tudo":
+        raise ValueError(f"escopo inválido: {escopo}")
+
+    lancamentos = q.all()
+    cat_cache: dict = {}
+    subcat_cache: dict = {}
+    atualizados = 0
+
+    for lanc in lancamentos:
+        try:
+            cat_nome_db, subcat_nome = classificar_nomes_por_regras(lanc.descricao or "", lanc.tipo)
+            with db.begin_nested():
+                cid, sid = persistir_ids_categoria(
+                    db, cat_nome_db, subcat_nome, cat_cache, subcat_cache
+                )
+            if cid and (lanc.id_categoria != cid or lanc.id_subcategoria != sid):
+                lanc.id_categoria = cid
+                lanc.id_subcategoria = sid
+                atualizados += 1
+        except Exception as e:
+            logger.warning("Falha ao aplicar regras ao lançamento %s: %s", lanc.id, e)
+
+    if atualizados:
+        db.commit()
+    return atualizados
+
+
+# ---------------------------------------------------------------------------
 # Função principal
 # ---------------------------------------------------------------------------
 
@@ -265,111 +414,13 @@ def categorizar_transacao(
     Returns:
         (categoria_id, subcategoria_id) ou (None, None) em caso de erro.
     """
-    tipo = normalizar_tipo(tipo_raw)
-    
-    # 🛡️ NOVO: Limpeza da descrição antes da categorização
-    desc_limpa = limpar_descricao(descricao)
-    desc_norm = remove_accents(desc_limpa)
+    cat_nome_db, subcat_nome = classificar_nomes_por_regras(descricao, tipo_raw)
 
-    cat_nome: str | None = None
-    subcat_nome: str | None = None
-
-    # ------------------------------------------------------------------
-    # CAMADA 1: Busca por Keywords (com word-boundary, pré-compiladas)
-    # ------------------------------------------------------------------
-    # Prioridade para categorias específicas
-    for c_nome, subcategorias in MAPA_CATEGORIAS.items():
-
-        # 'FINANÇAS E INVESTIMENTOS' só para créditos (Receita)
-        if c_nome == 'FINANÇAS E INVESTIMENTOS' and tipo != 'Receita':
-            continue
-            
-        # Pula Transferências na primeira passada para dar chance a categorias específicas
-        if c_nome == 'TRANSFERÊNCIAS':
-            continue
-
-        for s_nome, keywords in subcategorias.items():
-            for kw in keywords:
-                pattern = _PADROES_COMPILADOS[(c_nome, s_nome, kw)]
-                if pattern.search(desc_norm):
-                    cat_nome = c_nome
-                    subcat_nome = s_nome
-                    break
-            if cat_nome:
-                break
-        if cat_nome:
-            break
-
-    # ------------------------------------------------------------------
-    # CAMADA 1.5: Busca específica para TRANSFERÊNCIAS (baixa prioridade)
-    # ------------------------------------------------------------------
-    if not cat_nome and _deve_classificar_como_transferencia(descricao, desc_limpa):
-        c_nome = 'TRANSFERÊNCIAS'
-        subcategorias = MAPA_CATEGORIAS[c_nome]
-        # Aqui usamos a descrição ORIGINAL pois os prefixos são as keywords de transferência
-        desc_original_norm = remove_accents(descricao)
-        
-        for s_nome, keywords in subcategorias.items():
-            for kw in keywords:
-                pattern = _PADROES_COMPILADOS[(c_nome, s_nome, kw)]
-                if pattern.search(desc_original_norm):
-                    cat_nome = c_nome
-                    subcat_nome = s_nome
-                    break
-            if cat_nome:
-                break
-    # ------------------------------------------------------------------
-    # CAMADA 2: Fallback por tipo de transação
-    # ------------------------------------------------------------------
-    if not cat_nome:
-        if tipo == 'Receita':
-            cat_nome = 'Receita / Outros'
-            subcat_nome = 'Outras Receitas'
-        else:
-            cat_nome = 'Outros'
-            subcat_nome = 'Geral'
-
-    # Converte nome interno (UPPER) para nome do banco
-    cat_nome_db = _MAPA_NOME_CATEGORIA.get(cat_nome, cat_nome)
-
-    # ------------------------------------------------------------------
-    # CAMADA 3: Persistência no Banco com Cache
-    # ------------------------------------------------------------------
     try:
-        # --- Categoria ---
-        if cat_cache is not None and cat_nome_db in cat_cache:
-            cat_id = cat_cache[cat_nome_db]
-        else:
-            categoria_db = db.query(Categoria).filter(Categoria.nome == cat_nome_db).first()
-            if not categoria_db:
-                categoria_db = Categoria(nome=cat_nome_db)
-                db.add(categoria_db)
-                db.flush()
-            cat_id = categoria_db.id
-            if cat_cache is not None:
-                cat_cache[cat_nome_db] = cat_id
-
-        # --- Subcategoria ---
-        sub_key = (cat_id, subcat_nome)
-        if subcat_cache is not None and sub_key in subcat_cache:
-            subcat_id = subcat_cache[sub_key]
-        else:
-            subcat_db = db.query(Subcategoria).filter(
-                Subcategoria.nome == subcat_nome,
-                Subcategoria.id_categoria == cat_id,
-            ).first()
-            if not subcat_db:
-                subcat_db = Subcategoria(nome=subcat_nome, id_categoria=cat_id)
-                db.add(subcat_db)
-                db.flush()
-            subcat_id = subcat_db.id
-            if subcat_cache is not None:
-                subcat_cache[sub_key] = subcat_id
-
-        return cat_id, subcat_id
-
+        with db.begin_nested():
+            return persistir_ids_categoria(
+                db, cat_nome_db, subcat_nome, cat_cache, subcat_cache
+            )
     except Exception as e:
         logger.error(f"Erro ao persistir categoria/subcategoria para '{descricao}': {e}")
-        db.rollback()
-        
         return None, None
