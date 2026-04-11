@@ -199,46 +199,58 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session):
 
     # 5.2 Faturas EM ABERTO (Atuais)
     res_summary = client.get_bill_summary()
-    logger.info(f"🔍 [DEBUG PIERRE] res_summary count: {len(res_summary) if isinstance(res_summary, list) else 'NOT LIST'}")
-    if isinstance(res_summary, list):
-        for summary in res_summary:
-            acc_id = str(summary.get("accountId"))
-            conta_id = accounts_map.get(acc_id)
-            if not conta_id: continue
-            
-            # ID Fake para faturas em aberto (baseado no mes e conta) já que elas não tem ID fixo na API
-            hoje = datetime.now()
-            fake_ext_id = f"aberta_{acc_id}_{hoje.year}_{hoje.month}"
-            
-            fatura = db.query(FaturaCartao).filter(FaturaCartao.external_id == fake_ext_id).first()
-            if not fatura:
-                fatura = FaturaCartao(id_usuario=usuario.id, id_conta=conta_id, external_id=fake_ext_id)
-                db.add(fatura)
-                faturas_count += 1
-            
-            fatura.valor_total = Decimal(str(summary.get("billAmount") or summary.get("amount") or 0))
-            fatura.status = "em_aberto"
-            if "dueDate" in summary:
-                try: fatura.data_vencimento = datetime.fromisoformat(summary["dueDate"].replace("Z", "+00:00")).date()
-                except: pass
+    logger.info(f"🔍 [DEBUG PIERRE] res_summary type: {type(res_summary)}")
+    
+    # Se vier um dicionário único, transforma em lista para o loop
+    summaries = []
+    if isinstance(res_summary, dict):
+        if "accountId" in res_summary: summaries = [res_summary]
+        elif "data" in res_summary and isinstance(res_summary["data"], list): summaries = res_summary["data"]
+        elif "accounts" in res_summary and isinstance(res_summary["accounts"], list): summaries = res_summary["accounts"]
+    elif isinstance(res_summary, list):
+        summaries = res_summary
+
+    for summary in summaries:
+        acc_id = str(summary.get("accountId") or summary.get("id"))
+        conta_id = accounts_map.get(acc_id)
+        if not conta_id: continue
+        
+        # ID Fake para faturas em aberto
+        hoje = datetime.now()
+        fake_ext_id = f"aberta_{acc_id}_{hoje.year}_{hoje.month}"
+        
+        fatura = db.query(FaturaCartao).filter(FaturaCartao.external_id == fake_ext_id).first()
+        if not fatura:
+            fatura = FaturaCartao(id_usuario=usuario.id, id_conta=conta_id, external_id=fake_ext_id)
+            db.add(fatura)
+            faturas_count += 1
+        
+        # API pode mandar billAmount, amount ou totalAmount
+        valor = summary.get("billAmount") or summary.get("amount") or summary.get("totalAmount") or 0
+        fatura.valor_total = Decimal(str(valor))
+        fatura.status = "em_aberto"
+        
+        dt_venc = summary.get("dueDate") or summary.get("due_date")
+        if dt_venc:
+            try: fatura.data_vencimento = datetime.fromisoformat(str(dt_venc).replace("Z", "+00:00")).date()
+            except: pass
 
     # 6. Parcelamentos
     parcelas_count = 0
     res_inst = client.get_installments(start_date=date_90)
-    logger.info(f"🔍 [DEBUG PIERRE] res_inst raw: {res_inst}")
+    
     inst_list = []
-    if isinstance(res_inst, dict): inst_list = res_inst.get("purchases") or res_inst.get("installments") or []
-    elif isinstance(res_inst, list): inst_list = res_inst
+    if isinstance(res_inst, dict):
+        inst_list = res_inst.get("purchases") or res_inst.get("installments") or res_inst.get("data", [])
+    elif isinstance(res_inst, list):
+        inst_list = res_inst
 
     for inst in inst_list:
-        # 🛡️ Proteção contra IDs nulos ou vazios
-        raw_ext_id = inst.get("id") or inst.get("transactionId")
-        if not raw_ext_id:
-            continue
+        raw_ext_id = inst.get("id") or inst.get("transactionId") or inst.get("purchaseId")
+        if not raw_ext_id: continue
             
         ext_id = str(raw_ext_id)
-        if ext_id.lower() == "none":
-            continue
+        if ext_id.lower() == "none": continue
         
         parcela = db.query(ParcelamentoItem).filter(ParcelamentoItem.external_id == ext_id).first()
         if not parcela:
@@ -249,19 +261,23 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session):
         parcela.id_conta = accounts_map.get(str(inst.get("accountId")))
         parcela.descricao = inst.get("description") or inst.get("name") or "Parcelamento"
         
-        # Correção de mapeamento de valores
+        # Mapeamento API Pierre real (purchase structure)
         v_total = inst.get("totalAmount") or inst.get("amount") or 0
-        v_parcela = inst.get("installmentAmount") or inst.get("amount") or 0
+        v_parcela = inst.get("installmentAmount") or inst.get("amount") or (float(v_total)/max(1, int(inst.get("totalInstallments", 1))))
         
         parcela.valor_total = Decimal(str(v_total))
         parcela.valor_parcela = Decimal(str(v_parcela))
-        parcela.parcela_atual = int(inst.get("installmentNumber") or 1)
+        parcela.parcela_atual = int(inst.get("installmentNumber") or inst.get("installmentsPaid") or 1)
         parcela.total_parcelas = int(inst.get("totalInstallments") or 1)
-        if "date" in inst:
-            try: parcela.data_compra = datetime.fromisoformat(inst["date"].replace("Z", "+00:00")).date()
+        
+        dt_compra = inst.get("date") or inst.get("purchaseDate")
+        if dt_compra:
+            try: parcela.data_compra = datetime.fromisoformat(str(dt_compra).replace("Z", "+00:00")).date()
             except: pass
-        if "dueDate" in inst:
-            try: parcela.data_proxima_parcela = datetime.fromisoformat(inst["dueDate"].replace("Z", "+00:00")).date()
+            
+        dt_prox = inst.get("dueDate") or inst.get("nextInstallmentDate")
+        if dt_prox:
+            try: parcela.data_proxima_parcela = datetime.fromisoformat(str(dt_prox).replace("Z", "+00:00")).date()
             except: pass
 
     # 7. Finalização

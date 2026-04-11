@@ -348,6 +348,7 @@ async def _enviar_resposta_html_segura(message, texto: str, **kwargs):
     """
     Formata e envia uma resposta em HTML para o usuário.
     Garante que se a mensagem for muito longa, ela seja fatiada para evitar erro 400 do Telegram.
+    Se falhar o parse do HTML, envia como texto simples.
     """
     texto_html = _formatar_resposta_html(texto)
     
@@ -358,8 +359,18 @@ async def _enviar_resposta_html_segura(message, texto: str, **kwargs):
         except Exception as exc:
             if "Message is too long" in str(exc):
                 return await _enviar_mensagem_fatiada(message, texto_html, is_html=True, **kwargs)
+            
+            if "Can't parse entities" in str(exc) or "unsupported" in str(exc).lower():
+                logger.warning("Falha no parse HTML (entidades); tentando texto simples...")
+                # Remover tags HTML para enviar plano
+                texto_plano = re.sub(r"<[^>]+>", "", texto_html)
+                try:
+                    return await message.reply_text(texto_plano, **kwargs)
+                except Exception as e2:
+                    logger.error("Erro fatal ao enviar texto simples: %s", e2)
+                    return None
                 
-            logger.warning("Falha ao enviar HTML seguro; usando texto simples: %s", exc)
+            logger.warning("Falha genérica ao enviar HTML seguro; usando texto simples: %s", exc)
             texto_plano = re.sub(r"<[^>]+>", "", texto_html)
             try:
                 return await message.reply_text(texto_plano, **kwargs)

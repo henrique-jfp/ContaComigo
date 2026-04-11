@@ -69,44 +69,52 @@ MAPA_CATEGORIAS = {
 }
 
 def categorizar_transacao(descricao: str, tipo: str, db: Session, cat_cache: dict = None, subcat_cache: dict = None) -> tuple[int|None, int|None]:
+    # Normalização agressiva: remove acentos, minúsculo e colapsa espaços duplos/triplos
     desc_norm = remove_accents(descricao)
+    desc_norm = re.sub(r'\s+', ' ', desc_norm).strip()
     
     cat_nome = None
     subcat_nome = None
 
-    # CAMADA 1: Busca por Keywords
-    for c_nome, subcategorias in MAPA_CATEGORIAS.items():
-        # Regra: Finanças e Investimentos apenas para Receita
-        if c_nome == 'FINANÇAS E INVESTIMENTOS' and tipo != 'Receita':
-            continue
-            
-        for s_nome, keywords in subcategorias.items():
-            for kw in keywords:
-                kw_norm = remove_accents(kw)
-                # Proteção contra palavras curtas (ex: 'ir'): exige fronteira de palavra ou ser parte de algo maior
-                if len(kw_norm) <= 2:
-                    pattern = rf'\b{re.escape(kw_norm)}\b'
-                    if re.search(pattern, desc_norm):
+    # Regra de Ouro: Encargos financeiros (Juros, IOF, Multas)
+    if any(k in desc_norm for k in ['juros', 'iof', 'multa', 'encargo', 'rotativo']):
+        cat_nome = 'Financeiro'
+        subcat_nome = 'Encargos e Juros'
+
+    # CAMADA 1: Busca por Keywords (Apenas se não for juros)
+    if not cat_nome:
+        for c_nome, subcategorias in MAPA_CATEGORIAS.items():
+            # Regra: Finanças e Investimentos apenas para Receita
+            if c_nome == 'FINANÇAS E INVESTIMENTOS' and tipo != 'Receita':
+                continue
+                
+            for s_nome, keywords in subcategorias.items():
+                for kw in keywords:
+                    kw_norm = remove_accents(kw)
+                    # Proteção contra palavras curtas (ex: 'ir'): exige fronteira de palavra
+                    if len(kw_norm) <= 2:
+                        pattern = rf'\b{re.escape(kw_norm)}\b'
+                        if re.search(pattern, desc_norm):
+                            cat_nome = c_nome
+                            subcat_nome = s_nome
+                            break
+                    elif kw_norm in desc_norm:
                         cat_nome = c_nome
                         subcat_nome = s_nome
                         break
-                elif kw_norm in desc_norm:
-                    cat_nome = c_nome
-                    subcat_nome = s_nome
-                    break
+                if cat_nome: break
             if cat_nome: break
-        if cat_nome: break
 
     # CAMADA 2: Fallback por tipo
     if not cat_nome:
         if tipo == "Receita":
-            cat_nome = "Receita / Outros"
+            cat_nome = "Receitas"
             subcat_nome = "Outras Receitas"
         else:
             cat_nome = "Outros"
             subcat_nome = "Geral"
 
-    # Normalização de nomes para bater com o que está no banco (Caso existam com nomes levemente diferentes)
+    # Normalização de nomes para bater com o que está no banco (EXATO)
     mapa_fixo = {
         'SERVIÇOS E ASSINATURAS': 'Serviços e Assinaturas',
         'ALIMENTAÇÃO': 'Alimentação',
@@ -115,7 +123,8 @@ def categorizar_transacao(descricao: str, tipo: str, db: Session, cat_cache: dic
         'SAÚDE': 'Saúde',
         'LAZER E ENTRETENIMENTO': 'Lazer e Entretenimento',
         'FINANÇAS E INVESTIMENTOS': 'Financeiro',
-        'IMPOSTOS E TAXAS': 'Impostos e Taxas'
+        'IMPOSTOS E TAXAS': 'Impostos e Taxas',
+        'COMPRAS E VESTUÁRIO': 'Compras'
     }
     cat_nome = mapa_fixo.get(cat_nome, cat_nome)
 

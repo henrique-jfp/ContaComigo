@@ -1400,18 +1400,24 @@ def miniapp_modo_deus():
         # --- SEÇÃO 3: ASSINATURAS ---
         try:
             keywords = ['netflix', 'spotify', 'amazon', 'disney', 'hbo', 'globoplay', 'youtube', 'deezer', 'apple', 'crunchyroll', 'paramount', 'claro', 'vivo', 'tim', 'oi', 'net', 'sky', 'starlink', 'academia', 'gym', 'assinatura', 'subscription', 'plano mensal', 'totalpass', 'gympass']
+            keywords_excluir = ['juros', 'multa', 'encargo', 'iof', 'rotativo']
+            
             regex_kw = '|'.join(keywords)
+            regex_excluir = '|'.join(keywords_excluir)
 
             # Busca por palavras-chave OU pela categoria específica de Assinaturas
+            # Mas EXCLUI explicitamente termos financeiros (juros, iof, etc)
             lanc_ass = db.query(Lancamento).filter(
                 Lancamento.id_usuario == user_id,
+                Lancamento.tipo.in_(['Saída', 'Despesa']),
                 Lancamento.data_transacao >= datetime.combine(start_month, time.min),
                 or_(
                     func.lower(Lancamento.descricao).op('~')(regex_kw),
                     Lancamento.id_categoria.in_(
                         db.query(Categoria.id).filter(func.lower(Categoria.nome).like('%assinatura%'))
                     )
-                )
+                ),
+                func.lower(Lancamento.descricao).op('!~')(regex_excluir)
             ).all()
 
             agend_ass = db.query(Agendamento).filter(
@@ -1422,7 +1428,8 @@ def miniapp_modo_deus():
                     Agendamento.id_categoria.in_(
                         db.query(Categoria.id).filter(func.lower(Categoria.nome).like('%assinatura%'))
                     )
-                )
+                ),
+                func.lower(Agendamento.descricao).op('!~')(regex_excluir)
             ).all()            
             lista_ass = []
             seen = set()
