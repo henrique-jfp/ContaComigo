@@ -16,7 +16,7 @@ import re
 import requests
 from urllib.parse import parse_qsl
 from functools import wraps
-from sqlalchemy import and_, func, desc
+from sqlalchemy import and_, func, desc, or_, extract
 from flask import Flask, render_template, jsonify, request, g, make_response
 from sqlalchemy.orm import joinedload
 from datetime import datetime, timedelta, date, timezone
@@ -68,7 +68,7 @@ static_dir = os.path.join(parent_dir, 'static')
 sys.path.insert(0, parent_dir)
 import config
 from database.database import get_db, buscar_lancamentos_usuario
-from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Categoria, Subcategoria, XpEvent, UserMission, UserAchievement, OrcamentoCategoria, Conta, SaldoConta, FaturaCartao, ParcelamentoItem
+from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Categoria, Subcategoria, XpEvent, UserMission, UserAchievement, OrcamentoCategoria, Conta, SaldoConta, FaturaCartao, ParcelamentoItem, Investment, CarteiraFII, HistoricoAlertaFII, PatrimonySnapshot
 from gerente_financeiro.prompts import PROMPT_ALFREDO_APRIMORADO as PROMPT_ALFREDO
 from gerente_financeiro.services import preparar_contexto_financeiro_completo
 from gerente_financeiro.services import salvar_transacoes_generica
@@ -1046,7 +1046,7 @@ def miniapp_pierre_dashboard():
                 "categories": cleaned_categories,
                 "installments": installments_res,
                 "health": {"score": health_score, "label": health_label},
-                "sync_time": usuario.last_pierre_sync.isoformat() if usuario.last_pierre_sync else datetime.now(timezone.utc).isoformat()
+                "sync_time": usuario.last_pierre_sync_at.isoformat() if usuario.last_pierre_sync_at else datetime.now(timezone.utc).isoformat()
             }
         })
     except Exception as e:
@@ -1268,6 +1268,296 @@ def miniapp_history():
         itens = [_serialize_miniapp_lancamento(lanc) for lanc in lancamentos]
 
         return jsonify({"ok": True, "items": itens, "total": total, "offset": offset})
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/modo_deus')
+def miniapp_modo_deus():
+    """Aba Modo Deus - Painel CFO Pessoal consolidado."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    user_id_telegram = session["user_id"]
+    
+    # Cache manual de 2 minutos
+    cache_key_val = f"modo_deus_{user_id_telegram}"
+    now_ts = datetime.now().timestamp()
+    if cache_key_val in _cache:
+        cached_val, ts = _cache[cache_key_val]
+        if now_ts - ts < 120:
+            return jsonify(cached_val)
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id_telegram).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+        
+        user_id = usuario.id
+        today = datetime.now(timezone.utc).date()
+        start_month = today.replace(day=1)
+        next_month = (start_month + timedelta(days=32)).replace(day=1)
+        end_month = next_month - timedelta(days=1)
+        
+        result = {}
+        
+        # --- SEÇÃO 1: VISÃO GERAL ---
+        try:
+            subquery = db.query(
+                SaldoConta.id_conta,
+                func.max(SaldoConta.capturado_em).label('max_date')
+            ).filter(SaldoConta.id_usuario == user_id).group_by(SaldoConta.id_conta).subquery()
+            
+            recent_saldos = db.query(SaldoConta).join(
+                subquery,
+                and_(
+                    SaldoConta.id_conta == subquery.c.id_conta,
+                    SaldoConta.capturado_em == subquery.c.max_date
+                )
+            ).all()
+            
+            total_saldos = sum(float(s.saldo or 0) for s in recent_saldos)
+            investments_total = db.query(func.sum(Investment.valor_atual)).filter(
+                Investment.id_usuario == user_id, Investment.ativo == True
+            ).scalar() or 0
+            
+            fiis_total = db.query(func.sum(CarteiraFII.quantidade_cotas * CarteiraFII.preco_medio)).filter(
+                CarteiraFII.id_usuario == user_id, CarteiraFII.ativo == True
+            ).scalar() or 0
+            
+            patrimonio_liquido = float(total_saldos) + float(investments_total) + float(fiis_total)
+            saldo_disponivel = sum(float(s.saldo or 0) for s in recent_saldos if s.conta.tipo == "Conta Corrente")
+            
+            entradas_mes = db.query(func.sum(Lancamento.valor)).filter(
+                Lancamento.id_usuario == user_id,
+                Lancamento.tipo.in_(['Entrada', 'Receita']),
+                Lancamento.data_transacao >= datetime.combine(start_month, time.min),
+                Lancamento.data_transacao <= datetime.combine(end_month, time.max)
+            ).scalar() or 0
+            
+            saidas_mes = db.query(func.sum(Lancamento.valor)).filter(
+                Lancamento.id_usuario == user_id,
+                Lancamento.tipo.in_(['Saída', 'Despesa']),
+                Lancamento.data_transacao >= datetime.combine(start_month, time.min),
+                Lancamento.data_transacao <= datetime.combine(end_month, time.max)
+            ).scalar() or 0
+            
+            resultado_mes = float(entradas_mes) - abs(float(saidas_mes))
+            
+            last_month = (start_month - timedelta(days=1)).replace(day=1)
+            last_snapshot = db.query(PatrimonySnapshot).filter(
+                PatrimonySnapshot.id_usuario == user_id, PatrimonySnapshot.mes_referencia == last_month
+            ).first()
+            
+            variacao_patrimonio_pct = None
+            if last_snapshot and last_snapshot.total_patrimonio > 0:
+                variacao_patrimonio_pct = ((patrimonio_liquido / float(last_snapshot.total_patrimonio)) - 1) * 100
+                
+            dias_restantes = (end_month - today).days + 1
+            limite_diario = max(0, saldo_disponivel / dias_restantes) if dias_restantes > 0 else 0
+            
+            result['visao_geral'] = {
+                "patrimonio_liquido": patrimonio_liquido,
+                "saldo_disponivel": saldo_disponivel,
+                "resultado_mes": resultado_mes,
+                "variacao_patrimonio_pct": variacao_patrimonio_pct,
+                "entradas_mes": float(entradas_mes),
+                "saidas_mes": abs(float(saidas_mes)),
+                "dias_restantes_mes": dias_restantes,
+                "limite_diario_seguro": limite_diario
+            }
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (visao_geral): {e}")
+            result['visao_geral'] = {}
+
+        # --- SEÇÃO 2: TOP CATEGORIAS ---
+        try:
+            top_cats = db.query(
+                Categoria.nome, func.sum(Lancamento.valor).label('total')
+            ).join(Lancamento, Lancamento.id_categoria == Categoria.id).filter(
+                Lancamento.id_usuario == user_id,
+                Lancamento.tipo.in_(['Saída', 'Despesa']),
+                Lancamento.data_transacao >= datetime.combine(start_month, time.min),
+                Lancamento.data_transacao <= datetime.combine(end_month, time.max)
+            ).group_by(Categoria.nome).order_by(desc('total')).limit(6).all()
+            
+            total_g = sum(abs(float(c[1])) for c in top_cats)
+            colors = ["#D85A30","#378ADD","#7F77DD","#888780","#1D9E75","#BA7517"]
+            result['top_categorias'] = [
+                {
+                    "nome": c[0], "total": abs(float(c[1])),
+                    "percentual_do_total_gastos": (abs(float(c[1])) / total_g * 100) if total_g > 0 else 0,
+                    "cor_hex": colors[i % len(colors)]
+                } for i, c in enumerate(top_cats)
+            ]
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (top_categorias): {e}")
+            result['top_categorias'] = []
+
+        # --- SEÇÃO 3: ASSINATURAS ---
+        try:
+            keywords = ['netflix', 'spotify', 'amazon', 'disney', 'hbo', 'globoplay', 'youtube', 'deezer', 'apple', 'crunchyroll', 'paramount', 'claro', 'vivo', 'tim', 'oi', 'net', 'sky', 'starlink', 'academia', 'gym', 'assinatura', 'subscription', 'plano mensal']
+            regex_kw = '|'.join(keywords)
+            
+            lanc_ass = db.query(Lancamento).filter(
+                Lancamento.id_usuario == user_id,
+                Lancamento.data_transacao >= datetime.combine(start_month, time.min),
+                func.lower(Lancamento.descricao).op('~')(regex_kw)
+            ).all()
+            
+            agend_ass = db.query(Agendamento).filter(
+                Agendamento.id_usuario == user_id, Agendamento.ativo == True,
+                Agendamento.frequencia == 'mensal',
+                func.lower(Agendamento.descricao).op('~')(regex_kw)
+            ).all()
+            
+            lista_ass = []
+            seen = set()
+            for l in lanc_ass:
+                if l.descricao.lower() not in seen:
+                    lista_ass.append({"descricao": l.descricao, "valor": abs(float(l.valor)), "proxima_data": None})
+                    seen.add(l.descricao.lower())
+            for a in agend_ass:
+                if a.descricao.lower() not in seen:
+                    lista_ass.append({"descricao": a.descricao, "valor": float(a.valor), "proxima_data": a.proxima_data_execucao.isoformat() if a.proxima_data_execucao else None})
+                    seen.add(a.descricao.lower())
+            
+            result['assinaturas'] = {"lista": lista_ass, "total_mensal": sum(x['valor'] for x in lista_ass)}
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (assinaturas): {e}")
+            result['assinaturas'] = {"lista": [], "total_mensal": 0}
+
+        # --- SEÇÃO 4: PARCELAMENTOS ---
+        try:
+            parcelas = db.query(ParcelamentoItem).filter(ParcelamentoItem.id_usuario == user_id).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(6).all()
+            lista_p = [{"descricao": p.descricao, "valor_parcela": float(p.valor_parcela), "parcela_atual": p.parcela_atual, "total_parcelas": p.total_parcelas, "data_proxima_parcela": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None, "percentual_concluido": (p.parcela_atual / p.total_parcelas * 100) if p.total_parcelas > 0 else 0} for p in parcelas]
+            total_p = db.query(func.sum(ParcelamentoItem.valor_parcela)).filter(ParcelamentoItem.id_usuario == user_id).scalar() or 0
+            result['parcelamentos'] = {"lista": lista_p, "total_mensal_parcelas": float(total_p)}
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (parcelamentos): {e}")
+            result['parcelamentos'] = {"lista": [], "total_mensal_parcelas": 0}
+
+        # --- SEÇÃO 5: CARTÕES ---
+        try:
+            faturas = db.query(FaturaCartao).join(Conta).filter(
+                FaturaCartao.id_usuario == user_id,
+                or_(and_(extract('month', FaturaCartao.mes_referencia) == today.month, extract('year', FaturaCartao.mes_referencia) == today.year), FaturaCartao.data_vencimento >= today)
+            ).all()
+            colors_c = ["#534AB7","#378ADD","#1D9E75","#D85A30"]
+            lista_c = []
+            for i, f in enumerate(faturas):
+                limite = float(f.conta.limite_cartao or 0)
+                lista_c.append({
+                    "nome_conta": f.conta.nome, "valor_total": float(f.valor_total),
+                    "data_vencimento": f.data_vencimento.isoformat() if f.data_vencimento else None,
+                    "data_fechamento": f.data_fechamento.isoformat() if f.data_fechamento else None,
+                    "status": f.status, "limite_cartao": limite,
+                    "percentual_limite_usado": (float(f.valor_total) / limite * 100) if limite > 0 else 0,
+                    "dias_para_vencer": (f.data_vencimento - today).days if f.data_vencimento else None,
+                    "cor_hex": colors_c[i % len(colors_c)]
+                })
+            result['cartoes'] = lista_c
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (cartoes): {e}")
+            result['cartoes'] = []
+
+        # --- SEÇÃO 6: METAS ---
+        try:
+            metas = db.query(Objetivo).filter(Objetivo.id_usuario == user_id, Objetivo.valor_atual < Objetivo.valor_meta).all()
+            lista_m = []
+            for m in metas:
+                m_rest = max(1, (m.data_meta.year - today.year) * 12 + (m.data_meta.month - today.month)) if m.data_meta else 1
+                lista_m.append({
+                    "descricao": m.descricao, "valor_meta": float(m.valor_meta), "valor_atual": float(m.valor_atual or 0),
+                    "percentual": (float(m.valor_atual or 0) / float(m.valor_meta) * 100) if m.valor_meta > 0 else 0,
+                    "data_meta": m.data_meta.isoformat() if m.data_meta else None, "meses_restantes": m_rest,
+                    "aporte_mensal_necessario": (float(m.valor_meta) - float(m.valor_atual or 0)) / m_rest
+                })
+            result['metas'] = lista_m
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (metas): {e}")
+            result['metas'] = []
+
+        # --- SEÇÃO 7: ORÇAMENTOS ---
+        try:
+            orcs = db.query(OrcamentoCategoria).filter(OrcamentoCategoria.id_usuario == user_id).all()
+            lista_o = []
+            for o in orcs:
+                gasto = db.query(func.sum(Lancamento.valor)).filter(
+                    Lancamento.id_usuario == user_id, Lancamento.id_categoria == o.id_categoria,
+                    Lancamento.tipo.in_(['Saída', 'Despesa']),
+                    Lancamento.data_transacao >= datetime.combine(start_month, time.min),
+                    Lancamento.data_transacao <= datetime.combine(end_month, time.max)
+                ).scalar() or 0
+                gasto = abs(float(gasto))
+                perc = (gasto / float(o.valor_limite) * 100) if o.valor_limite > 0 else 0
+                lista_o.append({
+                    "categoria": o.categoria.nome if o.categoria else "Outros", "valor_limite": float(o.valor_limite),
+                    "gasto_atual": gasto, "percentual_usado": perc,
+                    "status": "estourado" if perc > 100 else ("atencao" if perc > 75 else "ok")
+                })
+            result['orcamentos'] = lista_o
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (orcamentos): {e}")
+            result['orcamentos'] = []
+
+        # --- SEÇÃO 8: FIIS ---
+        try:
+            fiis = db.query(CarteiraFII).filter(CarteiraFII.id_usuario == user_id, CarteiraFII.ativo == True).all()
+            lista_f = [{"ticker": f.ticker, "quantidade_cotas": float(f.quantidade_cotas), "preco_medio": float(f.preco_medio), "valor_posicao": float(f.quantidade_cotas * f.preco_medio)} for f in fiis]
+            renda = db.query(HistoricoAlertaFII.valor_referencia).filter(
+                HistoricoAlertaFII.id_usuario == user_id, HistoricoAlertaFII.tipo_alerta == 'rendimento_pago',
+                HistoricoAlertaFII.enviado_em >= datetime.now(timezone.utc) - timedelta(days=30)
+            ).all()
+            result['fiis'] = {"lista": lista_f, "total_investido_fiis": sum(x['valor_posicao'] for x in lista_f), "renda_mensal_estimada": sum(float(r[0]) for r in renda) if renda else None}
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (fiis): {e}")
+            result['fiis'] = {"lista": [], "total_investido_fiis": 0, "renda_mensal_estimada": None}
+
+        # --- SEÇÃO 9: ALERTAS ---
+        try:
+            alertas = []
+            for o in result.get('orcamentos', []):
+                if o['status'] == 'estourado': alertas.append({"tipo": "critico", "titulo": f"Limite de {o['categoria']} estourado", "detalhe": f"Gasto {o['percentual_usado']:.0f}% do limite.", "data": datetime.now().isoformat()})
+            for c in result.get('cartoes', []):
+                if c['dias_para_vencer'] is not None and c['dias_para_vencer'] <= 7 and c['status'] != 'paga':
+                    alertas.append({"tipo": "critico", "titulo": f"Fatura {c['nome_conta']} vence em {c['dias_para_vencer']}d", "detalhe": f"Valor R$ {c['valor_total']:.2f}", "data": datetime.now().isoformat()})
+            if result.get('visao_geral', {}).get('resultado_mes', 0) < 0: alertas.append({"tipo": "aviso", "titulo": "Mês no vermelho", "detalhe": f"Déficit de R$ {abs(result['visao_geral']['resultado_mes']):.2f}", "data": datetime.now().isoformat()})
+            if result.get('assinaturas', {}).get('total_mensal', 0) > 300: alertas.append({"tipo": "aviso", "titulo": "Muitas assinaturas", "detalhe": f"R$ {result['assinaturas']['total_mensal']:.2f}/mês total", "data": datetime.now().isoformat()})
+            result['alertas'] = alertas[:6]
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (alertas): {e}")
+            result['alertas'] = []
+
+        # --- SEÇÃO 10: PRÓXIMOS VENCIMENTOS ---
+        try:
+            v_limit = today + timedelta(days=30)
+            agends = db.query(Agendamento).filter(Agendamento.id_usuario == user_id, Agendamento.ativo == True, Agendamento.proxima_data_execucao <= v_limit).all()
+            fats = db.query(FaturaCartao).filter(FaturaCartao.id_usuario == user_id, FaturaCartao.data_vencimento >= today, FaturaCartao.data_vencimento <= v_limit, FaturaCartao.status != 'paga').all()
+            lista_v = [{"descricao": a.descricao, "valor": float(a.valor), "data": a.proxima_data_execucao.isoformat(), "tipo": "agendamento", "cor_hex": "#378ADD"} for a in agends]
+            lista_v += [{"descricao": f"Fatura {f.conta.nome}", "valor": float(f.valor_total), "data": f.data_vencimento.isoformat(), "tipo": "fatura", "cor_hex": "#534AB7"} for f in fats]
+            result['proximos_vencimentos'] = sorted(lista_v, key=lambda x: x['data'])[:6]
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (vencimentos): {e}")
+            result['proximos_vencimentos'] = []
+
+        # --- SEÇÃO 11: INSIGHTS RÁPIDOS ---
+        try:
+            ins = []
+            vg = result.get('visao_geral', {})
+            s_hoje = abs(float(db.query(func.sum(Lancamento.valor)).filter(Lancamento.id_usuario == user_id, Lancamento.tipo.in_(['Saída', 'Despesa']), func.date(Lancamento.data_transacao) == today).scalar() or 0))
+            if s_hoje > (vg.get('saidas_mes', 0) / max(1, today.day)) * 1.5: ins.append(f"Você gastou acima da sua média diária hoje.")
+            if vg.get('resultado_mes', 0) < 0: ins.append(f"O mês está fechando no vermelho em R$ {abs(vg['resultado_mes']):.2f}")
+            if result.get('top_categorias') and result['top_categorias'][0]['percentual_do_total_gastos'] > 40: ins.append(f"{result['top_categorias'][0]['nome']} consome {result['top_categorias'][0]['percentual_do_total_gastos']:.0f}% dos gastos.")
+            result['insights_rapidos'] = ins[:3]
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (insights): {e}")
+            result['insights_rapidos'] = []
+
+        _cache[cache_key_val] = (result, now_ts)
+        return jsonify(result)
     finally:
         db.close()
 

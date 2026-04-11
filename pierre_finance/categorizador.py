@@ -1,218 +1,133 @@
 import unicodedata
 from sqlalchemy.orm import Session
 from models import Categoria, Subcategoria
+import logging
+
+logger = logging.getLogger(__name__)
 
 def remove_accents(input_str: str) -> str:
     if not input_str:
         return ""
     nfkd_form = unicodedata.normalize('NFKD', input_str)
-    return u"".join([c for c in nfkd_form if not unicodedata.combining(c)]).lower()
+    return "".join([c for c in nfkd_form if not unicodedata.combining(c)]).lower()
 
+# CAMADA 1: Mapa de Palavras-Chave
 MAPA_CATEGORIAS = {
     'ALIMENTAÇÃO': {
         'Restaurantes/Lanchonetes': [
             'ifood', 'rappi', 'uber eats', 'mcdonalds', 'burger king', 'subway', 'pizza', 'lanche',
-            'restaurante', 'padaria', 'cafeteria', 'pastelaria', 'sushi', 'japonês', 'churrascaria', 'espetinho',
-            'japones'
+            'restaurante', 'padaria', 'cafeteria', 'pastelaria', 'sushi', 'japonês', 'churrascaria', 'espetinho'
         ],
         'Mercado/Supermercado': [
-            'mercado', 'supermercado', 'extra', 'pão de açúcar', 'pao de acucar', 'carrefour', 'atacadão', 'atacadao', 'assaí', 'assai',
-            'hortifruti', 'sacolão', 'sacolao', 'feira', 'açougue', 'acougue', 'hortifrutti'
+            'mercado', 'supermercado', 'extra', 'pão de açúcar', 'carrefour', 'atacadão', 'assaí',
+            'hortifruti', 'sacolão', 'feira', 'açougue', 'hortifrutti'
         ],
-        'Delivery': [
-            'delivery', 'entrega', 'motoboy'
-        ],
-        'Bebidas': [
-            'bebida', 'cerveja', 'bar', 'boteco', 'choperia', 'vinho', 'destilaria'
-        ]
+        'Delivery': ['delivery', 'entrega', 'motoboy'],
+        'Bebidas': ['bebida', 'cerveja', 'bar', 'boteco', 'choperia', 'vinho', 'destilaria']
     },
     'TRANSPORTE': {
-        'Aplicativos': [
-            'uber', '99', 'cabify', 'taxi', '99pop', 'ladydriver'
-        ],
-        'Combustível': [
-            'posto', 'combustivel', 'gasolina', 'etanol', 'shell', 'ipiranga', 'br distribuidora', 'ale combustiveis'
-        ],
-        'Estacionamento': [
-            'estacionamento', 'parking', 'park'
-        ],
-        'Transporte Público': [
-            'metro', 'metrô', 'onibus', 'ônibus', 'bilhete', 'riocard', 'cartão bom', 'cartao bom', 'sptrans'
-        ],
-        'Pedágio': [
-            'pedagio', 'pedágio', 'sem parar', 'conectcar', 'veloe'
-        ]
+        'Aplicativos': ['uber', '99', 'cabify', 'taxi', '99pop', 'ladydriver'],
+        'Combustível': ['posto', 'combustivel', 'gasolina', 'etanol', 'shell', 'ipiranga', 'br distribuidora', 'ale combustiveis'],
+        'Estacionamento': ['estacionamento', 'parking', 'park'],
+        'Transporte Público': ['metro', 'metrô', 'onibus', 'ônibus', 'bilhete', 'riocard', 'cartão bom', 'sptrans'],
+        'Pedágio': ['pedagio', 'pedágio', 'sem parar', 'conectcar', 'veloe']
     },
     'MORADIA': {
-        'Aluguel': [
-            'aluguel', 'locação', 'locacao', 'imobiliaria'
-        ],
-        'Condomínio': [
-            'condominio', 'condomínio', 'taxa condominial'
-        ],
-        'Energia': [
-            'cemig', 'copel', 'light', 'enel', 'energisa', 'coelba', 'celesc', 'elektro', 'cpfl',
-            'electropaulo', 'energia eletrica'
-        ],
-        'Água': [
-            'sabesp', 'cedae', 'copasa', 'embasa', 'saneago', 'caern', 'cagece', 'aguas do brasil', 'agua'
-        ],
-        'Internet/TV': [
-            'claro', 'vivo', 'tim', 'oi', 'net', 'sky', 'starlink', 'brisanet', 'algar', 'telefonica',
-            'banda larga', 'fibra'
-        ],
-        'Gás': [
-            'gás', 'gas', 'comgas', 'ceg'
-        ]
+        'Aluguel': ['aluguel', 'locação', 'locacao', 'imobiliaria'],
+        'Condomínio': ['condominio', 'condomínio', 'taxa condominial'],
+        'Energia': ['cemig', 'copel', 'light', 'enel', 'energisa', 'coelba', 'celesc', 'elektro', 'cpfl', 'electropaulo', 'energia eletrica'],
+        'Água': ['sabesp', 'cedae', 'copasa', 'embasa', 'saneago', 'caern', 'cagece', 'aguas do brasil'],
+        'Internet/TV': ['claro', 'vivo', 'tim', 'oi', 'net', 'sky', 'starlink', 'brisanet', 'algar', 'telefonica', 'banda larga', 'fibra'],
+        'Gás': ['gás', 'gas', 'comgas', 'ceg']
     },
     'SAÚDE': {
-        'Farmácia': [
-            'farmacia', 'drogasil', 'drogaria', 'ultrafarma', 'panvel', 'onofre', 'nissei'
-        ],
-        'Plano de Saúde': [
-            'plano saude', 'unimed', 'amil', 'bradesco saude', 'sulamerica saude', 'hapvida', 'notredame'
-        ],
-        'Consultas': [
-            'consulta', 'medico', 'médico', 'clinica', 'clínica', 'hospital', 'pronto socorro'
-        ],
-        'Exames': [
-            'exame', 'laboratorio', 'laboratório', 'fleury', 'dasa', 'labi', 'hermes pardini'
-        ]
+        'Farmácia': ['farmacia', 'drogasil', 'drogaria', 'ultrafarma', 'panvel', 'onofre', 'nissei'],
+        'Plano de Saúde': ['plano saude', 'unimed', 'amil', 'bradesco saude', 'sulamerica saude', 'hapvida', 'notredame'],
+        'Consultas': ['consulta', 'medico', 'médico', 'clinica', 'clínica', 'hospital', 'pronto socorro'],
+        'Exames': ['exame', 'laboratorio', 'laboratório', 'fleury', 'dasa', 'labi', 'hermes pardini']
     },
     'EDUCAÇÃO': {
-        'Mensalidade': [
-            'escola', 'faculdade', 'universidade', 'mensalidade', 'anuidade', 'matricula', 'matrícula'
-        ],
-        'Cursos': [
-            'curso', 'udemy', 'coursera', 'alura', 'dio', 'hotmart', 'kiwify', 'edtech'
-        ],
-        'Material': [
-            'livraria', 'amazon livros', 'saraiva', 'cultura', 'papelaria', 'material escolar'
-        ]
+        'Mensalidade': ['escola', 'faculdade', 'universidade', 'mensalidade', 'anuidade', 'matricula', 'matrícula'],
+        'Cursos': ['curso', 'udemy', 'coursera', 'alura', 'dio', 'hotmart', 'kiwify', 'edtech'],
+        'Material': ['livraria', 'amazon livros', 'saraiva', 'cultura', 'papelaria', 'material escolar']
     },
     'LAZER E ENTRETENIMENTO': {
-        'Streaming': [
-            'netflix', 'spotify', 'amazon prime', 'disney', 'hbo', 'globoplay', 'youtube premium',
-            'deezer', 'apple tv', 'crunchyroll', 'paramount'
-        ],
-        'Cinema/Teatro': [
-            'cinema', 'teatro', 'show', 'ingresso', 'ticket', 'sympla', 'eventbrite'
-        ],
-        'Jogos': [
-            'steam', 'psn', 'xbox', 'nintendo', 'nuuvem', 'playstation', 'razer', 'game'
-        ],
-        'Viagem': [
-            'hotel', 'pousada', 'airbnb', 'booking', 'decolar', 'latam', 'gol', 'azul', 'ryanair',
-            'emirates', 'passagem'
-        ]
+        'Streaming': ['netflix', 'spotify', 'amazon prime', 'disney', 'hbo', 'globoplay', 'youtube premium', 'deezer', 'apple tv', 'crunchyroll', 'paramount'],
+        'Cinema/Teatro': ['cinema', 'teatro', 'show', 'ingresso', 'ticket', 'sympla', 'eventbrite'],
+        'Jogos': ['steam', 'psn', 'xbox', 'nintendo', 'nuuvem', 'playstation', 'razer', 'game'],
+        'Viagem': ['hotel', 'pousada', 'airbnb', 'booking', 'decolar', 'latam', 'gol', 'azul', 'ryanair', 'emirates', 'passagem']
     },
     'COMPRAS E VESTUÁRIO': {
-        'Roupas': [
-            'renner', 'riachuelo', 'c&a', 'hering', 'zara', 'marisa', 'forever 21', 'farm',
-            'arezzo', 'reserva'
-        ],
-        'Eletrônicos': [
-            'kabum', 'terabyte', 'pichau', 'americanas', 'magazineluiza', 'magazine luiza',
-            'shoptime', 'casas bahia', 'fast shop', 'apple store'
-        ],
-        'E-commerce': [
-            'amazon', 'mercado livre', 'shopee', 'alibaba', 'aliexpress', 'shein', 'wish'
-        ]
+        'Roupas': ['renner', 'riachuelo', 'c&a', 'hering', 'zara', 'marisa', 'forever 21', 'farm', 'arezzo', 'reserva'],
+        'Eletrônicos': ['kabum', 'terabyte', 'pichau', 'americanas', 'magazineluiza', 'magazine luiza', 'shoptime', 'casas bahia', 'fast shop', 'apple store'],
+        'E-commerce': ['amazon', 'mercado livre', 'shopee', 'alibaba', 'aliexpress', 'shein', 'wish']
     },
     'PETS': {
-        'Pet Shop': [
-            'petshop', 'pet shop', 'cobasi', 'petz', 'agropet', 'veterinario', 'veterinário',
-            'clinica veterinaria'
-        ]
+        'Pet Shop': ['petshop', 'pet shop', 'cobasi', 'petz', 'agropet', 'veterinario', 'veterinário', 'clinica veterinaria']
     },
     'FINANÇAS E INVESTIMENTOS': {
-        'Salário': [
-            'salario', 'salário', 'pagamento', 'folha'
-        ],
-        'Investimentos': [
-            'cdb', 'lci', 'lca', 'tesouro', 'dividendo', 'rendimento', 'juros recebidos', 'fundo'
-        ],
-        'Transferência Recebida': [
-            'transferencia recebida', 'pix recebido', 'ted recebido'
-        ]
+        'Salário': ['salario', 'salário', 'pagamento', 'folha'],
+        'Investimentos': ['cdb', 'lci', 'lca', 'tesouro', 'dividendo', 'rendimento', 'juros recebidos', 'fundo'],
+        'Transferência Recebida': ['transferencia recebida', 'pix recebido', 'ted recebido']
     },
     'SERVIÇOS': {
-        'Assinaturas': [
-            'assinatura', 'subscription', 'plano mensal'
-        ],
-        'Financeiro': [
-            'iof', 'tarifa', 'taxa bancaria', 'anuidade cartao', 'anuidade cartão', 'seguro', 'juros'
-        ]
+        'Assinaturas': ['assinatura', 'subscription', 'plano mensal'],
+        'Financeiro': ['iof', 'tarifa', 'taxa bancaria', 'anuidade cartao', 'anuidade cartão', 'seguro']
     },
     'IMPOSTOS E TAXAS': {
-        'Impostos': [
-            'iptu', 'ipva', 'ir', 'imposto', 'receita federal', 'sefaz', 'detran', 'multa'
-        ]
+        'Impostos': ['iptu', 'ipva', 'ir', 'imposto', 'receita federal', 'sefaz', 'detran', 'multa']
     },
     'PIX / TRANSFERÊNCIAS': {
-        'Pix Enviado': [
-            'pix enviado', 'transferencia enviada', 'ted enviado'
-        ]
+        'Pix Enviado': ['pix enviado', 'transferencia enviada', 'ted enviado']
     }
 }
 
-# Normalizando o mapa uma vez na carga
-MAPA_NORMALIZADO = {}
-for cat, subcats in MAPA_CATEGORIAS.items():
-    MAPA_NORMALIZADO[cat] = {}
-    for subcat, keywords in subcats.items():
-        MAPA_NORMALIZADO[cat][subcat] = [remove_accents(kw) for kw in keywords]
-
-
 def categorizar_transacao(descricao: str, tipo: str, db: Session) -> tuple[int|None, int|None]:
-    """
-    Categoriza uma transação baseada na descrição. Retorna (id_categoria, id_subcategoria).
-    """
     desc_norm = remove_accents(descricao)
     
-    cat_encontrada = None
-    subcat_encontrada = None
-    
-    # Camada 1: Busca no mapa
-    for cat_nome, subcats in MAPA_NORMALIZADO.items():
-        # Regra especial: Finanças e Investimentos apenas para receitas
-        if cat_nome == 'FINANÇAS E INVESTIMENTOS' and tipo != 'Receita':
+    cat_nome = None
+    subcat_nome = None
+
+    # CAMADA 1: Busca por Keywords
+    for c_nome, subcategorias in MAPA_CATEGORIAS.items():
+        # Regra: Finanças e Investimentos apenas para Receita
+        if c_nome == 'FINANÇAS E INVESTIMENTOS' and tipo != 'Receita':
             continue
             
-        for subcat_nome, keywords in subcats.items():
-            if any(kw in desc_norm for kw in keywords):
-                cat_encontrada = cat_nome
-                subcat_encontrada = subcat_nome
+        for s_nome, keywords in subcategorias.items():
+            if any(remove_accents(kw) in desc_norm for kw in keywords):
+                cat_nome = c_nome
+                subcat_nome = s_nome
                 break
-        if cat_encontrada:
-            break
-            
-    # Camada 2: Fallback por tipo
-    if not cat_encontrada:
-        if tipo == 'Receita':
-            cat_encontrada = 'Receita / Outros'
-            subcat_encontrada = 'Outras Receitas'
+        if cat_nome: break
+
+    # CAMADA 2: Fallback por tipo
+    if not cat_nome:
+        if tipo == "Receita":
+            cat_nome = "Receita / Outros"
+            subcat_nome = "Outras Receitas"
         else:
-            cat_encontrada = 'Outros'
-            subcat_encontrada = 'Geral'
-            
-    # Camada 3: Buscar ou Criar no BD
-    # Buscar Categoria
-    categoria_db = db.query(Categoria).filter(Categoria.nome == cat_encontrada).first()
-    if not categoria_db:
-        categoria_db = Categoria(nome=cat_encontrada)
-        db.add(categoria_db)
-        db.flush()
-        
-    # Buscar Subcategoria
-    subcategoria_db = db.query(Subcategoria).filter(
-        Subcategoria.nome == subcat_encontrada,
-        Subcategoria.id_categoria == categoria_db.id
-    ).first()
-    
-    if not subcategoria_db:
-        subcategoria_db = Subcategoria(nome=subcat_encontrada, id_categoria=categoria_db.id)
-        db.add(subcategoria_db)
-        db.flush()
-        
-    return categoria_db.id, subcategoria_db.id
+            cat_nome = "Outros"
+            subcat_nome = "Geral"
+
+    # CAMADA 3: Persistência no Banco
+    try:
+        categoria_db = db.query(Categoria).filter(Categoria.nome == cat_nome).first()
+        if not categoria_db:
+            categoria_db = Categoria(nome=cat_nome)
+            db.add(categoria_db)
+            db.flush()
+
+        subcat_db = db.query(Subcategoria).filter(
+            Subcategoria.nome == subcat_nome,
+            Subcategoria.id_categoria == categoria_db.id
+        ).first()
+        if not subcat_db:
+            subcat_db = Subcategoria(nome=subcat_nome, id_categoria=categoria_db.id)
+            db.add(subcat_db)
+            db.flush()
+
+        return categoria_db.id, subcat_db.id
+    except Exception as e:
+        logger.error(f"Erro ao persistir categoria/subcat: {e}")
+        return None, None

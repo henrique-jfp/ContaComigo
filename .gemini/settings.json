@@ -1,0 +1,35 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "url": "https://mcp.supabase.com/mcp",
+      "type": "http"
+    },
+    "render": {
+      "url": "https://mcp.render.com/mcp",
+      "type": "http",
+      "headers": {
+        "Authorization": "Bearer rnd_DrXNDucb2NGaLXfx9uPi5xYIf8pG"
+      }
+    },
+    "telegram": {
+      "command": "npx",
+      "args": ["-y", "@overpod/mcp-telegram"],
+      "env": {
+        "TELEGRAM_API_ID": "36775136",
+        "TELEGRAM_API_HASH": "35bba3e8501aa6c323f78a05f95c8dbf"
+      }
+    },
+    "browser": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "$GITHUB_PERSONAL_ACCESS_TOKEN"
+      }
+    }
+  }
+
+}

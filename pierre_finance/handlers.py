@@ -10,10 +10,13 @@ from telegram.ext import (
 from database.database import get_db
 from models import Usuario
 import logging
+import asyncio
 from .sync import sincronizar_carga_inicial, sincronizar_incremental
 
 # Estados da conversação
 CHOOSING_ACTION, ASK_KEY = range(2)
+
+logger = logging.getLogger(__name__)
 
 async def sincronizar_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Comando /sincronizar_banco para forçar a leitura do Open Finance."""
@@ -27,19 +30,21 @@ async def sincronizar_manual(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await msg.edit_text("❌ Você ainda não configurou o Open Finance. Use /pierre primeiro.")
             return
 
+        # Se a carga inicial nunca foi feita ou deu erro
         if not usuario.pierre_initial_sync_done:
-            await msg.edit_text("⏳ Sua carga inicial ainda não foi concluída. Tente novamente em alguns minutos.")
+            await msg.edit_text("⏳ Sua carga inicial está sendo processada ou ainda não foi concluída. Alfredo está trabalhando nisso!")
+            # Tenta disparar a carga inicial se não estiver marcada como feita
+            res = await sincronizar_carga_inicial(usuario, db)
+            if isinstance(res, dict) and "error" not in res:
+                await msg.edit_text(f"✅ <b>Carga inicial concluída agora!</b>\n\nImportei {res.get('lancamentos')} transações. Agora o Alfredo monitora tudo!", parse_mode='HTML')
             return
 
         try:
             novos = await sincronizar_incremental(usuario, db)
-            if novos is not None:
-                await msg.edit_text(f"✅ <b>Sincronização concluída!</b>\n\nEncontrei <b>{novos}</b> novas transações que já foram categorizadas pelo Alfredo.", parse_mode='HTML')
-            else:
-                await msg.edit_text("❌ Ocorreu um erro na comunicação com o banco. Tente novamente mais tarde.")
+            await msg.edit_text(f"✅ <b>Sincronização concluída!</b>\n\nEncontrei <b>{novos}</b> novas transações que já foram processadas localmente.", parse_mode='HTML')
         except Exception as e:
-            logging.error(f"Erro no sync manual: {e}")
-            await msg.edit_text("❌ Erro inesperado ao sincronizar.")
+            logger.error(f"Erro no sync manual: {e}")
+            await msg.edit_text("❌ Ocorreu um erro na comunicação com o banco. Tente novamente mais tarde.")
     finally:
         db.close()
 
@@ -59,7 +64,7 @@ async def start_pierre(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Ao vincular sua conta do Pierre Finance, o Alfredo ganha superpoderes:\n"
         "• Leitura de saldos reais de todos os seus bancos.\n"
         "• Visão de faturas fechadas e parcelamentos futuros.\n"
-        "• Categorização automática sem que você precise digitar nada.\n\n"
+        "• Categorização automática local (sem depender da API).\n\n"
         "O que deseja fazer?",
         reply_markup=reply_markup,
         parse_mode='HTML'
@@ -103,52 +108,48 @@ async def request_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def receive_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Recebe e salva a chave e dispara carga inicial."""
-    # Sanitização profunda
     chave = update.message.text.strip().replace("\u200b", "").replace("\u200c", "").replace(" ", "")
     user_id = update.effective_user.id
     
-    # Validação básica
     if not chave.startswith("sk-"):
         await update.message.reply_text("❌ Chave inválida. Ela deve começar com 'sk-'. Operação cancelada.")
         return ConversationHandler.END
 
-    # Salva no banco de dados
     db = next(get_db())
     try:
         usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
         if usuario:
             usuario.pierre_api_key = chave
+            usuario.pierre_initial_sync_done = False # Reset obrigatório
             db.commit()
             
-            # Tenta apagar a mensagem com a chave por segurança
-            try:
-                await update.message.delete()
-            except Exception as e:
-                logging.warning(f"Não foi possível apagar a mensagem da chave: {e}")
+            try: await update.message.delete()
+            except: pass
                 
-            msg = await update.message.reply_text(
+            status_msg = await update.message.reply_text(
                 "✅ Chave salva! Iniciando carga inicial dos seus dados bancários... ⏳\nIsso pode levar alguns segundos."
             )
             
+            # Carga Inicial Assíncrona
             try:
                 res = await sincronizar_carga_inicial(usuario, db)
                 if isinstance(res, dict) and "error" in res:
-                    await msg.edit_text("✅ Chave salva com sucesso, mas a carga inicial falhou.\nUse /sincronizar_banco para tentar novamente.")
+                    await status_msg.edit_text("✅ Chave salva com sucesso, mas a carga inicial falhou.\nUse /sincronizar_banco para tentar novamente.")
                 else:
-                    await msg.edit_text(
+                    await status_msg.edit_text(
                         "✅ <b>Conexão Direta Estabelecida!</b>\n\n"
                         "📊 <b>Carga inicial concluída:</b>\n"
                         f"• <b>{res.get('contas', 0)}</b> contas bancárias importadas\n"
                         f"• <b>{res.get('lancamentos', 0)}</b> transações dos últimos 3 meses\n"
                         f"• <b>{res.get('faturas', 0)}</b> faturas de cartão importadas\n"
                         f"• <b>{res.get('parcelamentos', 0)}</b> parcelamentos mapeados\n\n"
-                        "A partir de agora o Alfredo monitora tudo com seus próprios dados.\n"
-                        "Use /sincronizar_banco para forçar uma atualização manual.",
+                        "A partir de agora o Alfredo monitora tudo com seus próprios dados locais.\n"
+                        "Use /sincronizar_banco para atualizações.",
                         parse_mode='HTML'
                     )
             except Exception as sync_err:
-                logging.error(f"Erro na carga inicial Pierre: {sync_err}", exc_info=True)
-                await msg.edit_text("✅ Chave salva com sucesso, mas ocorreu um erro na carga inicial.\nUse /sincronizar_banco para tentar novamente.")
+                logger.error(f"Erro na carga inicial Pierre: {sync_err}", exc_info=True)
+                await status_msg.edit_text("✅ Chave salva com sucesso, mas ocorreu um erro na carga inicial. Tente /sincronizar_banco em instantes.")
         else:
             await update.message.reply_text("❌ Usuário não encontrado no banco de dados.")
     finally:

@@ -75,12 +75,13 @@ def setup_environment():
     # 3. Ambiente local - tentar .env
     try:
         from dotenv import load_dotenv
-        env_path = Path(__file__).parent.parent / '.env'
+        # O arquivo .env fica na raiz do projeto, no mesmo nível de secret_loader.py
+        env_path = Path(__file__).parent / '.env'
         if env_path.exists():
             load_dotenv(env_path)
-            logger.info("✅ Arquivo .env local carregado")
+            logger.info(f"✅ Arquivo .env local carregado de: {env_path}")
         else:
-            logger.warning("⚠️ Nenhum arquivo .env encontrado localmente")
+            logger.warning(f"⚠️ Nenhum arquivo .env encontrado em: {env_path}")
     except ImportError:
         logger.warning("⚠️ python-dotenv não instalado - pulando .env local")
 

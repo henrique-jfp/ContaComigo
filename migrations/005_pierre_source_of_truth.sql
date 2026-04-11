@@ -11,9 +11,10 @@ CREATE TABLE IF NOT EXISTS saldos_conta (
     id_usuario INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
     saldo NUMERIC(15, 2) NOT NULL,
     saldo_disponivel NUMERIC(15, 2),
-    capturado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_saldo_conta_dia UNIQUE (id_conta, capturado_em)
+    capturado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_saldo_conta_dia ON saldos_conta (id_conta, (capturado_em::date));
 
 CREATE TABLE IF NOT EXISTS faturas_cartao (
     id SERIAL PRIMARY KEY,
