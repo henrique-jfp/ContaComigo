@@ -1375,10 +1375,11 @@ def miniapp_modo_deus():
         # --- SEÇÃO 2: TOP CATEGORIAS ---
         try:
             top_cats = db.query(
-                Categoria.nome, func.sum(Lancamento.valor).label('total')
+                Categoria.nome, func.sum(func.abs(Lancamento.valor)).label('total')
             ).join(Lancamento, Lancamento.id_categoria == Categoria.id).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.tipo.in_(['Saída', 'Despesa']),
+                func.lower(Categoria.nome).not_like('%receita%'),
                 Lancamento.data_transacao >= datetime.combine(start_month, time.min),
                 Lancamento.data_transacao <= datetime.combine(end_month, time.max)
             ).group_by(Categoria.nome).order_by(desc('total')).limit(6).all()

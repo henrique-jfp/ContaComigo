@@ -9,6 +9,7 @@ from database.database import get_db, get_or_create_user
 from models import Usuario, CarteiraFII
 from fiis.brapi_client import BrapiClient
 from fiis.analisador import analisar_carteira, scoring_fii, recomendar_fiis, explicar_conceito
+from gerente_financeiro.ia_handlers import _smart_ai_completion_async
 
 logger = logging.getLogger(__name__)
 
@@ -108,8 +109,6 @@ async def cmd_analisar_fii_handler(update: Update, context: ContextTypes.DEFAULT
         return
 
     logger.info(f"✅ [FII] Dados obtidos da Brapi para {ticker}. Chamando IA...")
-    # Usar Alfredo para gerar análise
-    from gerente_financeiro.ia_handlers import _smart_ai_completion_async
     
     db = next(get_db())
     usuario_db = get_or_create_user(db, update.effective_user.id, update.effective_user.full_name)
@@ -132,12 +131,16 @@ async def cmd_analisar_fii_handler(update: Update, context: ContextTypes.DEFAULT
     ]
     
     await update.message.reply_chat_action("typing")
-    resposta = await _smart_ai_completion_async(messages)
-    
-    if isinstance(resposta, dict): # se retornou tool calls ou algo assim
+    try:
+        resposta = await _smart_ai_completion_async(messages)
+        
+        if isinstance(resposta, dict): # se retornou tool calls ou algo assim
+            texto = "Desculpe, tive um problema ao processar a análise agora."
+        else:
+            texto = resposta or "Não consegui gerar a análise agora. Tente novamente em instantes."
+    except Exception as e:
+        logger.error(f"❌ [FII] Erro crítico na chamada da IA: {e}", exc_info=True)
         texto = "Desculpe, tive um problema ao processar a análise agora."
-    else:
-        texto = resposta or "Não consegui gerar a análise agora. Tente novamente em instantes."
         
     # Garantir que a nota de rodapé esteja presente
     if "recomendação" not in texto.lower():
