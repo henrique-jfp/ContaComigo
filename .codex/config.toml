@@ -1,0 +1,25 @@
+[mcp_servers.supabase]
+url = "https://mcp.supabase.com/mcp"
+
+[mcp_servers.render]
+url = "https://mcp.render.com/mcp"
+env_http_headers = { Authorization = "RENDER_MCP_AUTHORIZATION" }
+
+[mcp_servers.telegram]
+command = "npx"
+args = ["-y", "@overpod/mcp-telegram"]
+env_vars = ["TELEGRAM_API_ID", "TELEGRAM_API_HASH"]
+
+[mcp_servers.browser]
+command = "npx"
+args = ["-y", "@playwright/mcp@latest", "--headless", "--browser", "chromium"]
+
+[mcp_servers.browser.env]
+PLAYWRIGHT_BROWSERS_PATH = "/home/henriquejfp/.cache/ms-playwright"
+PLAYWRIGHT_MCP_HEADLESS = "true"
+PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true"
+
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+env_vars = ["GITHUB_PERSONAL_ACCESS_TOKEN"]

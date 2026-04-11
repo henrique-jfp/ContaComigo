@@ -152,13 +152,25 @@ def _upsert_accounts_and_balances(usuario: Usuario, db: Session, client: PierreC
         db.flush()
         accounts_map[ext_id] = conta.id
 
-        db.add(SaldoConta(
-            id_usuario=usuario.id,
-            id_conta=conta.id,
-            saldo=_safe_decimal(acc.get("balance")),
-            saldo_disponivel=_safe_decimal(acc.get("availableBalance") or acc.get("balance")),
-            capturado_em=datetime.now(timezone.utc)
-        ))
+        # Upsert de Saldo: se já existe saldo capturado hoje para esta conta, apenas atualiza
+        hoje = datetime.now(timezone.utc).date()
+        saldo_existente = db.query(SaldoConta).filter(
+            SaldoConta.id_conta == conta.id,
+            db.func.date(SaldoConta.capturado_em) == hoje
+        ).first()
+
+        if saldo_existente:
+            saldo_existente.saldo = _safe_decimal(acc.get("balance"))
+            saldo_existente.saldo_disponivel = _safe_decimal(acc.get("availableBalance") or acc.get("balance"))
+            saldo_existente.capturado_em = datetime.now(timezone.utc)
+        else:
+            db.add(SaldoConta(
+                id_usuario=usuario.id,
+                id_conta=conta.id,
+                saldo=_safe_decimal(acc.get("balance")),
+                saldo_disponivel=_safe_decimal(acc.get("availableBalance") or acc.get("balance")),
+                capturado_em=datetime.now(timezone.utc)
+            ))
 
     return accounts_map
 
