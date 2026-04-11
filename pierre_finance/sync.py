@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from .client import PierreClient
-from models import Usuario, Conta, Lancamento, SaldoConta, FaturaCartao, ParcelamentoItem
+from models import Usuario, Conta, Lancamento, SaldoConta, FaturaCartao, ParcelamentoItem, Categoria, Subcategoria
 from .categorizador import categorizar_transacao
 
 logger = logging.getLogger(__name__)
