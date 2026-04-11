@@ -355,7 +355,7 @@ async def _enviar_resposta_html_segura(message, texto: str, **kwargs):
     # Se for pequeno, envia direto (caminho rápido)
     if len(texto_html) <= 4000:
         try:
-            return await _enviar_resposta_html_segura(message, texto_html, **kwargs)
+            return await message.reply_html(texto_html, **kwargs)
         except Exception as exc:
             if "Message is too long" in str(exc):
                 return await _enviar_mensagem_fatiada(message, texto_html, is_html=True, **kwargs)

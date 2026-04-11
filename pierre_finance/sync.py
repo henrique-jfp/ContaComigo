@@ -91,21 +91,14 @@ def _inferir_tipo(
     valor_bruto: Decimal,
     account_type: str,
 ) -> str:
-    """
-    Regras para inferir tipo de transação com dados Open Finance:
+    desc_norm = (descricao or "").lower()
 
-    1. Conta Corrente / Conta Pagamento:
-       - Valor NEGATIVO = saída (Despesa)
-       - Valor POSITIVO = entrada, mas confirmar pela descrição
-         (pix recebido = Receita, rendimento = Receita, etc.)
+    # 🛡️ PRIORIDADE MÁXIMA: Sinais claros de ganho
+    ganhos = ["recebido", "salario", "salário", "reembolso", "estorno", "rendimento", "dividendo", "recebimento"]
+    if any(g in desc_norm for g in ganhos):
+        return "Receita"
 
-    2. Cartão de Crédito:
-       - Valor POSITIVO = compra (Despesa)
-       - Valor NEGATIVO = estorno / crédito (Receita)
-    """
-    desc_norm = normalizar_descricao(descricao)
-
-    # Verifica sinais de despesa forçada primeiro (mais confiável)
+    # Verifica sinais de despesa forçada
     for sinal in _SINAIS_DESPESA_FORCADOS:
         if sinal in desc_norm:
             return "Despesa"
@@ -120,12 +113,7 @@ def _inferir_tipo(
     if valor_bruto < 0:
         return "Despesa"
 
-    # Valor positivo em conta corrente: checar pela descrição
-    for sinal in _SINAIS_RECEITA:
-        if sinal in desc_norm:
-            return "Receita"
-
-    # Positivo mas sem sinal de receita = provável receita (depósito, PIX recebido genérico)
+    # Valor positivo em conta corrente
     return "Receita"
 
 
@@ -380,6 +368,7 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
     # ------------------------------------------------------------------
     logger.info("[PIERRE SYNC] Buscando sumário de faturas...")
     res_summary = client.get_bill_summary()
+    logger.error(f"🔍 [DEBUG FATURA] Resposta bruta: {str(res_summary)[:500]}")
     summaries = _extrair_sumarios_fatura(res_summary)
 
     faturas_count = 0
@@ -480,6 +469,7 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
     # ------------------------------------------------------------------
     logger.info("[PIERRE SYNC] Buscando parcelamentos...")
     res_inst = client.get_installments(start_date=date_90)
+    logger.error(f"🔍 [DEBUG PARCELAS] Resposta bruta: {str(res_inst)[:500]}")
     inst_list = _extrair_parcelamentos(res_inst)
     logger.info(f"[PIERRE SYNC] {len(inst_list)} parcelamento(s) encontrado(s)")
 
