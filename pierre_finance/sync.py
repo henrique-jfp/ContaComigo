@@ -142,8 +142,9 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session):
             ))
             txs_count += 1
 
-    # 5. Faturas Fechadas
+    # 5. Faturas (Fechadas e Em Aberto)
     faturas_count = 0
+    # 5.1 Faturas Fechadas/Vencidas
     res_bills = client.get_bills()
     if isinstance(res_bills, dict) and "data" in res_bills: res_bills = res_bills["data"]
     if isinstance(res_bills, list):
@@ -163,11 +164,38 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session):
             fatura.valor_total = Decimal(str(bill.get("amount") or bill.get("totalAmount") or 0))
             fatura.status = bill.get("status", "fechada")
             if "dueDate" in bill:
-                dt_venc = datetime.fromisoformat(bill["dueDate"].replace("Z", "+00:00")).date()
-                fatura.data_vencimento = dt_venc
-                fatura.mes_referencia = dt_venc.replace(day=1)
+                try:
+                    dt_venc = datetime.fromisoformat(bill["dueDate"].replace("Z", "+00:00")).date()
+                    fatura.data_vencimento = dt_venc
+                    fatura.mes_referencia = dt_venc.replace(day=1)
+                except: pass
             if "closingDate" in bill:
-                fatura.data_fechamento = datetime.fromisoformat(bill["closingDate"].replace("Z", "+00:00")).date()
+                try: fatura.data_fechamento = datetime.fromisoformat(bill["closingDate"].replace("Z", "+00:00")).date()
+                except: pass
+
+    # 5.2 Faturas EM ABERTO (Atuais)
+    res_summary = client.get_bill_summary()
+    if isinstance(res_summary, list):
+        for summary in res_summary:
+            acc_id = str(summary.get("accountId"))
+            conta_id = accounts_map.get(acc_id)
+            if not conta_id: continue
+            
+            # ID Fake para faturas em aberto (baseado no mes e conta) já que elas não tem ID fixo na API
+            hoje = datetime.now()
+            fake_ext_id = f"aberta_{acc_id}_{hoje.year}_{hoje.month}"
+            
+            fatura = db.query(FaturaCartao).filter(FaturaCartao.external_id == fake_ext_id).first()
+            if not fatura:
+                fatura = FaturaCartao(id_usuario=usuario.id, id_conta=conta_id, external_id=fake_ext_id)
+                db.add(fatura)
+                faturas_count += 1
+            
+            fatura.valor_total = Decimal(str(summary.get("billAmount") or summary.get("amount") or 0))
+            fatura.status = "em_aberto"
+            if "dueDate" in summary:
+                try: fatura.data_vencimento = datetime.fromisoformat(summary["dueDate"].replace("Z", "+00:00")).date()
+                except: pass
 
     # 6. Parcelamentos
     parcelas_count = 0
@@ -194,8 +222,13 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session):
             
         parcela.id_conta = accounts_map.get(str(inst.get("accountId")))
         parcela.descricao = inst.get("description") or inst.get("name") or "Parcelamento"
-        parcela.valor_total = Decimal(str(inst.get("totalAmount") or inst.get("amount") or 0))
-        parcela.valor_parcela = Decimal(str(inst.get("amount") or 0))
+        
+        # Correção de mapeamento de valores
+        v_total = inst.get("totalAmount") or inst.get("amount") or 0
+        v_parcela = inst.get("installmentAmount") or inst.get("amount") or 0
+        
+        parcela.valor_total = Decimal(str(v_total))
+        parcela.valor_parcela = Decimal(str(v_parcela))
         parcela.parcela_atual = int(inst.get("installmentNumber") or 1)
         parcela.total_parcelas = int(inst.get("totalInstallments") or 1)
         if "date" in inst:

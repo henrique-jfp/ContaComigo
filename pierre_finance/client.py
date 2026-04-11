@@ -98,9 +98,9 @@ class PierreClient:
         if start_date: params["startDate"] = start_date
         return self._request("GET", "/get-expensive-categories", params=params)
 
-    def get_book(self, include_all_periods=False):
+    def get_book(self, include_all_periods=False, **kwargs):
         """Obtém contexto financeiro e análises do usuário (Livro Caixa)."""
-        params = {}
+        params = kwargs.copy()
         if include_all_periods: params["includeAllPeriods"] = str(include_all_periods).lower()
         return self._request("GET", "/get-book", params=params)
 
