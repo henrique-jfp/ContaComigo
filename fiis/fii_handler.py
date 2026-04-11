@@ -133,10 +133,20 @@ async def cmd_analisar_fii_handler(update: Update, context: ContextTypes.DEFAULT
     await update.message.reply_chat_action("typing")
     resposta = await _smart_ai_completion_async(messages)
     
-    if isinstance(resposta, dict): # se retornou tool calls ou algo assim
-        texto = "Desculpe, tive um problema ao processar a análise agora."
-    else:
-        texto = resposta or "Não consegui gerar a análise agora. Tente novamente em instantes."
+    texto = ""
+    if isinstance(resposta, dict):
+        # Tenta extrair o conteúdo textual do formato OpenAI/Groq/Cerebras
+        try:
+            choice = (resposta.get("choices") or [{}])[0]
+            ia_message = choice.get("message") or {}
+            texto = ia_message.get("content") or ""
+        except Exception:
+            texto = ""
+    elif isinstance(resposta, str):
+        texto = resposta
+
+    if not texto or len(texto.strip()) < 10:
+        texto = "Desculpe, não consegui gerar uma análise detalhada agora. Tente novamente em instantes."
         
     # Garantir que a nota de rodapé esteja presente
     if "recomendação" not in texto.lower():
