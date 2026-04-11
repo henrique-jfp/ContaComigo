@@ -53,7 +53,8 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
             'subscription', 'plano mensal', 'gympass', 'totalpass',
         ],
         'Financeiro': [
-            'iof', 'tarifa', 'taxa bancaria', 'anuidade cartao', 'anuidade cartao', 'seguro',
+            'iof', 'tarifa', 'taxa bancaria', 'anuidade cartao', 'seguro',
+            'juros', 'multa', 'encargo', 'rotativo'
         ],
     },
     'ALIMENTAÇÃO': {
