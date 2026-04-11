@@ -301,11 +301,23 @@ add_fii_conv = ConversationHandler(
 def detect_fii_intent(message: str) -> str | None:
     m = message.lower()
     
-    # 1. Analisar FII específico (Regex mais flexível com fillers)
-    match_analisar = re.search(r'(?i)(analisa|o que acha de|vale a pena|sobre o|mostra o|detalhes do|info do|fundo|fii)\s+(?:o|a|os|as|do|da|fundo|ativo|fii)?\s*([a-z]{4}11)', m)
-    if match_analisar:
-        ticker = match_analisar.group(2).upper()
-        return f"analisar_fii:{ticker}"
+    # 1. Analisar FII específico (Regex muito mais flexível)
+    # Procura por um ticker XXXX11
+    ticker_match = re.search(r'([a-z]{4}11)', m)
+    
+    if ticker_match:
+        ticker = ticker_match.group(1).upper()
+        # Gatilhos de análise
+        gatilhos_analise = [
+            "analisa", "acha de", "vale a pena", "sobre", "info", "detalhes", 
+            "comprar", "vender", "estudo", "opinião", "opiniao", "fundo", "fii"
+        ]
+        if any(g in m for g in gatilhos_analise):
+            return f"analisar_fii:{ticker}"
+        
+        # Gatilhos de remoção
+        if any(g in m for g in ["remover", "vendi", "deletar", "excluir", "tirar"]):
+            return f"remover_fii:{ticker}"
     
     # 2. Carteira
     if any(p in m for p in ["meus fiis", "carteira de fii", "minha carteira fii", "meus fundos", "meus ativos"]):

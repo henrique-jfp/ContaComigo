@@ -177,8 +177,14 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session):
     elif isinstance(res_inst, list): inst_list = res_inst
 
     for inst in inst_list:
-        ext_id = str(inst.get("id") or inst.get("transactionId"))
-        if not ext_id: continue
+        # 🛡️ Proteção contra IDs nulos ou vazios
+        raw_ext_id = inst.get("id") or inst.get("transactionId")
+        if not raw_ext_id:
+            continue
+            
+        ext_id = str(raw_ext_id)
+        if ext_id.lower() == "none":
+            continue
         
         parcela = db.query(ParcelamentoItem).filter(ParcelamentoItem.external_id == ext_id).first()
         if not parcela:
@@ -188,12 +194,16 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session):
             
         parcela.id_conta = accounts_map.get(str(inst.get("accountId")))
         parcela.descricao = inst.get("description") or inst.get("name") or "Parcelamento"
-        parcela.valor_total = Decimal(str(inst.get("totalAmount") or 0))
+        parcela.valor_total = Decimal(str(inst.get("totalAmount") or inst.get("amount") or 0))
         parcela.valor_parcela = Decimal(str(inst.get("amount") or 0))
         parcela.parcela_atual = int(inst.get("installmentNumber") or 1)
         parcela.total_parcelas = int(inst.get("totalInstallments") or 1)
-        if "date" in inst: parcela.data_compra = datetime.fromisoformat(inst["date"].replace("Z", "+00:00")).date()
-        if "dueDate" in inst: parcela.data_proxima_parcela = datetime.fromisoformat(inst["dueDate"].replace("Z", "+00:00")).date()
+        if "date" in inst:
+            try: parcela.data_compra = datetime.fromisoformat(inst["date"].replace("Z", "+00:00")).date()
+            except: pass
+        if "dueDate" in inst:
+            try: parcela.data_proxima_parcela = datetime.fromisoformat(inst["dueDate"].replace("Z", "+00:00")).date()
+            except: pass
 
     # 7. Finalização
     usuario.pierre_initial_sync_done = True

@@ -41,6 +41,7 @@ from fiis.fii_handler import detect_fii_intent, route_fii_intent
 from gerente_financeiro.ai_service import (
     _smart_ai_completion_async, 
     _groq_transcribe_voice_async, 
+    _groq_chat_completion_async,
     _extrair_tool_calls_do_texto, 
     _contem_tool_call_json,
     _ALFREDO_TOOLS_NAMES
