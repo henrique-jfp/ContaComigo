@@ -11,6 +11,7 @@ Correções aplicadas v2:
 """
 
 import logging
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal, InvalidOperation
@@ -156,7 +157,7 @@ def _upsert_accounts_and_balances(usuario: Usuario, db: Session, client: PierreC
         hoje = datetime.now(timezone.utc).date()
         saldo_existente = db.query(SaldoConta).filter(
             SaldoConta.id_conta == conta.id,
-            db.func.date(SaldoConta.capturado_em) == hoje
+            func.date(SaldoConta.capturado_em) == hoje
         ).first()
 
         if saldo_existente:
