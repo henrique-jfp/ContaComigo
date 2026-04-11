@@ -12,8 +12,10 @@ logger = logging.getLogger(__name__)
 
 def _normalizar_forma_pagamento(descricao: str, account_type: str) -> str:
     desc_lower = descricao.lower()
+    # Prioridade 1: Pix (independente da conta)
     if "pix" in desc_lower:
         return "Pix"
+    # Prioridade 2: Pelo tipo da conta
     if account_type == "CREDIT":
         return "Crédito"
     if account_type in ["BANK", "PAYMENT_ACCOUNT"]:
@@ -110,25 +112,38 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session):
                 continue
                 
             valor_bruto = Decimal(str(tx.get("amount") or tx.get("value") or 0))
-            # Pierre API: Transações de cartão costumam vir positivas, mas são despesas.
-            # Se accountType for CREDIT e valor for positivo, tratamos como Despesa.
-            # Se for BANK e positivo, é Receita. Se for negativo, sempre Despesa.
             acc_type = tx.get("accountType", "BANK")
+            descricao = tx.get("description") or tx.get("name") or "Transação Open Finance"
+            desc_lower = descricao.lower()
+
+            # 🛡️ FILTRO ANTI-FANTASMA (INTER): 
+            # Se for PIX no CRÉDITO e o valor for POSITIVO, é o lançamento de ajuste interno do Inter. IGNORAR.
+            if acc_type == "CREDIT" and "pix" in desc_lower and valor_bruto > 0:
+                continue
+
+            # 🛡️ LÓGICA DE FERRO PARA TIPO (RECEITA VS DESPESA)
+            # 1. Se valor for negativo -> Sempre Despesa
+            # 2. Se for Cartão (CREDIT) e positivo -> Despesa (Pierre envia positivo no cartão)
+            # 3. Se for Conta (BANK) e positivo -> Receita
             if valor_bruto < 0:
                 tipo = "Despesa"
             elif acc_type == "CREDIT":
-                tipo = "Despesa"
+                # Pierre costuma mandar positivo para gastos de cartão.
+                # Só seria Receita se fosse um estorno muito claro (que costuma vir negativo na API deles ou com nome 'Estorno')
+                if "estorno" in desc_lower or "reembolso" in desc_lower:
+                    tipo = "Receita"
+                else:
+                    tipo = "Despesa"
             else:
                 tipo = "Receita"
                 
             valor = abs(valor_bruto)
-            descricao = tx.get("description") or tx.get("name") or "Transação Open Finance"
             
             # Categorização Inteligente Local com Cache
             cat_id, subcat_id = categorizar_transacao(descricao, tipo, db, cat_cache, subcat_cache)
             
-            # Normalização de Pagamento
-            fp = _normalizar_forma_pagamento(descricao, tx.get("accountType"))
+            # Normalização de Pagamento (Garante que nunca seja 'Não informado' se soubermos a conta)
+            fp = _normalizar_forma_pagamento(descricao, acc_type)
             
             conta_id = accounts_map.get(str(tx.get("accountId")))
             dt_str = tx.get("date") or tx.get("createdAt")
@@ -280,20 +295,31 @@ async def sincronizar_incremental(usuario: Usuario, db: Session):
                 
             valor_bruto = Decimal(str(tx.get("amount") or 0))
             acc_type = tx.get("accountType", "BANK")
+            descricao = tx.get("description", "")
+            desc_lower = descricao.lower()
+
+            # 🛡️ FILTRO ANTI-FANTASMA (INTER):
+            if acc_type == "CREDIT" and "pix" in desc_lower and valor_bruto > 0:
+                continue
+
+            # 🛡️ LÓGICA DE FERRO PARA TIPO
             if valor_bruto < 0:
                 tipo = "Despesa"
             elif acc_type == "CREDIT":
-                tipo = "Despesa"
+                if "estorno" in desc_lower or "reembolso" in desc_lower:
+                    tipo = "Receita"
+                else:
+                    tipo = "Despesa"
             else:
                 tipo = "Receita"
                 
-            cat_id, subcat_id = categorizar_transacao(tx.get("description", ""), tipo, db, cat_cache, subcat_cache)
+            cat_id, subcat_id = categorizar_transacao(descricao, tipo, db, cat_cache, subcat_cache)
             
             db.add(Lancamento(
                 id_usuario=usuario.id, id_conta=accounts_map.get(str(tx.get("accountId"))),
-                external_id=ext_id, descricao=tx.get("description"), valor=abs(valor_bruto),
+                external_id=ext_id, descricao=descricao, valor=abs(valor_bruto),
                 tipo=tipo, data_transacao=datetime.fromisoformat(tx.get("date").replace("Z", "+00:00")),
-                origem="open_finance", forma_pagamento=_normalizar_forma_pagamento(tx.get("description", ""), tx.get("accountType")),
+                origem="open_finance", forma_pagamento=_normalizar_forma_pagamento(descricao, acc_type),
                 id_categoria=cat_id, id_subcategoria=subcat_id
             ))
             novos += 1
