@@ -19,7 +19,7 @@ from functools import wraps
 from sqlalchemy import and_, func, desc
 from flask import Flask, render_template, jsonify, request, g, make_response
 from sqlalchemy.orm import joinedload
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -1046,7 +1046,7 @@ def miniapp_pierre_dashboard():
                 "categories": cleaned_categories,
                 "installments": installments_res,
                 "health": {"score": health_score, "label": health_label},
-                "sync_time": usuario.last_pierre_sync_at.isoformat() if usuario.last_pierre_sync_at else datetime.now(timezone.utc).isoformat()
+                "sync_time": usuario.last_pierre_sync.isoformat() if usuario.last_pierre_sync else datetime.now(timezone.utc).isoformat()
             }
         })
     except Exception as e:
