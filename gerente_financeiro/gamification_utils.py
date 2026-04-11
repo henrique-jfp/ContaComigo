@@ -174,17 +174,21 @@ async def check_achievements(user_id: int, context):
                 # Verificar se já foi concedida (você pode implementar uma tabela de conquistas)
                 # Por enquanto, dar XP bônus
                 await give_xp_for_action(user_id, "CONQUISTA_DESBLOQUEADA", context)
-                
-                try:
-                    await context.bot.send_message(
-                        chat_id=user_id,
-                        text=f"🏅 <b>CONQUISTA DESBLOQUEADA!</b>\n\n{message}\n\n⭐ +25 XP Bônus!",
-                        parse_mode='HTML'
-                    )
-                except:
-                    pass
-                break  # Parar na primeira conquista não desbloqueada
-        
+
+                # Trava de notificação: só envia se a flag notif_gamificacao estiver ativa (ou ausente/True)
+                usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
+                notif_gamificacao = getattr(usuario, 'notif_gamificacao', True) if usuario else True
+
+                if notif_gamificacao:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=user_id,
+                            text=f"🏅 <b>CONQUISTA DESBLOQUEADA!</b>\n\n{message}\n\n⭐ +25 XP Bônus!",
+                            parse_mode='HTML'
+                        )
+                    except:
+                        pass
+                break  # Parar na primeira conquista não desbloqueada        
     finally:
         db.close()
 

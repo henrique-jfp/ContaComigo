@@ -319,7 +319,8 @@ def detect_fii_intent(message: str) -> str | None:
     conceitos = [
         "o que é dy", "o que é pvp", "explica pvp", "explica dy", 
         "o que é vacância", "o que é vacancia", "fii de tijolo", 
-        "fii de papel", "fii de tijolo e papel", "fundo de tijolo", "fundo de papel"
+        "fii de papel", "fii de tijolo e papel", "fundo de tijolo", "fundo de papel",
+        "dividend yield", "p/vp", "valor patrimonial", "vacancia"
     ]
     if any(p in m for p in conceitos):
         return "explicar_conceito"
