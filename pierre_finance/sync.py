@@ -21,7 +21,7 @@ from models import (
     Usuario, Conta, Lancamento, SaldoConta,
     FaturaCartao, ParcelamentoItem, Categoria, Subcategoria,
 )
-from .categorizador import categorizar_transacao, normalizar_descricao
+from .categorizador import categorizar_transacao, limpar_descricao
 
 logger = logging.getLogger(__name__)
 
