@@ -357,7 +357,9 @@ async def route_fii_intent(intent: str, update: Update, context: ContextTypes.DE
         await cmd_recomendar_fii_handler(update, context)
     elif intent == "explicar_conceito":
         explica = explicar_conceito(update.message.text)
-        await update.message.reply_html(f"🏢 <b>Alfredo Explica:</b>\n\n{explica}")
+        # Limpeza defensiva de tags HTML para o Telegram
+        explica_limpa = explica.replace("<", "&lt;").replace(">", "&gt;").replace("&lt;b&gt;", "<b>").replace("&lt;/b&gt;", "</b>").replace("&lt;i&gt;", "<i>").replace("&lt;/i&gt;", "</i>").replace("&lt;code&gt;", "<code>").replace("&lt;/code&gt;", "</code>")
+        await update.message.reply_html(f"🏢 <b>Alfredo Explica:</b>\n\n{explica_limpa}")
     elif intent.startswith("analisar_fii:"):
         ticker = intent.split(":")[1]
         await cmd_analisar_fii_handler(update, context, ticker)

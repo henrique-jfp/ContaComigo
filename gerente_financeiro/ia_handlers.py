@@ -428,12 +428,14 @@ async def _enviar_mensagem_fatiada(message, texto: str, is_html: bool = True, **
         if not p.strip(): continue
         try:
             if is_html:
-                await _enviar_resposta_html_segura(message, p, **kwargs)
+                # IMPORTANTE: Usar reply_html direto aqui para evitar recursão infinita
+                await message.reply_html(p, **kwargs)
             else:
                 await message.reply_text(p, **kwargs)
         except Exception as e:
             logger.error("Erro ao enviar fatia: %s", e)
             if is_html:
+                # Fallback para texto plano se falhar o HTML da fatia
                 p_plano = re.sub(r"<[^>]+>", "", p)
                 try:
                     await message.reply_text(p_plano, **kwargs)
