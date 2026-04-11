@@ -1963,6 +1963,11 @@ lucide.createIcons();
       missionsCountActive.textContent = String(active);
       missionsCountCompleted.textContent = String(completed);
       missionsXpReward.textContent = String(totalXp);
+
+      const gameMissionsCount = document.getElementById('gameMissionsCount');
+      if (gameMissionsCount) {
+        gameMissionsCount.textContent = String(active);
+      }
     }
 
     async function loadMissions() {
@@ -2695,14 +2700,51 @@ lucide.createIcons();
     // Refresh and Modal binds
     historyRefresh.addEventListener('click', () => loadHistory(true));
     historyLoadMore.addEventListener('click', () => loadHistory(false));
-    historyTipo.addEventListener('change', () => loadHistory(true));
-    historyOrder.addEventListener('change', () => loadHistory(true));
-    historyDate.addEventListener('change', () => loadHistory(true));
+    
+    // Novo Modal de Filtros
+    const historyOpenFilters = document.getElementById('historyOpenFilters');
+    const historyFilterModal = document.getElementById('historyFilterModal');
+    const historyApplyFilters = document.getElementById('historyApplyFilters');
+    const historySearchInput = document.getElementById('historySearchInput');
+
+    if (historyOpenFilters) {
+      historyOpenFilters.addEventListener('click', () => {
+        historyFilterModal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+      });
+    }
+
+    window.closeHistoryFilterModal = () => {
+      historyFilterModal.classList.remove('active');
+      document.body.style.overflow = 'auto';
+    };
+
+    if (historyApplyFilters) {
+      historyApplyFilters.addEventListener('click', () => {
+        loadHistory(true);
+        closeHistoryFilterModal();
+      });
+    }
+
+    if (historySearchInput) {
+      let searchTimer;
+      historySearchInput.addEventListener('input', (e) => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          historyQuery.value = e.target.value;
+          loadHistory(true);
+        }, 400);
+      });
+    }
+
     historyClearFilters.addEventListener('click', () => {
       historyTipo.value = '';
       historyOrder.value = 'added_desc';
       historyDate.value = '';
+      if(historySearchInput) historySearchInput.value = '';
+      historyQuery.value = '';
       loadHistory(true);
+      closeHistoryFilterModal();
     });
     agendamentoRefresh.addEventListener('click', loadAgendamentos);
     agendamentoNew.addEventListener('click', openNewAgendamentoModal);

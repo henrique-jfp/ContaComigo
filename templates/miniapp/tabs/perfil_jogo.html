@@ -27,10 +27,13 @@
             <p class="text-xs font-semibold uppercase tracking-[0.2em] text-telegram-hint">Interações (histórico)</p>
             <p id="gameInteractionsTotal" class="mt-2 text-2xl font-extrabold text-telegram-text">0</p>
           </div>
-          <div class="glass-card rounded-2xl p-4">
-            <p class="text-xs font-semibold uppercase tracking-[0.2em] text-telegram-hint">Interações (7 dias)</p>
-            <p id="gameInteractionsWeek" class="mt-2 text-2xl font-extrabold text-telegram-text">0</p>
-          </div>
+          <button onclick="switchTabByName('missoes')" class="glass-card rounded-2xl p-4 text-left border border-brand/20 bg-brand/5">
+            <p class="text-xs font-bold uppercase tracking-[0.2em] text-brand">Missões Diárias</p>
+            <div class="flex items-center justify-between mt-2">
+              <span id="gameMissionsCount" class="text-2xl font-black text-telegram-text">0</span>
+              <i data-lucide="chevron-right" class="w-5 h-5 text-brand"></i>
+            </div>
+          </button>
         </div>
 
         <div class="glass-card rounded-3xl p-5">

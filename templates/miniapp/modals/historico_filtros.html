@@ -1,0 +1,39 @@
+<div class="modal-overlay" id="historyFilterModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="text-lg font-bold text-telegram-text flex items-center gap-2">
+          <i data-lucide="filter" class="w-5 h-5 text-brand"></i> Filtros do Histórico
+        </h2>
+        <button class="modal-close-btn" onclick="closeHistoryFilterModal()"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+      <div class="modal-body space-y-4">
+        <div class="space-y-2">
+          <label class="text-xs font-bold uppercase tracking-wider text-telegram-hint ml-1">Tipo</label>
+          <select id="historyTipo" class="floating-select peer">
+            <option value="">Todos os lançamentos</option>
+            <option value="Entrada">Apenas Receitas</option>
+            <option value="Saída">Apenas Despesas</option>
+          </select>
+        </div>
+
+        <div class="space-y-2">
+          <label class="text-xs font-bold uppercase tracking-wider text-telegram-hint ml-1">Ordenação</label>
+          <select id="historyOrder" class="floating-select peer">
+            <option value="added_desc">Adicionados recentemente</option>
+            <option value="date_desc">Data da transação (mais nova)</option>
+            <option value="date_asc">Data da transação (mais antiga)</option>
+          </select>
+        </div>
+
+        <div class="space-y-2">
+          <label class="text-xs font-bold uppercase tracking-wider text-telegram-hint ml-1">Data Específica</label>
+          <input id="historyDate" type="date" class="floating-input peer">
+        </div>
+
+        <div class="flex gap-3 pt-4">
+          <button id="historyApplyFilters" class="flex-1 rounded-xl bg-brand py-3 text-sm font-semibold text-white hover:bg-brand-soft transition shadow-soft">Aplicar Filtros</button>
+          <button id="historyClearFilters" class="flex-1 rounded-xl border border-telegram-separator bg-telegram-card py-3 text-sm font-semibold text-telegram-text hover:bg-slate-100 transition">Limpar</button>
+        </div>
+      </div>
+    </div>
+  </div>
