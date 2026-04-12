@@ -94,68 +94,74 @@
     }
   }
 
-  /* AQUÁRIO FINANCEIRO - MODERNIZADO E FUNCIONAL */
+  /* AQUÁRIO FINANCEIRO — DIVISÃO ORGÂNICA (SVG) */
   .aquarium-card {
     position: relative;
     width: 100%;
-    height: 100px;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 24px;
+    height: 140px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.06));
+    border-radius: 26px;
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     display: flex;
     align-items: center;
     justify-content: center;
     isolation: isolate;
-    box-shadow: inset 0 4px 12px rgba(0,0,0,0.4);
+    box-shadow: inset 0 6px 18px rgba(0,0,0,0.35);
   }
 
-  .aquarium-water {
+  .aquarium-svg-container {
     position: absolute;
-    bottom: 0;
-    left: 0;
+    inset: 0;
     width: 100%;
-    height: 0%; /* Controlado pelo JS */
-    background: linear-gradient(180deg, var(--cc-brand) 0%, #44131d 100%);
-    transition: height 2s cubic-bezier(0.4, 0, 0.2, 1);
+    height: 100%;
     z-index: 1;
+    pointer-events: none;
   }
 
-  .aquarium-water::before {
-    content: "";
+  /* Ensure SVG renders crisply and scales as container */
+  #homeAquariumSVG { display: block; width: 100%; height: 100%; }
+
+  /* Soft wave overlay for texture */
+  .aquarium-wave {
     position: absolute;
-    top: -15px;
-    left: 0;
-    width: 200%;
-    height: 20px;
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 88.7'%3E%3Cpath d='M800 56.9c-155.5 0-204.9-50-405.5-49.9-200 0-250 49.9-394.5 49.9v31.8h800v-31.8z' fill='%237b1e2d'/%3E%3C/svg%3E");
-    background-size: 50% 100%;
-    animation: wave-move 4s linear infinite;
-    opacity: 0.6;
+    inset: 0;
+    z-index: 3;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 120' preserveAspectRatio='none'%3E%3Cpath d='M0,30 C150,90 350,0 600,30 C850,60 1050,10 1200,30 L1200 120 L0 120 Z' fill='%23ffffff' opacity='0.04'/%3E%3C/svg%3E");
+    background-size: 2200px 120px;
+    background-repeat: repeat-x;
+    transform: translateX(0);
+    animation: aquarium-wave-move 12s linear infinite;
+    mix-blend-mode: overlay;
+    pointer-events: none;
   }
 
-  @keyframes wave-move {
+  @keyframes aquarium-wave-move {
     0% { transform: translateX(0); }
-    100% { transform: translateX(-50%); }
+    100% { transform: translateX(-40%); }
   }
 
   .aquarium-percentage {
     position: relative;
-    z-index: 10;
+    z-index: 6;
     display: flex;
     gap: 12px;
+    justify-content: flex-start;
+    padding-left: 18px;
+    top: 8px;
   }
 
   .percentage-badge {
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 0.75rem;
-    font-weight: 900;
-    color: white;
-    background: rgba(0, 0, 0, 0.5);
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: #ffffff;
+    background: rgba(0,0,0,0.45);
     backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     font-family: 'IBM Plex Mono', monospace;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
   }
 
   /* CATEGORY BRANDING & COLORS */

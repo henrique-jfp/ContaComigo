@@ -35,7 +35,32 @@
             </div>
             <div class="aquarium-card">
               <div class="aquarium-viewport relative w-full h-full overflow-hidden rounded-[24px]">
-                <div id="homeAquariumWater" class="aquarium-water absolute inset-0"></div>
+                <!-- SVG-based organic divider: two flowing fills (receitas/despesas) -->
+                <div id="homeAquariumWater" class="aquarium-svg-container absolute inset-0" aria-hidden="true">
+                  <svg id="homeAquariumSVG" viewBox="0 0 1200 200" preserveAspectRatio="none" width="100%" height="100%">
+                    <defs>
+                      <filter id="blurEdge" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="10" result="b"/>
+                        <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0"/>
+                      </filter>
+                      <linearGradient id="greenGrad" x1="0" x2="1">
+                        <stop offset="0%" stop-color="#1f9a5f" stop-opacity="0.98"/>
+                        <stop offset="100%" stop-color="#34d399" stop-opacity="0.85"/>
+                      </linearGradient>
+                      <linearGradient id="redGrad" x1="0" x2="1">
+                        <stop offset="0%" stop-color="#f97373" stop-opacity="0.95"/>
+                        <stop offset="100%" stop-color="#ef4444" stop-opacity="0.9"/>
+                      </linearGradient>
+                      <linearGradient id="blendGrad" x1="0" x2="1">
+                        <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
+                        <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+                      </linearGradient>
+                    </defs>
+                    <path id="aqGreen" fill="url(#greenGrad)" filter="url(#blurEdge)" opacity="0.98"></path>
+                    <path id="aqRed" fill="url(#redGrad)" filter="url(#blurEdge)" opacity="0.96"></path>
+                    <path id="aqBlend" fill="url(#blendGrad)" opacity="0.15"></path>
+                  </svg>
+                </div>
                 <div id="homeAquariumWave" class="aquarium-wave absolute inset-0 pointer-events-none"></div>
                 <div class="aquarium-percentage relative z-10">
                   <span id="homePctReceita" class="percentage-badge percentage-receita">0%</span>

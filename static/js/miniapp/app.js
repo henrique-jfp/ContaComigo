@@ -936,6 +936,49 @@ lucide.createIcons();
       homeCharts = {};
     }
 
+    // Atualiza a forma orgânica do aquário (SVG) baseada em receitas vs despesas
+    function updateAquariumVisual(receita, despesa) {
+      try {
+        const svg = document.getElementById('homeAquariumSVG');
+        if (!svg) return;
+        const vbW = 1200;
+        const vbH = 200;
+        const total = Math.max(0.0001, Number(receita || 0) + Number(despesa || 0));
+        const ratio = Number(receita || 0) / total;
+
+        const xStart = vbW * 0.08;
+        const xEnd = vbW * 0.92;
+        const steps = 10;
+        const points = [];
+        for (let i = 0; i <= steps; i += 1) {
+          const t = i / steps;
+          const y = vbH - t * (vbH * 0.78) - vbH * 0.06; // leave top/bottom margin
+          const base = xStart * (1 - t) + xEnd * t;
+          const globalOffset = (ratio - 0.5) * vbW * 0.42; // shift curve horizontally by ratio
+          const waviness = Math.sin(t * Math.PI * 3 + (ratio * Math.PI)) * (vbW * 0.04) * (1 - Math.abs(t - 0.5));
+          const x = Math.max(0, Math.min(vbW, Math.round(base + globalOffset + waviness)));
+          points.push({ x, y: Math.round(y) });
+        }
+
+        // Construir path simples conectando os pontos (a blur filter suaviza a borda)
+        const last = points.length - 1;
+        const forwardPts = points.map(p => `${p.x} ${p.y}`).join(' ');
+        const reversePts = points.slice().reverse().map(p => `${p.x} ${p.y}`).join(' ');
+
+        const greenD = `M 0 ${vbH} L 0 0 L ${points[last].x} ${points[last].y} L ${reversePts} Z`;
+        const redD = `M ${vbW} ${vbH} L ${vbW} 0 L ${points[last].x} ${points[last].y} L ${forwardPts} Z`;
+
+        const g = svg.querySelector('#aqGreen');
+        const r = svg.querySelector('#aqRed');
+        const b = svg.querySelector('#aqBlend');
+        if (g) g.setAttribute('d', greenD);
+        if (r) r.setAttribute('d', redD);
+        if (b) b.setAttribute('d', redD);
+      } catch (err) {
+        console.warn('updateAquariumVisual erro:', err);
+      }
+    }
+
     function renderHomeOverview(summary) {
       const balance = Number(summary?.balance || 0);
       const receita = Number(summary?.receita || 0);
@@ -980,10 +1023,12 @@ lucide.createIcons();
       homeProgressLabel.textContent = `${100 - progressPct}%`;
 
       if (homeAquariumWater) {
-        // Gradient horizontal: verde (receita) à esquerda, vermelho (despesa) à direita
-        // Construímos paradas para que receita ocupe pctReceita% e despesa o restante
-        const stop = pctReceitaSafe;
-        homeAquariumWater.style.background = `linear-gradient(90deg, #22c55e 0%, #22c55e ${stop}%, #ef4444 ${stop}%, #ef4444 100%)`;
+        // Atualiza a visualização SVG orgânica do aquário (verde = receita, vermelho = despesa)
+        try {
+          updateAquariumVisual(receita, despesa);
+        } catch (e) {
+          console.warn('Falha atualizando aquário SVG:', e);
+        }
       }
       // Atualiza os badges de porcentagem
       if (homePctReceita) homePctReceita.textContent = `REC: ${pctReceita}%`;
