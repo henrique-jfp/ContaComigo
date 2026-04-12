@@ -1,752 +1,131 @@
-<div align="center">
-  <img src="https://img.shields.io/badge/Status-Active-success?style=for-the-badge" alt="Status" />
-  <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
-  <img src="https://img.shields.io/badge/Telegram_Bot-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram" />
-  <img src="https://img.shields.io/badge/IA-Cerebras_%2B_Groq-FF6B35?style=for-the-badge" alt="AI" />
-  <img src="https://img.shields.io/badge/Database-PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="Postgres" />
-  <img src="https://img.shields.io/badge/Dashboard-Flask-000000?style=for-the-badge&logo=flask&logoColor=white" alt="Flask" />
-  <img src="https://img.shields.io/badge/Architecture-Hybrid-9C27B0?style=for-the-badge" alt="Hybrid" />
-</div>
-
-<h1 align="center">ContaComigo</h1>
-
-> **Assistente financeiro inteligente no Telegram com arquitetura híbrida, automação completa de lançamentos e dashboard web em tempo real.**
-
----
-
-## 📋 Índice
-
-1. [Visão Geral](#-visão-geral)
-2. [Arquitetura Híbrida](#-arquitetura-híbrida)
-3. [Componentes Principais](#-componentes-principais)
-4. [Fluxo de Dados](#-fluxo-de-dados)
-5. [Tecnologias](#-tecnologias)
-6. [Funcionalidades](#-funcionalidades)
-7. [Performance & Confiabilidade](#-performance--confiabilidade)
-8. [Deployment](#-deployment)
-9. [Desenvolvimento Local](#-desenvolvimento-local)
-
----
-
-## 🎯 Visão Geral
-
-**ContaComigo** é um ecossistema financeiro completo construído em torno do Telegram, oferecendo aos usuários uma forma intuitiva e frictionless de registrar, analisar e planejar suas finanças pessoais.
-
-### Proposta de Valor
-
-- **Zero Setup & Zero Atrito:** Fim dos comandos complexos. O chat é apenas para interações naturais (voz, texto, foto), enquanto configurações e visualizações moram no MiniApp.
-- **IA de Ultra Velocidade:** Orquestrador inteligente que utiliza **Cerebras Inference** (o mais rápido do mundo) com fallback para **Groq** e **Gemini**.
-- **Dashboard Web:** MiniApp otimizada para carregamento instantâneo.
-- **OCR & Parsing Universal:** Leitura multimodal nativa (**Gemini 2.0 Flash-Lite**) capaz de extrair dados de faturas em PDF de QUALQUER banco com 100% de assertividade estrutural.
-- **Análises em Tempo Real:** Insights personalizados e alertas proativos sem o tom robótico de gerente de banco.
-- **Assistente Proativo:** Notificações diárias de contas a pagar com botão "✅ Dar baixa" direto no chat.
-- **Gamificação Viciante:** Transforme o controle financeiro em um jogo de RPG com missões, XP, rankings e níveis.
-
----
-
-## 🏗️ Arquitetura Híbrida
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      MODO HÍBRIDO (LOCAL_DEV)                    │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  THREAD 1 (Bot Telegram)        │  MAIN PROCESS (Flask Dashboard) │
-│  ────────────────────────       │  ────────────────────────────── │
-│  • Polling (getUpdates)         │  • Flask app (Port: $PORT)      │
-│  • Handlers por tipo de media   │  • /api/miniapp/* endpoints    │
-│  • Alfredo router (Groq)        │  • /api/telegram/auth          │
-│  • OCR, audio, processamento    │  • WebApp view                  │
-│  • Background jobs (APScheduler)│  • Static files + templates    │
-│  ────────────────────────       │  ────────────────────────────── │
-│  Runs: Thread(target=bot)       │  Runs: python launcher.py       │
-│                                                                   │
-└─────────────────────────────────────────────────────────────────┘
-                          ↓
-                   Compartilhado
-                          ↓
-              ┌──────────────────────┐
-              │ PostgreSQL Database  │
-              │ • Usuários           │
-              │ • Transações         │
-              │ • Sessões            │
-              │ • Analytics          │
-              └──────────────────────┘
-```
-
-### Por que Híbrido?
-
-1. **Responsividade:** Bot em thread permite que o Flask não fique bloqueado por polling.
-2. **Separação de Responsabilidades:** Telegram (I/O bound) vs Web (CPU bound).
-3. **Escalabilidade:** Ambos podem falhar independentemente sem derrubar o outro.
-4. **Resiliência de IA:** Rodízio entre Cerebras, Groq e Gemini garante cota e disponibilidade.
-
-### Fluxo de Inicialização
-
-1. **Startup (`__main__`):**
-   - Carrega variáveis de ambiente
-   - Inicializa banco de dados (migrations SQL)
-   - Configura OCR (Google Vision credentials)
-   - Inicia thread do bot (modo `LOCAL_DEV`)
-   - Inicia Flask app no main thread
-
-2. **Bot Thread:**
-   - `ApplicationBuilder` com Groq token
-   - Registra handlers padrão (text, voice, photo, pdf, callbacks)
-   - **NOVO:** Global callbacks para handlers que iniciam fora de ConversationHandler
-     - Ex: `CallbackQueryHandler(fatura_confirm, pattern="^fatura_")` para PDF faturas
-   - Inicia `app.run_polling()`
-
-3. **Main Thread:**
-   - Registra rotas Flask (`/api/telegram/auth`, `/api/miniapp/*`, `/webapp`)
-   - Inicia APScheduler para jobs agendados
-   - Executa `app.run(host='0.0.0.0', port=8080)`
+# 🚀 ContaComigo: Ecossistema Financeiro Híbrido no Telegram
 
----
-
-## 🔧 Componentes Principais
-
-### 1. Bot Telegram (`gerente_financeiro/`)
-
-#### **a) Roteador Alfredo (`ia_handlers.py`)**
-
-Router inteligente que utiliza o motor mais rápido disponível no momento:
-
-```python
-# Ordem de preferência (Smart Fallback)
-1. Cerebras Inference (Velocidade Extrema)
-2. Groq LLaMA 3.x (Resiliência)
-3. Gemini Flash (Última linha de defesa)
-```
-
-**Responsabilidades:**
-- Identificação instantânea de intenções (Zero Atrito) via Regex Robusta.
-- Execução de ferramentas (Function Calling) para registros, metas e limites.
-- Consulta inteligente de histórico e extratos em linguagem natural.
-- Filtro de "alucinações" para separar ordens de ação de perguntas de consulta.
-
-#### **b) Handlers por Tipo de Mídia**
-
-| Handler | Entrada | Processamento | Saída |
-|---------|---------|---------------|-------|
-| **Text** | Mensagem natural | NLP com Alfredo → extração de valor, categoria, data | Card de confirmação |
-| **Voice** | Áudio | Transcrição (Groq Whisper) → Alfredo | Registro instantâneo |
-| **Photo** | Imagem | OCR (Google Vision/Gemini) → detecção de nota | Card de validação |
-| **Document**| PDFs | Gemini 2.0 Flash-Lite (Multimodal) | Importação de fatura |
-| **Callback** | Botões inline | Validação de token + contexto | Resposta inline |
-
-#### **c) OCR de Alta Performance**
-
-O processamento de faturas PDF utiliza o modelo **Gemini 2.0 Flash-Lite**, otimizado para custo e cota na camada gratuita, mantendo a visão estrutural para ler colunas de bancos como Nubank, Inter, Itaú, etc.
-
-#### **d) Ton de Voz "Elite Butler"**
-
-Alfredo abandonou os formalismos de "gerente dos anos 90".
-- **Direto:** Sem "Prezado" ou "Senhor".
-- **Elegante:** Respostas curtas, cirúrgicas e formatadas em HTML Premium.
-- **Ação-Primeiro:** Se você mandar registrar, ele executa a ferramenta e mostra o card, sem "textão" explicando o que fez.
-
-#### **e) Handlers Específicos**
-
-- **manual_entry_handler:** Conversa passo-a-passo para registrar gastos
-- **editing_handler:** Modificação de transações (valor, categoria, data)
-- **metas_handler:** Criação/ atualização de metas com check-in mensal
-- **agendamentos_handler:** Configuração de parcelas e recorrências
-- **relatorio_handler:** Geração de relatórios em PDF
-- **gamification_handler:** Cálculo de XP, levels, streaks
-  - **NEW:** Feature names em português legível (não mais technical actions)
-  - Mapeamento automático: `LANCAMENTO_CRIADO` → `Lançamentos realizados`
-  - Display no game profile com contadores de interações
-- **investment_handler:** Portfólio de investimentos e patrimônio líquido
-
-### 2. MiniApp (`templates/miniapp.html` + `analytics/dashboard_app.py`)
-
-#### **Frontend Otimizado**
-
-```html
-<!-- Telegram WebApp Integration -->
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
-
-<!-- Features -->
-- Telegram WebApp API (`Telegram.WebApp.initData` validation)
-- Sessões stateless: base64(user_id|exp_ts|hmac_sig)
-- Auto re-auth em 401: refresh de token + retry
-- Non-blocking UI: abre imediatamente, carrega data em background
-```
-
-**Endpoints Otimizados:**
-
-| Endpoint | Método | Descrição | Cache |
-|----------|--------|-----------|-------|
-| `/api/telegram/auth` | POST | Valida `initData`, cria sessão sign | 5min |
-| `/api/miniapp/overview` | GET | Visão geral: saldo, gastos, metas | 2min |
-| `/api/miniapp/history` | GET | Histórico paginado de transações | 1min |
-| `/api/miniapp/configuracoes` | GET | Perfil e preferências de notificação | 10min |
-| `/api/miniapp/metas` | GET | Metas, progresso, check-in | 5min |
-| `/api/miniapp/agendamentos` | GET | Recorrências, parecel próximas | 2min |
-
-> No modo Zero Setup, o MiniApp não expõe endpoint de contas/cartões (`/api/miniapp/contas`).
-
-#### **Performance Strategies**
-
-1. **Disable IA on Hot Path:** `MINIAPP_AI_INSIGHT_ENABLED=false` (default)
-   - Overview não chama Gemini/Groq por padrão
-   - Fallback local para texto de insight
-   - Reduz latência de 30s → <2s
-
-2. **Sessões Stateless:**
-   - Não dependem de in-memory dict
-   - Sobrevivem restarts e multi-instance deploys
-   - HMAC-SHA256 validation na cada requisição
-   - Expiração automática em token
-
-3. **UI Não-Bloqueante:**
-   ```javascript
-   // ❌ Antes: bloqueava UI
-   await Promise.allSettled([loadHome(), loadHistory(), loadConfig()])
-   
-   // ✅ Agora: abre imediatamente
-   Promise.allSettled([loadHome(), loadHistory(), loadConfig()])  // fire-and-forget
-   switchTabByName('home')  // UI disponível NOW
-   ```
-
-4. **Auto Re-auth:**
-   ```javascript
-   // Se receber 401
-   if (response.status === 401) {
-     await reauthenticateSession()  // refresh silencioso
-     return fetch(...) // retry
-   }
-   ```
-
-#### **Alfredo Cards (IA Insights)**
-
-- **Visibilidade garantida:** Dark gradient background override para CSS `.glass-card`
-- **Renderização em dois lugares:**
-  - Home insight: Análise do dia (saldo, padrão de gasto)
-  - Game profile: Nota motivacional personalizada
-- **Color scheme:** Radial gradient + linear background com white text para contraste em todos os temas
-- Carregamento lazy com placeholder
-
-### 3. Backend Flask (`analytics/dashboard_app.py`)
-
-```python
-# Session Management
-def _miniapp_session_secret():
-    """Derive HMAC key from env"""
-    return os.getenv('MINIAPP_SESSION_SECRET', TELEGRAM_TOKEN).encode()
-
-def _create_miniapp_session(user_id):
-    """Generate signed stateless token"""
-    exp_ts = int(time.time()) + SESSION_LIFETIME
-    payload = f"{user_id}|{exp_ts}"
-    sig = hmac.new(secret, payload.encode(), hashlib.sha256).hexdigest()
-    return base64.b64encode(f"{payload}|{sig}".encode()).decode()
-
-def _get_session(session_id):
-    """Validate signed token"""
-    try:
-        decoded = base64.b64decode(session_id.encode()).decode()
-        payload, sig = decoded.rsplit('|', 1)
-        user_id, exp_ts = payload.split('|')
-        
-        expected_sig = hmac.new(...).hexdigest()
-        assert sig == expected_sig, "Invalid signature"
-        assert int(exp_ts) > time.time(), "Expired"
-        
-        return {'user_id': int(user_id), 'exp_ts': int(exp_ts)}
-    except:
-        return None
-
-# Feature Names Mapping (Gamification)
-def _friendly_feature_name(action: str):
-    """Map technical action keys to user-readable Portuguese labels"""
-    mapping = {
-        'PRIMEIRA_INTERACAO_DIA': 'Primeira interação do dia',
-        'INTERACAO_BOT': 'Uso do bot no chat',
-        'LANCAMENTO_CRIADO': 'Lançamentos realizados',
-        'LANCAMENTO_EDITADO': 'Edições de transações',
-        'MONTH_TURN_BLUE': 'Mês fechado no azul',
-        'STREAK_DIAS': 'Dias de registro consecutivo',
-        # ... (13 total mappings)
-    }
-    return mapping.get(action, action)
-```
-
-### 4. Analytics PostgreSQL
-
-```sql
--- Tabelas principais
-- users: ID, username, perfil e preferências
-- lancamentos: ID, user_id, valor, categoria, data, criado_em
-- transacoes_agendadas: parcelas, frequência, status
-- analytics_events: comando, sucesso, tempo_execução
-- metas: user_id, alvo, período, progresso
-- investimentos: portfólio, cotações atualizadas
-```
-
----
-
-## 📊 Fluxo de Dados
-
-### Caso 1: Ordem de Ação ("Gastei 300 na Oakley")
-
-```
-1. Usuário envia texto/voz
-2. Interceptor de Regex (ia_handlers.py) detecta intenção de registro
-3. Se falhar regex, Alfredo (Cerebras/Groq) identifica a ferramenta registrar_lancamento
-4. Sistema extrai JSON e gera card de confirmação (quick_action_handler)
-5. Usuário clica [Confirmar] -> Persistência no DB
-```
-
-### Caso 2: Consulta de Histórico ("Qual meu último lançamento?")
-
-```
-1. Alfredo identifica que a pergunta é sobre o passado (consulta)
-2. Sistema busca no banco e retorna o card detalhado do registro
-3. Nenhuma ferramenta de escrita é chamada por engano
-```
-
-### Caso 3: Dashboard Web Load
-
-```
-1. Usuário clica em "Dashboard" no MiniApp
-   GET /webapp
-
-2. Telegram.WebApp.initData validation
-   POST /api/telegram/auth
-   → cria sessão signed
-
-3. Frontend carrega com non-blocking flow:
-   
-   UI abre imediatamente (sem spinner)
-       ↓
-   Background: Promise.allSettled([
-     GET /api/miniapp/overview        (2s)
-     GET /api/miniapp/history         (1s)
-     GET /api/miniapp/configuracoes   (0.5s)
-   ])
-   
-4. Conforme cada requisição completa:
-   - Overview: renderiza cards principais
-   - History: popula tabela com transações
-   - Config: aplica preferências de perfil e notificação
-
-5. Usuário vê:
-   - Instantâneo: Layout + menus + abas vazias
-   - 0.5s: Configurações
-   - 1s: Histórico de transações
-   - 2s: Cards de overview (saldo, gastos mês)
-```
-
----
-
-## 🛠️ Tecnologias
-
-### Backend
-
-| Camada | Tecnologia | Função |
-|--------|-----------|--------|
-| **Runtime** | Python 3.11+ | Core da aplicação |
-| **Web Framework** | Flask 2.x | API REST + dashboard |
-| **Bot Framework** | python-telegram-bot 22.x | Integração Telegram |
-| **Database** | PostgreSQL 14+ | Persistência |
-| **ORM** | SQLAlchemy 2.x | Query builder |
-| **ASGI** | gunicorn | Production server |
-| **Jobs** | APScheduler | Tarefas agendadas |
-| **PDF** | ReportLab | Geração de relatórios |
-
-### IA & Vision
-
-| Serviço | Provedor | Função |
-|---------|----------|-----|
-| **Primary Chat** | **Cerebras Inference** | Respostas em milissegundos |
-| **Fallback Chat** | **Groq (LLaMA 3.x)** | Resiliência e cota extra |
-| **PDF Extraction**| **Gemini 2.0 Flash-Lite** | Visão multimodal de faturas |
-| **Voice-to-Text** | **Groq Whisper** | Transcrição de áudio fluida |
-| **Analytics** | PostgreSQL + pandas | Insights |
-
-### Frontend
-
-| Tecnologia | Uso |
-|-----------|-----|
-| **HTML5** | Estrutura |
-| **CSS3 + Tailwind** | Styling responsive |
-| **Chart.js** | Gráficos em tempo real |
-| **Telegram WebApp API** | Integração com Telegram |
-| **Vanilla JavaScript** | Lógica frontend |
-
-### Infrastructure
-
-| Componente | Opção |
-|-----------|-------|
-| **Deployment** | Docker (Render.com) |
-| **CI/CD** | GitHub Actions (futura) |
-| **Monitoring** | Logs JSON (Render) |
-| **Secrets** | Environment variables |
-
----
-
-## 🚀 Funcionalidades
-
-### 🤖 Zero Setup & Chat Inteligente
-
-- [x] **Lançamentos sem Atrito:** Aceita texto livre, áudios (transcritos via Groq Whisper), fotos de notas fiscais (OCR) e faturas em PDF.
-- [x] **O Cérebro do Alfredo (AI-First):** Motor de inteligência que prioriza o processamento via LLM (Groq/Gemini). Diferente de bots comuns, o Alfredo possui visão periférica de todo o seu mês, analisando padrões, sugerindo cortes e respondendo com a sofisticação de um mordomo financeiro de elite.
-- [x] **Contexto Rico:** A IA agora recebe o breakdown completo de categorias, gastos de ontem, metas ativas e histórico expandido (20+ transações) em cada interação.
-- [x] **Microlearning:** Manuais curtos e temáticos acessíveis pelo chat, substituindo "textões" de ajuda engessados.
-
-### 📱 MiniApp (Sua Central de Controle)
-
-- [x] **Dashboard em Tempo Real:** Gráficos interativos de fluxo de caixa, despesas por categoria e evolução patrimonial.
-- [x] **Gestão Completa:** Edição rápida de histórico de lançamentos, gestão de cartões/contas e personalização de perfil de investidor.
-- [x] **Controle de Notificações:** Toggle em tempo real para ativar/desativar lembretes automáticos.
-
-### 🎮 Gamificação (O Jogo da Riqueza)
-
-- [x] **XP e Níveis:** De "Caderneta Zerada" (Nível 1) a "Além do Budget" (Nível 16+).
-- [x] **Missões e Conquistas:** Missões Diárias (ex: *Caffeine Tracker*), Semanais (ex: *Semana Azul*) e bônus permanentes por consistência (Streaks).
-- [x] **Ranking Global:** Competição em tempo real mostrando os líderes de XP do mês (com premiação mensal automática).
-
-### 🔔 Assistente Proativo & Planejamento
-
-- [x] **Agendamentos com 1-Clique:** Notificações automáticas na madrugada para contas do dia, com botão nativo "✅ Dar baixa".
-- [x] **Metas Inteligentes:** A IA calcula o aporte necessário e o bot faz o check-in mensalmente para garantir seu progresso.
-- [x] **Wrapped Anual:** Retrospectiva automatizada todo dia 31 de dezembro mostrando as curiosidades do ano.
-
-### Relatórios & Visualização
-
-- [x] **Gráficos:** Pizza, barras, linha, área, composições
-- [x] **Dashboard Web:** Tempo real com MiniApp
-- [x] **Relatórios PDF:** Mensais, customizáveis
-- [x] **Wrapped Anual:** Retrospectiva automatizada
-
-### Engajamento
-
-- [x] **Gamificação:** XP, níveis, ranking, streaks
-  - Tela de perfil gamer completa com resgate de missões
-  - Alfredo cards baseados no momento do usuário
-- [x] **Notificações:** Diárias (vencimentos de contas), check-in de metas, e alertas
-- [x] **Suporte:** Fluxo de contato integrado
-
----
-
-## ⚡ Performance & Confiabilidade
-
-### Otimizações de Performance
-
-#### 1. **IA Hot Path Disabled by Default**
-```bash
-MINIAPP_AI_INSIGHT_ENABLED=false  # Default em produção
-```
-- Desativa chamadas a Gemini/Groq em `/api/miniapp/overview`
-- Reduz latência de 30s → <2s
-- Fallback local para texto genérico
-- Pode ser ativado se performance melhorar
-
-#### 2. **Sessões Stateless**
-- Baseado em HMAC-SHA256
-- Não requer lookup em banco
-- Válido em múltiplas instâncias
-- Expiração automática (4 horas)
-
-#### 3. **UI Não-Bloqueante**
-```javascript
-// MiniApp abre instantaneamente
-// Dados carregan em background
-// Se uma chamada falha, não bloqueia UI
-```
-
-#### 4. **Query Optimization**
-- Índices em `user_id`, `data`, `categoria`
-- Paginação em histórico (limit 20)
-- Caching com TTL em endpoints
-
-### Confiabilidade
-
-#### 1. **Optional Imports com Fallback**
-```python
-# Se análises_ia falhar, bot continua rodando
-try:
-    from .analises_ia import get_analisador
-except:
-    def get_analisador():
-        raise RuntimeError("Analytics IA disabled")
-```
-
-#### 2. **Auto Re-authentication**
-```javascript
-// Se sessão expirar (401)
-if (response.status === 401) {
-    await reauthenticateSession()  // silencioso
-    return fetch(...)  // retry automático
-}
-```
-
-#### 3. **Error Handling**
-- Logging estruturado em JSON
-- Graceful degradation
-- User-friendly error messages
-- Retry automático em I/O
-
-#### 4. **Database Failover**
-- Connection pooling (SQLAlchemy)
-- Migrations automáticas na inicialização
-- Rollback em caso de erro
-
----
-
-## 📦 Deployment
-
-### 1. Local Development
+ContaComigo é uma plataforma financeira inovadora que combina a conveniência de um **assistente de IA no Telegram** com um **dashboard web completo**, projetado para otimizar sua vida financeira com zero atrito. Através do nosso assistente "Alfredo", você gerencia suas finanças, obtém insights inteligentes e explora seu potencial financeiro com gamificação.
+
+## ✨ Features Principais
+
+*   **Alfredo: Assistente de IA Avançado:**
+    *   Processamento de linguagem natural e áudio powered by **Groq/Cerebras** e **Gemini API**.
+    *   Entendimento contextual para transações, faturas, e dúvidas financeiras.
+    *   Respostas rápidas e inteligentes para otimizar seu dia a dia.
+
+*   **Integração Pierre API (Open Banking):**
+    *   Sincronização segura e automática de contas bancárias e cartões de crédito.
+    *   Visão consolidada de saldos, transações e faturas em um só lugar.
+    *   Gerenciamento de limites de gastos e lembretes de pagamento.
+
+*   **Gamificação Financeira (XP & Níveis):**
+    *   Sistema de XP e níveis para incentivar o bom gerenciamento financeiro.
+    *   Missões e desafios para aprendizado e engajamento.
+    *   Rankings e recompensas para os usuários mais ativos e organizados.
+
+*   **Dashboard Web Completo (Flask & Tailwind CSS):**
+    *   Interface visual rica e profissional para análise detalhada de suas finanças.
+    *   Visualização de gráficos, relatórios, metas e faturas.
+    *   Ferramentas de gestão e configuração avançadas.
+    *   Estilização moderna, incluindo um tema "Cyberpunk" (`dashboard_cyberpunk.css`).
+
+*   **Processamento Inteligente de Faturas:**
+    *   Envio de faturas em PDF por mensagem para extração automática de dados via OCR (Google Vision) e IA.
+    *   Categorização automática de despesas e sugestões de melhorias.
+
+## 🏗️ Arquitetura
+
+ContaComigo opera em um **único processo orquestrado** (`launcher.py`), garantindo eficiência e escalabilidade, com uma separação clara de responsabilidades:
+
+1.  **Thread do Bot (Telegram):** Responsável por interagir com o usuário via Telegram, processar comandos, gerenciar conversas (incluindo OCR e IA com Gemini), e executar ações em tempo real. Utiliza `python-telegram-bot`.
+2.  **Thread Principal (Flask API):** Hospeda a API do MiniApp (`/api/miniapp/*`) e o Dashboard Web (definido em `analytics.dashboard_app`). Gerencia as requisições HTTP, serve a interface do usuário e se comunica com o backend.
+3.  **Processos de Background/Jobs:** Tarefas agendadas para sincronização bancária (via Pierre API), geração de relatórios, e outras operações assíncronas.
+
+O estado da aplicação e a sincronia são mantidos através de um banco de dados **PostgreSQL**. Sessões do MiniApp são stateless, utilizando HMAC para segurança.
+
+## 🛠️ Stack Técnica
+
+*   **Linguagem Principal:** Python 3.11+
+*   **Framework Web:** Flask
+*   **API do Telegram:** `python-telegram-bot`
+*   **Banco de Dados:** PostgreSQL (com SQLAlchemy)
+*   **IA & OCR:** Google Gemini API, Google Cloud Vision
+*   **Integração Bancária:** Pierre API Client (`pierre_finance/client.py`)
+*   **Frontend (Dashboard):** HTML, CSS (incluindo `dashboard.css` e `dashboard_cyberpunk.css`), JavaScript.
+*   **Frontend (MiniApp):** Renderizado via `templates/miniapp.html`.
+*   **Gerenciamento de Dependências:** Pip (`requirements.txt`)
+*   **Orquestração:** Gunicorn (produção), Launcher script (`launcher.py` para desenvolvimento/execução híbrida).
+
+## 🚀 Guia de Setup
+
+Siga os passos abaixo para configurar e executar o ContaComigo em seu ambiente:
+
+### 1. Pré-requisitos
+
+*   Python 3.11 ou superior instalado.
+*   Git instalado.
+*   Um ambiente de banco de dados PostgreSQL acessível.
+*   Credenciais para a API do Gemini e Google Cloud Vision.
+*   Credenciais para a Pierre API.
+*   Token para o Bot do Telegram.
+
+### 2. Clonar o Repositório
 
 ```bash
-# Setup
-python -m venv venv
-source venv/bin/activate
+git clone https://github.com/your-repo-url/ContaComigo.git
+cd ContaComigo
+```
+
+### 3. Instalar Dependências
+
+```bash
 pip install -r requirements.txt
-
-# Variables
-export TELEGRAM_TOKEN="..."
-export GROQ_API_KEY="..."
-export DATABASE_URL="postgresql://..."
-export CONTACOMIGO_MODE=LOCAL_DEV
-
-# Run
-python app.py  # ou: python launcher.py
 ```
 
-### 2. Production (Render.com)
+### 4. Configurar Variáveis de Ambiente
 
-```bash
-# Dockerfile automaticamente detecta requirements.txt
-# push para main branch → Render rebuild
+Crie um arquivo `.env` na raiz do projeto com as seguintes variáveis:
 
-# Environment variables
-TELEGRAM_TOKEN
-GROQ_API_KEY
-GOOGLE_VISION_CREDENTIALS_JSON  # base64 encoded
-DATABASE_URL  # PostgreSQL
-MINIAPP_AI_INSIGHT_ENABLED=false
-CONTACOMIGO_MODE=PRODUCTION
+```dotenv
+TELEGRAM_TOKEN="SEU_TELEGRAM_BOT_TOKEN"
+DATABASE_URL="postgresql://user:password@host:port/dbname"
+GEMINI_API_KEY="SUA_GEMINI_API_KEY"
+GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/google/credentials.json" # Ou outra forma de credencial GCV
+PIERRE_API_KEY="SUA_PIERRE_API_KEY"
+
+# Opcional: Para desenvolvimento
+PORT=10000
+DEBUG=True
 ```
 
-### 3. Docker
+**Nota:** Para ambientes de produção (Render, Railway), configure estas variáveis através das configurações da plataforma.
 
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY . .
-RUN pip install -r requirements.txt
-CMD ["gunicorn", "-c", "gunicorn_config.py", "launcher:app"]
-```
+### 5. Executar a Aplicação
 
-### 4. Variáveis de Ambiente
+*   **Modo Híbrido (Bot + Dashboard) - Desenvolvimento Local:**
+    ```bash
+    python launcher.py
+    ```
+    Ou, definindo o modo explicitamente:
+    ```bash
+    CONTACOMIGO_MODE=LOCAL_DEV python launcher.py
+    ```
 
-```bash
-# Telegram
-TELEGRAM_TOKEN              # Required: Bot token
-TELEGRAM_WEBHOOK_BASE       # Optional: para webhook (unused - polling)
+*   **Apenas Bot do Telegram:**
+    ```bash
+    CONTACOMIGO_MODE=BOT python launcher.py
+    ```
 
-# IA/APIs
-GROQ_API_KEY               # Router Alfredo
-GEMINI_API_KEY             # Fallback Vision
-GOOGLE_VISION_CREDENTIALS_JSON  # OCR primary
+*   **Apenas Dashboard Web:**
+    ```bash
+    CONTACOMIGO_MODE=DASHBOARD python launcher.py
+    ```
 
-# Database
-DATABASE_URL               # PostgreSQL connection
+## 🤝 Contribuição
 
-# App Config
-CONTACOMIGO_MODE          # LOCAL_DEV ou PRODUCTION
-MINIAPP_AI_INSIGHT_ENABLED # true/false (default false)
-SESSION_LIFETIME           # segundos (default 14400)
-
-# Emails
-EMAIL_HOST_USER
-EMAIL_HOST_PASSWORD
-SENDER_EMAIL
-EMAIL_RECEIVER
-PIX_KEY
-```
-
----
-
-## 💻 Desenvolvimento Local
-
-### Setup Inicial
-
-```bash
-# 1. Clone e setup
-git clone https://github.com/henrique-jfp/ContaComigoApp.git
-cd MaestroFin
-python -m venv venv
-source venv/bin/activate
-
-# 2. Dependências
-pip install -r requirements.txt
-
-# 3. Variáveis (.env)
-cat > .env << EOF
-TELEGRAM_TOKEN=YOUR_TOKEN
-GROQ_API_KEY=YOUR_KEY
-GEMINI_API_KEY=YOUR_KEY
-GOOGLE_VISION_CREDENTIALS_JSON='{"type":"service_account",...}'
-DATABASE_URL=postgresql://user:pass@localhost:5432/contacomigo
-CONTACOMIGO_MODE=LOCAL_DEV
-EOF
-
-# 4. Database (local PostgreSQL)
-createdb contacomigo
-python -c "from database.database import create_tables; create_tables()"
-
-# 5. Run
-python app.py
-```
-
-### Estrutura de Pastas
-
-```
-MaestroFin/
-├── bot.py                         # Entry point bot
-├── app.py                         # Entry point Flask
-├── launcher.py                    # Orchestrator (bot + Flask)
-├── requirements.txt               # Dependencies
-│
-├── gerente_financeiro/            # Bot logic
-│   ├── ia_handlers.py            # Alfredo router
-│   ├── handlers.py               # Main dispatcher
-│   ├── ocr_handler.py            # Vision integration
-│   ├── manual_entry_handler.py   # Guided entry
-│   ├── editing_handler.py        # Transaction edit
-│   ├── metas_handler.py          # Goals
-│   ├── agendamentos_handler.py   # Recurring
-│   ├── investments_handler.py    # Portfolio
-│   ├── relatorio_handler.py      # PDF reports
-│   ├── gamification_*.py         # XP/levels
-│   └── ...
-│
-├── analytics/                     # Dashboard backend
-│   ├── dashboard_app.py          # Flask routes
-│   ├── bot_analytics_postgresql.py  # Analytics
-│   └── metrics.py
-│
-├── templates/                     # Frontend
-│   ├── miniapp.html              # MiniApp UI
-│   ├── dashboard_*.html          # Dashboard views
-│   └── ...
-│
-├── database/                      # DB layer
-│   ├── database.py               # SQLAlchemy setup
-│   └── models.py                 # ORM models
-│
-├── migrations/                    # SQL migrations
-│   ├── 002_create_pluggy_tables.sql
-│   ├── 003_create_investments_table.sql
-│   └── 004_add_lancamento_origem.sql
-│
-├── open_finance/                  # Open Finance (future)
-│   ├── pluggy_client.py
-│   └── ...
-│
-└── static/                        # CSS/assets
-    └── dashboard_*.css
-```
-
-### Debug & Logs
-
-```bash
-# Ver logs em tempo real
-tail -f debug_logs/bot.log
-
-# Debug OCR
-/debugocr  # comando no Telegram
-
-# Debug Dashboard
-/dashboarddebug  # comando no Telegram
-
-# Logs estruturados (Render)
-# Aparecem em JSON no Render dashboard
-```
-
----
-
-##  Correções Recentes (Abril 2026)
-
-### Operação "Alfredo Mestre" - 09 de Abril de 2026
-**Problema:** Alfredo estava robótico, demorado e confuso entre ordens de registro e perguntas de histórico.
-**Solução:**
-- **Extreme Speed IA:** Integração com **Cerebras Inference** para respostas quase instantâneas.
-- **AI-First Architecture:** Rodízio inteligente entre Cerebras, Groq e Gemini para garantir disponibilidade e cota infinita.
-- **Zero Setup Robusto:** Regex melhorada que ignora stop-words e entende frases naturais como "quero registrar uma compra de...".
-- **Blindagem Anti-JSON:** Extrator de JSON que impede vazamento de código técnico no chat.
-- **Smart Budget Limits:** Inteligência para atualizar limites existentes ou criar novos via voz/texto.
-- **Gemini 2.0 Lite:** Migração de modelo para otimizar cota gratuita de faturas mantendo 100% de precisão.
-
-**Status:** ✅ Implantado e 100% Operacional
-
-### Commit `f25dba2` - Estabilização de callbacks de fatura
-**Problema:** Botões MiniApp e botão de editar fatura não respondiam (BOT_RESPONSE_TIMEOUT)
-**Causa Raiz:** 
-- PDFs de fatura processados fora de ConversationHandler
-- Callbacks inline (`fatura_editar_inline`) não tinham rota global
-- Telegram enfileira resposta indefinidamente se handler não encontrado (~15s timeout)
-
-**Solução:**
-- Adicionado global `CallbackQueryHandler(fatura_confirm, pattern="^fatura_")` em `bot.py`
-- URL normalization robusta em `build_miniapp_url()` e `_get_fatura_webapp_url()`
-- HTTPS enforcement para non-localhost (Telegram WebApp requirement)
-- Fallback para `RENDER_EXTERNAL_URL` se `DASHBOARD_BASE_URL` não definida
-
-**Status:** ✅ Resolvido e testado
-
-### Commit `a0a25c9` - Visibilidade de Alfredo cards e feature names
-**Problema 1:** Comentários do Alfredo invisíveis em todos os lugares
-**Causa Raiz:** `.glass-card` CSS forcing light backgrounds mesmo em cards que precisam de dark theme
-
-**Solução 1:**
-- Criado `.alfredo-card` CSS variant com dark gradient background
-- Aplicado em dois cards: home insight + game profile note
-- Texto branco com contraste garantido
-
-**Problema 2:** Feature names técnicos na tela de game profile
-**Causa Raiz:** API retornava raw `XpEvent.action` keys (ex: `LANCAMENTO_CRIADO`, `INTERACAO_BOT`)
-
-**Solução 2:**
-- Adicionada função `_friendly_feature_name()` em `dashboard_app.py`
-- Mapeamento de 13+ actions para labels em português legível
-- API retorna `feature` (friendly), `raw_feature` (technical), `interactions` (count)
-- Frontend exibe nome legível ao usuário
-
-**Status:** ✅ Implementado e validado
-
----
-
-## �📈 Roadmap & Próximas Features
-
-- [ ] Web scraping para sincronização de contas bancárias
-- [ ] Machine learning para categorização automática
-- [ ] Export em múltiplos formatos (CSV, Excel)
-- [ ] Integração com CRM
-- [ ] Dark mode para MiniApp
-- [ ] PWA (Progressive Web App)
-- [ ] Backup automático em cloud
-
----
+Contribuições são bem-vindas! Por favor, consulte o arquivo `CONTRIBUTING.md` (se existir) para diretrizes.
 
 ## 📄 Licença
 
-[LICENSE](LICENSE)
-
-## 🤝 Contribuições
-
-Issues e PRs são bem-vindos!
-
-## 📞 Suporte
-
-- **Telegram:** Use o comando `/contato` no bot
-- **GitHub Issues:** Para bugs e feature requests
+Este projeto está licenciado sob a licença [MIT License] (LICENSE).
 
 ---
+## 📜 Change Log
 
-**Última atualização:** 09 de abril de 2026  
-**Versão:** 3.5 (Alfredo Master Update & Cerebras Integration)
+Consulte o [CHANGELOG.md](./CHANGELOG.md) para ver as últimas atualizações.
