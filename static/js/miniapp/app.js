@@ -1036,10 +1036,18 @@ lucide.createIcons();
       // Lógica da Onda Extrema: representa proporção receita vs despesa
       if (homeWave) {
         const totalWave = receita + despesa;
-        const pctRecWave = totalWave > 0 ? (receita / totalWave) * 100 : 100;
-        // Gradiente angulado (165deg) para acompanhar a inclinação da onda (subindo para a direita)
-        // O verde (receita) fica no topo e o carmim (despesa) na base, acompanhando a linha diagonal
-        homeWave.style.background = `linear-gradient(165deg, #22c55e 0%, #22c55e ${pctRecWave}%, #be123c ${pctRecWave}%, #be123c 100%)`;
+        // p = proporção de lucro (receita) em relação ao fluxo total
+        const p = totalWave > 0 ? (receita / totalWave) : 1;
+        
+        // Mapeamento: O gradiente 165deg começa no topo do card. 
+        // A "onda" começa aproximadamente em 35% do percurso do gradiente (devido ao clip-path).
+        // Mapeamos o 0-100% financeiro para o 35-100% visual do gradiente.
+        const startVisible = 35;
+        const stopPct = startVisible + (p * (100 - startVisible));
+        
+        // Verde (lucro) no topo da onda, Vermelho (custo) na base.
+        // A linha de divisão agora acompanha a inclinação diagonal da onda.
+        homeWave.style.background = `linear-gradient(165deg, #22c55e 0%, #22c55e ${stopPct}%, #be123c ${stopPct}%, #be123c 100%)`;
       }
 
       // Lógica do Aquário (Legado): só atualiza se os elementos existirem
