@@ -15,12 +15,19 @@ lucide.createIcons();
       // Registrar plugins especiais para Chart.js 4
       try {
         // Registro para Sankey
-        const sankeyPlugin = window['chartjs-chart-sankey'] || window.ChartSankey;
-        if (sankeyPlugin) {
-            Chart.register(sankeyPlugin.SankeyController, sankeyPlugin.FlowElement);
-        } else if (typeof SankeyController !== 'undefined') {
-            Chart.register(SankeyController, FlowElement);
+      const sankeyPlugin = window['chartjs-chart-sankey'] || window.ChartSankey;
+      if (sankeyPlugin) {
+        // Different builds expose different symbols; try common ones
+        const controller = sankeyPlugin.SankeyController || sankeyPlugin.Sankey || sankeyPlugin.Controller;
+        const element = sankeyPlugin.SankeyElement || sankeyPlugin.FlowElement || sankeyPlugin.Element;
+        if (controller && element) {
+          Chart.register(controller, element);
+        } else if (sankeyPlugin.SankeyController && sankeyPlugin.FlowElement) {
+          Chart.register(sankeyPlugin.SankeyController, sankeyPlugin.FlowElement);
         }
+      } else if (typeof SankeyController !== 'undefined' && typeof FlowElement !== 'undefined') {
+        Chart.register(SankeyController, FlowElement);
+      }
 
         // Registro para Matrix (Heatmap)
         const matrixPlugin = window['chartjs-chart-matrix'] || window.ChartMatrix;
@@ -50,6 +57,10 @@ lucide.createIcons();
       Chart.defaults.plugins.legend.labels.pointStyle = 'circle';
       Chart.defaults.plugins.legend.labels.padding = 20;
     }
+
+  // Mapa global de instâncias de Chart para evitar reuso de canvas sem destruir
+  const CHART_INSTANCES = new Map();
+
 
     // DOM Elements
     const panels = document.querySelectorAll('.panel');
@@ -194,6 +205,8 @@ lucide.createIcons();
     let sessionId = null;
     let telegramInitData = null;
     let reauthInFlight = null;
+    // Flag para evitar concorrência em reload do dashboard
+    let isRefreshingHome = false;
     let historyOffset = 0;
     const historyLimit = 20;
     let historyCache = [];
@@ -907,9 +920,19 @@ lucide.createIcons();
     }
 
     function destroyHomeCharts() {
-      Object.values(homeCharts).forEach((chart) => {
-        if (chart && typeof chart.destroy === 'function') chart.destroy();
-      });
+      // Destrói todas as instâncias registradas no mapa e no objeto homeCharts
+      try {
+        Object.values(homeCharts).forEach((chart) => {
+          if (chart && typeof chart.destroy === 'function') chart.destroy();
+        });
+      } catch (e) { console.warn('destroyHomeCharts: erro destruindo homeCharts:', e); }
+      // Também destrói qualquer instância remanescente no mapa global
+      try {
+        for (const [key, chart] of CHART_INSTANCES.entries()) {
+          try { if (chart && typeof chart.destroy === 'function') chart.destroy(); } catch (dErr) { /* ignore */ }
+        }
+        CHART_INSTANCES.clear();
+      } catch (e) { console.warn('destroyHomeCharts: erro destruindo CHART_INSTANCES:', e); }
       homeCharts = {};
     }
 
@@ -1025,14 +1048,31 @@ lucide.createIcons();
         },
       };
 
-      // Helper para criar gráficos com segurança
+      // Helper para criar gráficos com segurança usando um mapa global de instâncias
       const safeChart = (id, config) => {
+        const el = typeof id === 'string' ? document.getElementById(id) : id;
+        if (!el) return null;
+        // chave única por canvas: preferimos id, fallback ao próprio elemento
+        const key = el.id || el;
+
+        // Se já existe uma instância, destrua-a antes de criar
         try {
-          const el = typeof id === 'string' ? document.getElementById(id) : id;
-          if (!el) return null;
-          return new Chart(el, config);
+          const existing = CHART_INSTANCES.get(key);
+          if (existing && typeof existing.destroy === 'function') {
+            try { existing.destroy(); } catch (dErr) { console.warn('Erro ao destruir chart anterior:', dErr); }
+            CHART_INSTANCES.delete(key);
+          }
+        } catch (e) {
+          console.warn('safeChart: erro ao checar instância existente:', e);
+        }
+
+        // Cria novo gráfico com tratamento de erros robusto
+        try {
+          const chart = new Chart(el, config);
+          try { CHART_INSTANCES.set(key, chart); } catch (mErr) { console.warn('safeChart: falha ao armazenar instância:', mErr); }
+          return chart;
         } catch (err) {
-          console.warn(`Erro ao criar gráfico ${id}:`, err);
+          console.warn(`Erro ao criar gráfico ${el.id || el}:`, err);
           return null;
         }
       };
@@ -1339,7 +1379,13 @@ lucide.createIcons();
     }
 
     async function loadHomeOverview() {
-      if (!sessionId) {
+      if (isRefreshingHome) {
+        console.log('loadHomeOverview: atualização já em andamento, ignorando nova chamada.');
+        return;
+      }
+      isRefreshingHome = true;
+      try {
+        if (!sessionId) {
         console.warn('loadHomeOverview: sem sessionId. Tentando recuperar...');
         await tryRecoverSessionFromStorage();
         if (!sessionId) {
@@ -1347,26 +1393,29 @@ lucide.createIcons();
           try { await authTelegram(); } catch (e) { console.warn('authTelegram falhou:', e); }
         }
       }
-      console.log('loadHomeOverview: sessionId=', sessionId);
-      try {
-        console.log("🚀 Carregando visão geral...");
-        const response = await fetchWithSession('/api/miniapp/overview');
-        console.log('loadHomeOverview: response status', response.status);
-        const data = await response.json();
-        if (!data.ok) {
-          console.error("❌ Erro na API de visão geral:", data.error);
-          throw new Error(data.error || 'overview_error');
+        console.log('loadHomeOverview: sessionId=', sessionId);
+        try {
+          console.log("🚀 Carregando visão geral...");
+          const response = await fetchWithSession('/api/miniapp/overview');
+          console.log('loadHomeOverview: response status', response.status);
+          const data = await response.json();
+          if (!data.ok) {
+            console.error("❌ Erro na API de visão geral:", data.error);
+            throw new Error(data.error || 'overview_error');
+          }
+          // Backend pode retornar { summary: {...} } ou { data: {...} }
+          const summary = data.summary || data.data || data;
+          console.log("✅ Dados recebidos (overview):", summary);
+          renderHomeOverview(summary || {});
+        } catch (error) {
+          console.error("🔥 Falha crítica ao carregar home:", error);
+          if (homeBalance) homeBalance.textContent = 'R$ 0,00';
+          if (homeBalanceHint) homeBalanceHint.textContent = 'Não foi possível carregar o resumo agora.';
+          if (homeInsight) homeInsight.textContent = 'O Alfredo não conseguiu montar o resumo agora. Tente atualizar em instantes.';
+          if (homeRecentList) homeRecentList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint">Resumo indisponível no momento.</div>';
         }
-        // Backend pode retornar { summary: {...} } ou { data: {...} }
-        const summary = data.summary || data.data || data;
-        console.log("✅ Dados recebidos (overview):", summary);
-        renderHomeOverview(summary || {});
-      } catch (error) {
-        console.error("🔥 Falha crítica ao carregar home:", error);
-        homeBalance.textContent = 'R$ 0,00';
-        homeBalanceHint.textContent = 'Não foi possível carregar o resumo agora.';
-        homeInsight.textContent = 'O Alfredo não conseguiu montar o resumo agora. Tente atualizar em instantes.';
-        homeRecentList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint">Resumo indisponível no momento.</div>';
+      } finally {
+        isRefreshingHome = false;
       }
     }
 
@@ -2439,6 +2488,11 @@ lucide.createIcons();
 
         setInterval(() => {
           if (document.hidden || !sessionId) return;
+          // Evita iniciar nova carga se a anterior ainda estiver em andamento
+          if (isRefreshingHome) {
+            // ainda carregando, pula este ciclo
+            return;
+          }
           loadHistory(true);
           loadHomeOverview();
           if (document.getElementById('metas')?.classList.contains('active')) {
