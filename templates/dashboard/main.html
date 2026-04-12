@@ -171,43 +171,21 @@
                         <div class="row mb-4">
                                 <div class="col-12">
                                         <div
-                                            class="relative w-full max-w-2xl mx-auto aspect-[16/7] rounded-3xl overflow-hidden shadow-2xl bg-neutral-950 border border-neutral-800"
-                                            style="--pct-receita: {{ kpis.pct_receita|default(62) }}%; --pct-despesa: {{ kpis.pct_despesa|default(38) }}%;"
+                                            class="relative w-full max-w-2xl mx-auto aspect-[16/7] rounded-3xl overflow-hidden shadow-2xl border border-neutral-800"
+                                            style="
+                                                --pct-receita: {{ kpis.pct_receita|default(62) }}%;
+                                                --pct-despesa: {{ kpis.pct_despesa|default(38) }}%;
+                                                background: linear-gradient(120deg,
+                                                    #047857 0%,
+                                                    #047857 calc(var(--pct-receita,62%) - 6%),
+                                                    #047857bb calc(var(--pct-receita,62%) + 0%),
+                                                    #be123cbb calc(var(--pct-receita,62%) + 4%),
+                                                    #be123c calc(var(--pct-receita,62%) + 8%),
+                                                    #be123c 100%
+                                                );
+                                                filter: blur(0.5px) contrast(1.1);
+                                            "
                                         >
-                                            <!-- Camada Líquida (Aquário) -->
-                                            <div class="absolute inset-0 z-0 pointer-events-none select-none">
-                                                <svg
-                                                    viewBox="0 0 800 350"
-                                                    fill="none"
-                                                    xmlns="http://www.w3.org/2000/svg"
-                                                    class="w-full h-full"
-                                                    style="position:absolute;inset:0;"
-                                                >
-                                                    <defs>
-                                                        <!-- Gradiente para mistura de cores -->
-                                                        <linearGradient id="liquido-mix" x1="0" y1="0" x2="800" y2="350" gradientUnits="userSpaceOnUse">
-                                                            <stop offset="0%" stop-color="#047857" stop-opacity="0.85" />
-                                                            <stop offset="var(--pct-receita,62%)" stop-color="#047857" stop-opacity="0.82" />
-                                                            <stop offset="calc(var(--pct-receita,62%) + 2%)" stop-color="#be123c" stop-opacity="0.78" />
-                                                            <stop offset="100%" stop-color="#be123c" stop-opacity="0.75" />
-                                                        </linearGradient>
-                                                        <filter id="blur" x="-20%" y="-20%" width="140%" height="140%">
-                                                            <feGaussianBlur stdDeviation="18" />
-                                                        </filter>
-                                                    </defs>
-                                                    <path
-                                                        d="
-                                                            M0,110
-                                                            Q 200,170 400,110
-                                                            T 800,310
-                                                            L800,350 L0,350 Z
-                                                        "
-                                                        fill="url(#liquido-mix)"
-                                                        filter="url(#blur)"
-                                                    />
-                                                </svg>
-                                            </div>
-
                                             <!-- Camada de Dados (Conteúdo Flutuante) -->
                                             <div class="relative z-10 flex flex-col h-full justify-between px-8 py-6">
                                                 <!-- Topo: Mini-card Gamificação -->
