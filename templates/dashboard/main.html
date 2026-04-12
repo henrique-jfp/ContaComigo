@@ -163,28 +163,93 @@
     <div class="container my-4">
         <!-- GRÁFICOS -->
         <section id="graficos" class="mb-5">
-            <h3 class="mb-4"><i class="fas fa-chart-bar"></i> Análise Visual</h3>
-            <div class="row">
-                <!-- Gráfico de Pizza -->
-                <div class="col-lg-6 mb-4">
-                    <div class="card chart-card">
-                        <div class="card-header">
-                            <h5 class="card-title mb-0">
-                                <i class="fas fa-chart-pie"></i> Despesas por Categoria
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <div id="grafico-pizza" class="chart-container"></div>
-                            <div class="loading-spinner text-center" style="display: none;">
-                                <i class="fas fa-spinner fa-spin fa-2x"></i>
-                                <p>Carregando gráfico...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                        <h3 class="mb-4"><i class="fas fa-chart-bar"></i> Análise Visual</h3>
+                        <!-- AQUÁRIO DE TOPO ABERTO - CARD INOVADOR -->
+                        <div class="row mb-4">
+                                <div class="col-12">
+                                        <div
+                                            class="relative w-full max-w-2xl mx-auto aspect-[16/7] rounded-3xl overflow-hidden shadow-2xl bg-neutral-950 border border-neutral-800"
+                                            style="--pct-receita: {{ kpis.pct_receita|default(62) }}%; --pct-despesa: {{ kpis.pct_despesa|default(38) }}%;"
+                                        >
+                                            <!-- Camada Líquida (Aquário) -->
+                                            <div class="absolute inset-0 z-0 pointer-events-none select-none">
+                                                <svg
+                                                    viewBox="0 0 800 350"
+                                                    fill="none"
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    class="w-full h-full"
+                                                    style="position:absolute;inset:0;"
+                                                >
+                                                    <defs>
+                                                        <!-- Gradiente para mistura de cores -->
+                                                        <linearGradient id="liquido-mix" x1="0" y1="0" x2="800" y2="350" gradientUnits="userSpaceOnUse">
+                                                            <stop offset="0%" stop-color="#047857" stop-opacity="0.85" />
+                                                            <stop offset="var(--pct-receita,62%)" stop-color="#047857" stop-opacity="0.82" />
+                                                            <stop offset="calc(var(--pct-receita,62%) + 2%)" stop-color="#be123c" stop-opacity="0.78" />
+                                                            <stop offset="100%" stop-color="#be123c" stop-opacity="0.75" />
+                                                        </linearGradient>
+                                                        <filter id="blur" x="-20%" y="-20%" width="140%" height="140%">
+                                                            <feGaussianBlur stdDeviation="18" />
+                                                        </filter>
+                                                    </defs>
+                                                    <path
+                                                        d="
+                                                            M0,110
+                                                            Q 200,170 400,110
+                                                            T 800,310
+                                                            L800,350 L0,350 Z
+                                                        "
+                                                        fill="url(#liquido-mix)"
+                                                        filter="url(#blur)"
+                                                    />
+                                                </svg>
+                                            </div>
 
-                <!-- Gráfico de Evolução -->
-                <div class="col-lg-6 mb-4">
+                                            <!-- Camada de Dados (Conteúdo Flutuante) -->
+                                            <div class="relative z-10 flex flex-col h-full justify-between px-8 py-6">
+                                                <!-- Topo: Mini-card Gamificação -->
+                                                <div class="flex justify-end">
+                                                    <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-2 flex items-center gap-2 shadow-lg"
+                                                        style="box-shadow:0 4px 24px 0 rgba(0,0,0,0.18);">
+                                                        <span class="text-white font-semibold tracking-wide text-sm drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)]">Nível {{ kpis.nivel|default(7) }}</span>
+                                                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                                        <span class="text-white/80 text-xs font-mono">XP {{ kpis.xp|default(3210) }}</span>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Centro: Títulos e Saldo -->
+                                                <div class="flex flex-col items-start gap-1 mt-2">
+                                                    <span class="uppercase text-xs font-bold tracking-widest text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]">Resumo do mês</span>
+                                                    <span class="text-4xl md:text-5xl font-extrabold text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.55)]" style="letter-spacing:-0.03em;">
+                                                        R$ {{ "%.2f"|format(kpis.saldo_mes|default(12450)) }}
+                                                    </span>
+                                                    <span class="text-neutral-200/90 text-sm font-medium drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)]">
+                                                        Saldo disponível
+                                                    </span>
+                                                </div>
+
+                                                <!-- Base: Pills Receitas/Despesas -->
+                                                <div class="flex gap-3 mt-4">
+                                                    <div class="flex items-center gap-2 bg-black/20 backdrop-blur-sm rounded-full px-4 py-1.5 border border-emerald-500/20 shadow"
+                                                        style="box-shadow:0 2px 12px 0 rgba(4,120,87,0.10);">
+                                                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                                                        <span class="text-emerald-100 font-semibold text-sm">Receitas</span>
+                                                        <span class="text-emerald-300 font-mono text-xs">R$ {{ "%.0f"|format(kpis.receita_total|default(8900)) }}</span>
+                                                    </div>
+                                                    <div class="flex items-center gap-2 bg-black/20 backdrop-blur-sm rounded-full px-4 py-1.5 border border-rose-500/20 shadow"
+                                                        style="box-shadow:0 2px 12px 0 rgba(190,18,60,0.10);">
+                                                        <span class="w-2.5 h-2.5 rounded-full bg-rose-400"></span>
+                                                        <span class="text-rose-100 font-semibold text-sm">Despesas</span>
+                                                        <span class="text-rose-300 font-mono text-xs">R$ {{ "%.0f"|format(kpis.despesa_total|default(5320)) }}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                </div>
+                        </div>
+
+                                <!-- Gráfico de Evolução -->
+                                <div class="col-lg-6 mb-4">
                     <div class="card chart-card">
                         <div class="card-header">
                             <h5 class="card-title mb-0">
