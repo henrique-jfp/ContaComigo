@@ -577,45 +577,40 @@ lucide.createIcons();
       return mapping[source] || [sourceRaw || 'Manual', 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700'];
     }
 
-    function getCategoryIcon(categoria, subcategoria, tipo) {
-      const combined = `${categoria || ''} ${subcategoria || ''}`.toLowerCase();
+    function getCategoryStyle(descricao, categoria, subcategoria, tipo) {
+      const combined = `${descricao || ''} ${categoria || ''} ${subcategoria || ''}`.toLowerCase();
       
+      // Brand Detection
+      if (combined.includes('uber') || combined.includes(' 99')) return { icon: 'car', class: 'cat-transport', color: '#0d6efd', label: 'Uber/99' };
+      if (combined.includes('ifood') || combined.includes('rappi')) return { icon: 'utensils', class: 'cat-food', color: '#ea1d2c', label: 'iFood/Rappi' };
+      if (combined.includes('netflix')) return { icon: 'play-square', class: 'cat-entertainment', color: '#e50914', label: 'Netflix' };
+      if (combined.includes('spotify')) return { icon: 'music', class: 'cat-entertainment', color: '#1db954', label: 'Spotify' };
+      if (combined.includes('amazon') || combined.includes('prime')) return { icon: 'shopping-bag', class: 'cat-shopping', color: '#ff9900', label: 'Amazon' };
+      if (combined.includes('mercado livre') || combined.includes('meli')) return { icon: 'package', class: 'cat-shopping', color: '#ffe600', label: 'Mercado Livre' };
+      if (combined.includes('nubank')) return { icon: 'credit-card', class: 'cat-utilities', color: '#8a05be', label: 'Nubank' };
+
+      // Category Map
       const map = [
-        { keys: ['aliment', 'mercado', 'padaria', 'supermercado', 'açougue', 'feira'], icon: 'shopping-cart' },
-        { keys: ['restaurante', 'ifood', 'delivery', 'lanche', 'pizza', 'hamburguer'], icon: 'utensils' },
-        { keys: ['café', 'coffee', 'confeitaria'], icon: 'coffee' },
-        { keys: ['transporte', 'uber', '99', 'táxi', 'taxi', 'estacionamento', 'pedágio'], icon: 'car' },
-        { keys: ['combustível', 'gasolina', 'posto', 'etanol', 'diesel'], icon: 'fuel' },
-        { keys: ['passagem', 'ônibus', 'onibus', 'metro', 'metrô', 'trem'], icon: 'bus' },
-        { keys: ['moradia', 'aluguel', 'casa', 'condomínio', 'condominio'], icon: 'home' },
-        { keys: ['energia', 'luz', 'eletricidade'], icon: 'zap' },
-        { keys: ['água', 'agua', 'saneamento'], icon: 'droplets' },
-        { keys: ['internet', 'telefone', 'celular', 'claro', 'vivo', 'tim'], icon: 'wifi' },
-        { keys: ['saúde', 'saude', 'médico', 'medico', 'hospital', 'dentista', 'convênio', 'unimed', 'terapia'], icon: 'heart-pulse' },
-        { keys: ['farmácia', 'farmacia', 'remédio', 'medicamento'], icon: 'pill' },
-        { keys: ['lazer', 'entretenimento', 'cinema', 'show', 'ingresso', 'festa', 'bar'], icon: 'popcorn' },
-        { keys: ['assinatura', 'streaming', 'netflix', 'spotify', 'amazon', 'prime'], icon: 'play-square' },
-        { keys: ['educação', 'educacao', 'escola', 'faculdade', 'curso', 'livro'], icon: 'graduation-cap' },
-        { keys: ['vestuário', 'vestuario', 'roupa', 'calçado', 'loja', 'shopping'], icon: 'shirt' },
-        { keys: ['eletrônico', 'eletronico', 'computador', 'tecnologia', 'software', 'hardware'], icon: 'laptop' },
-        { keys: ['pet', 'cachorro', 'gato', 'veterinário', 'ração', 'animal'], icon: 'dog' },
-        { keys: ['viagem', 'voo', 'hotel', 'hospedagem', 'airbnb', 'turismo'], icon: 'plane' },
-        { keys: ['beleza', 'cabelo', 'salão', 'barbearia', 'cosmético', 'estética'], icon: 'scissors' },
-        { keys: ['esporte', 'academia', 'gympass', 'smartfit', 'futebol', 'crossfit'], icon: 'dumbbell' },
-        { keys: ['imposto', 'taxa', 'ipva', 'iptu', 'darf', 'multa'], icon: 'landmark' },
-        { keys: ['salário', 'salario', 'renda', 'pagamento', 'prolabore', 'adiantamento'], icon: 'coins' },
-        { keys: ['investimento', 'rendimento', 'dividendos', 'cdb', 'selic', 'bolsa', 'poupança'], icon: 'trending-up' },
-        { keys: ['transferência', 'transferencia', 'pix', 'ted', 'doc'], icon: 'arrow-right-left' },
+        { keys: ['aliment', 'mercado', 'padaria', 'super'], icon: 'shopping-cart', class: 'cat-shopping' },
+        { keys: ['restaurante', 'lanche', 'pizza', 'burger'], icon: 'utensils', class: 'cat-food' },
+        { keys: ['transporte', 'táxi', 'taxi', 'estacionamento'], icon: 'car', class: 'cat-transport' },
+        { keys: ['saúde', 'saude', 'médico', 'medico', 'hospital', 'farmácia'], icon: 'heart-pulse', class: 'cat-health' },
+        { keys: ['lazer', 'entretenimento', 'cinema', 'show', 'bar'], icon: 'popcorn', class: 'cat-entertainment' },
+        { keys: ['casa', 'aluguel', 'luz', 'água', 'internet'], icon: 'home', class: 'cat-utilities' },
+        { keys: ['salário', 'renda', 'recebido', 'pix'], icon: 'coins', class: 'cat-health' },
       ];
-      for (const item of map) { if (item.keys.some(key => combined.includes(key))) return item.icon; }
-      const tipoNorm = String(tipo || '').toLowerCase();
-      if (tipoNorm.includes('entrada') || tipoNorm.includes('receita')) return 'arrow-down-to-line';
-      return 'receipt';
+
+      for (const item of map) {
+        if (item.keys.some(key => combined.includes(key))) return { icon: item.icon, class: item.class };
+      }
+
+      const isReceita = isEntradaTipo(tipo, 0);
+      return { icon: isReceita ? 'arrow-down-to-line' : 'receipt', class: isReceita ? 'cat-health' : 'cat-shopping' };
     }
 
     function renderHomeRecent(items = []) {
       if (!items.length) {
-        homeRecentList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint">Sem movimentações recentes por enquanto.</div>';
+        homeRecentList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint font-mono uppercase tracking-widest text-center">No recent records</div>';
         return;
       }
 
@@ -623,22 +618,23 @@ lucide.createIcons();
         const numericValue = Number(item.valor) || 0;
         const isReceita = isEntradaTipo(item.tipo, numericValue);
         const [badgeLabel, badgeClass] = sourceBadgeConfig(item.origem_label || item.origem);
-        const iconName = getCategoryIcon(item.categoria_nome, item.subcategoria_nome, item.tipo);
+        const style = getCategoryStyle(item.descricao, item.categoria_nome, item.subcategoria_nome, item.tipo);
+        
         return `
-          <button class="recent-item w-full text-left rounded-2xl border border-telegram-separator bg-telegram-card p-4 hover:bg-brand/5 transition shadow-soft" data-action="edit" data-id="${item.id}">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-full ${isReceita ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300'} flex items-center justify-center shrink-0">
-                <i data-lucide="${iconName}" class="w-5 h-5"></i>
+          <button class="recent-item w-full text-left rounded-3xl border border-white/5 bg-telegram-card p-4 hover:bg-brand/5 transition shadow-soft mb-3" data-action="edit" data-id="${item.id}">
+            <div class="flex items-center gap-4">
+              <div class="cat-icon ${style.class} shrink-0">
+                <i data-lucide="${style.icon}" class="w-5 h-5"></i>
               </div>
               <div class="min-w-0 flex-1">
                 <div class="flex items-start justify-between gap-2">
                   <div class="min-w-0">
-                    <p class="font-semibold text-sm text-telegram-text truncate">${item.descricao || 'Lançamento'}</p>
-                    <p class="text-xs text-telegram-hint mt-0.5 truncate">${item.categoria_nome ? `${item.categoria_nome}${item.subcategoria_nome ? ` / ${item.subcategoria_nome}` : ''}` : 'Sem categoria'} • ${new Date(item.data).toLocaleDateString('pt-BR')}</p>
+                    <p class="font-bold text-sm text-telegram-text truncate">${item.descricao || 'Lançamento'}</p>
+                    <p class="text-[10px] font-bold text-telegram-hint uppercase tracking-wider mt-0.5">${item.categoria_nome || 'Uncategorized'}</p>
                   </div>
-                  <div class="text-right shrink-0 flex flex-col items-end gap-1.5">
-                    <span class="font-extrabold ${isReceita ? 'text-emerald-600' : 'text-rose-600'}">${formatMoney(item.valor, item.tipo)}</span>
-                    <span class="text-[9px] font-bold uppercase tracking-[0.16em] rounded-full border px-1.5 py-0.5 ${badgeClass}">${badgeLabel}</span>
+                  <div class="text-right shrink-0 flex flex-col items-end gap-1">
+                    <span class="font-financial text-base font-black ${isReceita ? 'text-emerald-500' : 'text-rose-500'}">${formatMoney(item.valor, item.tipo)}</span>
+                    <span class="text-[8px] font-black uppercase tracking-widest rounded-md border border-white/5 px-1.5 py-0.5 bg-black/20 text-telegram-hint">${badgeLabel}</span>
                   </div>
                 </div>
               </div>
@@ -928,28 +924,21 @@ lucide.createIcons();
       const waterLevel = Math.max(15, 100 - progressPct); // Garante visibilidade mínima
       homeProgressLabel.textContent = `${100 - progressPct}%`;
 
-      // Animação de enchimento: efeito de "briga" entre cores
       if (homeAquariumWater) {
-        // 1. Reset
+        // Animação fluida de enchimento
         homeAquariumWater.style.height = '0%';
-        homeAquariumWater.style.background = '#ef4444'; 
-
+        
         setTimeout(() => {
-          // 2. Primeiro sobe a despesa (vermelho) de forma agressiva
-          homeAquariumWater.style.height = '100%'; 
-          
-          setTimeout(() => {
-            // 3. Aplica o gradiente dividido (Hard Stop)
-            // A parte de baixo (0% a progressPct%) fica vermelha
-            // A parte de cima (progressPct% a 100%) fica verde
-            const despesaPos = Math.max(5, progressPct); // Garante um pouco de vermelho se houver gasto
-            homeAquariumWater.style.background = `linear-gradient(to top, #ef4444 0%, #ef4444 ${despesaPos}%, #10b981 ${despesaPos}%, #059669 100%)`;
-            
-            // Mantemos a altura em 100% para o tanque parecer "cheio" de decisões financeiras
-            // ou ajustamos para waterLevel se quiser que o volume total represente a saúde
-            homeAquariumWater.style.height = '100%'; 
-          }, 1200);
-        }, 300);
+          homeAquariumWater.style.height = `${waterLevel}%`;
+          // Gradiente dinâmico baseado na saúde
+          if (waterLevel > 70) {
+            homeAquariumWater.style.background = 'linear-gradient(180deg, #10b981 0%, #059669 100%)';
+          } else if (waterLevel > 30) {
+            homeAquariumWater.style.background = 'linear-gradient(180deg, #f59e0b 0%, #d97706 100%)';
+          } else {
+            homeAquariumWater.style.background = 'linear-gradient(180deg, #ef4444 0%, #991b1b 100%)';
+          }
+        }, 100);
       }
 
       if (homePctReceita) homePctReceita.textContent = `REC: ${pctReceita}%`;

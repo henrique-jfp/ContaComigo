@@ -94,14 +94,85 @@
     }
   }
 
-  /* Aquarium Upgrade */
+  /* AQUÁRIO FINANCEIRO - MODERNIZADO E FUNCIONAL */
   .aquarium-card {
-    background: rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.5);
+    position: relative;
+    width: 100%;
+    height: 100px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 24px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    isolation: isolate;
+    box-shadow: inset 0 4px 12px rgba(0,0,0,0.4);
   }
 
   .aquarium-water {
-    background: linear-gradient(180deg, rgba(123, 30, 45, 0.4) 0%, rgba(123, 30, 45, 0.2) 100%);
-    box-shadow: 0 0 20px rgba(123, 30, 45, 0.2);
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 0%; /* Controlado pelo JS */
+    background: linear-gradient(180deg, var(--cc-brand) 0%, #44131d 100%);
+    transition: height 2s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1;
   }
+
+  .aquarium-water::before {
+    content: "";
+    position: absolute;
+    top: -15px;
+    left: 0;
+    width: 200%;
+    height: 20px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 88.7'%3E%3Cpath d='M800 56.9c-155.5 0-204.9-50-405.5-49.9-200 0-250 49.9-394.5 49.9v31.8h800v-31.8z' fill='%237b1e2d'/%3E%3C/svg%3E");
+    background-size: 50% 100%;
+    animation: wave-move 4s linear infinite;
+    opacity: 0.6;
+  }
+
+  @keyframes wave-move {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  .aquarium-percentage {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    gap: 12px;
+  }
+
+  .percentage-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 900;
+    color: white;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  /* CATEGORY BRANDING & COLORS */
+  .cat-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+
+  .cat-food { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); color: #d63384; }
+  .cat-transport { background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); color: #0d6efd; }
+  .cat-entertainment { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); color: #fd7e14; }
+  .cat-health { background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%); color: #198754; }
+  .cat-shopping { background: linear-gradient(135deg, #cfd9df 0%, #e2ebf0 100%); color: #495057; }
+  .cat-utilities { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #0dcaf0; }

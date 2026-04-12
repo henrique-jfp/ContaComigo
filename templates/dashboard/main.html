@@ -13,7 +13,7 @@
 
 <body>
     <!-- NAVBAR -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <nav class="navbar navbar-expand-lg navbar-light">
         <div class="container">
             <a class="navbar-brand" href="/">
                 <i class="fas fa-hand-holding-usd"></i> ContaComigo
@@ -58,7 +58,7 @@
                         </ul>
                     </li>
                     <li class="nav-item">
-                        <button class="btn btn-outline-light btn-sm" onclick="atualizarDados()">
+                        <button class="btn btn-outline-dark btn-sm" onclick="atualizarDados()">
                             <i class="fas fa-sync" id="refresh-icon"></i> Atualizar
                         </button>
                     </li>
@@ -68,13 +68,13 @@
     </nav>
 
     <!-- HEADER COM KPIs -->
-    <div class="container-fluid py-4 bg-light">
+    <div class="container-fluid py-5">
         <div class="container">
             <div class="row">
                 <div class="col-12">
-                    <h2 class="mb-4">
-                        <i class="fas fa-user-circle"></i> Dashboard Financeiro
-<small class="text-muted">{{ mes|default(now.now().month) }}/{{ ano|default(now.now().year) }}</small>
+                    <h2 class="mb-5 font-serif font-black text-4xl">
+                        <i class="fas fa-user-circle text-brand opacity-20"></i> Dashboard Financeiro
+                        <small class="text-muted text-sm font-mono block mt-1 uppercase tracking-widest">{{ mes|default(now.now().month) }}/{{ ano|default(now.now().year) }}</small>
                     </h2>
                 </div>
             </div>
@@ -354,20 +354,30 @@
 
             fetch(`/api/graficos/${USER_ID}?mes=${MES_ATUAL}&ano=${ANO_ATUAL}`)
                 .then(response => response.json())
-                .then data => {
+                .then(data => {
                     // Esconder spinners
                     document.querySelectorAll('.loading-spinner').forEach(el => el.style.display = 'none');
 
                     // Renderizar gráficos
                     if (data.pizza && Object.keys(data.pizza).length > 0) {
+                        // Customizing Plotly for the new aesthetic
+                        data.pizza.layout.paper_bgcolor = 'rgba(0,0,0,0)';
+                        data.pizza.layout.plot_bgcolor = 'rgba(0,0,0,0)';
+                        data.pizza.layout.font = { family: 'Schibsted Grotesk', size: 12 };
                         Plotly.newPlot('grafico-pizza', data.pizza.data, data.pizza.layout, { responsive: true });
                     }
 
                     if (data.evolucao && Object.keys(data.evolucao).length > 0) {
+                        data.evolucao.layout.paper_bgcolor = 'rgba(0,0,0,0)';
+                        data.evolucao.layout.plot_bgcolor = 'rgba(0,0,0,0)';
+                        data.evolucao.layout.font = { family: 'Schibsted Grotesk', size: 12 };
                         Plotly.newPlot('grafico-evolucao', data.evolucao.data, data.evolucao.layout, { responsive: true });
                     }
 
                     if (data.barras && Object.keys(data.barras).length > 0) {
+                        data.barras.layout.paper_bgcolor = 'rgba(0,0,0,0)';
+                        data.barras.layout.plot_bgcolor = 'rgba(0,0,0,0)';
+                        data.barras.layout.font = { family: 'Schibsted Grotesk', size: 12 };
                         Plotly.newPlot('grafico-barras', data.barras.data, data.barras.layout, { responsive: true });
                     }
                 })
