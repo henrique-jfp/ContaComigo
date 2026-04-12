@@ -1072,16 +1072,18 @@ lucide.createIcons();
       }
 
       // Plano do usuário (Free/Premium)
-      if (summary?.plan_label && homePlanLabel) {
-        homePlanLabel.textContent = summary.plan_label;
-        homePlanLabel.style.display = 'block';
-        if (homeUpgradeBtn) {
-          homeUpgradeBtn.style.display = (userPlan === 'free' || userPlan === 'trial') ? 'block' : 'none';
+      if (homePlanLabel) {
+        if (summary?.plan_label) {
+          homePlanLabel.textContent = summary.plan_label;
+          homePlanLabel.style.display = 'block';
+          if (homeUpgradeBtn) {
+            homeUpgradeBtn.style.display = (userPlan === 'free' || userPlan === 'trial') ? 'block' : 'none';
+          }
+        } else {
+          homePlanLabel.textContent = '';
+          homePlanLabel.style.display = 'none';
+          if (homeUpgradeBtn) homeUpgradeBtn.style.display = 'none';
         }
-      } else if (homePlanLabel) {
-        homePlanLabel.textContent = '';
-        homePlanLabel.style.display = 'none';
-        if (homeUpgradeBtn) homeUpgradeBtn.style.display = 'none';
       }
 
       homeRecentCache = Array.isArray(summary?.recent) ? summary.recent : [];
