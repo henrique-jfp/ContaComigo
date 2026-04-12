@@ -1,11 +1,12 @@
 // --- Inicialização automática dos dados principais ao carregar o DOM ---
 document.addEventListener('DOMContentLoaded', async () => {
-  // Recupera sessão do storage/localStorage
-  await tryRecoverSessionFromStorage();
-  // Carrega dados principais das abas
-  loadHomeOverview();
-  loadAgendamentos && loadAgendamentos();
-  loadModoDeus && loadModoDeus();
+  // Tenta autenticar/recuperar sessão e carregar dados essenciais
+  try {
+    await authTelegram();
+  } catch (e) {
+    console.warn('Falha ao autenticar automaticamente:', e);
+    await tryRecoverSessionFromStorage();
+  }
 });
 lucide.createIcons();
 
@@ -918,12 +919,31 @@ lucide.createIcons();
       const despesa = Number(summary?.despesa || 0);
       const progressPct = Math.max(0, Math.min(Number(summary?.progress_pct || 0), 100));
 
-      homeBalance.textContent = formatCurrencyBR(balance);
-      homeBalanceHint.textContent = balance >= 0 ? 'Você está fechando o mês no azul.' : 'As despesas estão pressionando o mês.';
+      const missing = [];
+      if (!homeBalance) missing.push('homeBalance');
+      if (!homeBalanceHint) missing.push('homeBalanceHint');
+      if (!homeLevel) missing.push('homeLevel');
+      if (!homeXp) missing.push('homeXp');
+      if (!homeStreak) missing.push('homeStreak');
+      if (!homeProgressLabel) missing.push('homeProgressLabel');
+      if (!homeAquariumWater) missing.push('homeAquariumWater');
+      if (!homePctReceita) missing.push('homePctReceita');
+      if (!homePctDespesa) missing.push('homePctDespesa');
+      if (!homeReceita) missing.push('homeReceita');
+      if (!homeDespesa) missing.push('homeDespesa');
+      if (!homeInsight) missing.push('homeInsight');
+      if (!homeBadgeContainer) missing.push('homeBadgeContainer');
+      if (!homePlanLabel) missing.push('homePlanLabel');
+      if (!homeUpgradeBtn) missing.push('homeUpgradeBtn');
+      if (!homeRecentList) missing.push('homeRecentList');
+      if (missing.length) console.warn('renderHomeOverview: elementos ausentes no DOM:', missing.join(', '));
 
-      homeLevel.textContent = String(summary?.level || 1);
-      homeXp.textContent = String(summary?.xp || 0);
-      homeStreak.textContent = String(summary?.streak || 0);
+      if (homeBalance) homeBalance.textContent = formatCurrencyBR(balance);
+      if (homeBalanceHint) homeBalanceHint.textContent = balance >= 0 ? 'Você está fechando o mês no azul.' : 'As despesas estão pressionando o mês.';
+
+      if (homeLevel) homeLevel.textContent = String(summary?.level || 1);
+      if (homeXp) homeXp.textContent = String(summary?.xp || 0);
+      if (homeStreak) homeStreak.textContent = String(summary?.streak || 0);
       
       const totalFluxo = receita + despesa;
       const pctReceita = totalFluxo > 0 ? Math.round((receita / totalFluxo) * 100) : 0;
@@ -953,44 +973,42 @@ lucide.createIcons();
       if (homePctReceita) homePctReceita.textContent = `REC: ${pctReceita}%`;
       if (homePctDespesa) homePctDespesa.textContent = `DES: ${pctDespesa}%`;
 
-      homeReceita.textContent = `Receitas: ${formatCurrencyBR(receita)}`;
-      homeDespesa.textContent = `Despesas: ${formatCurrencyBR(despesa)}`;
-      homeInsight.textContent = summary?.insight || 'Carregando insight do Alfredo...';
+      if (homeReceita) homeReceita.textContent = `Receitas: ${formatCurrencyBR(receita)}`;
+      if (homeDespesa) homeDespesa.textContent = `Despesas: ${formatCurrencyBR(despesa)}`;
+      if (homeInsight) homeInsight.textContent = summary?.insight || 'Carregando insight do Alfredo...';
 
       // Badge do usuário (nível)
       const badgeSvg = summary?.badge_svg || summary?.level_progress?.badge_svg;
       if (badgeSvg) {
-        homeBadgeContainer.innerHTML = `<span class="inline-flex items-center justify-center w-9 h-9 shrink-0">${badgeSvg}</span>`;
-        const svgEl = homeBadgeContainer.querySelector('svg');
-        if (svgEl) {
-          svgEl.setAttribute('width', '36');
-          svgEl.setAttribute('height', '36');
-          svgEl.style.width = '36px';
-          svgEl.style.height = '36px';
-          svgEl.style.maxWidth = '36px';
-          svgEl.style.maxHeight = '36px';
-          svgEl.style.display = 'block';
+        if (homeBadgeContainer) {
+          homeBadgeContainer.innerHTML = `<span class="inline-flex items-center justify-center w-9 h-9 shrink-0">${badgeSvg}</span>`;
+          const svgEl = homeBadgeContainer.querySelector('svg');
+          if (svgEl) {
+            svgEl.setAttribute('width', '36');
+            svgEl.setAttribute('height', '36');
+            svgEl.style.width = '36px';
+            svgEl.style.height = '36px';
+            svgEl.style.maxWidth = '36px';
+            svgEl.style.maxHeight = '36px';
+            svgEl.style.display = 'block';
+          }
         }
-      } else {
+      } else if (homeBadgeContainer) {
         homeBadgeContainer.textContent = summary?.badge || '🌱';
       }
 
       // Plano do usuário (Free/Premium)
-      if (summary?.plan_label) {
+      if (summary?.plan_label && homePlanLabel) {
         homePlanLabel.textContent = summary.plan_label;
         homePlanLabel.style.display = 'block';
-        
-        // Mostrar botão de upgrade se for free ou trial
         const userPlan = summary.plan || 'free';
-        if (userPlan === 'free' || userPlan === 'trial') {
-          homeUpgradeBtn.style.display = 'block';
-        } else {
-          homeUpgradeBtn.style.display = 'none';
+        if (homeUpgradeBtn) {
+          homeUpgradeBtn.style.display = (userPlan === 'free' || userPlan === 'trial') ? 'block' : 'none';
         }
-      } else {
+      } else if (homePlanLabel) {
         homePlanLabel.textContent = '';
         homePlanLabel.style.display = 'none';
-        homeUpgradeBtn.style.display = 'none';
+        if (homeUpgradeBtn) homeUpgradeBtn.style.display = 'none';
       }
 
       homeRecentCache = Array.isArray(summary?.recent) ? summary.recent : [];
@@ -1325,17 +1343,28 @@ lucide.createIcons();
     }
 
     async function loadHomeOverview() {
-      if (!sessionId) return;
+      if (!sessionId) {
+        console.warn('loadHomeOverview: sem sessionId. Tentando recuperar...');
+        await tryRecoverSessionFromStorage();
+        if (!sessionId) {
+          console.warn('loadHomeOverview: recovery falhou, tentando autenticar...');
+          try { await authTelegram(); } catch (e) { console.warn('authTelegram falhou:', e); }
+        }
+      }
+      console.log('loadHomeOverview: sessionId=', sessionId);
       try {
         console.log("🚀 Carregando visão geral...");
         const response = await fetchWithSession('/api/miniapp/overview');
+        console.log('loadHomeOverview: response status', response.status);
         const data = await response.json();
         if (!data.ok) {
           console.error("❌ Erro na API de visão geral:", data.error);
           throw new Error(data.error || 'overview_error');
         }
-        console.log("✅ Dados recebidos:", data.summary);
-        renderHomeOverview(data.summary || {});
+        // Backend pode retornar { summary: {...} } ou { data: {...} }
+        const summary = data.summary || data.data || data;
+        console.log("✅ Dados recebidos (overview):", summary);
+        renderHomeOverview(summary || {});
       } catch (error) {
         console.error("🔥 Falha crítica ao carregar home:", error);
         homeBalance.textContent = 'R$ 0,00';
