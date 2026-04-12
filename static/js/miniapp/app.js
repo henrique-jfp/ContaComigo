@@ -941,6 +941,8 @@ lucide.createIcons();
       const receita = Number(summary?.receita || 0);
       const despesa = Number(summary?.despesa || 0);
       const progressPct = Math.max(0, Math.min(Number(summary?.progress_pct || 0), 100));
+      // Plano do usuário disponível para decisões de UI (evita ReferenceError)
+      const userPlan = summary?.plan || 'free';
 
       const missing = [];
       if (!homeBalance) missing.push('homeBalance');
@@ -1020,7 +1022,6 @@ lucide.createIcons();
       if (summary?.plan_label && homePlanLabel) {
         homePlanLabel.textContent = summary.plan_label;
         homePlanLabel.style.display = 'block';
-        const userPlan = summary.plan || 'free';
         if (homeUpgradeBtn) {
           homeUpgradeBtn.style.display = (userPlan === 'free' || userPlan === 'trial') ? 'block' : 'none';
         }
