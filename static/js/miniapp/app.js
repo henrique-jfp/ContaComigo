@@ -1,3 +1,14 @@
+// --- Fantasma Pierre: animação de hover ---
+document.addEventListener('DOMContentLoaded', () => {
+  const ghost = document.getElementById('nav-fantasma');
+  if (!ghost) return;
+  const nav = document.getElementById('bottomNav');
+  // Detecta hover/focus/active no fantasma
+  ghost.parentElement.addEventListener('mouseenter', () => ghost.classList.add('lift'));
+  ghost.parentElement.addEventListener('mouseleave', () => ghost.classList.remove('lift'));
+  ghost.parentElement.addEventListener('touchstart', () => ghost.classList.add('lift'));
+  ghost.parentElement.addEventListener('touchend', () => ghost.classList.remove('lift'));
+});
 // --- Inicialização automática dos dados principais ao carregar o DOM ---
 document.addEventListener('DOMContentLoaded', async () => {
   // Tenta autenticar/recuperar sessão e carregar dados essenciais
