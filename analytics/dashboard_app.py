@@ -795,7 +795,7 @@ def dashboard():
 def miniapp_shell():
     """Shell do miniapp Telegram"""
     bot_username = os.getenv("TELEGRAM_BOT_USERNAME", "ContaComigoBot")
-    response = make_response(render_template('miniapp.html', bot_username=bot_username))
+    response = make_response(render_template('miniapp.html', bot_username=bot_username, kpis={}))
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
