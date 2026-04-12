@@ -80,6 +80,7 @@ lucide.createIcons();
     const mainStatus = document.getElementById('mainStatus');
     const homeBalance = document.getElementById('homeBalance');
     const homeBalanceHint = document.getElementById('homeBalanceHint');
+    const homeWave = document.getElementById('homeWave');
     const homeLevelCard = document.getElementById('homeLevelCard');
     const homeLevel = document.getElementById('homeLevel');
     const homeXp = document.getElementById('homeXp');
@@ -1032,6 +1033,14 @@ lucide.createIcons();
       const pctReceita = totalFluxo > 0 ? Math.round((receita / totalFluxo) * 100) : 0;
       const pctDespesa = totalFluxo > 0 ? Math.round((despesa / totalFluxo) * 100) : 0;
       
+      // Lógica da Onda Extrema: representa proporção receita vs despesa
+      if (homeWave) {
+        const totalWave = receita + despesa;
+        const pctRecWave = totalWave > 0 ? (receita / totalWave) * 100 : 100;
+        // Gradiente seco (hard stops) para divisão clara: Verde -> Carmim
+        homeWave.style.background = `linear-gradient(to right, #22c55e 0%, #22c55e ${pctRecWave}%, #be123c ${pctRecWave}%, #be123c 100%)`;
+      }
+
       // Lógica do Aquário (Legado): só atualiza se os elementos existirem
       if (homeProgressLabel) {
         homeProgressLabel.textContent = `${100 - progressPct}%`;

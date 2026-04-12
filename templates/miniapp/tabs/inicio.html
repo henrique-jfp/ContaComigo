@@ -3,12 +3,11 @@
     <!-- NOVO CARD PREMIUM (Inspirado em novoCard.png) -->
     <div class="relative bg-white rounded-[32px] overflow-hidden shadow-lift min-h-[420px] home-reveal" style="--delay: 30ms">
       
-      <!-- Fundo Diagonal (Verde / Vermelho) -->
+      <!-- Fundo Onda Extrema (Dinâmico: Verde / Vermelho) -->
       <div class="absolute inset-0 z-0">
-        <div class="absolute inset-0 bg-gradient-to-br from-[#2a9757] via-[#2a9757] to-[#be123c]" 
-             style="clip-path: polygon(0 45%, 100% 15%, 100% 100%, 0% 100%);"></div>
-        <div class="absolute inset-0 bg-[#2a9757]" 
-             style="clip-path: polygon(0 0, 100% 0, 100% 15%, 0 45%); opacity: 0.9;"></div>
+        <!-- A onda sobe dramaticamente da esquerda (70%) para a direita (20%) -->
+        <div id="homeWave" class="absolute inset-0 transition-all duration-1000 ease-in-out" 
+             style="clip-path: polygon(0 75%, 100% 25%, 100% 100%, 0% 100%); background: #22c55e;"></div>
       </div>
 
       <!-- Conteúdo do Card -->
