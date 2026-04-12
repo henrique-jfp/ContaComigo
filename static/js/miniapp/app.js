@@ -1037,8 +1037,9 @@ lucide.createIcons();
       if (homeWave) {
         const totalWave = receita + despesa;
         const pctRecWave = totalWave > 0 ? (receita / totalWave) * 100 : 100;
-        // Gradiente seco (hard stops) para divisão clara: Verde -> Carmim
-        homeWave.style.background = `linear-gradient(to right, #22c55e 0%, #22c55e ${pctRecWave}%, #be123c ${pctRecWave}%, #be123c 100%)`;
+        // Gradiente angulado (165deg) para acompanhar a inclinação da onda (subindo para a direita)
+        // O verde (receita) fica no topo e o carmim (despesa) na base, acompanhando a linha diagonal
+        homeWave.style.background = `linear-gradient(165deg, #22c55e 0%, #22c55e ${pctRecWave}%, #be123c ${pctRecWave}%, #be123c 100%)`;
       }
 
       // Lógica do Aquário (Legado): só atualiza se os elementos existirem
