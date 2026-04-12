@@ -27,6 +27,21 @@ def track_analytics(command_name):
                     logging.info(f"📊 Analytics: {username} usou /{command_name}")
                 except Exception as e:
                     logging.error(f"❌ Erro no analytics: {e}")
-            return await func(update, context, *args, **kwargs)
+            # Executa o handler com proteção contra falhas de rede/Telegram
+            try:
+                return await func(update, context, *args, **kwargs)
+            except Exception as e:
+                # Evita que exceções de rede (ex: telegram.error.TimedOut) derrubem o loop
+                try:
+                    import telegram
+                    if hasattr(telegram, 'error') and isinstance(e, telegram.error.TimedOut):
+                        logging.warning(f"Handler {command_name} timed out: {e}")
+                        # Não re-lançamos: o update é consumido e o bot continua responsivo
+                        return None
+                except Exception:
+                    # Fallback: se não conseguimos identificar o tipo, apenas logamos
+                    pass
+                logging.exception(f"Unhandled exception in handler {command_name}: {e}")
+                return None
         return wrapper
     return decorator

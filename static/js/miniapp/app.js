@@ -3004,11 +3004,9 @@ lucide.createIcons();
     if (ghostBtn) {
       ghostBtn.addEventListener('pointerenter', () => {
         ghostBtn.dataset.visible = 'true';
-        ghostBtn.style.zIndex = 60; // bring forward while hovering
       });
       ghostBtn.addEventListener('pointerleave', () => {
         ghostBtn.dataset.visible = 'false';
-        ghostBtn.style.zIndex = 40; // return below nav
       });
       ghostBtn.addEventListener('click', (e) => {
         e.stopPropagation();

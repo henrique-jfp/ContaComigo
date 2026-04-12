@@ -212,12 +212,12 @@
   #bottomNav .nav-btn { transform: none !important; }
 
   /* Ghost (Pierre) micro-interactions */
-  #nav-fantasma { z-index: 40; transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1); pointer-events: auto; }
-  #nav-fantasma[data-visible='true'] { transform: translateY(-22px); }
-  #nav-fantasma:hover, #nav-fantasma:active { transform: translateY(-30px); }
+  #nav-fantasma { z-index: 20; transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1); pointer-events: auto; will-change: transform; }
+  #nav-fantasma[data-visible='true'] { transform: translateY(-22px); z-index: 70; }
+  #nav-fantasma:hover, #nav-fantasma:active { transform: translateY(-30px); z-index: 80; }
 
-  /* Ensure ghost doesn't block clicks on the nav when tucked */
-  #navContainer { position: relative; z-index: 50; }
+  /* Ensure ghost doesn't block clicks on the nav when tucked: nav buttons above by default */
+  #navContainer { position: relative; z-index: 60; }
 
   /* Premium badge scale */
   .badge-premium { transform: scale(1.5); display: inline-block; }
