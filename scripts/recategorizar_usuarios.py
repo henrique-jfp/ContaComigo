@@ -32,7 +32,7 @@ async def recategorizar_todos_usuarios():
         total_llm = 0
         
         for user in usuarios:
-            logger.info(f"👤 Processando Usuário: {user.first_name or user.telegram_id} (ID: {user.id})")
+            logger.info(f"👤 Processando Usuário: {user.nome_completo or user.telegram_id} (ID: {user.id})")
             
             try:
                 # 1. Aplicar regras locais (palavras-chave novas) em TUDO

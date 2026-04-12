@@ -3,45 +3,36 @@
         <div class="glass-card rounded-3xl p-6">
           <div class="flex items-center justify-between mb-6">
             <div>
-              <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Seu Progresso</p>
-              <h2 class="text-lg font-extrabold text-telegram-text flex items-center gap-2">
-                <i data-lucide="target" class="w-5 h-5 text-brand"></i>
-                Missões em Andamento
+              <p class="text-[9px] font-black uppercase tracking-[0.3em] text-brand-soft/90 font-mono">Operations</p>
+              <h2 class="text-xl font-black text-telegram-text flex items-center gap-2 font-serif tracking-tight">
+                Active Missions
               </h2>
             </div>
-            <button id="missoesRefresh" class="text-brand hover:text-brand-soft transition" title="Atualizar missões">
-              <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+            <button id="missoesRefresh" class="p-2 rounded-xl bg-brand/5 text-brand hover:bg-brand/10 transition" title="Atualizar missões">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
             </button>
           </div>
 
-          <div class="mb-4 flex gap-2 hide-scroll overflow-x-auto">
-            <button data-mission-filter="all" class="px-3 py-2 text-xs font-semibold rounded-full border transition whitespace-nowrap mission-filter-btn tab-active border-brand/25 bg-brand/10 text-brand">Todas</button>
-            <button data-mission-filter="daily" class="px-3 py-2 text-xs font-semibold rounded-full border transition whitespace-nowrap mission-filter-btn border-telegram-separator bg-telegram-card text-telegram-text hover:border-brand/20">Diárias</button>
-            <button data-mission-filter="weekly" class="px-3 py-2 text-xs font-semibold rounded-full border transition whitespace-nowrap mission-filter-btn border-telegram-separator bg-telegram-card text-telegram-text hover:border-brand/20">Semanais</button>
-            <button data-mission-filter="special" class="px-3 py-2 text-xs font-semibold rounded-full border transition whitespace-nowrap mission-filter-btn border-telegram-separator bg-telegram-card text-telegram-text hover:border-brand/20">Especiais</button>
+          <div class="mb-6 flex gap-2 hide-scroll overflow-x-auto">
+            <button data-mission-filter="all" class="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-full border transition whitespace-nowrap mission-filter-btn tab-active border-brand/25 bg-brand/10 text-brand font-mono">All</button>
+            <button data-mission-filter="daily" class="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-full border border-white/5 bg-telegram-card text-telegram-text hover:border-brand/20 transition whitespace-nowrap mission-filter-btn font-mono">Daily</button>
+            <button data-mission-filter="weekly" class="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-full border border-white/5 bg-telegram-card text-telegram-text hover:border-brand/20 transition whitespace-nowrap mission-filter-btn font-mono">Weekly</button>
           </div>
 
-          <div id="missoesList" class="space-y-3">
-            <div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-6 text-center">
-              <div class="flex justify-center mb-2">
-                <div class="spinner"></div>
-              </div>
-              <p class="text-xs text-telegram-hint">Carregando suas missões...</p>
-            </div>
-          </div>
+          <div id="missoesList" class="space-y-3"></div>
 
-          <div class="mt-6 grid grid-cols-3 gap-2">
-            <div class="glass-card rounded-2xl p-3 text-center">
-              <p class="text-xs text-telegram-hint font-semibold mb-1">Ativas</p>
-              <p id="missionsCountActive" class="text-xl font-extrabold text-brand">0</p>
+          <div class="mt-8 grid grid-cols-3 gap-3">
+            <div class="glass-card rounded-2xl p-4 text-center">
+              <p class="text-[8px] font-black uppercase tracking-widest text-telegram-hint mb-1 font-mono">Active</p>
+              <p id="missionsCountActive" class="text-2xl font-black text-brand font-financial">0</p>
             </div>
-            <div class="glass-card rounded-2xl p-3 text-center">
-              <p class="text-xs text-telegram-hint font-semibold mb-1">Completas</p>
-              <p id="missionsCountCompleted" class="text-xl font-extrabold text-green-500">0</p>
+            <div class="glass-card rounded-2xl p-4 text-center">
+              <p class="text-[8px] font-black uppercase tracking-widest text-telegram-hint mb-1 font-mono">Done</p>
+              <p id="missionsCountCompleted" class="text-2xl font-black text-emerald-500 font-financial">0</p>
             </div>
-            <div class="glass-card rounded-2xl p-3 text-center">
-              <p class="text-xs text-telegram-hint font-semibold mb-1">XP Recompensa</p>
-              <p id="missionsXpReward" class="text-xl font-extrabold text-orange-500">0</p>
+            <div class="glass-card rounded-2xl p-4 text-center">
+              <p class="text-[8px] font-black uppercase tracking-widest text-telegram-hint mb-1 font-mono">Reward</p>
+              <p id="missionsXpReward" class="text-2xl font-black text-orange-500 font-financial">0</p>
             </div>
           </div>
         </div>

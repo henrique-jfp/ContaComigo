@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ContaComigo Premium</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Schibsted+Grotesk:ital,wght@0,400..900;1,400..900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lucide@latest"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
@@ -16,10 +16,10 @@
     const tg = window.Telegram?.WebApp;
     const root = document.documentElement;
     const theme = tg?.themeParams || {};
-    const bgColor = theme.bg_color || '#f8fafc';
-    const textColor = theme.text_color || '#0f172a';
-    const hintColor = theme.hint_color || '#64748b';
-    const cardColor = theme.secondary_bg_color || '#ffffff';
+    const bgColor = theme.bg_color || '#0a0a0b';
+    const textColor = theme.text_color || '#f8fafc';
+    const hintColor = theme.hint_color || '#94a3b8';
+    const cardColor = theme.secondary_bg_color || '#161618';
     const accentColor = tg?.colorScheme === 'dark' ? '#fb7185' : '#7b1e2d';
     const accentSoft = tg?.colorScheme === 'dark' ? '#fda4af' : '#a33a51';
     root.style.setProperty('--tg-theme-bg-color', bgColor);
@@ -36,14 +36,18 @@
     darkMode: 'class',
     theme: {
       extend: {
-        fontFamily: { sans: ['Outfit', 'sans-serif'] },
+        fontFamily: { 
+          sans: ['Schibsted Grotesk', 'sans-serif'],
+          serif: ['Fraunces', 'serif'],
+          mono: ['IBM Plex Mono', 'monospace']
+        },
         colors: {
           telegram: {
-            bg: 'var(--tg-theme-bg-color, #f8fafc)',
-            text: 'var(--tg-theme-text-color, #0f172a)',
-            hint: 'var(--tg-theme-hint-color, #64748b)',
-            card: 'var(--tg-theme-secondary-bg-color, #ffffff)',
-            separator: 'var(--tg-theme-section-separator-color, #e2e8f0)'
+            bg: 'var(--tg-theme-bg-color, #0a0a0b)',
+            text: 'var(--tg-theme-text-color, #f8fafc)',
+            hint: 'var(--tg-theme-hint-color, #94a3b8)',
+            card: 'var(--tg-theme-secondary-bg-color, #161618)',
+            separator: 'var(--tg-theme-section-separator-color, #1f1f23)'
           },
           brand: {
             DEFAULT: 'var(--cc-brand, #7b1e2d)',
@@ -53,8 +57,9 @@
           flex: { '2': '2 2 0%' }
         },
         boxShadow: {
-          soft: '0 8px 30px rgba(15, 23, 42, 0.06)',
-          lift: '0 18px 45px rgba(15, 23, 42, 0.08)'
+          soft: '0 8px 30px rgba(0, 0, 0, 0.3)',
+          lift: '0 18px 45px rgba(0, 0, 0, 0.4)',
+          'inner-glass': 'inset 0 1px 1px rgba(255, 255, 255, 0.05)'
         }
       }
     }

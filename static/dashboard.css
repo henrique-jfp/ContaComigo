@@ -1,35 +1,164 @@
 /* =============================================
-   🎨 ContaComigo Dashboard CSS
-   Estilos modernos para dashboard interativo
+   🎨 ContaComigo Dashboard - PREMIUM EDITORIAL
+   Sophisticated Interface for Modern Finance
 ============================================= */
 
-/* ===== VARIÁVEIS CSS ===== */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,900&family=Schibsted+Grotesk:wght@400;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap');
+
 :root {
-    --primary-color: #007bff;
-    --secondary-color: #6c757d;
-    --success-color: #28a745;
-    --danger-color: #dc3545;
-    --warning-color: #ffc107;
-    --info-color: #17a2b8;
-    --light-color: #f8f9fa;
-    --dark-color: #343a40;
-
-    --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    --gradient-success: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-    --gradient-danger: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
-    --gradient-warning: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-
-    --border-radius: 12px;
-    --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    --transition: all 0.3s ease;
+    --brand-carmine: #7b1e2d;
+    --brand-carmine-soft: #a33a51;
+    --bg-light: #fdfdfd;
+    --bg-dark: #0a0a0b;
+    --text-main: #0f172a;
+    --text-muted: #64748b;
+    
+    --glass-white: rgba(255, 255, 255, 0.85);
+    --glass-dark: rgba(22, 22, 24, 0.9);
+    
+    --radius-premium: 24px;
+    --shadow-premium: 0 20px 50px rgba(15, 23, 42, 0.08);
+    --transition-smooth: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* ===== ESTILOS GLOBAIS ===== */
+/* ===== BASE STYLES ===== */
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-    min-height: 100vh;
+    font-family: 'Schibsted Grotesk', sans-serif;
+    background-color: var(--bg-light);
+    color: var(--text-main);
     line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+}
+
+.font-financial {
+    font-family: 'Fraunces', serif;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+}
+
+/* ===== LANDING PAGE: EDITARIAL LUXURY ===== */
+.landing-container {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #0a0a0b 0%, #1a1a1c 100%);
+    color: white;
+    padding: 0 24px;
+}
+
+.hero-section {
+    padding: 120px 0 80px;
+    text-align: center;
+}
+
+.hero-title {
+    font-family: 'Fraunces', serif;
+    font-size: 4.5rem;
+    font-weight: 900;
+    line-height: 0.95;
+    margin-bottom: 24px;
+    letter-spacing: -0.04em;
+    background: linear-gradient(180deg, #fff 0%, #94a3b8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.hero-subtitle {
+    font-size: 1.25rem;
+    font-weight: 500;
+    color: #94a3b8;
+    max-width: 600px;
+    margin: 0 auto 48px;
+}
+
+/* ===== CARDS: REFINED GLASS ===== */
+.kpi-card, .chart-card, .feature-card {
+    background: var(--glass-white);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: var(--radius-premium);
+    box-shadow: var(--shadow-premium);
+    transition: var(--transition-smooth);
+    overflow: hidden;
+}
+
+.kpi-card:hover, .chart-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 30px 60px rgba(15, 23, 42, 0.12);
+}
+
+.kpi-card .card-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 900;
+    font-size: 2.25rem;
+    margin: 8px 0;
+}
+
+/* ===== NAVIGATION ===== */
+.navbar {
+    background: rgba(255, 255, 255, 0.8) !important;
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    padding: 16px 0;
+}
+
+.navbar-brand {
+    font-family: 'Fraunces', serif;
+    font-weight: 900;
+    font-size: 1.5rem;
+    color: var(--brand-carmine) !important;
+}
+
+/* ===== DATA VISUALIZATION ===== */
+.chart-container {
+    padding: 24px;
+}
+
+.table {
+    border-collapse: separate;
+    border-spacing: 0 8px;
+}
+
+.table tr {
+    background: white;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+    border-radius: 12px;
+}
+
+.table td, .table th {
+    padding: 20px;
+    border: none !important;
+}
+
+.table tr:hover {
+    background: #f8fafc !important;
+    transform: scale(1.01);
+}
+
+/* ===== DARK MODE OVERRIDES ===== */
+@media (prefers-color-scheme: dark) {
+    body {
+        background-color: var(--bg-dark);
+        color: #f8fafc;
+    }
+    
+    .navbar {
+        background: rgba(10, 10, 11, 0.8) !important;
+        border-color: rgba(255, 255, 255, 0.05);
+    }
+    
+    .kpi-card, .chart-card, .feature-card {
+        background: var(--glass-dark);
+        border-color: rgba(255, 255, 255, 0.08);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+    }
+    
+    .table tr {
+        background: #161618;
+    }
+    
+    .text-muted {
+        color: #94a3b8;
+    }
 }
 
 .container-fluid {
