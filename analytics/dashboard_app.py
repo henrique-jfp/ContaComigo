@@ -1413,28 +1413,40 @@ def miniapp_modo_deus():
             regex_kw = '|'.join(keywords)
             regex_excluir = '|'.join(keywords_excluir)
             start_assinaturas = datetime.combine(today - timedelta(days=90), time.min)
+            
+            # Categorias de Assinaturas
             categoria_ass_ids = db.query(Categoria.id).filter(
                 or_(
                     func.lower(Categoria.nome).like('%assinatura%'),
                     func.lower(Categoria.nome).like('%serviços e assinaturas%'),
                     func.lower(Categoria.nome).like('%servicos e assinaturas%')
                 )
-            )
+            ).all()
+            cat_ass_ids = [r[0] for r in categoria_ass_ids]
+
+            # Categoria de Financiamentos (para EXCLUIR do card de assinaturas)
+            categoria_fin_ids = db.query(Categoria.id).filter(
+                func.lower(Categoria.nome).like('%empréstimos e financiamentos%')
+            ).all()
+            cat_fin_ids = [r[0] for r in categoria_fin_ids]
+
             subcategoria_ass_ids = db.query(Subcategoria.id).filter(
                 func.lower(Subcategoria.nome).like('%assinatura%')
-            )
+            ).all()
+            sub_ass_ids = [r[0] for r in subcategoria_ass_ids]
 
             # Busca por palavras-chave OU pela categoria específica de Assinaturas
-            # Mas EXCLUI explicitamente termos financeiros (juros, iof, etc)
+            # Mas EXCLUI explicitamente financiamentos e termos financeiros
             lanc_ass = db.query(Lancamento).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.tipo.in_(['Saída', 'Despesa']),
                 Lancamento.data_transacao >= start_assinaturas,
                 or_(
                     func.lower(Lancamento.descricao).op('~')(regex_kw),
-                    Lancamento.id_categoria.in_(categoria_ass_ids),
-                    Lancamento.id_subcategoria.in_(subcategoria_ass_ids),
+                    Lancamento.id_categoria.in_(cat_ass_ids),
+                    Lancamento.id_subcategoria.in_(sub_ass_ids),
                 ),
+                Lancamento.id_categoria.not_in(cat_fin_ids),
                 func.lower(Lancamento.descricao).op('!~')(regex_excluir)
             ).all()
 

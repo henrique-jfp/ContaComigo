@@ -262,8 +262,10 @@ def _extrair_lista_de_resposta(res) -> list:
         for key in ["data", "purchases", "bills", "accounts", "transactions"]:
             data = res.get(key)
             if isinstance(data, list): return data
+            # Se a chave existe mas é um dict (objeto único), envelopa em lista
             if isinstance(data, dict): return [data]
-        # Se tem chaves de objeto único, retorna como lista de 1
+        
+        # Se o próprio dicionário raiz tem chaves de objeto único, retorna como lista de 1
         if any(k in res for k in ["accountId", "id", "transactionId"]):
             return [res]
     return []
@@ -274,35 +276,43 @@ def _extrair_sumarios_fatura(res) -> list:
     if not res: return []
     
     # Se vier em 'data', usa o conteúdo de 'data'
-    if isinstance(res, dict) and "data" in res:
-        res = res["data"]
-        
-    if isinstance(res, list): return res
-    
     if isinstance(res, dict):
+        # Formato { "data": [...], "success": true }
+        if "data" in res:
+            data = res["data"]
+            if isinstance(data, list): return data
+            if isinstance(data, dict): return [data]
+            
         # Formato { "bills": [...] }
         if "bills" in res and isinstance(res["bills"], list):
             return res["bills"]
-        # Formato objeto único
+            
+        # Formato objeto único no nível raiz
         if "billAmount" in res or "accountId" in res:
             return [res]
             
+    if isinstance(res, list): return res
     return []
 
 
 def _extrair_parcelamentos(res) -> list:
-    """Extrai parcelas garantindo que pegamos a lista de 'purchases'."""
+    """Extrai parcelas garantindo que pegamos a lista de 'purchases' ou 'data'."""
     if not res: return []
     
-    # O Pierre costuma retornar { "data": { "purchases": [...] } }
     if isinstance(res, dict):
-        data = res.get("data", res)
-        if isinstance(data, dict):
-            purchases = data.get("purchases", data.get("installments"))
-            if isinstance(purchases, list):
-                return purchases
-        elif isinstance(data, list):
-            return data
+        # A API do Pierre costuma enviar 'purchases' no nível raiz ou dentro de 'data'
+        purchases = res.get("purchases") or res.get("data")
+        
+        # Se 'data' for um dict que contém 'purchases'
+        if isinstance(purchases, dict):
+            purchases = purchases.get("purchases", purchases.get("installments", purchases))
+            
+        if isinstance(purchases, list):
+            return purchases
+            
+        # Fallback para o próprio objeto se parecer uma compra
+        if any(k in res for k in ["purchaseId", "totalInstallments", "installmentAmount"]):
+            return [res]
             
     if isinstance(res, list): return res
     return []

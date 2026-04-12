@@ -20,12 +20,13 @@ PROMPT_CATEGORIZACAO = """
 Você é um especialista em finanças pessoais brasileiras e sua tarefa é categorizar transações bancárias.
 Receberei uma lista de transações com descrição, valor e tipo (Receita/Despesa).
 
-Regras:
-1. Analise a descrição e identifique o estabelecimento ou serviço.
-2. Limpe a descrição para um nome amigável (ex: "PAG* IFOOD" -> "iFood").
-3. Escolha a Categoria e Subcategoria que melhor se encaixam na lista abaixo.
-4. Se for um PIX enviado para uma pessoa e não houver indicação de serviço, use a categoria "Transferências" e subcategoria "PIX Enviado".
-5. Retorne APENAS um JSON no formato:
+Regras de Ouro:
+1. Identifique o estabelecimento/serviço: Limpe a descrição para um nome amigável (ex: "PAG* IFOOD" -> "iFood").
+2. **Assinaturas vs Financiamentos**: 
+   - Se for um serviço recorrente (Netflix, Spotify, Wellhub, Sócio Torcedor, Flamengo, Academias, SaaS), use a categoria "Serviços e Assinaturas" e subcategoria "Assinaturas".
+   - Se for uma parcela de dívida de longo prazo (BV Financeira, Banco Itaú Financiamento, Carro, Moto, Imóvel), use a categoria "Empréstimos e Financiamentos".
+3. Se for um PIX enviado para uma pessoa sem indicação de serviço, use a categoria "Transferências" e subcategoria "PIX Enviado".
+4. Retorne APENAS um JSON no formato:
 [
   {{"id": 123, "descricao_limpa": "Nome Amigável", "categoria": "Nome Categoria", "subcategoria": "Nome Subcategoria"}},
   ...

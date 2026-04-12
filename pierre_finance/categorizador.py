@@ -74,13 +74,19 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
             'claro rec', 'vivo', 'tim', 'oi', 'net virtua', 'sky', 'starlink', 'assinatura',
             'subscription', 'plano mensal', 'gympass', 'totalpass', 'canva', 'chatgpt', 'openai', 'wellhub',
             'midjourney', 'icloud', 'google one', 'dropbox', 'microsoft 365', 'adobe', 'smartfit',
-            'bluefit', 'selfit', 'sky', 'directv', 'globomail', 'uol', 'terra', 'globo.com',
+            'bluefit', 'selfit', 'sky', 'directv', 'globomail', 'uol', 'terra', 'globo.com', 'cr flamengo',
+            'socio torcedor', 'flamengo', 'sportv', 'premiere',
         ],
         'Financeiro': [
             'iof', 'tarifa', 'taxa bancaria', 'anuidade cartao', 'seguro', 'encargos', 'juros',
             'multa', 'mora', 'tbi', 'tar ', 'cesta servicos', 'manutencao conta', 'mensalidade banco',
             'pacote servicos', 'seguro vida', 'seguro residencial', 'seguro celular', 'pagamento seguro',
         ],
+    },
+    'EMPRÉSTIMOS E FINANCIAMENTOS': {
+        'Parcela de Veículo': ['financiamento veiculo', 'bv financeira', 'itau financiamento', 'parcela carro', 'moto'],
+        'Empréstimo Pessoal': ['emprestimo', 'credito pessoal', 'parcela emprestimo', 'consignado'],
+        'Financiamento Imobiliário': ['financiamento habitacional', 'caixa habita', 'parcela imovel', 'mcmv'],
     },
     'ALIMENTAÇÃO': {
         'Restaurantes/Lanchonetes': [
@@ -184,6 +190,7 @@ _MAPA_NOME_CATEGORIA: dict[str, str] = {
     'FINANÇAS E INVESTIMENTOS':  'Financeiro',
     'IMPOSTOS E TAXAS':          'Impostos e Taxas',
     'TRANSFERÊNCIAS':            'Transferências',
+    'EMPRÉSTIMOS E FINANCIAMENTOS': 'Empréstimos e Financiamentos',
 }
 
 # Fallbacks após regras — candidatos ao refinamento por LLM (híbrido)
