@@ -1461,18 +1461,26 @@ def miniapp_modo_deus():
                 ),
                 func.lower(Agendamento.descricao).op('!~')(regex_excluir)
             ).all()            
+            from pierre_finance.categorizador import limpar_descricao
+            
             lista_ass = []
             seen = set()
             for l in lanc_ass:
-                desc_key = re.sub(r'\d+/\d+|\d{4,}', '', (l.descricao or '').lower()).strip()
-                if desc_key and desc_key not in seen:
+                # Limpeza agressiva para evitar duplicatas (Flamengo, Amazon Prime, etc)
+                nome_limpo = limpar_descricao(l.descricao or "").split()[0].lower() # Pega apenas a primeira palavra significativa
+                if nome_limpo and nome_limpo not in seen:
                     lista_ass.append({"descricao": l.descricao, "valor": abs(float(l.valor)), "proxima_data": None})
-                    seen.add(desc_key)
+                    seen.add(nome_limpo)
+            
             for a in agend_ass:
-                desc_key = re.sub(r'\d+/\d+|\d{4,}', '', (a.descricao or '').lower()).strip()
-                if desc_key and desc_key not in seen:
-                    lista_ass.append({"descricao": a.descricao, "valor": float(a.valor), "proxima_data": a.proxima_data_execucao.isoformat() if a.proxima_data_execucao else None})
-                    seen.add(desc_key)
+                nome_limpo = limpar_descricao(a.descricao or "").split()[0].lower()
+                if nome_limpo and nome_limpo not in seen:
+                    lista_ass.append({
+                        "descricao": a.descricao, 
+                        "valor": float(a.valor), 
+                        "proxima_data": a.proxima_data_execucao.isoformat() if a.proxima_data_execucao else None
+                    })
+                    seen.add(nome_limpo)
             
             result['assinaturas'] = {"lista": lista_ass, "total_mensal": sum(x['valor'] for x in lista_ass)}
         except Exception as e:
@@ -1481,15 +1489,27 @@ def miniapp_modo_deus():
 
         # --- SEÇÃO 4: PARCELAMENTOS ---
         try:
+            # Afrouxa o filtro: mostra parcelas que vencem hoje ou no futuro, E parcelas sem data (ativos)
             parcelas = db.query(ParcelamentoItem).filter(
                 ParcelamentoItem.id_usuario == user_id,
-                or_(ParcelamentoItem.data_proxima_parcela.is_(None), ParcelamentoItem.data_proxima_parcela >= today)
-            ).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(6).all()
-            lista_p = [{"descricao": p.descricao, "valor_parcela": float(p.valor_parcela), "parcela_atual": p.parcela_atual, "total_parcelas": p.total_parcelas, "data_proxima_parcela": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None, "percentual_concluido": (p.parcela_atual / p.total_parcelas * 100) if p.total_parcelas > 0 else 0} for p in parcelas]
-            total_p = db.query(func.sum(ParcelamentoItem.valor_parcela)).filter(
-                ParcelamentoItem.id_usuario == user_id,
-                or_(ParcelamentoItem.data_proxima_parcela.is_(None), ParcelamentoItem.data_proxima_parcela >= today)
-            ).scalar() or 0
+                or_(
+                    ParcelamentoItem.data_proxima_parcela.is_(None), 
+                    ParcelamentoItem.data_proxima_parcela >= (today - timedelta(days=5)) # Mostra até 5 dias após vencimento
+                )
+            ).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(10).all()
+            
+            lista_p = [
+                {
+                    "descricao": p.descricao, 
+                    "valor_parcela": float(p.valor_parcela), 
+                    "parcela_atual": p.parcela_atual, 
+                    "total_parcelas": p.total_parcelas, 
+                    "data_proxima_parcela": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None, 
+                    "percentual_concluido": (p.parcela_atual / p.total_parcelas * 100) if p.total_parcelas > 0 else 0
+                } for p in parcelas
+            ]
+            
+            total_p = sum(float(p.valor_parcela) for p in parcelas)
             result['parcelamentos'] = {"lista": lista_p, "total_mensal_parcelas": float(total_p)}
         except Exception as e:
             logger.error(f"Erro Modo Deus (parcelamentos): {e}")
@@ -1497,13 +1517,13 @@ def miniapp_modo_deus():
 
         # --- SEÇÃO 5: CARTÕES ---
         try:
-            # Busca faturas que estão em aberto OU que vencem nos próximos 45 dias
+            # Busca faturas que estão em aberto OU variações de status
             v_limit_cards = today + timedelta(days=45)
             faturas = db.query(FaturaCartao).join(Conta).filter(
                 FaturaCartao.id_usuario == user_id,
                 or_(
-                    FaturaCartao.status == 'em_aberto',
-                    and_(FaturaCartao.data_vencimento >= today, FaturaCartao.data_vencimento <= v_limit_cards)
+                    FaturaCartao.status.in_(['em_aberto', 'aberta', 'aberto', 'PENDING']),
+                    and_(FaturaCartao.data_vencimento >= (today - timedelta(days=2)), FaturaCartao.data_vencimento <= v_limit_cards)
                 )
             ).order_by(FaturaCartao.data_vencimento.asc()).all()
             
