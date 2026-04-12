@@ -1,10 +1,10 @@
-<div class="modal-overlay" id="newAgendamentoModal">
-    <div class="modal-content">
+<div id="newAgendamentoModal" class="hidden fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 p-4">
+  <div class="modal-content pointer-events-auto w-full max-w-2xl rounded-t-2xl md:rounded-3xl bg-telegram-card border border-telegram-separator p-6 shadow-lift glass-card">
       <div class="modal-header">
         <h2 class="text-lg font-bold text-telegram-text flex items-center gap-2">
           <i data-lucide="plus-circle" class="w-5 h-5 text-brand"></i> Novo Agendamento
         </h2>
-        <button class="modal-close-btn" onclick="closeNewAgendamentoModal()"><i data-lucide="x" class="w-6 h-6"></i></button>
+        <button class="modal-close-btn ml-auto p-2 rounded-full hover:bg-telegram-separator/30" onclick="closeNewAgendamentoModal()" aria-label="Fechar"><i data-lucide="x" class="w-6 h-6"></i></button>
       </div>
       <div class="modal-body space-y-4">
         <div class="floating-field">
@@ -58,5 +58,5 @@
           <button id="newAgendCancel" class="flex-1 rounded-xl border border-telegram-separator bg-telegram-card py-3 text-sm font-semibold text-telegram-text hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition" onclick="closeNewAgendamentoModal()">Cancelar</button>
         </div>
       </div>
-    </div>
   </div>
+</div>

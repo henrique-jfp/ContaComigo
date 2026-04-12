@@ -79,7 +79,7 @@
   </header>
 
   <!-- Viewport -->
-  <main id="app-content" class="flex-1 overflow-x-hidden hide-scroll p-4 pb-28 relative z-0">
+  <main id="app-content" class="flex-1 overflow-x-hidden hide-scroll p-4 pb-8 relative z-0">
     
     <!-- Tela 1: INÍCIO -->
     {% include 'miniapp/tabs/inicio.html' %}
@@ -116,23 +116,18 @@
   <!-- Toast Notifications Container -->
   <div id="toastContainer"></div>
 
-  <!-- Modal de Novo Agendamento -->
-  {% include 'miniapp/modals/novo_agendamento.html' %}
-
-  <!-- Modal de Meta -->
-  {% include 'miniapp/modals/meta.html' %}
-
-  <!-- Modal de Edição de Lançamentos -->
-  {% include 'miniapp/modals/edit.html' %}
-
-  <!-- Modal de Filtros do Histórico -->
-  {% include 'miniapp/modals/historico_filtros.html' %}
-
-  <!-- Modal de Orçamento -->
-  {% include 'miniapp/modals/orcamento.html' %}
-
-  <!-- Modal de Notificações -->
-  {% include 'miniapp/modals/notificacoes.html' %}
+  <!-- Modals: todos os modais ficam dentro de um overlay oculto para não ocupar fluxo -->
+  <div id="modalsOverlay" class="hidden fixed inset-0 z-50 pointer-events-none">
+    <div class="w-full h-full pointer-events-none">
+      <!-- Cada modal individual deve controlar sua própria visibilidade e pointer-events -->
+      {% include 'miniapp/modals/novo_agendamento.html' %}
+      {% include 'miniapp/modals/meta.html' %}
+      {% include 'miniapp/modals/edit.html' %}
+      {% include 'miniapp/modals/historico_filtros.html' %}
+      {% include 'miniapp/modals/orcamento.html' %}
+      {% include 'miniapp/modals/notificacoes.html' %}
+    </div>
+  </div>
 
   <!-- Bottom Tab Bar Premium -->
   {% include 'miniapp/components/bottom_nav.html' %}

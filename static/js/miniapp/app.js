@@ -2079,12 +2079,25 @@ lucide.createIcons();
       const hoje = new Date().toISOString().split('T')[0];
       newAgendData.value = hoje;
       updateParcelasVisibility();
+      // Mostrar overlay e modal (remover hidden, marcar active)
+      const modalsOverlay = document.getElementById('modalsOverlay');
+      if (modalsOverlay) {
+        modalsOverlay.classList.remove('hidden');
+        modalsOverlay.classList.add('pointer-events-auto');
+      }
+      newAgendamentoModal.classList.remove('hidden');
       newAgendamentoModal.classList.add('active');
       document.body.style.overflow = 'hidden';
     }
 
     function closeNewAgendamentoModal() {
       newAgendamentoModal.classList.remove('active');
+      newAgendamentoModal.classList.add('hidden');
+      const modalsOverlay = document.getElementById('modalsOverlay');
+      if (modalsOverlay) {
+        modalsOverlay.classList.add('hidden');
+        modalsOverlay.classList.remove('pointer-events-auto');
+      }
       document.body.style.overflow = 'auto';
     }
 
