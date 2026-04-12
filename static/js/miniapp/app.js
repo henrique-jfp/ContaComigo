@@ -1,3 +1,12 @@
+// --- Inicialização automática dos dados principais ao carregar o DOM ---
+document.addEventListener('DOMContentLoaded', async () => {
+  // Recupera sessão do storage/localStorage
+  await tryRecoverSessionFromStorage();
+  // Carrega dados principais das abas
+  loadHomeOverview();
+  loadAgendamentos && loadAgendamentos();
+  loadModoDeus && loadModoDeus();
+});
 lucide.createIcons();
 
     // Chart.js Global Defaults

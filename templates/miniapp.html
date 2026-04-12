@@ -71,7 +71,7 @@
 </style>
 <link href="{{ url_for('static', filename='css/miniapp/main.css') }}" rel="stylesheet">
 </head>
-<body class="h-screen w-screen overflow-hidden flex flex-col font-sans antialiased selection:bg-brand selection:text-white bg-telegram-bg text-telegram-text">
+<body class="h-screen w-screen overflow-x-hidden flex flex-col font-sans antialiased selection:bg-brand selection:text-white bg-telegram-bg text-telegram-text">
 
   <!-- Header (Discreto) -->
   <header class="p-4 pt-8 pb-2 flex justify-end relative z-10">
@@ -79,7 +79,7 @@
   </header>
 
   <!-- Viewport -->
-  <main id="app-content" class="flex-1 overflow-hidden hide-scroll p-4 pb-28 relative z-0">
+  <main id="app-content" class="flex-1 overflow-x-hidden hide-scroll p-4 pb-28 relative z-0">
     
     <!-- Tela 1: INÍCIO -->
     {% include 'miniapp/tabs/inicio.html' %}

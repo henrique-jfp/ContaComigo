@@ -931,22 +931,30 @@ def pierre_connected_banks():
             return jsonify({"ok": False, "error": "pierre_not_configured"}), 403
 
         client = PierreClient(usuario.pierre_api_key)
-        accounts = client.get_accounts() # Assume que get_accounts retorna uma lista de instituições conectadas
-        
+        accounts = client.get_accounts()
+        logger.info(f"[Pierre] get_accounts() response: {accounts}")
+        institutions = []
         if isinstance(accounts, list):
-            institutions = []
             for acc in accounts:
-                if acc.get("id") and acc.get("name"):
-                    # Extrair informações relevantes, logo seria um plus se disponível na API
+                if isinstance(acc, dict) and acc.get("id") and acc.get("name"):
                     institutions.append({
-                        "id": acc.get("id"), 
-                        "name": acc.get("name", "Instituição Desconhecida"), 
-                        "type": acc.get("type", "BANK") # Tipo como BANK, CREDIT, INVESTMENT
+                        "id": acc.get("id"),
+                        "name": acc.get("name", "Instituição Desconhecida"),
+                        "type": acc.get("type", "BANK")
                     })
-            return jsonify({"ok": True, "data": institutions})
+        elif isinstance(accounts, dict) and accounts.get("data") and isinstance(accounts["data"], list):
+            for acc in accounts["data"]:
+                if isinstance(acc, dict) and acc.get("id") and acc.get("name"):
+                    institutions.append({
+                        "id": acc.get("id"),
+                        "name": acc.get("name", "Instituição Desconhecida"),
+                        "type": acc.get("type", "BANK")
+                    })
         else:
-            logger.error(f"Formato de resposta inesperado ao buscar contas Pierre para usuário {usuario.id}: {accounts}")
-            return jsonify({"ok": False, "error": "unexpected_response_format"}), 500
+            logger.error(f"[Pierre] Formato de resposta inesperado ao buscar contas: {accounts}")
+            return jsonify({"ok": False, "error": "unexpected_response_format", "raw": accounts}), 500
+
+        return jsonify({"ok": True, "data": institutions})
     except Exception as e:
         logger.error(f"Erro ao buscar contas conectadas Pierre para usuário {usuario.id}: {e}", exc_info=True)
         return jsonify({"ok": False, "error": "internal_server_error"}), 500
