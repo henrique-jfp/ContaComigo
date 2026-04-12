@@ -176,78 +176,116 @@ def _upsert_accounts_and_balances(usuario: Usuario, db: Session, client: PierreC
 
 
 def _upsert_bill_summaries(usuario: Usuario, db: Session, client: PierreClient, accounts_map: dict[str, int]) -> int:
-    res_summary = client.get_bill_summary()
-    summaries = _extrair_sumarios_fatura(res_summary)
-    updated = 0
+    try:
+        res_summary = client.get_bill_summary()
+        summaries = _extrair_sumarios_fatura(res_summary)
+        updated = 0
 
-    for s in summaries:
-        acc_id = str(s.get("accountId") or s.get("account_id") or "")
-        conta_id = accounts_map.get(acc_id)
-        if not conta_id:
-            continue
+        for s in summaries:
+            acc_id = str(s.get("accountId") or s.get("account_id") or "")
+            conta_id = accounts_map.get(acc_id)
+            if not conta_id:
+                continue
 
-        dv = _parse_iso_date(s.get("dueDate") or s.get("due_date"))
-        ref_date = dv or datetime.now(timezone.utc)
-        fake_ext_id = f"bill_{acc_id}_{ref_date.year}_{ref_date.month}"
+            dv_raw = s.get("dueDate") or s.get("due_date")
+            dv = _parse_iso_date(dv_raw)
+            ref_date = dv or datetime.now(timezone.utc)
+            
+            # ID Único para a fatura (Conta + Mês/Ano de Vencimento)
+            fake_ext_id = f"bill_{acc_id}_{ref_date.year}_{ref_date.month:02d}"
 
-        fatura = db.query(FaturaCartao).filter(
-            FaturaCartao.external_id == fake_ext_id,
-            FaturaCartao.id_usuario == usuario.id,
-        ).first()
-        if not fatura:
-            fatura = FaturaCartao(id_usuario=usuario.id, id_conta=conta_id, external_id=fake_ext_id)
-            db.add(fatura)
+            fatura = db.query(FaturaCartao).filter(
+                FaturaCartao.external_id == fake_ext_id,
+                FaturaCartao.id_usuario == usuario.id,
+            ).first()
+            if not fatura:
+                fatura = FaturaCartao(id_usuario=usuario.id, id_conta=conta_id, external_id=fake_ext_id)
+                db.add(fatura)
 
-        fatura.valor_total = _safe_decimal(s.get("billAmount") or s.get("amount") or s.get("totalAmount"))
-        fatura.data_vencimento = ref_date.date()
-        fatura.status = "em_aberto"
-        fatura.mes_referencia = ref_date.replace(day=1).date()
+            fatura.valor_total = _safe_decimal(s.get("billAmount") or s.get("amount") or s.get("totalAmount") or 0)
+            fatura.data_vencimento = ref_date.date()
+            
+            # Normalização de Status para o Dashboard
+            status_raw = str(s.get("status") or "").upper()
+            if any(k in status_raw for k in ["PAID", "PAGO", "FECHADA", "CLOSED"]):
+                fatura.status = "paga"
+            elif any(k in status_raw for k in ["OVERDUE", "ATRASO"]):
+                fatura.status = "atrasada"
+            else:
+                fatura.status = "em_aberto"
+                
+            fatura.mes_referencia = ref_date.replace(day=1).date()
 
-        df = _parse_iso_date(s.get("closeDate") or s.get("closing_date"))
-        if df:
-            fatura.data_fechamento = df.date()
-        updated += 1
-
-    return updated
+            df = _parse_iso_date(s.get("closeDate") or s.get("closing_date"))
+            if df:
+                fatura.data_fechamento = df.date()
+            updated += 1
+        return updated
+    except Exception as e:
+        logger.error(f"Erro em _upsert_bill_summaries: {e}")
+        return 0
 
 
 def _upsert_installments(usuario: Usuario, db: Session, client: PierreClient, accounts_map: dict[str, int]) -> int:
-    res_inst = client.get_installments()
-    inst_list = _extrair_parcelamentos(res_inst)
-    updated = 0
+    try:
+        res_inst = client.get_installments()
+        inst_list = _extrair_parcelamentos(res_inst)
+        updated = 0
+        hoje = datetime.now(timezone.utc).date()
 
-    for inst in inst_list:
-        ext_id = str(inst.get("id") or inst.get("purchaseId") or "")
-        if not ext_id:
-            continue
+        for inst in inst_list:
+            # Tenta pegar um ID único da compra
+            ext_id = str(inst.get("id") or inst.get("purchaseId") or inst.get("transactionId") or "")
+            if not ext_id:
+                # Fallback: Gera um ID baseado na descrição e valor se não tiver ID único
+                desc_slug = (inst.get("description") or "compra")[:10]
+                ext_id = f"inst_{usuario.id}_{desc_slug}_{inst.get('totalAmount')}"
 
-        parcela = db.query(ParcelamentoItem).filter(
-            ParcelamentoItem.external_id == ext_id,
-            ParcelamentoItem.id_usuario == usuario.id,
-        ).first()
-        if not parcela:
-            parcela = ParcelamentoItem(id_usuario=usuario.id, external_id=ext_id)
-            db.add(parcela)
+            parcela = db.query(ParcelamentoItem).filter(
+                ParcelamentoItem.external_id == ext_id,
+                ParcelamentoItem.id_usuario == usuario.id,
+            ).first()
+            if not parcela:
+                parcela = ParcelamentoItem(id_usuario=usuario.id, external_id=ext_id)
+                db.add(parcela)
 
-        parcela.id_conta = accounts_map.get(str(inst.get("accountId")))
-        parcela.descricao = inst.get("description") or inst.get("name") or "Compra Parcelada"
+            parcela.id_conta = accounts_map.get(str(inst.get("accountId") or inst.get("account_id")))
+            parcela.descricao = (inst.get("description") or inst.get("name") or "Compra Parcelada").strip()
 
-        v_total = _safe_decimal(inst.get("totalAmount") or inst.get("total"))
-        total_p = max(1, int(inst.get("totalInstallments") or inst.get("installments") or 1))
+            v_total = _safe_decimal(inst.get("totalAmount") or inst.get("total") or 0)
+            total_p = max(1, int(inst.get("totalInstallments") or inst.get("installments") or 1))
 
-        parcela.valor_total = v_total
-        parcela.total_parcelas = total_p
-        parcela.valor_parcela = _safe_decimal(inst.get("installmentAmount") or (float(v_total) / total_p))
-        parcela.parcela_atual = int(inst.get("installmentNumber") or inst.get("currentInstallment") or 1)
+            parcela.valor_total = v_total
+            parcela.total_parcelas = total_p
+            
+            # Valor da Parcela: Usa o campo da API ou calcula
+            v_parcela = inst.get("installmentAmount") or inst.get("amount")
+            if v_parcela:
+                parcela.valor_parcela = _safe_decimal(v_parcela)
+            else:
+                parcela.valor_parcela = _safe_decimal(float(v_total) / total_p)
 
-        dp = _parse_iso_date(inst.get("dueDate") or inst.get("nextDueDate"))
-        parcela.data_proxima_parcela = dp.date() if dp else parcela.data_proxima_parcela
+            parcela.parcela_atual = int(inst.get("installmentNumber") or inst.get("currentInstallment") or 1)
 
-        dc = _parse_iso_date(inst.get("date") or inst.get("purchaseDate"))
-        parcela.data_compra = dc.date() if dc else parcela.data_compra
-        updated += 1
+            # Data de Vencimento: Vital para o Modo Deus
+            dp_raw = inst.get("dueDate") or inst.get("nextDueDate") or inst.get("date")
+            dp = _parse_iso_date(dp_raw)
+            if dp:
+                parcela.data_proxima_parcela = dp.date()
+            else:
+                # Se não tem data, coloca como o dia 1 do mês atual para não sumir do dashboard
+                parcela.data_proxima_parcela = hoje.replace(day=1)
 
-    return updated
+            dc_raw = inst.get("date") or inst.get("purchaseDate") or inst.get("createdAt")
+            dc = _parse_iso_date(dc_raw)
+            if dc:
+                parcela.data_compra = dc.date()
+            
+            updated += 1
+        return updated
+    except Exception as e:
+        logger.error(f"Erro em _upsert_installments: {e}")
+        return 0
 
 
 # ---------------------------------------------------------------------------
@@ -274,21 +312,18 @@ def _extrair_lista_de_resposta(res) -> list:
 def _extrair_sumarios_fatura(res) -> list:
     """Extrai sumários de fatura com múltiplos fallbacks de schema."""
     if not res: return []
-    
-    # Se vier em 'data', usa o conteúdo de 'data'
     if isinstance(res, dict):
-        # Formato { "data": [...], "success": true }
-        if "data" in res:
-            data = res["data"]
-            if isinstance(data, list): return data
-            if isinstance(data, dict): return [data]
-            
-        # Formato { "bills": [...] }
-        if "bills" in res and isinstance(res["bills"], list):
-            return res["bills"]
+        # A API pode retornar em 'data', 'bills' ou 'summaries'
+        data = res.get("data") or res.get("bills") or res.get("summaries")
+        if isinstance(data, list): return data
+        if isinstance(data, dict):
+            # Se for um objeto que contém a lista
+            items = data.get("items") or data.get("bills") or data.get("summaries")
+            if isinstance(items, list): return items
+            return [data]
             
         # Formato objeto único no nível raiz
-        if "billAmount" in res or "accountId" in res:
+        if any(k in res for k in ["billAmount", "dueDate", "accountId"]):
             return [res]
             
     if isinstance(res, list): return res
@@ -300,18 +335,18 @@ def _extrair_parcelamentos(res) -> list:
     if not res: return []
     
     if isinstance(res, dict):
-        # A API do Pierre costuma enviar 'purchases' no nível raiz ou dentro de 'data'
-        purchases = res.get("purchases") or res.get("data")
-        
-        # Se 'data' for um dict que contém 'purchases'
-        if isinstance(purchases, dict):
-            purchases = purchases.get("purchases", purchases.get("installments", purchases))
-            
-        if isinstance(purchases, list):
-            return purchases
+        # A API pode retornar em 'purchases', 'data', 'installments' ou 'items'
+        data = res.get("data") or res.get("purchases") or res.get("installments")
+        if isinstance(data, list): return data
+        if isinstance(data, dict):
+            items = data.get("purchases") or data.get("installments") or data.get("items")
+            if isinstance(items, list): return items
+            # Se o próprio 'data' parecer uma compra
+            if any(k in data for k in ["purchaseId", "totalInstallments", "installmentAmount"]):
+                return [data]
             
         # Fallback para o próprio objeto se parecer uma compra
-        if any(k in res for k in ["purchaseId", "totalInstallments", "installmentAmount"]):
+        if any(k in res for k in ["purchaseId", "totalInstallments", "installmentAmount", "description"]):
             return [res]
             
     if isinstance(res, list): return res
