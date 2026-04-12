@@ -24,7 +24,7 @@ lucide.createIcons();
       }
 
       Chart.defaults.color = '#64748b';
-      Chart.defaults.font.family = "'Outfit', sans-serif";
+      Chart.defaults.font.family = "'Schibsted Grotesk', sans-serif";
       Chart.defaults.font.weight = '600';
       
       // Cores dos Tooltips explicitamente contrastadas
@@ -1408,9 +1408,9 @@ lucide.createIcons();
       gameProfileXpLine.textContent = `${xp.xp_in_level || 0} / ${xp.xp_needed || 1} XP`;
       gameProfileProgressBar.style.width = `${progress}%`;
       gameProfileNextHint.textContent = `Faltam ${xp.xp_to_next || 0} XP para o nível ${xp.next_level || ((profile.level || 1) + 1)}`;
-      gameInteractionsTotal.textContent = String(profile.interactions_total || 0);
-      gameInteractionsWeek.textContent = String(profile.interactions_week || 0);
-      gameAlfredoNote.textContent = profile.alfredo_note || 'Mantenha consistência para subir no ranking.';
+      if (gameInteractionsTotal) gameInteractionsTotal.textContent = String(profile.interactions_total || 0);
+      if (gameInteractionsWeek) gameInteractionsWeek.textContent = String(profile.interactions_week || 0);
+      if (gameAlfredoNote) gameAlfredoNote.textContent = profile.alfredo_note || 'Mantenha consistência para subir no ranking.';
       renderGameTopFeatures(Array.isArray(profile.top_features) ? profile.top_features : []);
     }
 
@@ -2142,9 +2142,8 @@ lucide.createIcons();
 
     // Expor função para salvar configurações de notificação ao trocar o toggle
     window.saveNotificationPreferences = async function() {
-      const sessionId = localStorage.getItem('contacomigo_session_id') || window.Telegram?.WebApp?.initData;
-      if (!sessionId) return;
-      
+      const sId = localStorage.getItem(MINIAPP_SESSION_STORAGE_KEY) || telegramInitData;
+      if (!sId) return;
       const payload = {
         notif_lembretes: document.getElementById('toggle_notif_lembretes')?.checked ?? true,
         notif_alertas_risco: document.getElementById('toggle_notif_alertas_risco')?.checked ?? true,
@@ -2155,7 +2154,7 @@ lucide.createIcons();
       try {
         const response = await fetch('/api/miniapp/configuracoes', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
+          headers: { 'Content-Type': 'application/json', 'X-Session-Id': sId },
           body: JSON.stringify(payload),
         });
         const data = await response.json();
@@ -2434,30 +2433,31 @@ lucide.createIcons();
           const numericValue = Number(item.valor) || 0;
           const isReceita = isEntradaTipo(item.tipo, numericValue);
           const valueText = formatMoney(item.valor, item.tipo);
-          const iconName = getCategoryIcon(item.categoria_nome, item.subcategoria_nome, item.tipo);
-          
+          const style = getCategoryStyle(item.descricao, item.categoria_nome, item.subcategoria_nome, item.tipo);
+
           const div = document.createElement('div');
-          div.className = 'flex items-center justify-between gap-3 p-3 sm:p-4 rounded-2xl hover:bg-brand/5 transition border border-telegram-separator/40 bg-telegram-card/40 shadow-sm mb-2';
+          div.className = 'flex items-center justify-between gap-3 p-3 sm:p-4 rounded-3xl hover:bg-brand/5 transition border border-white/5 bg-telegram-card shadow-sm mb-3';
           div.innerHTML = `
             <div class="flex items-center gap-3 min-w-0 flex-1">
-              <div class="w-10 h-10 rounded-full ${isReceita ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300'} flex items-center justify-center shrink-0">
-                <i data-lucide="${iconName}" class="w-5 h-5"></i>
+              <div class="cat-icon ${style.class} shrink-0 w-10 h-10">
+                <i data-lucide="${style.icon}" class="w-5 h-5"></i>
               </div>
               <div class="min-w-0 flex-1">
-                <p class="font-semibold text-sm truncate text-telegram-text">${item.descricao || 'Lançamento'}</p>
-                <p class="text-[11px] sm:text-xs text-telegram-hint truncate mt-0.5">${item.categoria_nome ? item.categoria_nome : 'Sem categoria'} • ${new Date(item.data).toLocaleDateString('pt-BR')}</p>
+                <p class="font-bold text-sm truncate text-telegram-text">${item.descricao || 'Lançamento'}</p>
+                <p class="text-[10px] font-bold text-telegram-hint uppercase tracking-wider mt-0.5">${item.categoria_nome || 'Uncategorized'} • ${new Date(item.data).toLocaleDateString('pt-BR')}</p>
               </div>
             </div>
             <div class="flex flex-col items-end gap-1.5 shrink-0 ml-2">
-              <span class="font-bold ${isReceita ? 'text-emerald-600' : 'text-rose-600'} text-sm whitespace-nowrap">${valueText}</span>
+              <span class="font-financial text-base font-black ${isReceita ? 'text-emerald-500' : 'text-rose-500'} whitespace-nowrap">${valueText}</span>
               <div class="flex items-center gap-1.5">
-                <button class="history-edit-btn rounded-md border border-telegram-separator bg-telegram-card p-1.5 text-telegram-hint hover:text-brand transition" data-action="edit" data-id="${item.id}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
-                <button class="history-delete-btn rounded-md border border-telegram-separator bg-telegram-card p-1.5 text-telegram-hint hover:text-red-500 transition" data-action="delete" data-id="${item.id}"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                <button class="history-edit-btn rounded-lg border border-white/5 bg-black/20 p-1.5 text-telegram-hint hover:text-brand transition" data-action="edit" data-id="${item.id}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                <button class="history-delete-btn rounded-lg border border-white/5 bg-black/20 p-1.5 text-telegram-hint hover:text-red-500 transition" data-action="delete" data-id="${item.id}"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
               </div>
             </div>
           `;
           historyList.appendChild(div);
         });
+
         historyOffset = reset ? data.items.length : historyOffset + data.items.length;
         lucide.createIcons();
       } catch(e){}
