@@ -1001,7 +1001,15 @@ lucide.createIcons();
       if (!homeDespesa) missing.push('homeDespesa');
       if (!homeInsight) missing.push('homeInsight');
       if (!homeBadgeContainer) missing.push('homeBadgeContainer');
-      if (!homePlanLabel) missing.push('homePlanLabel');
+      if (!homePlanLabel) {
+        // Cria fallback visual para homePlanLabel se não existir
+        const fallback = document.createElement('span');
+        fallback.id = 'homePlanLabel';
+        fallback.style.display = 'none';
+        document.body.appendChild(fallback);
+        window.homePlanLabel = fallback;
+        console.warn('homePlanLabel não estava presente no DOM, fallback criado.');
+      }
       if (!homeUpgradeBtn) missing.push('homeUpgradeBtn');
       if (!homeRecentList) missing.push('homeRecentList');
       if (missing.length) console.warn('renderHomeOverview: elementos ausentes no DOM:', missing.join(', '));
@@ -1110,6 +1118,14 @@ lucide.createIcons();
           }
         } catch (e) {
           console.warn('safeChart: erro ao checar instância existente:', e);
+        }
+
+        // Para Sankey, destrua instância Chart.js global se canvas já estiver em uso
+        if (el.id === 'homeSankeyChart' && window.Chart && Chart.getChart) {
+          const chart = Chart.getChart(el);
+          if (chart) {
+            try { chart.destroy(); } catch (err) { console.warn('Erro ao destruir Chart Sankey antigo:', err); }
+          }
         }
 
         // Cria novo gráfico com tratamento de erros robusto
