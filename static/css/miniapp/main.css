@@ -176,3 +176,48 @@
   .cat-health { background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%); color: #198754; }
   .cat-shopping { background: linear-gradient(135deg, #cfd9df 0%, #e2ebf0 100%); color: #495057; }
   .cat-utilities { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #0dcaf0; }
+
+  /* Aquarium: full background split and animated wave */
+  .aquarium-viewport { position: relative; height: 100px; }
+  .aquarium-water {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    transition: background 600ms ease;
+    background: linear-gradient(90deg, #22c55e 0%, #22c55e 50%, #ef4444 50%, #ef4444 100%);
+  }
+
+  .aquarium-wave {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 120' preserveAspectRatio='none'%3E%3Cpath d='M0,30 C150,90 350,0 600,30 C850,60 1050,10 1200,30 L1200 120 L0 120 Z' fill='%23ffffff' opacity='0.08'/%3E%3C/svg%3E");
+    background-size: 2400px 120px;
+    background-repeat: repeat-x;
+    transform: translateX(0);
+    animation: aquarium-wave-move 8s linear infinite;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+  }
+
+  @keyframes aquarium-wave-move {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  /* Stabilize bottom nav and remove unwanted transforms */
+  #bottomNav { left: 50%; transform: translateX(-50%) !important; }
+  #bottomNav .nav-btn { transform: none !important; }
+
+  /* Ghost (Pierre) micro-interactions */
+  #nav-fantasma { z-index: 40; transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1); pointer-events: auto; }
+  #nav-fantasma[data-visible='true'] { transform: translateY(-22px); }
+  #nav-fantasma:hover, #nav-fantasma:active { transform: translateY(-30px); }
+
+  /* Ensure ghost doesn't block clicks on the nav when tucked */
+  #navContainer { position: relative; z-index: 50; }
+
+  /* Premium badge scale */
+  .badge-premium { transform: scale(1.5); display: inline-block; }

@@ -949,27 +949,18 @@ lucide.createIcons();
       const pctReceita = totalFluxo > 0 ? Math.round((receita / totalFluxo) * 100) : 0;
       const pctDespesa = totalFluxo > 0 ? Math.round((despesa / totalFluxo) * 100) : 0;
       
-      // Lógica do Aquário: Nível é o saldo restante (proporcional ao verde)
-      const waterLevel = Math.max(15, 100 - progressPct); // Garante visibilidade mínima
+      // Lógica do Aquário: representar proporção receita vs despesa com background sempre 100% preenchido
+      const pctReceitaSafe = Math.max(0, Math.min(100, pctReceita));
+      const pctDespesaSafe = Math.max(0, Math.min(100, pctDespesa));
       homeProgressLabel.textContent = `${100 - progressPct}%`;
 
       if (homeAquariumWater) {
-        // Animação fluida de enchimento
-        homeAquariumWater.style.height = '0%';
-        
-        setTimeout(() => {
-          homeAquariumWater.style.height = `${waterLevel}%`;
-          // Gradiente dinâmico baseado na saúde
-          if (waterLevel > 70) {
-            homeAquariumWater.style.background = 'linear-gradient(180deg, #10b981 0%, #059669 100%)';
-          } else if (waterLevel > 30) {
-            homeAquariumWater.style.background = 'linear-gradient(180deg, #f59e0b 0%, #d97706 100%)';
-          } else {
-            homeAquariumWater.style.background = 'linear-gradient(180deg, #ef4444 0%, #991b1b 100%)';
-          }
-        }, 100);
+        // Gradient horizontal: verde (receita) à esquerda, vermelho (despesa) à direita
+        // Construímos paradas para que receita ocupe pctReceita% e despesa o restante
+        const stop = pctReceitaSafe;
+        homeAquariumWater.style.background = `linear-gradient(90deg, #22c55e 0%, #22c55e ${stop}%, #ef4444 ${stop}%, #ef4444 100%)`;
       }
-
+      // Atualiza os badges de porcentagem
       if (homePctReceita) homePctReceita.textContent = `REC: ${pctReceita}%`;
       if (homePctDespesa) homePctDespesa.textContent = `DES: ${pctDespesa}%`;
 
@@ -991,6 +982,11 @@ lucide.createIcons();
             svgEl.style.maxWidth = '36px';
             svgEl.style.maxHeight = '36px';
             svgEl.style.display = 'block';
+          }
+          // Se o usuário for premium, aumentamos o badge
+          if (userPlan === 'premium' || userPlan === 'pro') {
+            const span = homeBadgeContainer.querySelector('span');
+            if (span) span.classList.add('badge-premium');
           }
         }
       } else if (homeBadgeContainer) {
@@ -2946,6 +2942,24 @@ lucide.createIcons();
           window.Telegram.WebApp.openTelegramLink(`https://t.me/${botUsername}?start=premium`);
           setTimeout(() => window.Telegram.WebApp.close(), 100);
         }
+      });
+    }
+
+    // Ghost (Pierre) interactions: reveal on hover / touch and ensure accessible click
+    const ghostBtn = document.getElementById('nav-fantasma');
+    if (ghostBtn) {
+      ghostBtn.addEventListener('pointerenter', () => {
+        ghostBtn.dataset.visible = 'true';
+        ghostBtn.style.zIndex = 60; // bring forward while hovering
+      });
+      ghostBtn.addEventListener('pointerleave', () => {
+        ghostBtn.dataset.visible = 'false';
+        ghostBtn.style.zIndex = 40; // return below nav
+      });
+      ghostBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // open modo-deus panel
+        switchTabByName('modo-deus');
       });
     }
 

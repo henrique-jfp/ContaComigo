@@ -9,19 +9,22 @@
                 <i data-lucide="info" class="w-3 h-3"></i> Carregando seu fluxo...
               </p>
             </div>
-            <div class="flex flex-col gap-2 shrink-0 w-[120px]">
-              <button id="homeLevelCard" type="button" class="rounded-2xl bg-telegram-card/40 backdrop-blur-md border border-white/5 shadow-soft p-3 text-left hover:border-brand/40 hover:bg-brand/5 transition" title="Abrir perfil do jogo">
-                <div class="flex items-center justify-between text-[9px] font-black uppercase tracking-[0.2em] text-telegram-hint mb-2">
+            <div class="flex flex-col gap-2 shrink-0 w-[100px]">
+              <button id="homeLevelCard" type="button" class="rounded-2xl bg-telegram-card/40 backdrop-blur-md border border-white/5 shadow-soft p-2 text-left hover:border-brand/40 hover:bg-brand/5 transition flex flex-col" title="Abrir perfil do jogo">
+                <div class="flex items-center justify-between text-[9px] font-black uppercase tracking-[0.2em] text-telegram-hint mb-1">
                   <span>Nível</span>
                   <span id="homeBadgeContainer"></span>
                 </div>
-                <div class="text-3xl font-black text-brand leading-none font-serif" id="homeLevel">1</div>
-                <div class="mt-1 text-[10px] font-bold text-telegram-hint font-mono"><span id="homeXp">0</span> XP</div>
-                <div class="mt-2 text-[10px] font-black text-telegram-text flex items-center gap-1">
+                <div class="text-2xl font-black text-brand leading-none font-serif" id="homeLevel">1</div>
+                <div class="mt-1 text-[9px] font-bold text-telegram-hint font-mono"><span id="homeXp">0</span> XP</div>
+                <div class="mt-1 text-[10px] font-black text-telegram-text flex items-center gap-1">
                   <i data-lucide="flame" class="w-3 h-3 text-orange-500"></i>
                   <span id="homeStreak">0</span> DIAS
                 </div>
               </button>
+            </div>
+            <div class="flex items-center pl-2">
+              <button id="homeUpgradeBtn" class="hidden rounded-full bg-brand text-white px-3 py-1 text-xs font-semibold shadow-sm">💎 Seja Premium</button>
             </div>
           </div>
 
@@ -31,10 +34,13 @@
               <span id="homeProgressLabel" class="font-mono text-brand">0%</span>
             </div>
             <div class="aquarium-card">
-              <div id="homeAquariumWater" class="aquarium-water"></div>
-              <div class="aquarium-percentage">
-                <span id="homePctReceita" class="percentage-badge percentage-receita">0%</span>
-                <span id="homePctDespesa" class="percentage-badge percentage-despesa">0%</span>
+              <div class="aquarium-viewport relative w-full h-full overflow-hidden rounded-[24px]">
+                <div id="homeAquariumWater" class="aquarium-water absolute inset-0"></div>
+                <div id="homeAquariumWave" class="aquarium-wave absolute inset-0 pointer-events-none"></div>
+                <div class="aquarium-percentage relative z-10">
+                  <span id="homePctReceita" class="percentage-badge percentage-receita">0%</span>
+                  <span id="homePctDespesa" class="percentage-badge percentage-despesa">0%</span>
+                </div>
               </div>
             </div>
             <div class="mt-3 flex items-center justify-between text-[11px] font-semibold text-telegram-hint">
