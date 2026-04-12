@@ -1004,10 +1004,7 @@ lucide.createIcons();
       if (!homeLevel) missing.push('homeLevel');
       if (!homeXp) missing.push('homeXp');
       if (!homeStreak) missing.push('homeStreak');
-      if (!homeProgressLabel) missing.push('homeProgressLabel');
-      if (!homeAquariumWater) missing.push('homeAquariumWater');
-      if (!homePctReceita) missing.push('homePctReceita');
-      if (!homePctDespesa) missing.push('homePctDespesa');
+      // Elementos do antigo aquário são agora opcionais e não geram aviso se faltarem
       if (!homeReceita) missing.push('homeReceita');
       if (!homeDespesa) missing.push('homeDespesa');
       if (!homeInsight) missing.push('homeInsight');
@@ -1019,42 +1016,41 @@ lucide.createIcons();
         fallback.style.display = 'none';
         document.body.appendChild(fallback);
         window.homePlanLabel = fallback;
-        console.warn('homePlanLabel não estava presente no DOM, fallback criado.');
       }
       if (!homeUpgradeBtn) missing.push('homeUpgradeBtn');
       if (!homeRecentList) missing.push('homeRecentList');
-      if (missing.length) console.warn('renderHomeOverview: elementos ausentes no DOM:', missing.join(', '));
+      if (missing.length > 5) console.warn('renderHomeOverview: muitos elementos ausentes no DOM:', missing.join(', '));
 
       if (homeBalance) homeBalance.textContent = formatCurrencyBR(balance);
       if (homeBalanceHint) homeBalanceHint.textContent = balance >= 0 ? 'Você está fechando o mês no azul.' : 'As despesas estão pressionando o mês.';
 
       if (homeLevel) homeLevel.textContent = String(summary?.level || 1);
       if (homeXp) homeXp.textContent = String(summary?.xp || 0);
-      if (homeStreak) homeStreak.textContent = String(summary?.streak || 0);
+      if (homeStreak) homeStreak.textContent = `${summary?.streak || 0} DIAS`;
       
       const totalFluxo = receita + despesa;
       const pctReceita = totalFluxo > 0 ? Math.round((receita / totalFluxo) * 100) : 0;
       const pctDespesa = totalFluxo > 0 ? Math.round((despesa / totalFluxo) * 100) : 0;
       
-      // Lógica do Aquário: representar proporção receita vs despesa com background sempre 100% preenchido
-      const pctReceitaSafe = Math.max(0, Math.min(100, pctReceita));
-      const pctDespesaSafe = Math.max(0, Math.min(100, pctDespesa));
-      homeProgressLabel.textContent = `${100 - progressPct}%`;
+      // Lógica do Aquário (Legado): só atualiza se os elementos existirem
+      if (homeProgressLabel) {
+        homeProgressLabel.textContent = `${100 - progressPct}%`;
+      }
 
       if (homeAquariumWater) {
-        // Atualiza a visualização SVG orgânica do aquário (verde = receita, vermelho = despesa)
         try {
           updateAquariumVisual(receita, despesa);
         } catch (e) {
           console.warn('Falha atualizando aquário SVG:', e);
         }
       }
-      // Atualiza os badges de porcentagem
+      // Atualiza os badges de porcentagem (Legado)
       if (homePctReceita) homePctReceita.textContent = `REC: ${pctReceita}%`;
       if (homePctDespesa) homePctDespesa.textContent = `DES: ${pctDespesa}%`;
 
-      if (homeReceita) homeReceita.textContent = `Receitas: ${formatCurrencyBR(receita)}`;
-      if (homeDespesa) homeDespesa.textContent = `Despesas: ${formatCurrencyBR(despesa)}`;
+      // No novo design de "bolhas", mostramos apenas o valor formatado
+      if (homeReceita) homeReceita.textContent = formatCurrencyBR(receita);
+      if (homeDespesa) homeDespesa.textContent = formatCurrencyBR(despesa);
       if (homeInsight) homeInsight.textContent = summary?.insight || 'Carregando insight do Alfredo...';
 
       // Badge do usuário (nível)
