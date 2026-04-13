@@ -9,161 +9,210 @@
   .aq-card {
     position: relative;
     overflow: hidden;
-    border-radius: 28px;
+    border-radius: 32px;
     background: var(--tg-theme-secondary-bg-color, #ffffff);
     width: 100%;
-    min-height: 400px;
-    border: 1px solid var(--tg-theme-section-separator-color, rgba(0,0,0,0.05));
+    min-height: 240px;
+    border: 1px solid var(--tg-theme-section-separator-color, rgba(0,0,0,0.08));
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    padding: 28px 24px 24px;
+    padding: 24px;
     box-sizing: border-box;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.04);
+  }
+
+  /* Camada da Água no Fundo */
+  .aq-liquid-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .aq-liquid-layer svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .aq-content-wrapper {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    justify-content: space-between;
+    gap: 20px;
+  }
+
+  .aq-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
   }
 
   .aq-month-label {
-    font-family: 'Geist Mono', monospace;
-    font-size: 9px;
-    font-weight: 600;
-    letter-spacing: 0.24em;
+    font-size: 10px;
+    font-weight: 700;
     text-transform: uppercase;
-    color: var(--tg-theme-hint-color, rgba(0,0,0,0.45));
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-  }
-  .aq-month-label::before {
-    content: '';
-    width: 18px; height: 1px;
-    background: var(--tg-theme-hint-color, rgba(0,0,0,0.25));
-    display: inline-block;
+    letter-spacing: 0.15em;
+    color: var(--tg-theme-hint-color, #94a3b8);
+    margin-bottom: 4px;
   }
 
   .aq-balance-value {
-    font-family: 'Instrument Serif', serif;
-    font-size: clamp(36px, 8vw, 52px);
-    line-height: 1;
-    color: var(--tg-theme-text-color, #000000);
+    font-size: 36px;
+    font-weight: 800;
+    color: var(--tg-theme-text-color, #0f172a);
     letter-spacing: -0.02em;
-    margin-bottom: 10px;
-    text-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    line-height: 1.1;
   }
 
   .aq-balance-hint {
     font-size: 12px;
-    font-weight: 400;
-    color: var(--tg-theme-hint-color, rgba(0,0,0,0.65));
-    line-height: 1.5;
+    font-weight: 600;
+    color: var(--tg-theme-hint-color, #64748b);
+    margin-top: 4px;
   }
-  .aq-pos { color: #10b981; font-weight: 600; }
-  .aq-neg { color: #ef4444; font-weight: 600; }
 
-  .aq-gamification {
-    background: rgba(var(--cc-brand-rgb, 123, 30, 45), 0.05);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border: 1px solid rgba(var(--cc-brand-rgb, 123, 30, 45), 0.1);
+  .aq-gamification-mini {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(0,0,0,0.05);
+    padding: 8px 12px;
     border-radius: 20px;
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    min-width: 90px;
-    flex-shrink: 0;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.02);
   }
 
-  .aq-level-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    margin-bottom: 2px;
-  }
-
-  .aq-level-number {
-    font-family: 'Instrument Serif', serif;
-    font-size: 32px;
-    line-height: 1;
+  .aq-lvl-num {
+    font-size: 20px;
+    font-weight: 800;
     color: var(--cc-brand, #7b1e2d);
   }
 
-  .aq-xp {
-    font-family: 'Geist Mono', monospace;
-    font-size: 9px;
-    font-weight: 600;
-    color: var(--tg-theme-hint-color, rgba(0,0,0,0.4));
+  .aq-lvl-info {
+    display: flex;
+    flex-direction: column;
   }
-  
+
+  .aq-lvl-xp {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--tg-theme-hint-color);
+  }
+
+  .aq-pills-row {
+    display: flex;
+    gap: 12px;
+    margin-top: auto;
+  }
+
+  .aq-pill {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(0,0,0,0.05);
+    border-radius: 20px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .aq-pill-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .aq-pill-income .aq-pill-icon { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+  .aq-pill-expense .aq-pill-icon { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+
+  .aq-pill-data p:first-child {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--tg-theme-hint-color);
+  }
+
+  .aq-pill-data p:last-child {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--tg-theme-text-color);
+  }
+
   #homeBadgeContainer svg {
     width: 24px;
     height: 24px;
   }
-</style>
+  </style>
 
-<section class="panel active" id="inicio">
+  <section class="panel active" id="inicio">
       <div class="space-y-4">
-        
+
         <div class="aq-wrap home-reveal" style="--delay: 30ms">
           <div class="aq-card" id="aqCard">
-            <!-- LIQUID LAYER -->
-            <div class="aq-liquid-layer" id="liquidLayer">
-              <svg viewBox="0 0 400 420" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" id="liquidSvg">
+            <!-- BACKGROUND LIQUID LAYER -->
+            <div class="aq-liquid-layer">
+              <svg viewBox="0 0 400 420" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                   <linearGradient id="liquidGrad" x1="0%" y1="100%" x2="0%" y2="0%">
-                    <stop offset="0%" stop-color="#ef4444" stop-opacity="0.9"/>
-                    <stop offset="50%" id="gradStopRed" stop-color="#ef4444" stop-opacity="0.9"/>
-                    <stop offset="50%" id="gradStopGreen" stop-color="#10b981" stop-opacity="0.9"/>
-                    <stop offset="100%" stop-color="#10b981" stop-opacity="0.9"/>
+                    <stop offset="0%" stop-color="#fee2e2" stop-opacity="0.6"/> <!-- Vermelho suave -->
+                    <stop offset="50%" id="gradStopRed" stop-color="#fecaca" stop-opacity="0.5"/>
+                    <stop offset="50%" id="gradStopGreen" stop-color="#d1fae5" stop-opacity="0.5"/>
+                    <stop offset="100%" stop-color="#ecfdf5" stop-opacity="0.6"/> <!-- Verde suave -->
                   </linearGradient>
                 </defs>
                 <path id="liquidPath" d="M0,420 L400,420 L400,420 L0,420 Z" fill="url(#liquidGrad)" />
-                <path id="shimmerPath" d="" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" />
               </svg>
             </div>
 
-            <!-- TOP ROW -->
-            <div class="aq-top">
-              <div class="aq-balance-block">
-                <p class="aq-month-label">Resumo do mês</p>
-                <h2 class="aq-balance-value" id="homeBalance">R$ 0,00</h2>
-                <p class="aq-balance-hint" id="homeBalanceHint">Carregando fluxo...</p>
+            <!-- CONTENT LAYER -->
+            <div class="aq-content-wrapper">
+              <div class="aq-header">
+                <div>
+                  <p class="aq-month-label">Resumo do mês</p>
+                  <h2 class="aq-balance-value" id="homeBalance">R$ 0,00</h2>
+                  <p class="aq-balance-hint" id="homeBalanceHint">Carregando fluxo...</p>
+                </div>
+
+                <button id="homeLevelCard" type="button" class="aq-gamification-mini transition active:scale-95 shadow-sm">
+                  <div id="homeBadgeContainer"></div>
+                  <div class="aq-lvl-info">
+                    <div class="flex items-center gap-2">
+                      <span class="aq-lvl-num" id="homeLevel">1</span>
+                      <span class="text-[10px] font-black text-orange-500 bg-orange-500/10 px-1.5 py-0.5 rounded-md" id="homeStreak">0 DIAS</span>
+                    </div>
+                    <span class="aq-lvl-xp"><span id="homeXp">0</span> XP</span>
+                  </div>
+                </button>
               </div>
 
-              <button id="homeLevelCard" type="button" class="aq-gamification transition active:scale-95">
-                <div class="aq-level-row">
-                  <span id="homeBadgeContainer"></span>
-                  <div class="aq-level-number" id="homeLevel">1</div>
+              <div class="aq-pills-row">
+                <div class="aq-pill aq-pill-income">
+                  <div class="aq-pill-icon"><i data-lucide="trending-up" class="w-4 h-4"></i></div>
+                  <div class="aq-pill-data">
+                    <p>Receita</p>
+                    <p id="homeReceita">R$ 0</p>
+                  </div>
                 </div>
-                <div class="aq-xp"><span id="homeXp">0</span> XP</div>
-                <div class="aq-streak">
-                  <div class="aq-streak-dot"></div>
-                  <span id="homeStreak">0 dias</span>
+                <div class="aq-pill aq-pill-expense">
+                  <div class="aq-pill-icon"><i data-lucide="trending-down" class="w-4 h-4"></i></div>
+                  <div class="aq-pill-data">
+                    <p>Despesa</p>
+                    <p id="homeDespesa">R$ 0</p>
+                  </div>
                 </div>
-              </button>
+              </div>
             </div>
 
-            <!-- BOTTOM PILLS -->
-            <div class="aq-bottom">
-              <div class="aq-pill aq-pill-income">
-                <div class="aq-pill-dot"></div>
-                <div class="aq-pill-info">
-                  <span class="aq-pill-label">Receita</span>
-                  <span class="aq-pill-value" id="homeReceita">R$ 0</span>
-                </div>
-              </div>
-              <div class="aq-pill aq-pill-expense">
-                <div class="aq-pill-dot"></div>
-                <div class="aq-pill-info">
-                  <span class="aq-pill-label">Despesa</span>
-                  <span class="aq-pill-value" id="homeDespesa">R$ 0</span>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Hidden original elements for compatibility -->
+            <!-- Compatibility hidden elements -->
             <div style="display:none">
                 <span id="homeProgressLabel">0%</span>
                 <div id="homeAquariumWater"></div>
@@ -171,6 +220,7 @@
                 <span id="homePctDespesa">0%</span>
                 <div id="homePlanLabel"></div>
                 <div id="homeUpgradeBtn"></div>
+                <span id="homeStreak">0 dias</span>
             </div>
           </div>
         </div>

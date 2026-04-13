@@ -1045,19 +1045,25 @@ lucide.createIcons();
         // despesaRatio: 0 (só receita) a 1 (só despesa)
         const despesaRatio = totalFlow > 0 ? (despesa / totalFlow) : 0;
         
-        // pct: Altura do tanque preenchido. 
-        // Se tem pouco dado, fica baixo (20%). Se tem muito gasto ou receita, sobe (até 90%).
-        const pct = totalFlow === 0 ? 0.1 : Math.max(0.3, Math.min(0.9, (totalFlow / 10000) + 0.3)); 
+        // pct: Altura do tanque preenchido (de 0.1 a 0.95)
+        const pct = totalFlow === 0 ? 0.1 : Math.max(0.3, Math.min(0.95, (totalFlow / 12000) + 0.35)); 
 
-        const waveTopLeft = 420 * (1 - pct - 0.05);
-        const waveTopRight = 420 * (1 - pct + 0.05);
+        const waveTopLeft = 420 * (1 - pct - 0.04);
+        const waveTopRight = 420 * (1 - pct + 0.04);
 
         // O gradiente vai de 100% (bottom) a 0% (top).
-        // 0% do gradiente (offset 0) é Vermelho. 100% do gradiente (offset 100) é Verde.
-        // Se despesaRatio é 0.7, os primeiros 70% (de baixo para cima) são Vermelho.
-        const splitPct = Math.round(despesaRatio * 100);
+        // Se despesaRatio é 0.7, os primeiros 70% da ÁGUA (de baixo para cima) são Vermelho.
+        // Como o gradiente cobre os 420px do SVG, o offset do split na escala 0-100 é:
+        const splitPct = Math.round(pct * despesaRatio * 100);
+        const endPct = Math.round(pct * 100);
+
         if (gRed) gRed.setAttribute('offset', `${splitPct}%`);
         if (gGreen) gGreen.setAttribute('offset', `${splitPct}%`);
+        // Opcional: ajustar o topo do verde para o fim da água
+        const stops = grad.querySelectorAll('stop');
+        if (stops.length >= 4) {
+            stops[3].setAttribute('offset', `${endPct}%`);
+        }
 
         const cy1 = waveTopLeft + (waveTopRight - waveTopLeft) * 0.15;
         const cy2 = waveTopLeft + (waveTopRight - waveTopLeft) * 0.6;
