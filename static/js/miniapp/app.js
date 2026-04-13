@@ -1479,18 +1479,36 @@ lucide.createIcons();
               colorFrom: (c) => palette[c.index % palette.length],
               colorTo: (c) => palette[(c.index + 1) % palette.length],
               colorMode: 'gradient',
-              alpha: 0.45,
-              fontFamily: "'Outfit', sans-serif",
+              alpha: 0.6,
+              fontFamily: "'Schibsted Grotesk', sans-serif",
               fontWeight: 'bold',
+              size: 11,
+              node: {
+                width: 15,
+                padding: 12,
+              }
             }]
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
             animation: commonAnimation,
+            layout: {
+              padding: { top: 10, bottom: 10, left: 5, right: 5 }
+            },
             plugins: {
               legend: { display: false },
-              tooltip: { callbacks: { label: (ctx) => `Fluxo: ${formatCurrencyBR(ctx.raw.flow)}` } }
+              tooltip: {
+                backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                titleFont: { size: 13, weight: 'bold' },
+                bodyFont: { size: 12 },
+                padding: 12,
+                cornerRadius: 10,
+                displayColors: false,
+                callbacks: {
+                  label: (ctx) => `Fluxo: ${formatCurrencyBR(ctx.raw.flow)}`
+                }
+              }
             }
           }
         });
