@@ -227,3 +227,144 @@
 
   /* Premium badge scale */
   .badge-premium { transform: scale(1.5); display: inline-block; }
+
+  /* SISTEMA DE MODAIS & OVERLAYS */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: flex-end; /* Mobile-first: bottom-sheet */
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    padding: 1rem;
+    pointer-events: none;
+  }
+
+  @media (min-width: 768px) {
+    .modal-overlay { align-items: center; }
+  }
+
+  .modal-overlay.active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .modal-content {
+    width: 100%;
+    max-width: 480px;
+    background: color-mix(in srgb, var(--tg-theme-secondary-bg-color, #161618) 95%, transparent);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 28px 28px 0 0; /* Bottom-sheet */
+    padding: 1.5rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    transform: translateY(100%);
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  @media (min-width: 768px) {
+    .modal-content {
+      border-radius: 32px;
+      transform: scale(0.95);
+    }
+  }
+
+  .modal-overlay.active .modal-content {
+    transform: translateY(0);
+  }
+
+  @media (min-width: 768px) {
+    .modal-overlay.active .modal-content {
+      transform: scale(1);
+    }
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .modal-close-btn {
+    padding: 0.5rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--tg-theme-hint-color);
+    transition: all 0.2s;
+  }
+
+  .modal-close-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+  }
+
+  /* FLOATING LABELS & INPUTS */
+  .floating-field {
+    position: relative;
+    margin-bottom: 1rem;
+  }
+
+  .floating-input, .floating-select {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1.5px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 1.25rem 1rem 0.5rem;
+    font-size: 0.95rem;
+    color: var(--tg-theme-text-color);
+    transition: all 0.3s;
+    outline: none;
+  }
+
+  .floating-input:focus, .floating-select:focus {
+    border-color: var(--cc-brand);
+    background: rgba(0, 0, 0, 0.3);
+    box-shadow: 0 0 0 4px rgba(123, 30, 45, 0.1);
+  }
+
+  .floating-label {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.85rem;
+    color: var(--tg-theme-hint-color);
+    transition: all 0.3s;
+    pointer-events: none;
+    font-weight: 500;
+  }
+
+  .floating-input:focus ~ .floating-label,
+  .floating-input:not(:placeholder-shown) ~ .floating-label,
+  .floating-select:focus ~ .floating-label,
+  .floating-select:not([value=""]):valid ~ .floating-label,
+  .floating-select:not(:placeholder-shown) ~ .floating-label {
+    top: 0.6rem;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--cc-brand);
+    font-weight: 800;
+  }
+
+  /* Special fix for Selects that are not focusable */
+  .floating-select { appearance: none; cursor: pointer; }
+  .floating-field::after {
+    content: "";
+    position: absolute;
+    right: 1rem;
+    top: 55%;
+    transform: translateY(-50%);
+    border: 5px solid transparent;
+    border-top-color: rgba(255, 255, 255, 0.2);
+    pointer-events: none;
+  }

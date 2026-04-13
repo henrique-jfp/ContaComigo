@@ -78,10 +78,14 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
             'socio torcedor', 'flamengo', 'sportv', 'premiere',
         ],
         'Financeiro': [
-            'iof', 'tarifa', 'taxa bancaria', 'anuidade cartao', 'seguro', 'encargos', 'juros',
-            'multa', 'mora', 'tbi', 'tar ', 'cesta servicos', 'manutencao conta', 'mensalidade banco',
-            'pacote servicos', 'seguro vida', 'seguro residencial', 'seguro celular', 'pagamento seguro',
+            'seguro', 'seguro vida', 'seguro residencial', 'seguro celular', 'pagamento seguro',
         ],
+    },
+    'JUROS E ENCARGOS': {
+        'Juros': ['juros', 'mora', 'encargo', 'encargos'],
+        'IOF': ['iof'],
+        'Anuidade': ['anuidade', 'taxa anuidade', 'anuidade cartao'],
+        'Multas': ['multa', 'tarifa', 'taxa bancaria', 'tbi', 'tar ', 'cesta servicos', 'manutencao conta', 'mensalidade banco', 'pacote servicos'],
     },
     'EMPRÉSTIMOS E FINANCIAMENTOS': {
         'Parcela de Veículo': ['financiamento veiculo', 'bv financeira', 'itau financiamento', 'parcela carro', 'moto'],
@@ -174,6 +178,12 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
         'Enviada': ['pix enviado', 'ted enviado', 'doc enviado', 'transferencia enviada', 'ted enviada'],
         'Fatura': ['pagamento fatura', 'fatura cartao', 'pgto fatura', 'pagamento cartao', 'pagto fatura'],
     },
+    'JUROS E ENCARGOS': {
+        'Juros': ['juros', 'mora', 'encargo'],
+        'IOF': ['iof'],
+        'Anuidade': ['anuidade', 'taxa anuidade'],
+        'Multas': ['multa', 'tarifa', 'cesta servicos'],
+    },
 }
 
 # Normalização de nomes internos (UPPER) → nome exibido no banco
@@ -191,11 +201,52 @@ _MAPA_NOME_CATEGORIA: dict[str, str] = {
     'IMPOSTOS E TAXAS':          'Impostos e Taxas',
     'TRANSFERÊNCIAS':            'Transferências',
     'EMPRÉSTIMOS E FINANCIAMENTOS': 'Empréstimos e Financiamentos',
+    'JUROS E ENCARGOS':          'JUROS E ENCARGOS',
 }
 
 # Fallbacks após regras — candidatos ao refinamento por LLM (híbrido)
 NOME_CATEGORIA_OUTROS_DESPESA = "Outros"
 NOME_CATEGORIA_OUTROS_RECEITA = "Receita / Outros"
+
+
+# ---------------------------------------------------------------------------
+# CAMADA 0 — CNAE (Classificação Nacional de Atividades Econômicas)
+# ---------------------------------------------------------------------------
+# Prioridade máxima: dados fiscais oficiais do estabelecimento.
+MAPA_CNAE_CATEGORIA = {
+    # ALIMENTAÇÃO
+    "56": ("ALIMENTAÇÃO", "Restaurantes/Lanchonetes"),
+    "47.1": ("ALIMENTAÇÃO", "Mercado/Supermercado"), 
+    
+    # TRANSPORTE
+    "49": ("TRANSPORTE", "Transporte Publico"),
+    "49.2": ("TRANSPORTE", "Aplicativos"),
+    
+    # SAÚDE
+    "86": ("SAÚDE", "Consultas"),
+    "47.7": ("SAÚDE", "Farmacia"),
+    
+    # EDUCAÇÃO
+    "85": ("EDUCAÇÃO", "Mensalidade"),
+    
+    # SERVIÇOS E ASSINATURAS
+    "64": ("SERVIÇOS E ASSINATURAS", "Financeiro"),
+    "65": ("SERVIÇOS E ASSINATURAS", "Financeiro"),
+    "61": ("SERVIÇOS E ASSINATURAS", "Assinaturas"),
+    
+    # LAZER E ENTRETENIMENTO
+    "90": ("LAZER E ENTRETENIMENTO", "Cultura e Eventos"),
+    "91": ("LAZER E ENTRETENIMENTO", "Cultura e Eventos"),
+    "93": ("LAZER E ENTRETENIMENTO", "Esportes e Lazer"),
+    
+    # VESTUÁRIO E BELEZA
+    "47.8": ("VESTUÁRIO E BELEZA", "Roupas e Calcados"),
+    "96.0": ("VESTUÁRIO E BELEZA", "Beleza"),
+    
+    # MORADIA
+    "41": ("MORADIA", "Aluguel"),
+    "43": ("MORADIA", "Condominio"),
+}
 
 
 def _build_pattern(keyword_norm: str) -> re.Pattern:
@@ -256,12 +307,26 @@ def _deve_classificar_como_transferencia(descricao_original: str, descricao_limp
 # Classificação por regras (sem I/O) + persistência
 # ---------------------------------------------------------------------------
 
-def classificar_nomes_por_regras(descricao: str, tipo_raw: str) -> tuple[str, str]:
+def classificar_nomes_por_regras(
+    descricao: str, 
+    tipo_raw: str, 
+    cnae_codigo: str | None = None
+) -> tuple[str, str]:
     """
-    Aplica apenas o mapa de palavras-chave e fallbacks Outros / Receita / Outros.
-    Retorna (nome_categoria_no_banco, nome_subcategoria).
+    Aplica regras de CNAE, mapa de palavras-chave e fallbacks Outros.
+    Retorna (nome_categoria_interna, nome_subcategoria).
     """
     tipo = normalizar_tipo(tipo_raw)
+
+    # 1. Prioridade Máxima: CNAE (se disponível e mapeado)
+    if cnae_codigo:
+        cnae_limpo = "".join(filter(str.isdigit, str(cnae_codigo)))
+        if len(cnae_limpo) >= 2:
+            # Tenta match por prefixos formatados (ex: 47.1 ou 47)
+            formatted_prefixes = [f"{cnae_limpo[:2]}.{cnae_limpo[2]}", cnae_limpo[:2]]
+            for p in formatted_prefixes:
+                if p in MAPA_CNAE_CATEGORIA:
+                    return MAPA_CNAE_CATEGORIA[p]
 
     desc_limpa = limpar_descricao(descricao)
     desc_norm = remove_accents(desc_limpa)
@@ -380,7 +445,9 @@ def aplicar_regras_lancamentos_open_finance(
 
     for lanc in lancamentos:
         try:
-            cat_nome_db, subcat_nome = classificar_nomes_por_regras(lanc.descricao or "", lanc.tipo)
+            cat_nome_db, subcat_nome = classificar_nomes_por_regras(
+                lanc.descricao or "", lanc.tipo, cnae_codigo=lanc.cnae
+            )
             with db.begin_nested():
                 cid, sid = persistir_ids_categoria(
                     db, cat_nome_db, subcat_nome, cat_cache, subcat_cache

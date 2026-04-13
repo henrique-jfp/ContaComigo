@@ -275,8 +275,7 @@ lucide.createIcons();
           if (opt) orcamentoCategoria.value = opt.value;
       }
       orcamentoValor.value = String(valor_limite).replace('.', ',');
-      orcamentoModal.classList.add('active');
-      document.body.style.overflow = 'hidden';
+      openModal('orcamentoModal');
     };
 
     function applyAdaptiveLayout() {
@@ -366,6 +365,52 @@ lucide.createIcons();
       }
     };
     window.switchTabByName = switchTabByName;
+
+    // --- SISTEMA DE MODAIS ---
+    const modalsOverlay = document.getElementById('modalsOverlay');
+
+    function openModal(modalId) {
+      const modal = document.getElementById(modalId);
+      if (!modal) return;
+
+      // Mostrar overlay
+      if (modalsOverlay) {
+        modalsOverlay.classList.remove('hidden');
+        modalsOverlay.classList.add('pointer-events-auto');
+      }
+
+      // Mostrar modal específico
+      modal.classList.remove('hidden');
+      // Delay minúsculo para permitir que a transição de opacidade/transform funcione
+      setTimeout(() => {
+        modal.classList.add('active');
+      }, 10);
+
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal(modalId) {
+      const modal = document.getElementById(modalId);
+      if (!modal) return;
+
+      modal.classList.remove('active');
+      
+      // Aguarda a transição terminar antes de ocultar
+      setTimeout(() => {
+        modal.classList.add('hidden');
+        
+        // Verifica se ainda há algum outro modal ativo antes de fechar o overlay
+        const activeModals = document.querySelectorAll('.modal-overlay.active');
+        if (activeModals.length === 0 && modalsOverlay) {
+          modalsOverlay.classList.add('hidden');
+          modalsOverlay.classList.remove('pointer-events-auto');
+          document.body.style.overflow = 'auto';
+        }
+      }, 400);
+    }
+
+    window.openModal = openModal;
+    window.closeModal = closeModal;
 
     function isEntradaTipo(tipo, value) {
       const tipoNorm = String(tipo || '').toLowerCase();
@@ -496,13 +541,11 @@ lucide.createIcons();
 
     function openEditModal(item) {
       setSelectedLancamento(item);
-      editModal.classList.add('active');
-      document.body.style.overflow = 'hidden';
+      openModal('editModal');
     }
 
     function closeEditModal() {
-      editModal.classList.remove('active');
-      document.body.style.overflow = 'auto';
+      closeModal('editModal');
       setSelectedLancamento(null);
     }
 
@@ -2213,26 +2256,11 @@ lucide.createIcons();
       const hoje = new Date().toISOString().split('T')[0];
       newAgendData.value = hoje;
       updateParcelasVisibility();
-      // Mostrar overlay e modal (remover hidden, marcar active)
-      const modalsOverlay = document.getElementById('modalsOverlay');
-      if (modalsOverlay) {
-        modalsOverlay.classList.remove('hidden');
-        modalsOverlay.classList.add('pointer-events-auto');
-      }
-      newAgendamentoModal.classList.remove('hidden');
-      newAgendamentoModal.classList.add('active');
-      document.body.style.overflow = 'hidden';
+      openModal('newAgendamentoModal');
     }
 
     function closeNewAgendamentoModal() {
-      newAgendamentoModal.classList.remove('active');
-      newAgendamentoModal.classList.add('hidden');
-      const modalsOverlay = document.getElementById('modalsOverlay');
-      if (modalsOverlay) {
-        modalsOverlay.classList.add('hidden');
-        modalsOverlay.classList.remove('pointer-events-auto');
-      }
-      document.body.style.overflow = 'auto';
+      closeModal('newAgendamentoModal');
     }
 
     function updateParcelasVisibility() {
@@ -2660,13 +2688,11 @@ lucide.createIcons();
       metaValorMeta.value = meta?.valor_meta != null ? String(meta.valor_meta).replace('.', ',') : '';
       metaValorAtual.value = meta?.valor_atual != null ? String(meta.valor_atual).replace('.', ',') : '';
       metaData.value = formatDateForInput(meta?.data_meta || '');
-      metaModal.classList.add('active');
-      document.body.style.overflow = 'hidden';
+      openModal('metaModal');
     }
 
     function closeMetaModal() {
-      metaModal.classList.remove('active');
-      document.body.style.overflow = 'auto';
+      closeModal('metaModal');
       selectedMeta = null;
       metaDescricao.value = '';
       metaValorMeta.value = '';
@@ -2796,12 +2822,10 @@ lucide.createIcons();
 
     function openOrcamentoModal() {
       orcamentoValor.value = '';
-      orcamentoModal.classList.add('active');
-      document.body.style.overflow = 'hidden';
+      openModal('orcamentoModal');
     }
     function closeOrcamentoModal() {
-      orcamentoModal.classList.remove('active');
-      document.body.style.overflow = 'auto';
+      closeModal('orcamentoModal');
     }
 
     async function loadOrcamentos() {
@@ -2958,14 +2982,12 @@ lucide.createIcons();
 
     if (historyOpenFilters) {
       historyOpenFilters.addEventListener('click', () => {
-        historyFilterModal.classList.add('active');
-        document.body.style.overflow = 'hidden';
+        openModal('historyFilterModal');
       });
     }
 
     window.closeHistoryFilterModal = () => {
-      historyFilterModal.classList.remove('active');
-      document.body.style.overflow = 'auto';
+      closeModal('historyFilterModal');
     };
 
     if (historyApplyFilters) {

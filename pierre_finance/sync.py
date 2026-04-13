@@ -11,11 +11,13 @@ Correções aplicadas v2:
 """
 
 import logging
+import re
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal, InvalidOperation
 from .client import PierreClient
+from .enrichment import enriquecer_lancamentos_pendentes, enriquecer_um_lancamento
 from finance_utils import normalize_financial_type
 from models import (
     Usuario, Conta, Lancamento, SaldoConta,
@@ -118,6 +120,75 @@ def _inferir_tipo(
         return "Despesa"
 
     return "Receita"
+
+
+def _extrair_nome_da_descricao(descricao: str) -> str | None:
+    """Tenta extrair o nome da empresa/pessoa de descrições sujas do Open Finance."""
+    if not descricao:
+        return None
+        
+    desc = descricao.strip()
+    
+    # Padrão: 'Pix enviado - Nome do Estabelecimento'
+    # Padrão: 'Pix recebido - Nome de Alguem'
+    # Padrão: 'TRANSFERENCIA PIX - DES Nome'
+    patterns = [
+        r"(?:Pix enviado|Pix recebido)\s*-\s*(.+)",
+        r"TRANSFERENCIA PIX\s*-\s*[A-Z]{3}\s*(.+)",
+        r"PAGTO ELETRON\s*COBRANCA\s*-\s*(.+?)\s*-", # Bradesco style
+        r"COMPRA NO CARTAO\s*-\s*(.+?)\s*\d",
+    ]
+    
+    for pat in patterns:
+        match = re.search(pat, desc, re.IGNORECASE)
+        if match:
+            # Limpa o resultado final
+            res = match.group(1).strip()
+            # Remove sufixos de data ou IDs no final (ex: '01/04 - DOCTO')
+            res = re.split(r'\s+\d{2}/\d{2}', res)[0]
+            res = re.split(r'\s+-', res)[0]
+            return res.strip()
+            
+    return None
+
+
+def _extrair_dados_contraparte(tx: dict) -> tuple[str | None, str | None]:
+    """Extrai CNPJ/CPF e Nome da contraparte do payload da transação."""
+    payment_data = tx.get("payment_data") or {}
+    descricao_bruta = tx.get("description") or ""
+    
+    # Tenta receiver primeiro (gastos)
+    receiver = payment_data.get("receiver") or {}
+    doc = receiver.get("document")
+    name = receiver.get("name")
+    
+    # Se não tem no receiver, tenta merchant
+    if not doc or not name:
+        merchant = tx.get("merchant") or {}
+        if not name:
+            name = merchant.get("name")
+        if not doc:
+            doc = merchant.get("documentNumber") or merchant.get("document")
+
+    # Se ainda não tem, tenta payer (entradas)
+    if not doc or not name:
+        payer = payment_data.get("payer") or {}
+        if not doc:
+            doc = payer.get("document")
+        if not name:
+            name = payer.get("name")
+            
+    # ÚLTIMO RECURSO: Se não veio nome estruturado, tenta extrair da descrição
+    if not name or name.lower() == "null":
+        name = _extrair_nome_da_descricao(descricao_bruta)
+            
+    # Limpeza básica do documento (remove pontos, traços)
+    if doc:
+        doc = "".join(filter(str.isdigit, str(doc)))
+        if len(doc) not in [11, 14]: # Filtra documentos inválidos
+            doc = None
+            
+    return doc, name
 
 
 def _upsert_accounts_and_balances(usuario: Usuario, db: Session, client: PierreClient) -> dict[str, int]:
@@ -389,8 +460,9 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
         descricao = (tx.get("description") or tx.get("name") or "Transação").strip()
 
         tipo = _inferir_tipo(descricao, valor_bruto, acc_type, tx_type)
+        cnpj, nome_fantasia = _extrair_dados_contraparte(tx)
 
-        db.add(Lancamento(
+        lanc = Lancamento(
             id_usuario=usuario.id,
             id_conta=accounts_map.get(str(tx.get("accountId"))),
             external_id=ext_id,
@@ -402,7 +474,12 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
             forma_pagamento=_normalizar_forma_pagamento(descricao, acc_type),
             id_categoria=None,
             id_subcategoria=None,
-        ))
+            cnpj_contraparte=cnpj,
+            nome_contraparte=nome_fantasia,
+        )
+        db.add(lanc)
+        # Enriquecimento em tempo real (evita overwrite do categorizador manual)
+        await enriquecer_um_lancamento(db, lanc)
         txs_count += 1
 
     # ------------------------------------------------------------------
@@ -418,6 +495,12 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
     usuario.pierre_initial_sync_done = True
     usuario.last_pierre_sync_at = datetime.now(timezone.utc)
     db.commit()
+
+    # Enriquecimento de dados fiscais (CNAE/CNPJ)
+    try:
+        await enriquecer_lancamentos_pendentes(db)
+    except Exception as e:
+        logger.error(f"Erro no enriquecimento pós-carga inicial: {e}")
 
     # Categorização (regras + LLM) fica fora do sync — ver pipeline_categorizacao_pos_ingestao.
 
@@ -465,6 +548,7 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
         descricao = (tx.get("description") or tx.get("name") or "Transação").strip()
 
         tipo = _inferir_tipo(descricao, valor_bruto, acc_type, tx_type)
+        cnpj, nome_fantasia = _extrair_dados_contraparte(tx)
 
         data_tx = (
             _parse_iso_date(tx.get("date"))
@@ -473,7 +557,7 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
         )
 
         acc_id_tx = str(tx.get("accountId") or "")
-        db.add(Lancamento(
+        lanc = Lancamento(
             id_usuario=usuario.id,
             id_conta=accounts_map.get(acc_id_tx),
             external_id=ext_id,
@@ -485,7 +569,12 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
             forma_pagamento=_normalizar_forma_pagamento(descricao, acc_type),
             id_categoria=None,
             id_subcategoria=None,
-        ))
+            cnpj_contraparte=cnpj,
+            nome_contraparte=nome_fantasia,
+        )
+        db.add(lanc)
+        # Enriquecimento em tempo real
+        await enriquecer_um_lancamento(db, lanc)
         novos += 1
 
     faturas_atualizadas = _upsert_bill_summaries(usuario, db, client, accounts_map)
@@ -503,5 +592,11 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
     # Atualiza timestamp de última sync
     usuario.last_pierre_sync_at = datetime.now(timezone.utc)
     db.commit()
+
+    # Enriquecimento assíncrono de dados fiscais
+    try:
+        await enriquecer_lancamentos_pendentes(db)
+    except Exception as e:
+        logger.error(f"Erro no enriquecimento incremental: {e}")
 
     return novos

@@ -169,6 +169,9 @@ class Lancamento(Base):
     forma_pagamento = Column(String, nullable=False, default="Nao_informado")
     origem = Column(String, nullable=True)  # manual, texto, audio, ocr, miniapp, open_finance
     documento_fiscal = Column(String, nullable=True)
+    cnpj_contraparte = Column(String, nullable=True)
+    nome_contraparte = Column(String, nullable=True)
+    cnae = Column(String, nullable=True)
     external_id = Column(String, unique=True, nullable=True) # ID Único da API Open Finance
     
     id_usuario = Column(Integer, ForeignKey('usuarios.id'), nullable=False)
