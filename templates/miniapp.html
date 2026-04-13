@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ContaComigo Premium</title>
-<script src="https://cdn.tailwindcss.com" crossorigin="anonymous"></script>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Schibsted+Grotesk:ital,wght@0,400..900;1,400..900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" crossorigin="anonymous">
-<script src="https://unpkg.com/lucide@0.473.0" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-sankey@0.17.0/dist/chartjs-chart-sankey.min.js" crossorigin="anonymous"></script>
-<script src="https://telegram.org/js/telegram-web-app.js" crossorigin="anonymous"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Schibsted+Grotesk:ital,wght@0,400..900;1,400..900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@0.473.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-sankey@0.12.0/dist/chartjs-chart-sankey.min.js"></script>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
   (function syncTelegramTheme() {
     const tg = window.Telegram?.WebApp;
@@ -32,34 +32,39 @@
     window.botUsername = '{{ bot_username }}'; // Passado pelo Flask
   })();
 
-  tailwind.config = {
-    darkMode: 'class',
-    theme: {
-      extend: {
-        fontFamily: { 
-          sans: ['Schibsted Grotesk', 'sans-serif'],
-          serif: ['Fraunces', 'serif'],
-          mono: ['IBM Plex Mono', 'monospace']
-        },
-        colors: {
-          telegram: {
-            bg: 'var(--tg-theme-bg-color, #0a0a0b)',
-            text: 'var(--tg-theme-text-color, #f8fafc)',
-            hint: 'var(--tg-theme-hint-color, #94a3b8)',
-            card: 'var(--tg-theme-secondary-bg-color, #161618)',
-            separator: 'var(--tg-theme-section-separator-color, #1f1f23)'
+  if (window.tailwind) {
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { 
+            sans: ['Schibsted Grotesk', 'sans-serif'],
+            serif: ['Fraunces', 'serif'],
+            mono: ['IBM Plex Mono', 'monospace']
           },
-          brand: {
-            DEFAULT: 'var(--cc-brand, #7b1e2d)',
-            soft: 'var(--cc-brand-soft, #a33a51)'
+          colors: {
+            telegram: {
+              bg: 'var(--tg-theme-bg-color, #0a0a0b)',
+              text: 'var(--tg-theme-text-color, #f8fafc)',
+              hint: 'var(--tg-theme-hint-color, #94a3b8)',
+              card: 'var(--tg-theme-secondary-bg-color, #161618)',
+              separator: 'var(--tg-theme-section-separator-color, #1f1f23)'
+            },
+            brand: {
+              DEFAULT: 'var(--cc-brand, #7b1e2d)',
+              soft: 'var(--cc-brand-soft, #a33a51)'
+            },
+            carmine: 'var(--cc-brand, #7b1e2d)',
+            flex: { '2': '2 2 0%' }
           },
-          carmine: 'var(--cc-brand, #7b1e2d)',
-          flex: { '2': '2 2 0%' }
-        },
-        boxShadow: {
-          soft: '0 8px 30px rgba(0, 0, 0, 0.3)',
-          lift: '0 18px 45px rgba(0, 0, 0, 0.4)',
-          'inner-glass': 'inset 0 1px 1px rgba(255, 255, 255, 0.05)'
+          boxShadow: {
+            soft: '0 8px 30px rgba(0, 0, 0, 0.3)',
+            lift: '0 18px 45px rgba(0, 0, 0, 0.4)',
+            'inner-glass': 'inset 0 1px 1px rgba(255, 255, 255, 0.05)'
+          },
+          screens: {
+            'desktop': '860px'
+          }
         }
       }
     }

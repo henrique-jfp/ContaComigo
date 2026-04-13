@@ -658,16 +658,55 @@ lucide.createIcons();
     function getCategoryStyle(descricao, categoria, subcategoria, tipo) {
       const combined = `${descricao || ''} ${categoria || ''} ${subcategoria || ''}`.toLowerCase();
       
-      // Brand Detection
-      if (combined.includes('uber') || combined.includes(' 99')) return { icon: 'car', class: 'cat-transport', color: '#0d6efd', label: 'Uber/99' };
-      if (combined.includes('ifood') || combined.includes('rappi')) return { icon: 'utensils', class: 'cat-food', color: '#ea1d2c', label: 'iFood/Rappi' };
-      if (combined.includes('netflix')) return { icon: 'play-square', class: 'cat-entertainment', color: '#e50914', label: 'Netflix' };
-      if (combined.includes('spotify')) return { icon: 'music', class: 'cat-entertainment', color: '#1db954', label: 'Spotify' };
-      if (combined.includes('amazon') || combined.includes('prime')) return { icon: 'shopping-bag', class: 'cat-shopping', color: '#ff9900', label: 'Amazon' };
-      if (combined.includes('mercado livre') || combined.includes('meli')) return { icon: 'package', class: 'cat-shopping', color: '#ffe600', label: 'Mercado Livre' };
-      if (combined.includes('nubank')) return { icon: 'credit-card', class: 'cat-utilities', color: '#8a05be', label: 'Nubank' };
+      const brands = {
+        'uber': 'uber.com',
+        ' 99': '99app.com',
+        'ifood': 'ifood.com.br',
+        'rappi': 'rappi.com',
+        'netflix': 'netflix.com',
+        'spotify': 'spotify.com',
+        'amazon': 'amazon.com',
+        'prime': 'amazon.com',
+        'mercado livre': 'mercadolivre.com.br',
+        'meli': 'mercadolivre.com.br',
+        'nubank': 'nubank.com.br',
+        'inter': 'bancointer.com.br',
+        'itau': 'itau.com.br',
+        'bradesco': 'bradesco.com.br',
+        'santander': 'santander.com.br',
+        'banco do brasil': 'bb.com.br',
+        'extra': 'extra.com.br',
+        'carrefour': 'carrefour.com.br',
+        'pao de acucar': 'paodeacucar.com.br',
+        'samsung': 'samsung.com',
+        'apple': 'apple.com',
+        'claro': 'claro.com.br',
+        'vivo': 'vivo.com.br',
+        'tim': 'tim.com.br',
+        'mcdonald': 'mcdonalds.com.br',
+        'burger king': 'burgerking.com.br',
+        'bk': 'burgerking.com.br',
+        'starbucks': 'starbucks.com',
+        'shell': 'shell.com.br',
+        'ipiranga': 'postossipiranga.com.br',
+        'flamengo': 'flamengo.com.br',
+        'corinthians': 'corinthians.com.br',
+        'palmeiras': 'palmeiras.com.br',
+        'sao paulo': 'saopaulofc.net',
+        'vasco': 'vasco.com.br',
+        'gremio': 'gremio.net',
+        'inter': 'internacional.com.br'
+      };
 
-      // Category Map
+      let logoUrl = null;
+      for (const [key, domain] of Object.entries(brands)) {
+        if (combined.includes(key)) {
+          logoUrl = `https://logo.clearbit.com/${domain}`;
+          break;
+        }
+      }
+
+      // Category Map for Fallback
       const map = [
         { keys: ['aliment', 'mercado', 'padaria', 'super'], icon: 'shopping-cart', class: 'cat-shopping' },
         { keys: ['restaurante', 'lanche', 'pizza', 'burger'], icon: 'utensils', class: 'cat-food' },
@@ -678,12 +717,21 @@ lucide.createIcons();
         { keys: ['salário', 'renda', 'recebido', 'pix'], icon: 'coins', class: 'cat-health' },
       ];
 
+      let result = { icon: 'receipt', class: 'cat-shopping', logoUrl: logoUrl };
       for (const item of map) {
-        if (item.keys.some(key => combined.includes(key))) return { icon: item.icon, class: item.class };
+        if (item.keys.some(key => combined.includes(key))) {
+          result = { icon: item.icon, class: item.class, logoUrl: logoUrl };
+          break;
+        }
       }
 
       const isReceita = isEntradaTipo(tipo, 0);
-      return { icon: isReceita ? 'arrow-down-to-line' : 'receipt', class: isReceita ? 'cat-health' : 'cat-shopping' };
+      if (result.icon === 'receipt' && isReceita) {
+        result.icon = 'arrow-down-to-line';
+        result.class = 'cat-health';
+      }
+      
+      return result;
     }
 
     function renderHomeRecent(items = []) {
@@ -698,12 +746,17 @@ lucide.createIcons();
         const [badgeLabel, badgeClass] = sourceBadgeConfig(item.origem_label || item.origem);
         const style = getCategoryStyle(item.descricao, item.categoria_nome, item.subcategoria_nome, item.tipo);
         
+        const iconHtml = style.logoUrl 
+          ? `<div class="w-10 h-10 rounded-full overflow-hidden bg-white flex items-center justify-center border border-white/10 shadow-sm">
+               <img src="${style.logoUrl}" class="w-full h-full object-contain" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+               <div class="hidden w-full h-full items-center justify-center bg-brand/5 text-brand"><i data-lucide="${style.icon}" class="w-5 h-5"></i></div>
+             </div>`
+          : `<div class="cat-icon ${style.class} shrink-0 w-10 h-10"><i data-lucide="${style.icon}" class="w-5 h-5"></i></div>`;
+
         return `
           <button class="recent-item w-full text-left rounded-3xl border border-white/5 bg-telegram-card p-4 hover:bg-brand/5 transition shadow-soft mb-3" data-action="edit" data-id="${item.id}">
             <div class="flex items-center gap-4">
-              <div class="cat-icon ${style.class} shrink-0">
-                <i data-lucide="${style.icon}" class="w-5 h-5"></i>
-              </div>
+              ${iconHtml}
               <div class="min-w-0 flex-1">
                 <div class="flex items-start justify-between gap-2">
                   <div class="min-w-0">
@@ -1075,22 +1128,43 @@ lucide.createIcons();
       const totalFluxo = receita + despesa;
       const pctReceita = totalFluxo > 0 ? Math.round((receita / totalFluxo) * 100) : 0;
       const pctDespesa = totalFluxo > 0 ? Math.round((despesa / totalFluxo) * 100) : 0;
-      
-      // Lógica da Onda Extrema: representa proporção receita vs despesa
-      if (homeWave) {
-        const totalWave = receita + despesa;
-        // p = proporção de lucro (receita) em relação ao fluxo total
-        const p = totalWave > 0 ? (receita / totalWave) : 1;
-        
-        // Mapeamento: O gradiente 165deg começa no topo do card. 
-        // A "onda" começa aproximadamente em 35% do percurso do gradiente (devido ao clip-path).
-        // Mapeamos o 0-100% financeiro para o 35-100% visual do gradiente.
-        const startVisible = 35;
-        const stopPct = startVisible + (p * (100 - startVisible));
-        
-        // Verde (lucro) no topo da onda, Vermelho (custo) na base.
-        // A linha de divisão agora acompanha a inclinação diagonal da onda.
-        homeWave.style.background = `linear-gradient(165deg, #22c55e 0%, #22c55e ${stopPct}%, #be123c ${stopPct}%, #be123c 100%)`;
+
+      // Novo Efeito Líquido (Aquário Pro)
+      const lp = document.getElementById('liquidPath');
+      const sp = document.getElementById('shimmerPath');
+      const grad = document.getElementById('liquidGrad');
+
+      if (lp && grad) {
+        const pct = Math.max(0, Math.min(1, receita / (totalFluxo || 1)));
+        const bal = receita - despesa;
+
+        // Wave: pct=1 (só receita) → onda sobe muito
+        const waveTopLeft = 420 * (1 - pct * 0.82 - 0.08);
+        const waveTopRight = 420 * (1 - pct * 0.92 - 0.04);
+
+        if (bal >= 0) {
+          const greenStop = Math.round(pct * 100);
+          grad.innerHTML = `
+            <stop offset="0%" stop-color="#022c22" stop-opacity="0.9"/>
+            <stop offset="${greenStop}%" stop-color="#065f46" stop-opacity="0.8"/>
+            <stop offset="100%" stop-color="#134e4a" stop-opacity="0.7"/>
+          `;
+        } else {
+          const rPct = Math.round((1 - pct) * 100);
+          grad.innerHTML = `
+            <stop offset="0%" stop-color="#7f1d1d" stop-opacity="0.9"/>
+            <stop offset="${rPct}%" stop-color="#991b1b" stop-opacity="0.8"/>
+            <stop offset="100%" stop-color="#450a0a" stop-opacity="0.85"/>
+          `;
+        }
+
+        const cy1 = waveTopLeft + (waveTopRight - waveTopLeft) * 0.15;
+        const cy2 = waveTopLeft + (waveTopRight - waveTopLeft) * 0.6;
+        const wavePath = `M0,${waveTopLeft.toFixed(1)} C90,${cy1.toFixed(1)} 180,${cy2.toFixed(1)} 240,${((waveTopLeft + waveTopRight) / 2).toFixed(1)} C300,${cy2.toFixed(1)} 350,${(waveTopRight + 20).toFixed(1)} 400,${waveTopRight.toFixed(1)} L400,420 L0,420 Z`;
+        const shimmer = `M0,${waveTopLeft.toFixed(1)} C90,${cy1.toFixed(1)} 180,${cy2.toFixed(1)} 240,${((waveTopLeft + waveTopRight) / 2).toFixed(1)} C300,${cy2.toFixed(1)} 350,${(waveTopRight + 20).toFixed(1)} 400,${waveTopRight.toFixed(1)}`;
+
+        lp.setAttribute('d', wavePath);
+        if (sp) sp.setAttribute('d', shimmer);
       }
 
       // Lógica do Aquário (Legado): só atualiza se os elementos existirem
@@ -1109,11 +1183,9 @@ lucide.createIcons();
       if (homePctReceita) homePctReceita.textContent = `REC: ${pctReceita}%`;
       if (homePctDespesa) homePctDespesa.textContent = `DES: ${pctDespesa}%`;
 
-      // No novo design de "bolhas", mostramos apenas o valor formatado
       if (homeReceita) homeReceita.textContent = formatCurrencyBR(receita);
       if (homeDespesa) homeDespesa.textContent = formatCurrencyBR(despesa);
       if (homeInsight) homeInsight.textContent = summary?.insight || 'Carregando insight do Alfredo...';
-
       // Badge do usuário (nível)
       const badgeSvg = summary?.badge_svg || summary?.level_progress?.badge_svg;
       if (badgeSvg) {
@@ -1158,6 +1230,7 @@ lucide.createIcons();
       const categories = Array.isArray(summary?.categories) ? summary.categories : [];
       const chartRuntime = getChartRuntime();
       const chartData = buildChartDataFromSummary(summary);
+      const palette = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#00f0ff', '#8b5cf6'];
 
       destroyHomeCharts();
 
@@ -1449,18 +1522,36 @@ lucide.createIcons();
               colorFrom: (c) => palette[c.index % palette.length],
               colorTo: (c) => palette[(c.index + 1) % palette.length],
               colorMode: 'gradient',
-              alpha: 0.45,
-              fontFamily: "'Outfit', sans-serif",
+              alpha: 0.6,
+              fontFamily: "'Schibsted Grotesk', sans-serif",
               fontWeight: 'bold',
+              size: 11,
+              node: {
+                width: 15,
+                padding: 12,
+              }
             }]
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
             animation: commonAnimation,
+            layout: {
+              padding: { top: 10, bottom: 10, left: 5, right: 5 }
+            },
             plugins: {
               legend: { display: false },
-              tooltip: { callbacks: { label: (ctx) => `Fluxo: ${formatCurrencyBR(ctx.raw.flow)}` } }
+              tooltip: {
+                backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                titleFont: { size: 13, weight: 'bold' },
+                bodyFont: { size: 12 },
+                padding: 12,
+                cornerRadius: 10,
+                displayColors: false,
+                callbacks: {
+                  label: (ctx) => `Fluxo: ${formatCurrencyBR(ctx.raw.flow)}`
+                }
+              }
             }
           }
         });
@@ -2353,6 +2444,38 @@ lucide.createIcons();
       } catch (e) {}
     }
 
+    // Expor funções para abrir/fechar modal de notificações
+    window.openNotificacoesModal = function() {
+      const modalsOverlay = document.getElementById('modalsOverlay');
+      const notificacoesModal = document.getElementById('notificacoesModal');
+      if (modalsOverlay) {
+        modalsOverlay.classList.remove('hidden');
+        modalsOverlay.classList.add('pointer-events-auto');
+      }
+      if (notificacoesModal) {
+        notificacoesModal.classList.remove('hidden');
+        notificacoesModal.classList.add('active');
+      }
+      document.body.style.overflow = 'hidden';
+    };
+
+    window.closeNotificacoesModal = function() {
+      const modalsOverlay = document.getElementById('modalsOverlay');
+      const notificacoesModal = document.getElementById('notificacoesModal');
+      if (notificacoesModal) {
+        notificacoesModal.classList.remove('active');
+        setTimeout(() => {
+            notificacoesModal.classList.add('hidden');
+            // Verificação extra para limpar o overlay global
+            const activeModals = document.querySelectorAll('.modal-overlay.active, #notificacoesModal.active');
+            if (activeModals.length === 0 && modalsOverlay) {
+                modalsOverlay.classList.add('hidden');
+                modalsOverlay.classList.remove('pointer-events-auto');
+                document.body.style.overflow = '';
+            }
+        }, 300);
+      }
+    };
     // Expor função para salvar configurações de notificação ao trocar o toggle
     window.saveNotificationPreferences = async function() {
       const sId = localStorage.getItem(MINIAPP_SESSION_STORAGE_KEY) || telegramInitData;
@@ -2653,13 +2776,18 @@ lucide.createIcons();
           const valueText = formatMoney(item.valor, item.tipo);
           const style = getCategoryStyle(item.descricao, item.categoria_nome, item.subcategoria_nome, item.tipo);
 
+          const iconHtml = style.logoUrl 
+            ? `<div class="w-10 h-10 rounded-full overflow-hidden bg-white flex items-center justify-center border border-white/10 shadow-sm shrink-0">
+                 <img src="${style.logoUrl}" class="w-full h-full object-contain" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                 <div class="hidden w-full h-full items-center justify-center bg-brand/5 text-brand"><i data-lucide="${style.icon}" class="w-5 h-5"></i></div>
+               </div>`
+            : `<div class="cat-icon ${style.class} shrink-0 w-10 h-10"><i data-lucide="${style.icon}" class="w-5 h-5"></i></div>`;
+
           const div = document.createElement('div');
           div.className = 'flex items-center justify-between gap-3 p-3 sm:p-4 rounded-3xl hover:bg-brand/5 transition border border-white/5 bg-telegram-card shadow-sm mb-3';
           div.innerHTML = `
             <div class="flex items-center gap-3 min-w-0 flex-1">
-              <div class="cat-icon ${style.class} shrink-0 w-10 h-10">
-                <i data-lucide="${style.icon}" class="w-5 h-5"></i>
-              </div>
+              ${iconHtml}
               <div class="min-w-0 flex-1">
                 <p class="font-bold text-sm truncate text-telegram-text">${item.descricao || 'Lançamento'}</p>
                 <p class="text-[10px] font-bold text-telegram-hint uppercase tracking-wider mt-0.5">${item.categoria_nome || 'Uncategorized'} • ${new Date(item.data).toLocaleDateString('pt-BR')}</p>

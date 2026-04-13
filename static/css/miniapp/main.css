@@ -1,4 +1,3 @@
-
   body {
     background: var(--tg-theme-bg-color, #0a0a0b);
     color: var(--tg-theme-text-color, #f8fafc);
@@ -368,3 +367,114 @@
     border-top-color: rgba(255, 255, 255, 0.2);
     pointer-events: none;
   }
+
+  /* ==========================================================================
+     DESKTOP OPTIMIZATIONS (.desktop-layout)
+     ========================================================================== */
+  
+  .desktop-layout body {
+    display: grid !important;
+    grid-template-columns: 260px 1fr !important;
+    grid-template-areas: "sidebar content" !important;
+    height: 100vh !important;
+    overflow: hidden !important;
+  }
+
+  /* Sidebar Navigation */
+  .desktop-layout #bottomNav {
+    grid-area: sidebar;
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 260px;
+    height: 100vh;
+    transform: none !important;
+    background: color-mix(in srgb, var(--tg-theme-bg-color, #0a0a0b) 98%, white 2%);
+    border-right: 1px solid var(--tg-theme-section-separator-color, rgba(255,255,255,0.05));
+    display: flex;
+    flex-direction: column;
+    padding: 2.5rem 1.25rem;
+    z-index: 100;
+    justify-content: flex-start;
+  }
+
+  .desktop-layout #navContainer {
+    flex-direction: column;
+    width: 100%;
+    height: auto;
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    box-shadow: none;
+    gap: 10px;
+  }
+
+  .desktop-layout .nav-btn {
+    width: 100%;
+    height: 54px;
+    border-radius: 18px;
+    justify-content: flex-start;
+    padding: 0 1.5rem;
+    gap: 14px;
+    font-size: 1rem;
+    transition: all 0.2s ease;
+  }
+
+  .desktop-layout .nav-btn i { width: 22px; height: 22px; }
+  .desktop-layout .nav-btn span { display: inline-block !important; font-weight: 600; }
+
+  .desktop-layout .nav-btn.tab-active {
+    background: var(--cc-brand, #7b1e2d);
+    color: white !important;
+    box-shadow: 0 10px 25px rgba(123, 30, 45, 0.25);
+  }
+
+  /* Main Content Area */
+  .desktop-layout main#app-content {
+    grid-area: content;
+    padding: 2.5rem 4rem !important;
+    margin-left: 260px; /* Offset for fixed sidebar */
+    width: calc(100% - 260px);
+    height: 100vh;
+    overflow-y: auto;
+    background: var(--tg-theme-bg-color, #0a0a0b);
+  }
+
+  /* Dashboard Grid Fix */
+  .desktop-layout #inicio > div {
+    display: grid !important;
+    grid-template-columns: 1fr 380px !important;
+    gap: 32px !important;
+    align-items: start !important;
+  }
+
+  .desktop-layout .aq-wrap { padding: 0; width: 100%; }
+  .desktop-layout .aq-card { min-height: 320px; }
+
+  .desktop-layout #homeChartCarousel {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)) !important;
+    gap: 24px !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  .desktop-layout article[data-home-chart-card] { min-width: 0 !important; }
+  .desktop-layout #homeChartsPills { display: none; }
+
+  /* Side Column (Alfredo + Recent) */
+  .desktop-layout .space-y-4:last-child {
+    position: sticky;
+    top: 0;
+  }
+
+  /* Scrollbar Styling for PC */
+  .desktop-layout ::-webkit-scrollbar { width: 6px; }
+  .desktop-layout ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+  }
+
+  .desktop-layout header { display: none; }
