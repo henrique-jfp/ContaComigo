@@ -615,16 +615,55 @@ lucide.createIcons();
     function getCategoryStyle(descricao, categoria, subcategoria, tipo) {
       const combined = `${descricao || ''} ${categoria || ''} ${subcategoria || ''}`.toLowerCase();
       
-      // Brand Detection
-      if (combined.includes('uber') || combined.includes(' 99')) return { icon: 'car', class: 'cat-transport', color: '#0d6efd', label: 'Uber/99' };
-      if (combined.includes('ifood') || combined.includes('rappi')) return { icon: 'utensils', class: 'cat-food', color: '#ea1d2c', label: 'iFood/Rappi' };
-      if (combined.includes('netflix')) return { icon: 'play-square', class: 'cat-entertainment', color: '#e50914', label: 'Netflix' };
-      if (combined.includes('spotify')) return { icon: 'music', class: 'cat-entertainment', color: '#1db954', label: 'Spotify' };
-      if (combined.includes('amazon') || combined.includes('prime')) return { icon: 'shopping-bag', class: 'cat-shopping', color: '#ff9900', label: 'Amazon' };
-      if (combined.includes('mercado livre') || combined.includes('meli')) return { icon: 'package', class: 'cat-shopping', color: '#ffe600', label: 'Mercado Livre' };
-      if (combined.includes('nubank')) return { icon: 'credit-card', class: 'cat-utilities', color: '#8a05be', label: 'Nubank' };
+      const brands = {
+        'uber': 'uber.com',
+        ' 99': '99app.com',
+        'ifood': 'ifood.com.br',
+        'rappi': 'rappi.com',
+        'netflix': 'netflix.com',
+        'spotify': 'spotify.com',
+        'amazon': 'amazon.com',
+        'prime': 'amazon.com',
+        'mercado livre': 'mercadolivre.com.br',
+        'meli': 'mercadolivre.com.br',
+        'nubank': 'nubank.com.br',
+        'inter': 'bancointer.com.br',
+        'itau': 'itau.com.br',
+        'bradesco': 'bradesco.com.br',
+        'santander': 'santander.com.br',
+        'banco do brasil': 'bb.com.br',
+        'extra': 'extra.com.br',
+        'carrefour': 'carrefour.com.br',
+        'pao de acucar': 'paodeacucar.com.br',
+        'samsung': 'samsung.com',
+        'apple': 'apple.com',
+        'claro': 'claro.com.br',
+        'vivo': 'vivo.com.br',
+        'tim': 'tim.com.br',
+        'mcdonald': 'mcdonalds.com.br',
+        'burger king': 'burgerking.com.br',
+        'bk': 'burgerking.com.br',
+        'starbucks': 'starbucks.com',
+        'shell': 'shell.com.br',
+        'ipiranga': 'postossipiranga.com.br',
+        'flamengo': 'flamengo.com.br',
+        'corinthians': 'corinthians.com.br',
+        'palmeiras': 'palmeiras.com.br',
+        'sao paulo': 'saopaulofc.net',
+        'vasco': 'vasco.com.br',
+        'gremio': 'gremio.net',
+        'inter': 'internacional.com.br'
+      };
 
-      // Category Map
+      let logoUrl = null;
+      for (const [key, domain] of Object.entries(brands)) {
+        if (combined.includes(key)) {
+          logoUrl = `https://logo.clearbit.com/${domain}`;
+          break;
+        }
+      }
+
+      // Category Map for Fallback
       const map = [
         { keys: ['aliment', 'mercado', 'padaria', 'super'], icon: 'shopping-cart', class: 'cat-shopping' },
         { keys: ['restaurante', 'lanche', 'pizza', 'burger'], icon: 'utensils', class: 'cat-food' },
@@ -635,12 +674,21 @@ lucide.createIcons();
         { keys: ['salário', 'renda', 'recebido', 'pix'], icon: 'coins', class: 'cat-health' },
       ];
 
+      let result = { icon: 'receipt', class: 'cat-shopping', logoUrl: logoUrl };
       for (const item of map) {
-        if (item.keys.some(key => combined.includes(key))) return { icon: item.icon, class: item.class };
+        if (item.keys.some(key => combined.includes(key))) {
+          result = { icon: item.icon, class: item.class, logoUrl: logoUrl };
+          break;
+        }
       }
 
       const isReceita = isEntradaTipo(tipo, 0);
-      return { icon: isReceita ? 'arrow-down-to-line' : 'receipt', class: isReceita ? 'cat-health' : 'cat-shopping' };
+      if (result.icon === 'receipt' && isReceita) {
+        result.icon = 'arrow-down-to-line';
+        result.class = 'cat-health';
+      }
+      
+      return result;
     }
 
     function renderHomeRecent(items = []) {
@@ -655,12 +703,17 @@ lucide.createIcons();
         const [badgeLabel, badgeClass] = sourceBadgeConfig(item.origem_label || item.origem);
         const style = getCategoryStyle(item.descricao, item.categoria_nome, item.subcategoria_nome, item.tipo);
         
+        const iconHtml = style.logoUrl 
+          ? `<div class="w-10 h-10 rounded-full overflow-hidden bg-white flex items-center justify-center border border-white/10 shadow-sm">
+               <img src="${style.logoUrl}" class="w-full h-full object-contain" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+               <div class="hidden w-full h-full items-center justify-center bg-brand/5 text-brand"><i data-lucide="${style.icon}" class="w-5 h-5"></i></div>
+             </div>`
+          : `<div class="cat-icon ${style.class} shrink-0 w-10 h-10"><i data-lucide="${style.icon}" class="w-5 h-5"></i></div>`;
+
         return `
           <button class="recent-item w-full text-left rounded-3xl border border-white/5 bg-telegram-card p-4 hover:bg-brand/5 transition shadow-soft mb-3" data-action="edit" data-id="${item.id}">
             <div class="flex items-center gap-4">
-              <div class="cat-icon ${style.class} shrink-0">
-                <i data-lucide="${style.icon}" class="w-5 h-5"></i>
-              </div>
+              ${iconHtml}
               <div class="min-w-0 flex-1">
                 <div class="flex items-start justify-between gap-2">
                   <div class="min-w-0">
@@ -2677,13 +2730,18 @@ lucide.createIcons();
           const valueText = formatMoney(item.valor, item.tipo);
           const style = getCategoryStyle(item.descricao, item.categoria_nome, item.subcategoria_nome, item.tipo);
 
+          const iconHtml = style.logoUrl 
+            ? `<div class="w-10 h-10 rounded-full overflow-hidden bg-white flex items-center justify-center border border-white/10 shadow-sm shrink-0">
+                 <img src="${style.logoUrl}" class="w-full h-full object-contain" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                 <div class="hidden w-full h-full items-center justify-center bg-brand/5 text-brand"><i data-lucide="${style.icon}" class="w-5 h-5"></i></div>
+               </div>`
+            : `<div class="cat-icon ${style.class} shrink-0 w-10 h-10"><i data-lucide="${style.icon}" class="w-5 h-5"></i></div>`;
+
           const div = document.createElement('div');
           div.className = 'flex items-center justify-between gap-3 p-3 sm:p-4 rounded-3xl hover:bg-brand/5 transition border border-white/5 bg-telegram-card shadow-sm mb-3';
           div.innerHTML = `
             <div class="flex items-center gap-3 min-w-0 flex-1">
-              <div class="cat-icon ${style.class} shrink-0 w-10 h-10">
-                <i data-lucide="${style.icon}" class="w-5 h-5"></i>
-              </div>
+              ${iconHtml}
               <div class="min-w-0 flex-1">
                 <p class="font-bold text-sm truncate text-telegram-text">${item.descricao || 'Lançamento'}</p>
                 <p class="text-[10px] font-bold text-telegram-hint uppercase tracking-wider mt-0.5">${item.categoria_nome || 'Uncategorized'} • ${new Date(item.data).toLocaleDateString('pt-BR')}</p>
