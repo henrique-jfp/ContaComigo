@@ -1033,36 +1033,33 @@ lucide.createIcons();
       const pctReceita = totalFluxo > 0 ? Math.round((receita / totalFluxo) * 100) : 0;
       const pctDespesa = totalFluxo > 0 ? Math.round((despesa / totalFluxo) * 100) : 0;
 
-      // Novo Efeito Líquido (Aquário Pro) - Bicolor Dinâmico
+      // Novo Efeito Líquido (Aquário Pro)
       const lp = document.getElementById('liquidPath');
       const sp = document.getElementById('shimmerPath');
       const grad = document.getElementById('liquidGrad');
-      const gRed = document.getElementById('gradStopRed');
-      const gGreen = document.getElementById('gradStopGreen');
 
       if (lp && grad) {
-        const totalFlow = receita + despesa;
-        // despesaRatio: 0 (só receita) a 1 (só despesa)
-        const despesaRatio = totalFlow > 0 ? (despesa / totalFlow) : 0;
-        
-        // pct: Altura do tanque preenchido (de 0.1 a 0.95)
-        const pct = totalFlow === 0 ? 0.1 : Math.max(0.3, Math.min(0.95, (totalFlow / 12000) + 0.35)); 
+        const pct = Math.max(0, Math.min(1, receita / (totalFluxo || 1)));
+        const bal = receita - despesa;
 
-        const waveTopLeft = 420 * (1 - pct - 0.04);
-        const waveTopRight = 420 * (1 - pct + 0.04);
+        // Wave: pct=1 (só receita) → onda sobe muito
+        const waveTopLeft = 420 * (1 - pct * 0.82 - 0.08);
+        const waveTopRight = 420 * (1 - pct * 0.92 - 0.04);
 
-        // O gradiente vai de 100% (bottom) a 0% (top).
-        // Se despesaRatio é 0.7, os primeiros 70% da ÁGUA (de baixo para cima) são Vermelho.
-        // Como o gradiente cobre os 420px do SVG, o offset do split na escala 0-100 é:
-        const splitPct = Math.round(pct * despesaRatio * 100);
-        const endPct = Math.round(pct * 100);
-
-        if (gRed) gRed.setAttribute('offset', `${splitPct}%`);
-        if (gGreen) gGreen.setAttribute('offset', `${splitPct}%`);
-        // Opcional: ajustar o topo do verde para o fim da água
-        const stops = grad.querySelectorAll('stop');
-        if (stops.length >= 4) {
-            stops[3].setAttribute('offset', `${endPct}%`);
+        if (bal >= 0) {
+          const greenStop = Math.round(pct * 100);
+          grad.innerHTML = `
+            <stop offset="0%" stop-color="#022c22" stop-opacity="0.9"/>
+            <stop offset="${greenStop}%" stop-color="#065f46" stop-opacity="0.8"/>
+            <stop offset="100%" stop-color="#134e4a" stop-opacity="0.7"/>
+          `;
+        } else {
+          const rPct = Math.round((1 - pct) * 100);
+          grad.innerHTML = `
+            <stop offset="0%" stop-color="#7f1d1d" stop-opacity="0.9"/>
+            <stop offset="${rPct}%" stop-color="#991b1b" stop-opacity="0.8"/>
+            <stop offset="100%" stop-color="#450a0a" stop-opacity="0.85"/>
+          `;
         }
 
         const cy1 = waveTopLeft + (waveTopRight - waveTopLeft) * 0.15;
@@ -2346,6 +2343,39 @@ lucide.createIcons();
 
       } catch (e) {}
     }
+
+    // Expor funções para abrir/fechar modal de notificações
+    window.openNotificacoesModal = function() {
+      const modalsOverlay = document.getElementById('modalsOverlay');
+      const notificacoesModal = document.getElementById('notificacoesModal');
+      if (modalsOverlay) {
+        modalsOverlay.classList.remove('hidden');
+        modalsOverlay.classList.add('pointer-events-auto');
+      }
+      if (notificacoesModal) {
+        notificacoesModal.classList.remove('hidden');
+        notificacoesModal.classList.add('active');
+      }
+      document.body.style.overflow = 'hidden';
+    };
+
+    window.closeNotificacoesModal = function() {
+      const modalsOverlay = document.getElementById('modalsOverlay');
+      const notificacoesModal = document.getElementById('notificacoesModal');
+      if (notificacoesModal) {
+        notificacoesModal.classList.remove('active');
+        setTimeout(() => notificacoesModal.classList.add('hidden'), 300);
+      }
+      if (modalsOverlay) {
+        // Só esconde o overlay se não houver outros modais ativos
+        const activeModals = document.querySelectorAll('.modal-overlay.active');
+        if (activeModals.length <= 1) {
+          modalsOverlay.classList.add('hidden');
+          modalsOverlay.classList.remove('pointer-events-auto');
+        }
+      }
+      document.body.style.overflow = '';
+    };
 
     // Expor função para salvar configurações de notificação ao trocar o toggle
     window.saveNotificationPreferences = async function() {
