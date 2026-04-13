@@ -2436,19 +2436,18 @@ lucide.createIcons();
       const notificacoesModal = document.getElementById('notificacoesModal');
       if (notificacoesModal) {
         notificacoesModal.classList.remove('active');
-        setTimeout(() => notificacoesModal.classList.add('hidden'), 300);
+        setTimeout(() => {
+            notificacoesModal.classList.add('hidden');
+            // Verificação extra para limpar o overlay global
+            const activeModals = document.querySelectorAll('.modal-overlay.active, #notificacoesModal.active');
+            if (activeModals.length === 0 && modalsOverlay) {
+                modalsOverlay.classList.add('hidden');
+                modalsOverlay.classList.remove('pointer-events-auto');
+                document.body.style.overflow = '';
+            }
+        }, 300);
       }
-      if (modalsOverlay) {
-        // Só esconde o overlay se não houver outros modais ativos
-        const activeModals = document.querySelectorAll('.modal-overlay.active');
-        if (activeModals.length <= 1) {
-          modalsOverlay.classList.add('hidden');
-          modalsOverlay.classList.remove('pointer-events-auto');
-        }
-      }
-      document.body.style.overflow = '';
     };
-
     // Expor função para salvar configurações de notificação ao trocar o toggle
     window.saveNotificationPreferences = async function() {
       const sId = localStorage.getItem(MINIAPP_SESSION_STORAGE_KEY) || telegramInitData;

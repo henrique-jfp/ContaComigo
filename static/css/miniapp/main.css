@@ -233,11 +233,11 @@
      ========================================================================== */
   
   .desktop-layout body {
-    display: grid;
-    grid-template-columns: 280px 1fr;
-    grid-template-areas: "sidebar content";
-    height: 100vh;
-    overflow: hidden;
+    display: grid !important;
+    grid-template-columns: 260px 1fr !important;
+    grid-template-areas: "sidebar content" !important;
+    height: 100vh !important;
+    overflow: hidden !important;
   }
 
   /* Sidebar Navigation */
@@ -247,17 +247,16 @@
     left: 0;
     top: 0;
     bottom: 0;
-    width: 280px;
+    width: 260px;
     height: 100vh;
     transform: none !important;
-    background: color-mix(in srgb, var(--tg-theme-bg-color, #0a0a0b) 95%, white 2%);
+    background: color-mix(in srgb, var(--tg-theme-bg-color, #0a0a0b) 98%, white 2%);
     border-right: 1px solid var(--tg-theme-section-separator-color, rgba(255,255,255,0.05));
     display: flex;
     flex-direction: column;
-    padding: 2rem 1.5rem;
+    padding: 2.5rem 1.25rem;
     z-index: 100;
     justify-content: flex-start;
-    gap: 0.5rem;
   }
 
   .desktop-layout #navContainer {
@@ -269,124 +268,73 @@
     padding: 0;
     margin: 0;
     box-shadow: none;
-    gap: 8px;
+    gap: 10px;
   }
 
   .desktop-layout .nav-btn {
     width: 100%;
-    height: 52px;
-    border-radius: 16px;
+    height: 54px;
+    border-radius: 18px;
     justify-content: flex-start;
-    padding: 0 1.25rem;
-    gap: 12px;
-    font-size: 0.95rem;
-    transition: all 0.3s ease;
+    padding: 0 1.5rem;
+    gap: 14px;
+    font-size: 1rem;
+    transition: all 0.2s ease;
   }
 
-  .desktop-layout .nav-btn i {
-    width: 20px;
-    height: 20px;
-  }
-
-  .desktop-layout .nav-btn span {
-    display: inline-block !important;
-    font-weight: 600;
-  }
+  .desktop-layout .nav-btn i { width: 22px; height: 22px; }
+  .desktop-layout .nav-btn span { display: inline-block !important; font-weight: 600; }
 
   .desktop-layout .nav-btn.tab-active {
     background: var(--cc-brand, #7b1e2d);
     color: white !important;
-    box-shadow: 0 8px 20px rgba(123, 30, 45, 0.2);
-  }
-
-  .desktop-layout .nav-btn:not(.tab-active):hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--tg-theme-text-color, #f8fafc);
+    box-shadow: 0 10px 25px rgba(123, 30, 45, 0.25);
   }
 
   /* Main Content Area */
   .desktop-layout main#app-content {
     grid-area: content;
-    padding: 2rem 3rem;
-    max-width: 1400px;
-    margin: 0 auto;
-    width: 100%;
+    padding: 2.5rem 4rem !important;
+    margin-left: 260px; /* Offset for fixed sidebar */
+    width: calc(100% - 260px);
     height: 100vh;
     overflow-y: auto;
+    background: var(--tg-theme-bg-color, #0a0a0b);
   }
 
-  .desktop-layout .panel {
-    padding-bottom: 4rem;
-    max-width: 1200px;
-    margin: 0 auto;
+  /* Dashboard Grid Fix */
+  .desktop-layout #inicio > div {
+    display: grid !important;
+    grid-template-columns: 1fr 380px !important;
+    gap: 32px !important;
+    align-items: start !important;
   }
 
-  /* Dashboard Grid */
-  .desktop-layout #inicio .space-y-4 > div:first-child {
-    display: grid;
-    grid-template-columns: 1fr 320px;
-    gap: 24px;
-    align-items: start;
-  }
-
-  .desktop-layout .aq-wrap {
-    padding: 0;
-  }
+  .desktop-layout .aq-wrap { padding: 0; width: 100%; }
+  .desktop-layout .aq-card { min-height: 320px; }
 
   .desktop-layout #homeChartCarousel {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
-    gap: 20px;
-    overflow: visible;
-    snap-type: none;
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)) !important;
+    gap: 24px !important;
+    overflow: visible !important;
+    padding: 0 !important;
   }
 
-  .desktop-layout article[data-home-chart-card] {
-    min-width: 0;
-  }
+  .desktop-layout article[data-home-chart-card] { min-width: 0 !important; }
+  .desktop-layout #homeChartsPills { display: none; }
 
-  .desktop-layout #homeChartsPills {
-    display: none; /* Hide pills on desktop as we show grid */
+  /* Side Column (Alfredo + Recent) */
+  .desktop-layout .space-y-4:last-child {
+    position: sticky;
+    top: 0;
   }
 
   /* Scrollbar Styling for PC */
-  .desktop-layout ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  .desktop-layout ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
+  .desktop-layout ::-webkit-scrollbar { width: 6px; }
   .desktop-layout ::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.1);
     border-radius: 10px;
   }
 
-  .desktop-layout ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
-  }
-
-  /* Hide header on desktop if needed */
-  .desktop-layout header {
-    display: none;
-  }
-
-  /* Modal Adjustments for Desktop */
-  .desktop-layout .modal-content {
-    max-width: 600px;
-    margin: auto;
-  }
-
-  /* Pierre Ghost repositioning */
-  .desktop-layout #nav-fantasma {
-    position: relative;
-    margin-top: auto;
-    margin-bottom: 1rem;
-    transform: none !important;
-  }
-  
-  .desktop-layout #nav-fantasma:hover {
-    transform: scale(1.1) !important;
-  }
+  .desktop-layout header { display: none; }
