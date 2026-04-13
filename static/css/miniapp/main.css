@@ -227,3 +227,166 @@
 
   /* Premium badge scale */
   .badge-premium { transform: scale(1.5); display: inline-block; }
+
+  /* ==========================================================================
+     DESKTOP OPTIMIZATIONS (.desktop-layout)
+     ========================================================================== */
+  
+  .desktop-layout body {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    grid-template-areas: "sidebar content";
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Sidebar Navigation */
+  .desktop-layout #bottomNav {
+    grid-area: sidebar;
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 280px;
+    height: 100vh;
+    transform: none !important;
+    background: color-mix(in srgb, var(--tg-theme-bg-color, #0a0a0b) 95%, white 2%);
+    border-right: 1px solid var(--tg-theme-section-separator-color, rgba(255,255,255,0.05));
+    display: flex;
+    flex-direction: column;
+    padding: 2rem 1.5rem;
+    z-index: 100;
+    justify-content: flex-start;
+    gap: 0.5rem;
+  }
+
+  .desktop-layout #navContainer {
+    flex-direction: column;
+    width: 100%;
+    height: auto;
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    box-shadow: none;
+    gap: 8px;
+  }
+
+  .desktop-layout .nav-btn {
+    width: 100%;
+    height: 52px;
+    border-radius: 16px;
+    justify-content: flex-start;
+    padding: 0 1.25rem;
+    gap: 12px;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+  }
+
+  .desktop-layout .nav-btn i {
+    width: 20px;
+    height: 20px;
+  }
+
+  .desktop-layout .nav-btn span {
+    display: inline-block !important;
+    font-weight: 600;
+  }
+
+  .desktop-layout .nav-btn.tab-active {
+    background: var(--cc-brand, #7b1e2d);
+    color: white !important;
+    box-shadow: 0 8px 20px rgba(123, 30, 45, 0.2);
+  }
+
+  .desktop-layout .nav-btn:not(.tab-active):hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--tg-theme-text-color, #f8fafc);
+  }
+
+  /* Main Content Area */
+  .desktop-layout main#app-content {
+    grid-area: content;
+    padding: 2rem 3rem;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+    height: 100vh;
+    overflow-y: auto;
+  }
+
+  .desktop-layout .panel {
+    padding-bottom: 4rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  /* Dashboard Grid */
+  .desktop-layout #inicio .space-y-4 > div:first-child {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 24px;
+    align-items: start;
+  }
+
+  .desktop-layout .aq-wrap {
+    padding: 0;
+  }
+
+  .desktop-layout #homeChartCarousel {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+    gap: 20px;
+    overflow: visible;
+    snap-type: none;
+  }
+
+  .desktop-layout article[data-home-chart-card] {
+    min-width: 0;
+  }
+
+  .desktop-layout #homeChartsPills {
+    display: none; /* Hide pills on desktop as we show grid */
+  }
+
+  /* Scrollbar Styling for PC */
+  .desktop-layout ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .desktop-layout ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .desktop-layout ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+  }
+
+  .desktop-layout ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Hide header on desktop if needed */
+  .desktop-layout header {
+    display: none;
+  }
+
+  /* Modal Adjustments for Desktop */
+  .desktop-layout .modal-content {
+    max-width: 600px;
+    margin: auto;
+  }
+
+  /* Pierre Ghost repositioning */
+  .desktop-layout #nav-fantasma {
+    position: relative;
+    margin-top: auto;
+    margin-bottom: 1rem;
+    transform: none !important;
+  }
+  
+  .desktop-layout #nav-fantasma:hover {
+    transform: scale(1.1) !important;
+  }

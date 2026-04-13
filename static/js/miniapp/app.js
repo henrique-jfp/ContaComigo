@@ -1187,6 +1187,7 @@ lucide.createIcons();
       const categories = Array.isArray(summary?.categories) ? summary.categories : [];
       const chartRuntime = getChartRuntime();
       const chartData = buildChartDataFromSummary(summary);
+      const palette = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#00f0ff', '#8b5cf6'];
 
       destroyHomeCharts();
 

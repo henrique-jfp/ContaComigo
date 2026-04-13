@@ -201,204 +201,211 @@
 </style>
 
 <section class="panel active" id="inicio">
-      <div class="space-y-4">
+      <div class="space-y-4 desktop:grid desktop:grid-cols-[1fr_380px] desktop:gap-6 desktop:space-y-0">
         
-        <div class="aq-wrap home-reveal" style="--delay: 30ms">
-          <div class="aq-card" id="aqCard">
-            <!-- LIQUID LAYER -->
-            <div class="aq-liquid-layer" id="liquidLayer">
-              <svg viewBox="0 0 400 420" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" id="liquidSvg">
-                <defs>
-                  <linearGradient id="liquidGrad" x1="0%" y1="100%" x2="0%" y2="0%">
-                    <stop offset="0%" stop-color="#fee2e2" stop-opacity="0.8"/>
-                    <stop offset="50%" id="gradStopRed" stop-color="#fca5a5" stop-opacity="0.6"/>
-                    <stop offset="50%" id="gradStopGreen" stop-color="#a7f3d0" stop-opacity="0.6"/>
-                    <stop offset="100%" stop-color="#d1fae5" stop-opacity="0.8"/>
-                  </linearGradient>
-                </defs>
-                <path id="liquidPath" d="M0,420 L400,420 L400,420 L0,420 Z" fill="url(#liquidGrad)" />
-                <path id="shimmerPath" d="" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="2" />
-              </svg>
-            </div>
-
-            <!-- TOP ROW -->
-            <div class="aq-top">
-              <div class="aq-balance-block">
-                <p class="aq-month-label">Resumo do mês</p>
-                <h2 class="aq-balance-value" id="homeBalance">R$ 0,00</h2>
-                <p class="aq-balance-hint" id="homeBalanceHint">Carregando fluxo...</p>
+        <!-- Coluna Principal (Hero + Charts) -->
+        <div class="space-y-4">
+          <div class="aq-wrap home-reveal" style="--delay: 30ms">
+            <div class="aq-card" id="aqCard">
+              <!-- LIQUID LAYER -->
+              <div class="aq-liquid-layer" id="liquidLayer">
+                <svg viewBox="0 0 400 420" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" id="liquidSvg">
+                  <defs>
+                    <linearGradient id="liquidGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+                      <stop offset="0%" stop-color="#fee2e2" stop-opacity="0.8"/>
+                      <stop offset="50%" id="gradStopRed" stop-color="#fca5a5" stop-opacity="0.6"/>
+                      <stop offset="50%" id="gradStopGreen" stop-color="#a7f3d0" stop-opacity="0.6"/>
+                      <stop offset="100%" stop-color="#d1fae5" stop-opacity="0.8"/>
+                    </linearGradient>
+                  </defs>
+                  <path id="liquidPath" d="M0,420 L400,420 L400,420 L0,420 Z" fill="url(#liquidGrad)" />
+                  <path id="shimmerPath" d="" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="2" />
+                </svg>
               </div>
 
-              <button id="homeLevelCard" type="button" class="aq-gamification transition active:scale-95 shadow-sm">
-                <div class="aq-level-row">
-                  <span id="homeBadgeContainer"></span>
-                  <div class="aq-level-number" id="homeLevel">1</div>
+              <!-- TOP ROW -->
+              <div class="aq-top">
+                <div class="aq-balance-block">
+                  <p class="aq-month-label">Resumo do mês</p>
+                  <h2 class="aq-balance-value" id="homeBalance">R$ 0,00</h2>
+                  <p class="aq-balance-hint" id="homeBalanceHint">Carregando fluxo...</p>
                 </div>
-                <div class="aq-xp"><span id="homeXp">0</span> XP</div>
-                <div class="aq-streak">
-                  <div class="aq-streak-dot"></div>
-                  <span id="homeStreak">0 dias</span>
+
+                <button id="homeLevelCard" type="button" class="aq-gamification transition active:scale-95 shadow-sm">
+                  <div class="aq-level-row">
+                    <span id="homeBadgeContainer"></span>
+                    <div class="aq-level-number" id="homeLevel">1</div>
+                  </div>
+                  <div class="aq-xp"><span id="homeXp">0</span> XP</div>
+                  <div class="aq-streak">
+                    <div class="aq-streak-dot"></div>
+                    <span id="homeStreak">0 dias</span>
+                  </div>
+                </button>
+              </div>
+
+              <!-- BOTTOM PILLS -->
+              <div class="aq-bottom">
+                <div class="aq-pill aq-pill-income">
+                  <div class="aq-pill-dot"></div>
+                  <div class="aq-pill-info">
+                    <span class="aq-pill-label">Receita</span>
+                    <span class="aq-pill-value" id="homeReceita">R$ 0</span>
+                  </div>
                 </div>
-              </button>
+                <div class="aq-pill aq-pill-expense">
+                  <div class="aq-pill-dot"></div>
+                  <div class="aq-pill-info">
+                    <span class="aq-pill-label">Despesa</span>
+                    <span class="aq-pill-value" id="homeDespesa">R$ 0</span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Hidden original elements for compatibility if needed -->
+              <div style="display:none">
+                  <span id="homeProgressLabel">0%</span>
+                  <div id="homeAquariumWater"></div>
+                  <span id="homePctReceita">0%</span>
+                  <span id="homePctDespesa">0%</span>
+                  <div id="homePlanLabel"></div>
+                  <div id="homeUpgradeBtn"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Charts Section -->
+          <div class="space-y-3">
+            <div class="home-reveal" style="--delay: 95ms">
+              <div class="hide-scroll flex overflow-x-auto gap-2 pb-1" id="homeChartsPills">
+                <button type="button" data-home-chart-pill="chart-patrimonio" class="rounded-full border border-brand/25 bg-brand/10 px-4 py-2 text-xs font-bold text-brand whitespace-nowrap transition">Patrimonio</button>
+                <button type="button" data-home-chart-pill="chart-fluxo" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Fluxo de Caixa</button>
+                <button type="button" data-home-chart-pill="chart-orcamento" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Orcamento vs Realizado</button>
+                <button type="button" data-home-chart-pill="chart-distribuicao" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Distribuicao</button>
+                <button type="button" data-home-chart-pill="chart-projecao" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Projecao</button>
+                <button type="button" data-home-chart-pill="chart-viloes" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Top 5 Viloes</button>
+                <button type="button" data-home-chart-pill="chart-sankey" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Fluxo</button>
+                <button type="button" data-home-chart-pill="chart-heatmap" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Densidade</button>
+              </div>
             </div>
 
-            <!-- BOTTOM PILLS -->
-            <div class="aq-bottom">
-              <div class="aq-pill aq-pill-income">
-                <div class="aq-pill-dot"></div>
-                <div class="aq-pill-info">
-                  <span class="aq-pill-label">Receita</span>
-                  <span class="aq-pill-value" id="homeReceita">R$ 0</span>
+            <div id="homeChartCarousel" class="flex overflow-x-auto snap-x snap-mandatory hide-scroll gap-4 pb-4 home-reveal" style="--delay: 125ms">
+              <article id="chart-patrimonio" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+                <div class="mb-3 flex items-center justify-between">
+                  <div>
+                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 1</p>
+                    <h3 class="text-lg font-extrabold text-telegram-text">Evolucao Patrimonial</h3>
+                  </div>
+                  <i data-lucide="line-chart" class="h-5 w-5 text-brand"></i>
                 </div>
-              </div>
-              <div class="aq-pill aq-pill-expense">
-                <div class="aq-pill-dot"></div>
-                <div class="aq-pill-info">
-                  <span class="aq-pill-label">Despesa</span>
-                  <span class="aq-pill-value" id="homeDespesa">R$ 0</span>
+                <div class="h-[280px]">
+                  <canvas id="homePatrimonyChart"></canvas>
                 </div>
-              </div>
-            </div>
-            
-            <!-- Compatibility hidden elements -->
-            <div style="display:none">
-                <span id="homeProgressLabel">0%</span>
-                <div id="homeAquariumWater"></div>
-                <span id="homePctReceita">0%</span>
-                <span id="homePctDespesa">0%</span>
-                <div id="homePlanLabel"></div>
-                <div id="homeUpgradeBtn"></div>
+              </article>
+
+              <article id="chart-fluxo" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+                <div class="mb-3 flex items-center justify-between">
+                  <div>
+                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 2</p>
+                    <h3 class="text-lg font-extrabold text-telegram-text">Fluxo de Caixa</h3>
+                  </div>
+                  <i data-lucide="bar-chart-3" class="h-5 w-5 text-brand"></i>
+                </div>
+                <div class="h-[280px]">
+                  <canvas id="homeCashflowChart"></canvas>
+                </div>
+              </article>
+
+              <article id="chart-orcamento" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+                <div class="mb-3 flex items-center justify-between">
+                  <div>
+                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 3</p>
+                    <h3 class="text-lg font-extrabold text-telegram-text">Orcamento vs Realizado</h3>
+                  </div>
+                  <i data-lucide="target" class="h-5 w-5 text-brand"></i>
+                </div>
+                <div class="h-[280px]">
+                  <canvas id="homeBudgetChart"></canvas>
+                </div>
+              </article>
+
+              <article id="chart-distribuicao" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+                <div class="mb-3 flex items-center justify-between">
+                  <div>
+                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 4</p>
+                    <h3 class="text-lg font-extrabold text-telegram-text">Distribuicao de Despesas</h3>
+                  </div>
+                  <i data-lucide="pie-chart" class="h-5 w-5 text-brand"></i>
+                </div>
+                <div class="h-[280px]">
+                  <canvas id="homeCategoryChart"></canvas>
+                </div>
+                <div class="mt-3 inline-flex max-w-full items-center gap-2 rounded-2xl border border-telegram-separator bg-telegram-card px-3 py-2">
+                  <div class="h-2.5 w-2.5 shrink-0 rounded-full bg-brand"></div>
+                  <div class="min-w-0">
+                    <div id="homeCategoryValue" class="text-sm font-extrabold text-brand leading-none">R$ 0,00</div>
+                    <div id="homeCategoryLabel" class="truncate text-xs font-semibold text-telegram-hint">Nenhuma fatia</div>
+                  </div>
+                </div>
+              </article>
+
+              <article id="chart-projecao" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+                <div class="mb-3 flex items-center justify-between">
+                  <div>
+                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 5</p>
+                    <h3 class="text-lg font-extrabold text-telegram-text">Projecao de Saldo</h3>
+                  </div>
+                  <i data-lucide="trending-up" class="h-5 w-5 text-brand"></i>
+                </div>
+                <div class="h-[280px]">
+                  <canvas id="homeProjectionChart"></canvas>
+                </div>
+              </article>
+
+              <article id="chart-viloes" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+                <div class="mb-3 flex items-center justify-between">
+                  <div>
+                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 6</p>
+                    <h3 class="text-lg font-extrabold text-telegram-text">Top 5 Viloes</h3>
+                  </div>
+                  <i data-lucide="alert-triangle" class="h-5 w-5 text-brand"></i>
+                </div>
+                <div class="h-[280px]">
+                  <canvas id="homeVillainsChart"></canvas>
+                </div>
+              </article>
+
+              <article id="chart-sankey" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+                <div class="mb-3 flex items-center justify-between">
+                  <div>
+                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Fluxo</p>
+                    <h3 class="text-lg font-extrabold text-telegram-text">Caminho do Dinheiro</h3>
+                  </div>
+                  <i data-lucide="git-branch" class="h-5 w-5 text-brand"></i>
+                </div>
+                <div class="h-[280px]">
+                  <canvas id="homeSankeyChart"></canvas>
+                </div>
+              </article>
+
+              <article id="chart-heatmap" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+                <div class="mb-3 flex items-center justify-between">
+                  <div>
+                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Densidade</p>
+                    <h3 class="text-lg font-extrabold text-telegram-text">Mapa de Calor de Gastos</h3>
+                  </div>
+                  <i data-lucide="layout-grid" class="h-5 w-5 text-brand"></i>
+                </div>
+                <div class="h-[280px]">
+                  <canvas id="homeHeatmapChart"></canvas>
+                </div>
+              </article>
             </div>
           </div>
         </div>
 
-        <div class="space-y-3">
-          <div class="home-reveal" style="--delay: 95ms">
-            <div class="hide-scroll flex overflow-x-auto gap-2 pb-1" id="homeChartsPills">
-              <button type="button" data-home-chart-pill="chart-patrimonio" class="rounded-full border border-brand/25 bg-brand/10 px-4 py-2 text-xs font-bold text-brand whitespace-nowrap transition">Patrimonio</button>
-              <button type="button" data-home-chart-pill="chart-fluxo" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Fluxo de Caixa</button>
-              <button type="button" data-home-chart-pill="chart-orcamento" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Orcamento vs Realizado</button>
-              <button type="button" data-home-chart-pill="chart-distribuicao" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Distribuicao</button>
-              <button type="button" data-home-chart-pill="chart-projecao" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Projecao</button>
-              <button type="button" data-home-chart-pill="chart-viloes" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Top 5 Viloes</button>
-              <button type="button" data-home-chart-pill="chart-sankey" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Fluxo</button>
-              <button type="button" data-home-chart-pill="chart-heatmap" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Densidade</button>
-            </div>
-          </div>
-
-          <div id="homeChartCarousel" class="flex overflow-x-auto snap-x snap-mandatory hide-scroll gap-4 pb-4 home-reveal" style="--delay: 125ms">
-            <article id="chart-patrimonio" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
-              <div class="mb-3 flex items-center justify-between">
-                <div>
-                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 1</p>
-                  <h3 class="text-lg font-extrabold text-telegram-text">Evolucao Patrimonial</h3>
-                </div>
-                <i data-lucide="line-chart" class="h-5 w-5 text-brand"></i>
-              </div>
-              <div class="h-[280px]">
-                <canvas id="homePatrimonyChart"></canvas>
-              </div>
-            </article>
-
-            <article id="chart-fluxo" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
-              <div class="mb-3 flex items-center justify-between">
-                <div>
-                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 2</p>
-                  <h3 class="text-lg font-extrabold text-telegram-text">Fluxo de Caixa</h3>
-                </div>
-                <i data-lucide="bar-chart-3" class="h-5 w-5 text-brand"></i>
-              </div>
-              <div class="h-[280px]">
-                <canvas id="homeCashflowChart"></canvas>
-              </div>
-            </article>
-
-            <article id="chart-orcamento" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
-              <div class="mb-3 flex items-center justify-between">
-                <div>
-                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 3</p>
-                  <h3 class="text-lg font-extrabold text-telegram-text">Orcamento vs Realizado</h3>
-                </div>
-                <i data-lucide="target" class="h-5 w-5 text-brand"></i>
-              </div>
-              <div class="h-[280px]">
-                <canvas id="homeBudgetChart"></canvas>
-              </div>
-            </article>
-
-            <article id="chart-distribuicao" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
-              <div class="mb-3 flex items-center justify-between">
-                <div>
-                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 4</p>
-                  <h3 class="text-lg font-extrabold text-telegram-text">Distribuicao de Despesas</h3>
-                </div>
-                <i data-lucide="pie-chart" class="h-5 w-5 text-brand"></i>
-              </div>
-              <div class="h-[280px]">
-                <canvas id="homeCategoryChart"></canvas>
-              </div>
-              <div class="mt-3 inline-flex max-w-full items-center gap-2 rounded-2xl border border-telegram-separator bg-telegram-card px-3 py-2">
-                <div class="h-2.5 w-2.5 shrink-0 rounded-full bg-brand"></div>
-                <div class="min-w-0">
-                  <div id="homeCategoryValue" class="text-sm font-extrabold text-brand leading-none">R$ 0,00</div>
-                  <div id="homeCategoryLabel" class="truncate text-xs font-semibold text-telegram-hint">Nenhuma fatia</div>
-                </div>
-              </div>
-            </article>
-
-            <article id="chart-projecao" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
-              <div class="mb-3 flex items-center justify-between">
-                <div>
-                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 5</p>
-                  <h3 class="text-lg font-extrabold text-telegram-text">Projecao de Saldo</h3>
-                </div>
-                <i data-lucide="trending-up" class="h-5 w-5 text-brand"></i>
-              </div>
-              <div class="h-[280px]">
-                <canvas id="homeProjectionChart"></canvas>
-              </div>
-            </article>
-
-            <article id="chart-viloes" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
-              <div class="mb-3 flex items-center justify-between">
-                <div>
-                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 6</p>
-                  <h3 class="text-lg font-extrabold text-telegram-text">Top 5 Viloes</h3>
-                </div>
-                <i data-lucide="alert-triangle" class="h-5 w-5 text-brand"></i>
-              </div>
-              <div class="h-[280px]">
-                <canvas id="homeVillainsChart"></canvas>
-              </div>
-            </article>
-
-            <article id="chart-sankey" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
-              <div class="mb-3 flex items-center justify-between">
-                <div>
-                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Fluxo</p>
-                  <h3 class="text-lg font-extrabold text-telegram-text">Caminho do Dinheiro</h3>
-                </div>
-                <i data-lucide="git-branch" class="h-5 w-5 text-brand"></i>
-              </div>
-              <div class="h-[280px]">
-                <canvas id="homeSankeyChart"></canvas>
-              </div>
-            </article>
-
-            <article id="chart-heatmap" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
-              <div class="mb-3 flex items-center justify-between">
-                <div>
-                  <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Densidade</p>
-                  <h3 class="text-lg font-extrabold text-telegram-text">Mapa de Calor de Gastos</h3>
-                </div>
-                <i data-lucide="layout-grid" class="h-5 w-5 text-brand"></i>
-              </div>
-              <div class="h-[280px]">
-                <canvas id="homeHeatmapChart"></canvas>
-              </div>
-            </article>
-          </div>
-
+        <!-- Coluna Lateral (Alfredo + Recent) -->
+        <div class="space-y-4">
           <div class="glass-card alfredo-card home-reveal rounded-3xl p-6" style="--delay: 165ms">
             <div class="alfredo-kicker mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em]">
               <i data-lucide="sparkles" class="h-4 w-4"></i>
@@ -418,5 +425,6 @@
             <div id="homeRecentList" class="space-y-3"></div>
           </div>
         </div>
+
       </div>
     </section>
