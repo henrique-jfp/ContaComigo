@@ -1032,22 +1032,43 @@ lucide.createIcons();
       const totalFluxo = receita + despesa;
       const pctReceita = totalFluxo > 0 ? Math.round((receita / totalFluxo) * 100) : 0;
       const pctDespesa = totalFluxo > 0 ? Math.round((despesa / totalFluxo) * 100) : 0;
-      
-      // Lógica da Onda Extrema: representa proporção receita vs despesa
-      if (homeWave) {
-        const totalWave = receita + despesa;
-        // p = proporção de lucro (receita) em relação ao fluxo total
-        const p = totalWave > 0 ? (receita / totalWave) : 1;
-        
-        // Mapeamento: O gradiente 165deg começa no topo do card. 
-        // A "onda" começa aproximadamente em 35% do percurso do gradiente (devido ao clip-path).
-        // Mapeamos o 0-100% financeiro para o 35-100% visual do gradiente.
-        const startVisible = 35;
-        const stopPct = startVisible + (p * (100 - startVisible));
-        
-        // Verde (lucro) no topo da onda, Vermelho (custo) na base.
-        // A linha de divisão agora acompanha a inclinação diagonal da onda.
-        homeWave.style.background = `linear-gradient(165deg, #22c55e 0%, #22c55e ${stopPct}%, #be123c ${stopPct}%, #be123c 100%)`;
+
+      // Novo Efeito Líquido (Aquário Pro)
+      const lp = document.getElementById('liquidPath');
+      const sp = document.getElementById('shimmerPath');
+      const grad = document.getElementById('liquidGrad');
+
+      if (lp && grad) {
+        const pct = Math.max(0, Math.min(1, receita / (totalFluxo || 1)));
+        const bal = receita - despesa;
+
+        // Wave: pct=1 (só receita) → onda sobe muito
+        const waveTopLeft = 420 * (1 - pct * 0.82 - 0.08);
+        const waveTopRight = 420 * (1 - pct * 0.92 - 0.04);
+
+        if (bal >= 0) {
+          const greenStop = Math.round(pct * 100);
+          grad.innerHTML = `
+            <stop offset="0%" stop-color="#022c22" stop-opacity="0.9"/>
+            <stop offset="${greenStop}%" stop-color="#065f46" stop-opacity="0.8"/>
+            <stop offset="100%" stop-color="#134e4a" stop-opacity="0.7"/>
+          `;
+        } else {
+          const rPct = Math.round((1 - pct) * 100);
+          grad.innerHTML = `
+            <stop offset="0%" stop-color="#7f1d1d" stop-opacity="0.9"/>
+            <stop offset="${rPct}%" stop-color="#991b1b" stop-opacity="0.8"/>
+            <stop offset="100%" stop-color="#450a0a" stop-opacity="0.85"/>
+          `;
+        }
+
+        const cy1 = waveTopLeft + (waveTopRight - waveTopLeft) * 0.15;
+        const cy2 = waveTopLeft + (waveTopRight - waveTopLeft) * 0.6;
+        const wavePath = `M0,${waveTopLeft.toFixed(1)} C90,${cy1.toFixed(1)} 180,${cy2.toFixed(1)} 240,${((waveTopLeft + waveTopRight) / 2).toFixed(1)} C300,${cy2.toFixed(1)} 350,${(waveTopRight + 20).toFixed(1)} 400,${waveTopRight.toFixed(1)} L400,420 L0,420 Z`;
+        const shimmer = `M0,${waveTopLeft.toFixed(1)} C90,${cy1.toFixed(1)} 180,${cy2.toFixed(1)} 240,${((waveTopLeft + waveTopRight) / 2).toFixed(1)} C300,${cy2.toFixed(1)} 350,${(waveTopRight + 20).toFixed(1)} 400,${waveTopRight.toFixed(1)}`;
+
+        lp.setAttribute('d', wavePath);
+        if (sp) sp.setAttribute('d', shimmer);
       }
 
       // Lógica do Aquário (Legado): só atualiza se os elementos existirem
@@ -1066,11 +1087,9 @@ lucide.createIcons();
       if (homePctReceita) homePctReceita.textContent = `REC: ${pctReceita}%`;
       if (homePctDespesa) homePctDespesa.textContent = `DES: ${pctDespesa}%`;
 
-      // No novo design de "bolhas", mostramos apenas o valor formatado
       if (homeReceita) homeReceita.textContent = formatCurrencyBR(receita);
       if (homeDespesa) homeDespesa.textContent = formatCurrencyBR(despesa);
       if (homeInsight) homeInsight.textContent = summary?.insight || 'Carregando insight do Alfredo...';
-
       // Badge do usuário (nível)
       const badgeSvg = summary?.badge_svg || summary?.level_progress?.badge_svg;
       if (badgeSvg) {
