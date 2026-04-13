@@ -1033,34 +1033,31 @@ lucide.createIcons();
       const pctReceita = totalFluxo > 0 ? Math.round((receita / totalFluxo) * 100) : 0;
       const pctDespesa = totalFluxo > 0 ? Math.round((despesa / totalFluxo) * 100) : 0;
 
-      // Novo Efeito Líquido (Aquário Pro)
+      // Novo Efeito Líquido (Aquário Pro) - Bicolor Dinâmico
       const lp = document.getElementById('liquidPath');
       const sp = document.getElementById('shimmerPath');
       const grad = document.getElementById('liquidGrad');
+      const gRed = document.getElementById('gradStopRed');
+      const gGreen = document.getElementById('gradStopGreen');
 
       if (lp && grad) {
-        const pct = Math.max(0, Math.min(1, receita / (totalFluxo || 1)));
-        const bal = receita - despesa;
+        const totalFlow = receita + despesa;
+        // despesaRatio: 0 (só receita) a 1 (só despesa)
+        const despesaRatio = totalFlow > 0 ? (despesa / totalFlow) : 0;
+        
+        // pct: Altura do tanque preenchido. 
+        // Se tem pouco dado, fica baixo (20%). Se tem muito gasto ou receita, sobe (até 90%).
+        const pct = totalFlow === 0 ? 0.1 : Math.max(0.3, Math.min(0.9, (totalFlow / 10000) + 0.3)); 
 
-        // Wave: pct=1 (só receita) → onda sobe muito
-        const waveTopLeft = 420 * (1 - pct * 0.82 - 0.08);
-        const waveTopRight = 420 * (1 - pct * 0.92 - 0.04);
+        const waveTopLeft = 420 * (1 - pct - 0.05);
+        const waveTopRight = 420 * (1 - pct + 0.05);
 
-        if (bal >= 0) {
-          const greenStop = Math.round(pct * 100);
-          grad.innerHTML = `
-            <stop offset="0%" stop-color="#022c22" stop-opacity="0.9"/>
-            <stop offset="${greenStop}%" stop-color="#065f46" stop-opacity="0.8"/>
-            <stop offset="100%" stop-color="#134e4a" stop-opacity="0.7"/>
-          `;
-        } else {
-          const rPct = Math.round((1 - pct) * 100);
-          grad.innerHTML = `
-            <stop offset="0%" stop-color="#7f1d1d" stop-opacity="0.9"/>
-            <stop offset="${rPct}%" stop-color="#991b1b" stop-opacity="0.8"/>
-            <stop offset="100%" stop-color="#450a0a" stop-opacity="0.85"/>
-          `;
-        }
+        // O gradiente vai de 100% (bottom) a 0% (top).
+        // 0% do gradiente (offset 0) é Vermelho. 100% do gradiente (offset 100) é Verde.
+        // Se despesaRatio é 0.7, os primeiros 70% (de baixo para cima) são Vermelho.
+        const splitPct = Math.round(despesaRatio * 100);
+        if (gRed) gRed.setAttribute('offset', `${splitPct}%`);
+        if (gGreen) gGreen.setAttribute('offset', `${splitPct}%`);
 
         const cy1 = waveTopLeft + (waveTopRight - waveTopLeft) * 0.15;
         const cy2 = waveTopLeft + (waveTopRight - waveTopLeft) * 0.6;
