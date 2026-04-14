@@ -1673,7 +1673,87 @@ lucide.createIcons();
       }
 
       renderHomeRecent(summary?.recent || []);
+      renderHomeRadar(summary);
       lucide.createIcons();
+    }
+
+    function renderHomeRadar(summary) {
+      const homeRadarSection = document.getElementById('homeRadarSection');
+      const homeCardsGrid = document.getElementById('homeCardsGrid');
+      const homeInstallmentsBlock = document.getElementById('homeInstallmentsBlock');
+      const homeInstallmentsList = document.getElementById('homeInstallmentsList');
+      const homeInstallmentsCount = document.getElementById('homeInstallmentsCount');
+
+      if (!homeRadarSection) return;
+
+      const cards = summary?.cards || [];
+      const installments = summary?.installments || [];
+
+      if (cards.length === 0 && installments.length === 0) {
+        homeRadarSection.classList.add('hidden');
+        return;
+      }
+
+      homeRadarSection.classList.remove('hidden');
+
+      // 1. Renderizar Cartões
+      if (homeCardsGrid) {
+        homeCardsGrid.innerHTML = '';
+        if (cards.length > 0) {
+          cards.forEach(card => {
+            const vence = card.vence ? new Date(card.vence).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) : 'S/D';
+            const pct = card.limite > 0 ? Math.min(100, (card.fatura / card.limite) * 100) : 0;
+            const statusColor = pct > 85 ? 'text-red-500' : (pct > 50 ? 'text-yellow-500' : 'text-emerald-500');
+            
+            homeCardsGrid.innerHTML += `
+              <div class="min-w-[160px] glass-card rounded-2xl p-3 border border-brand/5 shrink-0 snap-center">
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="w-6 h-6 rounded-lg bg-brand/10 flex items-center justify-center">
+                    <i data-lucide="credit-card" class="w-3.5 h-3.5 text-brand"></i>
+                  </div>
+                  <span class="text-[10px] font-bold text-telegram-text truncate">${card.nome}</span>
+                </div>
+                <div class="space-y-1">
+                  <p class="text-[9px] font-bold uppercase tracking-tight text-telegram-hint">Fatura Atual</p>
+                  <p class="text-sm font-extrabold text-telegram-text">${formatCurrencyBR(card.fatura)}</p>
+                  <div class="flex items-center justify-between mt-2">
+                    <span class="text-[8px] font-bold text-telegram-hint">Vence ${vence}</span>
+                    <span class="text-[8px] font-black ${statusColor}">${pct.toFixed(0)}%</span>
+                  </div>
+                </div>
+              </div>
+            `;
+          });
+        }
+      }
+
+      // 2. Renderizar Parcelas
+      if (homeInstallmentsBlock && homeInstallmentsList) {
+        if (installments.length > 0) {
+          homeInstallmentsBlock.classList.remove('hidden');
+          homeInstallmentsCount.textContent = installments.length;
+          homeInstallmentsList.innerHTML = installments.map(p => {
+            const vence = p.vence ? new Date(p.vence).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) : '--/--';
+            return `
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2 min-w-0">
+                  <div class="w-1.5 h-1.5 rounded-full bg-brand/40"></div>
+                  <div class="truncate">
+                    <p class="text-[11px] font-bold text-telegram-text truncate">${p.desc}</p>
+                    <p class="text-[9px] font-semibold text-telegram-hint">Parcela ${p.parcela}</p>
+                  </div>
+                </div>
+                <div class="text-right shrink-0">
+                  <p class="text-[11px] font-extrabold text-telegram-text">${formatCurrencyBR(p.valor)}</p>
+                  <p class="text-[9px] font-bold text-brand-soft">${vence}</p>
+                </div>
+              </div>
+            `;
+          }).join('');
+        } else {
+          homeInstallmentsBlock.classList.add('hidden');
+        }
+      }
     }
 
     async function loadHomeOverview() {
