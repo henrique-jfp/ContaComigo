@@ -3444,65 +3444,103 @@ lucide.createIcons();
       if (mdDiasRestantes) mdDiasRestantes.textContent = `${vg.dias_restantes_mes || 0} dias restantes`;
 
       const catsL = document.getElementById('mdTopCategories');
+      const catsBlock = catsL?.closest('.glass-card');
       if (catsL) {
-        catsL.innerHTML = '';
         const topCats = data.top_categorias || [];
-        const maxT = topCats.length > 0 ? topCats[0].total : 1;
-        topCats.forEach(c => {
-          catsL.innerHTML += `<div><div class="flex justify-between text-[11px] mb-1"><span class="text-telegram-text font-bold">${c.nome}</span><span class="text-telegram-text font-black">${fmt.format(c.total)}</span></div><div class="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-full rounded-full" style="width: ${(c.total / maxT * 100)}%; background-color: ${c.cor_hex}"></div></div></div>`;
-        });
+        if (topCats.length > 0) {
+          if (catsBlock) catsBlock.classList.remove('hidden');
+          catsL.innerHTML = '';
+          const maxT = topCats[0].total;
+          topCats.forEach(c => {
+            catsL.innerHTML += `<div><div class="flex justify-between text-[11px] mb-1"><span class="text-telegram-text font-bold">${c.nome}</span><span class="text-telegram-text font-black">${fmt.format(c.total)}</span></div><div class="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-full rounded-full" style="width: ${(c.total / maxT * 100)}%; background-color: ${c.cor_hex}"></div></div></div>`;
+          });
+        } else if (catsBlock) {
+          catsBlock.classList.add('hidden');
+        }
       }
 
       const mdTotalAssinaturas = document.getElementById('mdTotalAssinaturas');
       const assL = document.getElementById('mdAssinaturasList');
+      const assBlock = assL?.closest('.glass-card');
       if (assL) {
-        assL.innerHTML = '';
         const assObj = data.assinaturas || { lista: [], total_mensal: 0 };
-        if (mdTotalAssinaturas) mdTotalAssinaturas.textContent = fmt.format(assObj.total_mensal);
-        assObj.lista.slice(0, 5).forEach(a => {
-          const logo = getBrandLogoHtml(a.descricao);
-          assL.innerHTML += `<div class="flex items-center justify-between gap-3"><div class="flex items-center gap-3 min-w-0">${logo}<span class="text-[12px] font-bold text-telegram-text truncate">${a.descricao}</span></div><span class="text-[12px] text-telegram-text font-black whitespace-nowrap">${fmt.format(a.valor)}</span></div>`;
-        });
+        if (assObj.lista.length > 0) {
+          if (assBlock) assBlock.classList.remove('hidden');
+          assL.innerHTML = '';
+          if (mdTotalAssinaturas) mdTotalAssinaturas.textContent = fmt.format(assObj.total_mensal);
+          assObj.lista.slice(0, 10).forEach(a => {
+            const logo = getBrandLogoHtml(a.descricao);
+            assL.innerHTML += `<div class="flex items-center justify-between gap-3"><div class="flex items-center gap-3 min-w-0">${logo}<span class="text-[12px] font-bold text-telegram-text truncate">${a.descricao}</span></div><span class="text-[12px] text-telegram-text font-black whitespace-nowrap">${fmt.format(a.valor)}</span></div>`;
+          });
+        } else if (assBlock) {
+          assBlock.classList.add('hidden');
+        }
       }
 
       const mdTotalParcelas = document.getElementById('mdTotalParcelas');
       const parcL = document.getElementById('mdParcelasList');
+      const parcBlock = parcL?.closest('.glass-card');
       if (parcL) {
-        parcL.innerHTML = '';
         const parcObj = data.parcelamentos || { lista: [], total_mensal_parcelas: 0 };
-        if (mdTotalParcelas) mdTotalParcelas.textContent = fmt.format(parcObj.total_mensal_parcelas);
-        parcObj.lista.slice(0, 5).forEach(p => {
-          parcL.innerHTML += `<div><div class="flex justify-between text-[11px] mb-1"><span class="text-telegram-text truncate mr-2">${p.descricao}</span><span class="text-telegram-hint">${p.parcela_atual}/${p.total_parcelas}</span></div><div class="h-1 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-amber-500" style="width: ${p.percentual_concluido}%"></div></div></div>`;
-        });
+        if (parcObj.lista.length > 0) {
+          if (parcBlock) parcBlock.classList.remove('hidden');
+          parcL.innerHTML = '';
+          if (mdTotalParcelas) mdTotalParcelas.textContent = fmt.format(parcObj.total_mensal_parcelas);
+          parcObj.lista.slice(0, 10).forEach(p => {
+            parcL.innerHTML += `<div><div class="flex justify-between text-[11px] mb-1"><span class="text-telegram-text truncate mr-2">${p.descricao}</span><span class="text-telegram-hint">${p.parcela_atual}/${p.total_parcelas}</span></div><div class="h-1 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-amber-500" style="width: ${p.percentual_concluido}%"></div></div></div>`;
+          });
+        } else if (parcBlock) {
+          parcBlock.classList.add('hidden');
+        }
       }
 
       const cartL = document.getElementById('mdCartoesList');
+      const cartBlock = cartL?.closest('.glass-card');
       if (cartL) {
-        cartL.innerHTML = '';
-        (data.cartoes || []).forEach(c => {
-          const v = c.dias_para_vencer;
-          const b = v <= 7 ? `<span class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[8px] font-bold">VENCE EM ${v}D</span>` : (v <= 14 ? `<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[8px] font-bold">VENCE EM ${v}D</span>` : '');
-          cartL.innerHTML += `<div class="flex items-center gap-3"><div class="w-2 h-2 rounded-full" style="background-color: ${c.cor_hex}"></div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="text-[11px] font-bold text-telegram-text truncate">${c.nome_conta}</span>${b}</div><p class="text-[9px] text-telegram-hint">Vence ${dtFmt(c.data_vencimento)}</p></div><div class="text-right"><div class="text-[11px] font-bold text-telegram-text">${fmt.format(c.valor_total)}</div><p class="text-[9px] text-telegram-hint">de ${fmt.format(c.limite_cartao)}</p></div></div>`;
-        });
+        const cards = data.cartoes || [];
+        if (cards.length > 0) {
+          if (cartBlock) cartBlock.classList.remove('hidden');
+          cartL.innerHTML = '';
+          cards.forEach(c => {
+            const v = c.dias_para_vencer;
+            const b = v !== null && v <= 7 ? `<span class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[8px] font-bold">VENCE EM ${v}D</span>` : (v !== null && v <= 14 ? `<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[8px] font-bold">VENCE EM ${v}D</span>` : '');
+            cartL.innerHTML += `<div class="flex items-center gap-3"><div class="w-2 h-2 rounded-full" style="background-color: ${c.cor_hex}"></div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="text-[11px] font-bold text-telegram-text truncate">${c.nome_conta}</span>${b}</div><p class="text-[9px] text-telegram-hint">Vence ${dtFmt(c.data_vencimento)}</p></div><div class="text-right"><div class="text-[11px] font-bold text-telegram-text">${fmt.format(c.valor_total)}</div><p class="text-[9px] text-telegram-hint">de ${fmt.format(c.limite_cartao)}</p></div></div>`;
+          });
+        } else if (cartBlock) {
+          cartBlock.classList.add('hidden');
+        }
       }
 
       const mL = document.getElementById('mdMetasList');
+      const mBlock = mL?.closest('.glass-card');
       if (mL) {
-        mL.innerHTML = '';
-        (data.metas || []).forEach(m => {
-          mL.innerHTML += `<div><div class="flex justify-between text-[11px] mb-1"><span class="text-telegram-text truncate mr-2">${m.descricao}</span><span class="text-telegram-text font-bold">${m.percentual.toFixed(0)}%</span></div><div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-green-500" style="width: ${m.percentual}%"></div></div></div>`;
-        });
+        const metas = data.metas || [];
+        if (metas.length > 0) {
+          if (mBlock) mBlock.classList.remove('hidden');
+          mL.innerHTML = '';
+          metas.forEach(m => {
+            mL.innerHTML += `<div><div class="flex justify-between text-[11px] mb-1"><span class="text-telegram-text truncate mr-2">${m.descricao}</span><span class="text-telegram-text font-bold">${m.percentual.toFixed(0)}%</span></div><div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-green-500" style="width: ${m.percentual}%"></div></div></div>`;
+          });
+        } else if (mBlock) {
+          mBlock.classList.add('hidden');
+        }
       }
 
       const oL = document.getElementById('mdOrcamentosList');
+      const oBlock = oL?.closest('.glass-card');
       if (oL) {
-        oL.innerHTML = '';
-        (data.orcamentos || []).forEach(o => {
-          const cC = o.status === 'estourado' ? 'bg-red-100 text-red-700' : (o.status === 'atencao' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700');
-          oL.innerHTML += `<div class="flex items-center justify-between"><span class="text-[11px] text-telegram-text font-medium">${o.categoria}</span><span class="px-2 py-0.5 rounded-full ${cC} text-[9px] font-bold">${o.percentual_usado.toFixed(0)}% usado</span></div>`;
-        });
+        const orcs = data.orcamentos || [];
+        if (orcs.length > 0) {
+          if (oBlock) oBlock.classList.remove('hidden');
+          oL.innerHTML = '';
+          orcs.forEach(o => {
+            const cC = o.status === 'estourado' ? 'bg-red-100 text-red-700' : (o.status === 'atencao' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700');
+            oL.innerHTML += `<div class="flex items-center justify-between"><span class="text-[11px] text-telegram-text font-medium">${o.categoria}</span><span class="px-2 py-0.5 rounded-full ${cC} text-[9px] font-bold">${o.percentual_usado.toFixed(0)}% usado</span></div>`;
+          });
+        } else if (oBlock) {
+          oBlock.classList.add('hidden');
+        }
       }
-
       const fBlock = document.getElementById('mdFiisBlock');
       if (data.fiis && data.fiis.lista && data.fiis.lista.length > 0) {
         if (fBlock) fBlock.classList.remove('hidden');

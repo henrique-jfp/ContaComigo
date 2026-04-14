@@ -1408,92 +1408,154 @@ def miniapp_modo_deus():
 
         # --- SEÇÃO 3: ASSINATURAS ---
         try:
-            keywords = [
+            servicos_assinatura = [
                 'netflix', 'spotify', 'amazon', 'disney', 'hbo', 'globoplay', 'youtube',
                 'deezer', 'apple', 'crunchyroll', 'paramount', 'claro', 'vivo', 'tim',
-                'oi', 'net', 'sky', 'starlink', 'academia', 'gym', 'assinatura',
-                'subscription', 'plano mensal', 'totalpass', 'gympass', 'wellhub',
+                'oi', 'net', 'sky', 'starlink', 'gympass', 'totalpass', 'wellhub',
                 'chatgpt', 'openai', 'google one', 'icloud', 'dropbox', 'microsoft 365',
-                'adobe', 'prime video', 'amazon prime', 'youtube premium'
+                'adobe', 'prime video', 'amazon prime', 'youtube premium', 'academia', 'smartfit', 'bluefit'
             ]
-            keywords_excluir = ['juros', 'multa', 'encargo', 'iof', 'rotativo']
+            termos_recorrentes = ['assinatura', 'subscription', 'plano mensal', 'mensalidade', 'recorrente']
+            termos_excluir = ['juros', 'multa', 'encargo', 'iof', 'rotativo', 'pix enviado', 'pix recebido', 'bar ', 'lanchonete', 'restaurante', 'uber', '99app', 'ifood', 'rappi', 'ecovias', 'ponte']
             
-            regex_kw = '|'.join(keywords)
-            regex_excluir = '|'.join(keywords_excluir)
+            regex_servicos = '|'.join(servicos_assinatura)
+            regex_recorrentes = '|'.join(termos_recorrentes)
+            regex_excluir = '|'.join(termos_excluir)
+            
             start_assinaturas = datetime.combine(today - timedelta(days=90), time.min)
-            
-            # Categorias de Assinaturas
-            categoria_ass_ids = db.query(Categoria.id).filter(
-                or_(
-                    func.lower(Categoria.nome).like('%assinatura%'),
-                    func.lower(Categoria.nome).like('%serviços e assinaturas%'),
-                    func.lower(Categoria.nome).like('%servicos e assinaturas%')
-                )
-            ).all()
-            cat_ass_ids = [r[0] for r in categoria_ass_ids]
+            cat_ass_ids = [r[0] for r in db.query(Categoria.id).filter(or_(func.lower(Categoria.nome).like('%assinatura%'), func.lower(Categoria.nome).like('%serviços e assinaturas%'), func.lower(Categoria.nome).like('%servicos e assinaturas%'))).all()]
+            sub_ass_ids = [r[0] for r in db.query(Subcategoria.id).filter(func.lower(Subcategoria.nome).like('%assinatura%')).all()]
 
-            # Categoria de Financiamentos (para EXCLUIR do card de assinaturas)
-            categoria_fin_ids = db.query(Categoria.id).filter(
-                func.lower(Categoria.nome).like('%empréstimos e financiamentos%')
-            ).all()
-            cat_fin_ids = [r[0] for r in categoria_fin_ids]
-
-            subcategoria_ass_ids = db.query(Subcategoria.id).filter(
-                func.lower(Subcategoria.nome).like('%assinatura%')
-            ).all()
-            sub_ass_ids = [r[0] for r in subcategoria_ass_ids]
-
-            # Busca por palavras-chave OU pela categoria específica de Assinaturas
-            # Mas EXCLUI explicitamente financiamentos e termos financeiros
             lanc_ass = db.query(Lancamento).filter(
-                Lancamento.id_usuario == user_id,
-                Lancamento.tipo.in_(['Saída', 'Despesa']),
+                Lancamento.id_usuario == user_id, Lancamento.tipo.in_(['Saída', 'Despesa']),
                 Lancamento.data_transacao >= start_assinaturas,
-                or_(
-                    func.lower(Lancamento.descricao).op('~')(regex_kw),
-                    Lancamento.id_categoria.in_(cat_ass_ids),
-                    Lancamento.id_subcategoria.in_(sub_ass_ids),
-                ),
-                Lancamento.id_categoria.not_in(cat_fin_ids),
+                or_(Lancamento.id_categoria.in_(cat_ass_ids), Lancamento.id_subcategoria.in_(sub_ass_ids), func.lower(Lancamento.descricao).op('~')(regex_servicos), func.lower(Lancamento.descricao).op('~')(regex_recorrentes)),
                 func.lower(Lancamento.descricao).op('!~')(regex_excluir)
             ).all()
 
-            agend_ass = db.query(Agendamento).filter(
-                Agendamento.id_usuario == user_id, Agendamento.ativo == True,
-                Agendamento.frequencia == 'mensal',
-                or_(
-                    func.lower(Agendamento.descricao).op('~')(regex_kw),
-                    Agendamento.id_categoria.in_(
-                        db.query(Categoria.id).filter(func.lower(Categoria.nome).like('%assinatura%'))
-                    )
-                ),
-                func.lower(Agendamento.descricao).op('!~')(regex_excluir)
-            ).all()            
-            from pierre_finance.categorizador import limpar_descricao
+            agend_ass = db.query(Agendamento).filter(Agendamento.id_usuario == user_id, Agendamento.ativo == True, Agendamento.frequencia == 'mensal', func.lower(Agendamento.descricao).op('!~')(regex_excluir)).all()            
             
+            from pierre_finance.categorizador import limpar_descricao
             lista_ass = []
             seen = set()
+            
             for l in lanc_ass:
-                # Limpeza agressiva para evitar duplicatas (Flamengo, Amazon Prime, etc)
-                nome_limpo = limpar_descricao(l.descricao or "").split()[0].lower() # Pega apenas a primeira palavra significativa
-                if nome_limpo and nome_limpo not in seen:
+                nome_base = limpar_descricao(l.descricao or "").split()[0].lower()
+                if nome_base and nome_base not in seen:
                     lista_ass.append({"descricao": l.descricao, "valor": abs(float(l.valor)), "proxima_data": None})
-                    seen.add(nome_limpo)
+                    seen.add(nome_base)
             
             for a in agend_ass:
-                nome_limpo = limpar_descricao(a.descricao or "").split()[0].lower()
-                if nome_limpo and nome_limpo not in seen:
-                    lista_ass.append({
-                        "descricao": a.descricao, 
-                        "valor": float(a.valor), 
-                        "proxima_data": a.proxima_data_execucao.isoformat() if a.proxima_data_execucao else None
-                    })
-                    seen.add(nome_limpo)
+                nome_base = limpar_descricao(a.descricao or "").split()[0].lower()
+                if nome_base and nome_base not in seen:
+                    lista_ass.append({"descricao": a.descricao, "valor": float(a.valor), "proxima_data": a.proxima_data_execucao.isoformat() if a.proxima_data_execucao else None})
+                    seen.add(nome_base)
             
+            lista_ass.sort(key=lambda x: x['valor'], reverse=True)
             result['assinaturas'] = {"lista": lista_ass, "total_mensal": sum(x['valor'] for x in lista_ass)}
         except Exception as e:
             logger.error(f"Erro Modo Deus (assinaturas): {e}")
             result['assinaturas'] = {"lista": [], "total_mensal": 0}
+
+        # --- SEÇÃO 4: PARCELAMENTOS ---
+        try:
+            parcelas = db.query(ParcelamentoItem).filter(
+                ParcelamentoItem.id_usuario == user_id,
+                or_(ParcelamentoItem.data_proxima_parcela.is_(None), ParcelamentoItem.data_proxima_parcela >= (today - timedelta(days=5)))
+            ).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(10).all()
+            
+            lista_p = [{"descricao": p.descricao, "valor_parcela": float(p.valor_parcela), "parcela_atual": p.parcela_atual, "total_parcelas": p.total_parcelas, "data_proxima_parcela": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None, "percentual_concluido": (p.parcela_atual / p.total_parcelas * 100) if p.total_parcelas > 0 else 0} for p in parcelas]
+            result['parcelamentos'] = {"lista": lista_p, "total_mensal_parcelas": sum(float(p.valor_parcela) for p in parcelas)}
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (parcelamentos): {e}")
+            result['parcelamentos'] = {"lista": [], "total_mensal_parcelas": 0}
+
+        # --- SEÇÃO 5: CARTÕES ---
+        try:
+            v_limit_cards = today + timedelta(days=45)
+            faturas = db.query(FaturaCartao).join(Conta).filter(
+                FaturaCartao.id_usuario == user_id,
+                or_(FaturaCartao.status.in_(['em_aberto', 'aberta', 'aberto', 'PENDING']), and_(FaturaCartao.data_vencimento >= (today - timedelta(days=2)), FaturaCartao.data_vencimento <= v_limit_cards))
+            ).order_by(FaturaCartao.data_vencimento.asc()).all()
+            
+            colors_c = ["#534AB7","#378ADD","#1D9E75","#D85A30"]
+            lista_c = []
+            seen_accounts = set()
+            for i, f in enumerate(faturas):
+                if f.id_conta in seen_accounts: continue
+                seen_accounts.add(f.id_conta)
+                limite = float(f.conta.limite_cartao or 0)
+                lista_c.append({
+                    "nome_conta": f.conta.nome, "valor_total": float(f.valor_total),
+                    "data_vencimento": f.data_vencimento.isoformat() if f.data_vencimento else None,
+                    "status": f.status, "limite_cartao": limite, "cor_hex": colors_c[i % len(colors_c)],
+                    "dias_para_vencer": (f.data_vencimento - today).days if f.data_vencimento else None
+                })
+            result['cartoes'] = lista_c
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (cartoes): {e}")
+            result['cartoes'] = []
+
+        # --- SEÇÃO 6: METAS ---
+        try:
+            metas = db.query(Objetivo).filter(Objetivo.id_usuario == user_id, Objetivo.valor_atual < Objetivo.valor_meta).all()
+            result['metas'] = [{
+                "descricao": m.descricao, "valor_meta": float(m.valor_meta), "valor_atual": float(m.valor_atual or 0),
+                "percentual": (float(m.valor_atual or 0) / float(m.valor_meta) * 100) if m.valor_meta > 0 else 0
+            } for m in metas]
+        except Exception as e:
+            result['metas'] = []
+
+        # --- SEÇÃO 7: ORÇAMENTOS ---
+        try:
+            orcs = db.query(OrcamentoCategoria).filter(OrcamentoCategoria.id_usuario == user_id).all()
+            lista_o = []
+            for o in orcs:
+                gasto = db.query(func.sum(Lancamento.valor)).filter(Lancamento.id_usuario == user_id, Lancamento.id_categoria == o.id_categoria, Lancamento.tipo.in_(['Saída', 'Despesa']), Lancamento.data_transacao >= datetime.combine(start_month, time.min)).scalar() or 0
+                gasto = abs(float(gasto))
+                perc = (gasto / float(o.valor_limite) * 100) if o.valor_limite > 0 else 0
+                lista_o.append({"categoria": o.categoria.nome if o.categoria else "Outros", "percentual_usado": perc, "status": "estourado" if perc > 100 else ("atencao" if perc > 75 else "ok")})
+            result['orcamentos'] = lista_o
+        except Exception as e:
+            result['orcamentos'] = []
+
+        # --- SEÇÃO 8: FIIS ---
+        try:
+            fiis = db.query(CarteiraFII).filter(CarteiraFII.id_usuario == user_id, CarteiraFII.ativo == True).all()
+            lista_f = [{"ticker": f.ticker, "quantidade_cotas": float(f.quantidade_cotas), "valor_posicao": float(f.quantidade_cotas * f.preco_medio), "preco_medio": float(f.preco_medio)} for f in fiis]
+            renda = db.query(HistoricoAlertaFII.valor_referencia).filter(HistoricoAlertaFII.id_usuario == user_id, HistoricoAlertaFII.tipo_alerta == 'rendimento_pago', HistoricoAlertaFII.enviado_em >= datetime.now(timezone.utc) - timedelta(days=30)).all()
+            result['fiis'] = {"lista": lista_f, "renda_mensal_estimada": sum(float(r[0]) for r in renda) if renda else 0}
+        except Exception as e:
+            result['fiis'] = {"lista": [], "renda_mensal_estimada": 0}
+
+        # --- SEÇÃO 9: ALERTAS ---
+        try:
+            alertas = []
+            if getattr(usuario, 'notif_alertas_risco', True):
+                juros_atual = abs(float(db.query(func.sum(Lancamento.valor)).filter(Lancamento.id_usuario == user_id, Lancamento.tipo.in_(['Saída', 'Despesa']), func.lower(Lancamento.descricao).op('~')('juros|multa|encargo|iof'), Lancamento.data_transacao >= datetime.combine(start_month, time.min)).scalar() or 0))
+                if juros_atual > 0: alertas.append({"tipo": "critico", "titulo": "🚨 Gastos com Juros", "detalhe": f"Você pagou R$ {juros_atual:.2f} em juros este mês.", "data": datetime.now().isoformat()})
+            for o in result.get('orcamentos', []):
+                if o['status'] == 'estourado': alertas.append({"tipo": "critico", "titulo": f"Limite de {o['categoria']} estourado", "detalhe": f"Gasto {o['percentual_usado']:.0f}% do limite."})
+            result['alertas'] = alertas[:6]
+        except Exception as e:
+            result['alertas'] = []
+
+        # --- SEÇÃO 10: VENCIMENTOS ---
+        try:
+            v_limit = today + timedelta(days=30)
+            lista_v = [{"descricao": a.descricao, "valor": float(a.valor), "data": a.proxima_data_execucao.isoformat(), "cor_hex": "#378ADD"} for a in db.query(Agendamento).filter(Agendamento.id_usuario == user_id, Agendamento.ativo == True, Agendamento.proxima_data_execucao <= v_limit).all()]
+            lista_v += [{"descricao": f"Fatura {f.conta.nome}", "valor": float(f.valor_total), "data": f.data_vencimento.isoformat(), "cor_hex": "#534AB7"} for f in db.query(FaturaCartao).filter(FaturaCartao.id_usuario == user_id, FaturaCartao.data_vencimento >= today, FaturaCartao.data_vencimento <= v_limit, FaturaCartao.status != 'paga').all()]
+            result['proximos_vencimentos'] = sorted(lista_v, key=lambda x: x['data'])[:8]
+        except Exception as e:
+            result['proximos_vencimentos'] = []
+
+        # --- SEÇÃO 11: INSIGHTS ---
+        try:
+            ins = []
+            if result.get('top_categorias') and result['top_categorias'][0]['percentual_do_total_gastos'] > 40: ins.append(f"{result['top_categorias'][0]['nome']} consome {result['top_categorias'][0]['percentual_do_total_gastos']:.0f}% dos gastos.")
+            result['insights_rapidos'] = ins[:3]
+        except Exception as e:
+            result['insights_rapidos'] = []
 
         # --- SEÇÃO 4: PARCELAMENTOS ---
         try:
