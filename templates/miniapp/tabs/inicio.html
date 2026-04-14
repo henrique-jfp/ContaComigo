@@ -261,15 +261,26 @@
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <!-- NOVO: Radar de Cartões e Parcelas -->
+          <div id="homeRadarSection" class="hidden space-y-4 home-reveal" style="--delay: 60ms">
+            <div class="grid grid-cols-1 gap-3">
+              <!-- Grid de Cartões -->
+              <div id="homeCardsGrid" class="flex gap-3 overflow-x-auto pb-2 hide-scroll snap-x">
+                <!-- Injetado via JS -->
+              </div>
               
-              <!-- Hidden original elements for compatibility if needed -->
-              <div style="display:none">
-                  <span id="homeProgressLabel">0%</span>
-                  <div id="homeAquariumWater"></div>
-                  <span id="homePctReceita">0%</span>
-                  <span id="homePctDespesa">0%</span>
-                  <div id="homePlanLabel"></div>
-                  <div id="homeUpgradeBtn"></div>
+              <!-- Lista de Parcelas Próximas -->
+              <div id="homeInstallmentsBlock" class="hidden glass-card rounded-3xl p-4 border border-brand/5">
+                <div class="flex items-center justify-between mb-3">
+                  <h4 class="text-[10px] font-bold uppercase tracking-widest text-brand/60">Próximas Parcelas</h4>
+                  <span id="homeInstallmentsCount" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-brand/10 text-brand">0</span>
+                </div>
+                <div id="homeInstallmentsList" class="space-y-3">
+                  <!-- Injetado via JS -->
+                </div>
               </div>
             </div>
           </div>

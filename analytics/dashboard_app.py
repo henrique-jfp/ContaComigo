@@ -2068,7 +2068,72 @@ def miniapp_overview():
                     future_value = current_base + (avg_net * passo)
                     projection_series.append({"label": label, "historico": None, "futuro": round(future_value, 2)})
 
+        # --- NOVO: Resumo de Cartões e Parcelas para o Overview ---
+        faturas_db = db.query(FaturaCartao).join(Conta).filter(
+            FaturaCartao.id_usuario == usuario.id,
+            or_(FaturaCartao.status.in_(['em_aberto', 'aberta', 'aberto', 'PENDING']), FaturaCartao.data_vencimento >= today)
+        ).order_by(FaturaCartao.data_vencimento.asc()).all()
+        
+        cards_summary = []
+        seen_accounts = set()
+        for f in faturas_db:
+            if f.id_conta in seen_accounts: continue
+            seen_accounts.add(f.id_conta)
+            cards_summary.append({
+                "nome": f.conta.nome,
+                "fatura": float(f.valor_total),
+                "limite": float(f.conta.limite_cartao or 0),
+                "vence": f.data_vencimento.isoformat() if f.data_vencimento else None
+            })
+
+        parcelas_db = db.query(ParcelamentoItem).filter(
+            ParcelamentoItem.id_usuario == usuario.id,
+            or_(ParcelamentoItem.data_proxima_parcela.is_(None), ParcelamentoItem.data_proxima_parcela >= (today - timedelta(days=2)))
+        ).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(3).all()
+        
+        installments_summary = []
+        for p in parcelas_db:
+            installments_summary.append({
+                "desc": p.descricao,
+                "valor": float(p.valor_parcela),
+                "parcela": f"{p.parcela_atual}/{p.total_parcelas}",
+                "vence": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None
+            })
+
         # Top vilões reais dos últimos 90 dias.
+        # --- SEÇÃO PIERRE (CARTÕES E PARCELAS) ---
+        cards_summary = []
+        installments_summary = []
+        if usuario.pierre_api_key:
+            faturas_db = db.query(FaturaCartao).join(Conta).filter(
+                FaturaCartao.id_usuario == usuario.id,
+                or_(FaturaCartao.status.in_(['em_aberto', 'aberta', 'aberto', 'PENDING']), FaturaCartao.data_vencimento >= today)
+            ).order_by(FaturaCartao.data_vencimento.asc()).all()
+            
+            seen_accounts = set()
+            for f in faturas_db:
+                if f.id_conta in seen_accounts: continue
+                seen_accounts.add(f.id_conta)
+                cards_summary.append({
+                    "nome": f.conta.nome,
+                    "fatura": float(f.valor_total),
+                    "limite": float(f.conta.limite_cartao or 0),
+                    "vence": f.data_vencimento.isoformat() if f.data_vencimento else None
+                })
+
+            parcelas_db = db.query(ParcelamentoItem).filter(
+                ParcelamentoItem.id_usuario == usuario.id,
+                or_(ParcelamentoItem.data_proxima_parcela.is_(None), ParcelamentoItem.data_proxima_parcela >= (today - timedelta(days=2)))
+            ).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(3).all()
+            
+            for p in parcelas_db:
+                installments_summary.append({
+                    "desc": p.descricao,
+                    "valor": float(p.valor_parcela),
+                    "parcela": f"{p.parcela_atual}/{p.total_parcelas}",
+                    "vence": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None
+                })
+
         villains_start = today - timedelta(days=90)
         villains_lanc = (
             db.query(Lancamento)
@@ -2124,6 +2189,8 @@ def miniapp_overview():
                 "recent": [_serialize_miniapp_lancamento(lanc) for lanc in recent_items],
                 "plan": user_plan,
                 "plan_label": user_plan_label,
+                "cards": cards_summary,
+                "installments": installments_summary,
             }
         })
     finally:
