@@ -515,6 +515,12 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
         tx_type = tx.get("type") or tx.get("transactionType")
         descricao = (tx.get("description") or tx.get("name") or "Transação").strip()
 
+        # Filtro Banco Inter - Crédito Liberado (Pix no Crédito)
+        acc_name = (tx.get("account") or {}).get("name") or ""
+        if "inter" in acc_name.lower() and "crédito liberado" in descricao.lower():
+            logger.info(f"Ignorando lançamento Inter 'Crédito liberado': {ext_id}")
+            continue
+
         tipo = _inferir_tipo(descricao, valor_bruto, acc_type, tx_type)
         cnpj, nome_fantasia = _extrair_dados_contraparte(tx)
 
@@ -576,6 +582,12 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
         acc_type = tx.get("accountType") or (tx.get("account") or {}).get("type") or "BANK"
         tx_type = tx.get("type") or tx.get("transactionType")
         descricao = (tx.get("description") or tx.get("name") or "Transação").strip()
+
+        # Filtro Banco Inter - Crédito Liberado (Pix no Crédito)
+        acc_name = (tx.get("account") or {}).get("name") or ""
+        if "inter" in acc_name.lower() and "crédito liberado" in descricao.lower():
+            logger.info(f"Ignorando lançamento Inter 'Crédito liberado': {ext_id}")
+            continue
 
         tipo = _inferir_tipo(descricao, valor_bruto, acc_type, tx_type)
         cnpj, nome_fantasia = _extrair_dados_contraparte(tx)

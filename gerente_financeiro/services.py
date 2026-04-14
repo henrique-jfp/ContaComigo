@@ -829,6 +829,27 @@ async def salvar_transacoes_generica(db: Session, usuario_db, transacoes: list,
         
         for transacao_data in transacoes:
             try:
+                # FILTRO: Ignorar lançamentos de 'Crédito liberado' vindos do banco Inter
+                try:
+                    desc_l = (transacao_data.get('descricao') or '').lower()
+                    # possíveis chaves onde a origem/banco pode aparecer
+                    bank_candidates = [
+                        transacao_data.get('bank'),
+                        transacao_data.get('institution'),
+                        transacao_data.get('bank_name'),
+                        transacao_data.get('origem'),
+                        transacao_data.get('source'),
+                        transacao_data.get('provider')
+                    ]
+                    bank_str = ' '.join([str(x).lower() for x in bank_candidates if x])
+                    if 'crédito liberado' in desc_l or 'credito liberado' in desc_l:
+                        if 'inter' in bank_str or 'banco inter' in bank_str:
+                            logger.info('Ignorando transação automática (Crédito liberado) vinda do Inter: %s', transacao_data.get('descricao'))
+                            stats['erro'] += 0
+                            continue
+                except Exception:
+                    # se algo falhar aqui, apenas continue o processamento normal
+                    pass
                 # Verifica duplicidade primeiro
                 if verificar_duplicidade_transacoes(db, usuario_db.id, conta_id, transacao_data):
                     stats['duplicadas'] += 1
