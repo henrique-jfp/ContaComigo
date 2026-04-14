@@ -3,11 +3,11 @@ Sincronização Open Finance — Pierre Finance
 ============================================
 Motor de carga e atualização incremental de dados bancários.
 
-Correções aplicadas v2:
-- Lógica de Receita/Despesa muito mais robusta para dados bancários reais
-- Parser de faturas com suporte a todos os formatos que a API pode retornar
-- Parser de parcelamentos corrigido para o schema real do endpoint
-- Logs detalhados para diagnóstico de falhas silenciosas
+Correções aplicadas v3:
+- Prioridade de Merchant para cartões de crédito
+- Captura de accountId aninhado
+- Importação de faturas passadas (get_bills)
+- Parser de parcelas corrigido para schema real
 """
 
 import logging
@@ -64,7 +64,6 @@ def _normalizar_forma_pagamento(descricao: str, account_type: str) -> str:
 # Lógica de tipo (Receita / Despesa) — coração do sync
 # ---------------------------------------------------------------------------
 
-# Palavras que indicam RECEITA independentemente do sinal ou conta
 _SINAIS_RECEITA_FORTE = {
     "salario", "salário", "pagamento salario", "pagamento salário",
     "pix recebido", "ted recebida", "ted recebido", "doc recebido",
@@ -74,7 +73,6 @@ _SINAIS_RECEITA_FORTE = {
     "dividendo", "dividendos", "jcp", "venda", "resgate",
 }
 
-# Palavras que indicam DESPESA independentemente do sinal ou conta
 _SINAIS_DESPESA_FORTE = {
     "debito automatico", "débito automático",
     "debito em conta", "débito em conta",
@@ -91,7 +89,6 @@ def _inferir_tipo(
 ) -> str:
     desc_norm = (descricao or "").lower()
 
-    # 🛡️ PRIORIDADE 1: Sinais textuais explícitos (overrides)
     for sinal in _SINAIS_RECEITA_FORTE:
         if sinal in desc_norm:
             return "Receita"
@@ -104,18 +101,11 @@ def _inferir_tipo(
     if tipo_tx_norm in {"Receita", "Despesa"}:
         return tipo_tx_norm
 
-    # 🛡️ PRIORIDADE 2: Lógica por tipo de conta e sinal numérico
     if account_type == "CREDIT":
-        # No cartão de crédito (Pierre/Pluggy): 
-        # Geralmente valor POSITIVO é COMPRA (Despesa)
-        # Valor NEGATIVO é ESTORNO/PAGAMENTO (Receita)
         if valor_bruto < 0:
             return "Receita"
         return "Despesa"
 
-    # Conta corrente / pagamento / investimento:
-    # Valor NEGATIVO é SAÍDA (Despesa)
-    # Valor POSITIVO é ENTRADA (Receita)
     if valor_bruto < 0:
         return "Despesa"
 
@@ -129,25 +119,18 @@ def _extrair_nome_da_descricao(descricao: str) -> str | None:
         
     desc = descricao.strip()
     
-    # Padrão: 'Pix enviado - Nome do Estabelecimento'
-    # Padrão: 'Pix recebido - Nome de Alguem'
-    # Padrão: 'TRANSFERENCIA PIX - DES Nome'
-    # Padrão: 'COMPRA NO CARTAO - NOME ESTABELECIMENTO - RIO DE JANEIR BRA'
     patterns = [
         r"(?:Pix enviado|Pix recebido)\s*-\s*(.+)",
         r"TRANSFERENCIA PIX\s*-\s*[A-Z]{3}\s*(.+)",
         r"PAGTO ELETRON\s*COBRANCA\s*-\s*(.+?)\s*-",
         r"COMPRA NO CARTAO\s*-\s*(.+?)\s*(-|\d)",
-        # Fallback genérico para capturar o início da string antes de cidades/país comuns
         r"^(.+?)\s*(?:RIO DE JANEIR|SAO PAULO|BRA$|BRA\s)",
     ]
     
     for pat in patterns:
         match = re.search(pat, desc, re.IGNORECASE)
         if match:
-            # Limpa o resultado final
             res = match.group(1).strip()
-            # Remove sufixos de data ou IDs no final (ex: '01/04 - DOCTO')
             res = re.split(r'\s+\d{2}/\d{2}', res)[0]
             res = re.split(r'\s+-', res)[0]
             return res.strip()
@@ -158,38 +141,35 @@ def _extrair_nome_da_descricao(descricao: str) -> str | None:
 def _extrair_dados_contraparte(tx: dict) -> tuple[str | None, str | None]:
     """Extrai CNPJ/CPF e Nome da contraparte do payload da transação."""
     payment_data = tx.get("payment_data") or {}
-    descricao_bruta = tx.get("description") or ""
+    acc_type = tx.get("accountType", "")
     
-    # Tenta receiver primeiro (gastos)
+    # Prioridade para Merchant em Cartão de Crédito
+    if acc_type == "CREDIT":
+        merchant = tx.get("merchant") or {}
+        doc = merchant.get("documentNumber") or merchant.get("document")
+        name = merchant.get("name")
+        if name and name.lower() != "null":
+            if doc:
+                doc = "".join(filter(str.isdigit, str(doc)))
+                if len(doc) not in [11, 14]: doc = None
+            return doc, name
+
+    # Fallback para receiver/payer (Pix/TED)
     receiver = payment_data.get("receiver") or {}
     doc = receiver.get("document")
     name = receiver.get("name")
     
-    # Se não tem no receiver, tenta merchant
-    if not doc or not name:
-        merchant = tx.get("merchant") or {}
-        if not name:
-            name = merchant.get("name")
-        if not doc:
-            doc = merchant.get("documentNumber") or merchant.get("document")
-
-    # Se ainda não tem, tenta payer (entradas)
-    if not doc or not name:
-        payer = payment_data.get("payer") or {}
-        if not doc:
-            doc = payer.get("document")
-        if not name:
-            name = payer.get("name")
-            
-    # ÚLTIMO RECURSO: Se não veio nome estruturado, tenta extrair da descrição
     if not name or name.lower() == "null":
-        name = _extrair_nome_da_descricao(descricao_bruta)
-            
-    # Limpeza básica do documento (remove pontos, traços)
+        payer = payment_data.get("payer") or {}
+        if not doc: doc = payer.get("document")
+        if not name: name = payer.get("name")
+
+    if not name or name.lower() == "null":
+        name = _extrair_nome_da_descricao(tx.get("description") or "")
+
     if doc:
         doc = "".join(filter(str.isdigit, str(doc)))
-        if len(doc) not in [11, 14]: # Filtra documentos inválidos
-            doc = None
+        if len(doc) not in [11, 14]: doc = None
             
     return doc, name
 
@@ -226,7 +206,6 @@ def _upsert_accounts_and_balances(usuario: Usuario, db: Session, client: PierreC
         db.flush()
         accounts_map[ext_id] = conta.id
 
-        # Upsert de Saldo: se já existe saldo capturado hoje para esta conta, apenas atualiza
         hoje = datetime.now(timezone.utc).date()
         saldo_existente = db.query(SaldoConta).filter(
             SaldoConta.id_conta == conta.id,
@@ -250,12 +229,19 @@ def _upsert_accounts_and_balances(usuario: Usuario, db: Session, client: PierreC
 
 
 def _upsert_bill_summaries(usuario: Usuario, db: Session, client: PierreClient, accounts_map: dict[str, int]) -> int:
+    updated = 0
     try:
-        res_summary = client.get_bill_summary()
-        summaries = _extrair_sumarios_fatura(res_summary)
-        updated = 0
+        # 1. Fatura Aberta/Atual
+        res_current = client.get_bill_summary()
+        current_bills = _extrair_sumarios_fatura(res_current)
+        
+        # 2. Faturas Fechadas/Passadas
+        res_past = client.get_bills()
+        past_bills = _extrair_sumarios_fatura(res_past)
+        
+        all_bills = current_bills + past_bills
 
-        for s in summaries:
+        for s in all_bills:
             acc_id = str(s.get("accountId") or s.get("account_id") or "")
             conta_id = accounts_map.get(acc_id)
             if not conta_id:
@@ -265,7 +251,6 @@ def _upsert_bill_summaries(usuario: Usuario, db: Session, client: PierreClient, 
             dv = _parse_iso_date(dv_raw)
             ref_date = dv or datetime.now(timezone.utc)
             
-            # ID Único para a fatura (Conta + Mês/Ano de Vencimento)
             fake_ext_id = f"bill_{acc_id}_{ref_date.year}_{ref_date.month:02d}"
 
             fatura = db.query(FaturaCartao).filter(
@@ -279,7 +264,6 @@ def _upsert_bill_summaries(usuario: Usuario, db: Session, client: PierreClient, 
             fatura.valor_total = _safe_decimal(s.get("billAmount") or s.get("amount") or s.get("totalAmount") or 0)
             fatura.data_vencimento = ref_date.date()
             
-            # Normalização de Status para o Dashboard
             status_raw = str(s.get("status") or "").upper()
             if any(k in status_raw for k in ["PAID", "PAGO", "FECHADA", "CLOSED"]):
                 fatura.status = "paga"
@@ -303,150 +287,109 @@ def _upsert_bill_summaries(usuario: Usuario, db: Session, client: PierreClient, 
 def _upsert_installments(usuario: Usuario, db: Session, client: PierreClient, accounts_map: dict[str, int]) -> int:
     try:
         res_inst = client.get_installments()
-        inst_list = _extrair_parcelamentos(res_inst)
+        # Schema Pierre: { "purchases": [ { "id", "description", "installments": [...] } ] }
+        purchases = _extrair_parcelamentos(res_inst)
         updated = 0
-        hoje = datetime.now(timezone.utc).date()
 
-        for inst in inst_list:
-            # Tenta pegar um ID único da compra
-            ext_id = str(inst.get("id") or inst.get("purchaseId") or inst.get("transactionId") or "")
-            if not ext_id:
-                # Fallback: Gera um ID baseado na descrição e valor se não tiver ID único
-                desc_slug = (inst.get("description") or "compra")[:10]
-                ext_id = f"inst_{usuario.id}_{desc_slug}_{inst.get('totalAmount')}"
-
-            parcela = db.query(ParcelamentoItem).filter(
-                ParcelamentoItem.external_id == ext_id,
-                ParcelamentoItem.id_usuario == usuario.id,
-            ).first()
-            if not parcela:
-                parcela = ParcelamentoItem(id_usuario=usuario.id, external_id=ext_id)
-                db.add(parcela)
-
-            parcela.id_conta = accounts_map.get(str(inst.get("accountId") or inst.get("account_id")))
-            parcela.descricao = (inst.get("description") or inst.get("name") or "Compra Parcelada").strip()
-
-            v_total = _safe_decimal(inst.get("totalAmount") or inst.get("total") or 0)
-            total_p = max(1, int(inst.get("totalInstallments") or inst.get("installments") or 1))
-
-            parcela.valor_total = v_total
-            parcela.total_parcelas = total_p
+        for p in purchases:
+            p_id = str(p.get("id") or p.get("purchaseId") or "")
+            p_desc = (p.get("description") or p.get("name") or "Compra Parcelada").strip()
+            p_acc_id = str(p.get("accountId") or p.get("account_id") or "")
+            conta_id = accounts_map.get(p_acc_id)
             
-            # Valor da Parcela: Usa o campo da API ou calcula
-            v_parcela = inst.get("installmentAmount") or inst.get("amount")
-            if v_parcela:
-                parcela.valor_parcela = _safe_decimal(v_parcela)
-            else:
-                parcela.valor_parcela = _safe_decimal(float(v_total) / total_p)
+            # Cada compra pode ter uma lista de parcelas (installments)
+            installments = p.get("installments") or []
+            if not installments:
+                # Se não tem lista interna, tenta tratar o objeto raiz como uma parcela (legado)
+                installments = [p]
 
-            parcela.parcela_atual = int(inst.get("installmentNumber") or inst.get("currentInstallment") or 1)
+            for inst in installments:
+                # ID Único da Parcela: PurchaseID + Número da Parcela
+                idx = inst.get("installmentNumber") or inst.get("currentInstallment") or 1
+                ext_id = f"inst_{p_id}_{idx}" if p_id else None
+                
+                if not ext_id: continue
 
-            # Data de Vencimento: Vital para o Modo Deus
-            dp_raw = inst.get("dueDate") or inst.get("nextDueDate") or inst.get("date")
-            dp = _parse_iso_date(dp_raw)
-            if dp:
-                parcela.data_proxima_parcela = dp.date()
-            else:
-                # Se não tem data, coloca como o dia 1 do mês atual para não sumir do dashboard
-                parcela.data_proxima_parcela = hoje.replace(day=1)
+                parcela = db.query(ParcelamentoItem).filter(
+                    ParcelamentoItem.external_id == ext_id,
+                    ParcelamentoItem.id_usuario == usuario.id,
+                ).first()
+                
+                if not parcela:
+                    parcela = ParcelamentoItem(id_usuario=usuario.id, external_id=ext_id)
+                    db.add(parcela)
 
-            dc_raw = inst.get("date") or inst.get("purchaseDate") or inst.get("createdAt")
-            dc = _parse_iso_date(dc_raw)
-            if dc:
-                parcela.data_compra = dc.date()
-            
-            updated += 1
+                parcela.id_conta = conta_id
+                parcela.descricao = p_desc
+                parcela.parcela_atual = int(idx)
+                parcela.total_parcelas = int(p.get("totalInstallments") or p.get("installments") or idx)
+                parcela.valor_total = _safe_decimal(p.get("totalAmount") or p.get("total") or 0)
+                parcela.valor_parcela = _safe_decimal(inst.get("amount") or inst.get("installmentAmount") or 0)
+
+                dp = _parse_iso_date(inst.get("dueDate") or inst.get("date"))
+                if dp: parcela.data_proxima_parcela = dp.date()
+                
+                dc = _parse_iso_date(p.get("date") or p.get("purchaseDate"))
+                if dc: parcela.data_compra = dc.date()
+                
+                updated += 1
         return updated
     except Exception as e:
         logger.error(f"Erro em _upsert_installments: {e}")
         return 0
 
 
-# ---------------------------------------------------------------------------
-# Funções de parsing das respostas da API
-# ---------------------------------------------------------------------------
-
 def _extrair_lista_de_resposta(res) -> list:
     if res is None: return []
     if isinstance(res, list): return res
     if isinstance(res, dict):
-        # Tenta extrair de chaves comuns de listas
         for key in ["data", "purchases", "bills", "accounts", "transactions"]:
             data = res.get(key)
             if isinstance(data, list): return data
-            # Se a chave existe mas é um dict (objeto único), envelopa em lista
             if isinstance(data, dict): return [data]
-        
-        # Se o próprio dicionário raiz tem chaves de objeto único, retorna como lista de 1
         if any(k in res for k in ["accountId", "id", "transactionId"]):
             return [res]
     return []
 
 
 def _extrair_sumarios_fatura(res) -> list:
-    """Extrai sumários de fatura com múltiplos fallbacks de schema."""
     if not res: return []
     if isinstance(res, dict):
-        # A API pode retornar em 'data', 'bills' ou 'summaries'
         data = res.get("data") or res.get("bills") or res.get("summaries")
         if isinstance(data, list): return data
         if isinstance(data, dict):
-            # Se for um objeto que contém a lista
             items = data.get("items") or data.get("bills") or data.get("summaries")
             if isinstance(items, list): return items
             return [data]
-            
-        # Formato objeto único no nível raiz
         if any(k in res for k in ["billAmount", "dueDate", "accountId"]):
             return [res]
-            
     if isinstance(res, list): return res
     return []
 
 
 def _extrair_parcelamentos(res) -> list:
-    """Extrai parcelas garantindo que pegamos a lista de 'purchases' ou 'data'."""
     if not res: return []
-    
     if isinstance(res, dict):
-        # A API pode retornar em 'purchases', 'data', 'installments' ou 'items'
         data = res.get("data") or res.get("purchases") or res.get("installments")
         if isinstance(data, list): return data
         if isinstance(data, dict):
             items = data.get("purchases") or data.get("installments") or data.get("items")
             if isinstance(items, list): return items
-            # Se o próprio 'data' parecer uma compra
             if any(k in data for k in ["purchaseId", "totalInstallments", "installmentAmount"]):
                 return [data]
-            
-        # Fallback para o próprio objeto se parecer uma compra
-        if any(k in res for k in ["purchaseId", "totalInstallments", "installmentAmount", "description"]):
+        if any(k in res for k in ["purchaseId", "totalInstallments", "description"]):
             return [res]
-            
     if isinstance(res, list): return res
     return []
 
 
-# ---------------------------------------------------------------------------
-# Carga inicial
-# ---------------------------------------------------------------------------
-
 async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
     logger.info(f"🚀 [PIERRE SYNC] Iniciando carga inicial para {usuario.telegram_id}")
-
-    if not usuario.pierre_api_key:
-        return {"error": "Sem chave API configurada"}
+    if not usuario.pierre_api_key: return {"error": "Sem chave API configurada"}
 
     client = PierreClient(usuario.pierre_api_key)
-
-    # ------------------------------------------------------------------
-    # ETAPA 1: Upsert de Contas e Saldos
-    # ------------------------------------------------------------------
     accounts_map = _upsert_accounts_and_balances(usuario, db, client)
 
-    # ------------------------------------------------------------------
-    # ETAPA 2: Transações (últimos 90 dias)
-    # ------------------------------------------------------------------
     date_90 = (datetime.now(timezone.utc) - timedelta(days=90)).strftime('%Y-%m-%d')
     res_txs = client.get_transactions(startDate=date_90, limit=1000, format="raw")
     txs_raw = _extrair_lista_de_resposta(res_txs)
@@ -465,9 +408,11 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
         tipo = _inferir_tipo(descricao, valor_bruto, acc_type, tx_type)
         cnpj, nome_fantasia = _extrair_dados_contraparte(tx)
 
+        acc_id_tx = str(tx.get("accountId") or (tx.get("account") or {}).get("id") or "")
+        
         lanc = Lancamento(
             id_usuario=usuario.id,
-            id_conta=accounts_map.get(str(tx.get("accountId"))),
+            id_conta=accounts_map.get(acc_id_tx),
             external_id=ext_id,
             descricao=descricao,
             valor=abs(valor_bruto),
@@ -481,51 +426,24 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
             nome_contraparte=nome_fantasia,
         )
         db.add(lanc)
-        # Enriquecimento em tempo real (evita overwrite do categorizador manual)
         await enriquecer_um_lancamento(db, lanc)
         txs_count += 1
 
-    # ------------------------------------------------------------------
-    # ETAPA 3: Faturas Atuais e Próximas
-    # ------------------------------------------------------------------
     _upsert_bill_summaries(usuario, db, client, accounts_map)
-
-    # ------------------------------------------------------------------
-    # ETAPA 4: Parcelamentos (O coração do Modo Deus)
-    # ------------------------------------------------------------------
     _upsert_installments(usuario, db, client, accounts_map)
 
     usuario.pierre_initial_sync_done = True
     usuario.last_pierre_sync_at = datetime.now(timezone.utc)
     db.commit()
 
-    # Enriquecimento de dados fiscais (CNAE/CNPJ)
-    try:
-        await enriquecer_lancamentos_pendentes(db)
-    except Exception as e:
-        logger.error(f"Erro no enriquecimento pós-carga inicial: {e}")
+    try: await enriquecer_lancamentos_pendentes(db)
+    except Exception as e: logger.error(f"Erro no enriquecimento: {e}")
 
-    # Categorização (regras + LLM) fica fora do sync — ver pipeline_categorizacao_pos_ingestao.
+    return {"status": "success", "lancamentos": txs_count, "contas": len(accounts_map)}
 
-    return {
-        "status": "success",
-        "lancamentos": txs_count,
-        "contas": len(accounts_map)
-    }
-
-# ---------------------------------------------------------------------------
-# Sincronização incremental
-# ---------------------------------------------------------------------------
 
 async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
-    """
-    Busca apenas as transações mais recentes (últimas 48h) e insere
-    as que ainda não existem no banco local.
-    """
-    if not usuario.pierre_api_key:
-        return 0
-
-    # Se a carga inicial nunca foi feita, delega para ela
+    if not usuario.pierre_api_key: return 0
     if not usuario.pierre_initial_sync_done:
         res = await sincronizar_carga_inicial(usuario, db)
         return res.get("lancamentos", 0) if isinstance(res, dict) else 0
@@ -539,10 +457,8 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
 
     novos = 0
     for tx in txs_raw:
-        ext_id = str(tx.get("id") or "")
-        if not ext_id:
-            continue
-        if db.query(Lancamento).filter(Lancamento.external_id == ext_id).first():
+        ext_id = str(tx.get("id") or tx.get("transactionId") or "")
+        if not ext_id or db.query(Lancamento).filter(Lancamento.external_id == ext_id).first():
             continue
 
         valor_bruto = _safe_decimal(tx.get("amount") or tx.get("value") or 0)
@@ -553,13 +469,9 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
         tipo = _inferir_tipo(descricao, valor_bruto, acc_type, tx_type)
         cnpj, nome_fantasia = _extrair_dados_contraparte(tx)
 
-        data_tx = (
-            _parse_iso_date(tx.get("date"))
-            or _parse_iso_date(tx.get("createdAt"))
-            or datetime.now(timezone.utc)
-        )
+        data_tx = _parse_iso_date(tx.get("date")) or _parse_iso_date(tx.get("createdAt")) or datetime.now(timezone.utc)
+        acc_id_tx = str(tx.get("accountId") or (tx.get("account") or {}).get("id") or "")
 
-        acc_id_tx = str(tx.get("accountId") or "")
         lanc = Lancamento(
             id_usuario=usuario.id,
             id_conta=accounts_map.get(acc_id_tx),
@@ -570,36 +482,20 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
             data_transacao=data_tx,
             origem="open_finance",
             forma_pagamento=_normalizar_forma_pagamento(descricao, acc_type),
-            id_categoria=None,
-            id_subcategoria=None,
             cnpj_contraparte=cnpj,
             nome_contraparte=nome_fantasia,
         )
         db.add(lanc)
-        # Enriquecimento em tempo real
         await enriquecer_um_lancamento(db, lanc)
         novos += 1
 
     faturas_atualizadas = _upsert_bill_summaries(usuario, db, client, accounts_map)
     parcelamentos_atualizados = _upsert_installments(usuario, db, client, accounts_map)
 
-    if novos or faturas_atualizadas or parcelamentos_atualizados:
-        db.commit()
-        logger.info(
-            "[PIERRE SYNC] Incremental: %s transações, %s faturas e %s parcelamentos atualizados",
-            novos,
-            faturas_atualizadas,
-            parcelamentos_atualizados,
-        )
-
-    # Atualiza timestamp de última sync
     usuario.last_pierre_sync_at = datetime.now(timezone.utc)
     db.commit()
 
-    # Enriquecimento assíncrono de dados fiscais
-    try:
-        await enriquecer_lancamentos_pendentes(db)
-    except Exception as e:
-        logger.error(f"Erro no enriquecimento incremental: {e}")
+    try: await enriquecer_lancamentos_pendentes(db)
+    except Exception as e: logger.error(f"Erro no enriquecimento: {e}")
 
     return novos

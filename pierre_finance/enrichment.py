@@ -50,35 +50,34 @@ def categorizar_por_nome(nome: str, descricao: str = "") -> tuple[str, str] | No
     
     # Regras de fallback por nome de empresa (Ordem de prioridade)
     regras = [
-        # JUROS E ENCARGOS (Prioridade Máxima conforme pedido)
-        (["juros", "mora", "multa", "encargo"], ("JUROS E ENCARGOS", "Juros")),
-        (["iof"], ("JUROS E ENCARGOS", "IOF")),
-        (["anuidade", "taxa anuidade"], ("JUROS E ENCARGOS", "Anuidade")),
-        (["tarifa", "cesta servicos", "mensalidade banco"], ("JUROS E ENCARGOS", "Multas")),
+        # JUROS E ENCARGOS
+        (["juros", "mora", "multa", "encargo", "iof", "jur ", "tarifa", "anuidade", "taxa anuidade", "mensalidade banco", "cesta servicos"], ("JUROS E ENCARGOS", "Juros")),
         
         # ASSINATURAS
-        (["netflix", "spotify", "amazon prime", "disney", "hbo", "gympass", "wellhub", "icloud", "google one", "assinatura", "subscription", "plano mensal"], ("Serviços e Assinaturas", "Assinaturas")),
+        (["netflix", "spotify", "amazon prime", "disney", "hbo", "gympass", "wellhub", "icloud", "google one", "assinatura", "subscription", "plano mensal", "globoplay", "youtube premium", "deezer", "apple tv", "claro flex", "claro rec", "smartfit", "bluefit"], ("Serviços e Assinaturas", "Assinaturas")),
         
         # ALIMENTAÇÃO
-        (["alimentos", "bebidas", "distribuidora", "mercado", "supermercado", "formiguinha", "hortifruti", "sacolao", "sacolão", "pao de acucar", "pão de açúcar", "carrefour", "extra", "zona sul", "prezunic", "mundial", "guanabara", "assai", "atacadao"], ("Alimentação", "Mercado/Supermercado")),
-        (["restaurante", "lanchonete", "cafe", "café", "pizzaria", "doceria", "acai", "açaí", "bar e pet", "churrascaria", "burguer", "burger", "mcdonald", "outback", "starbucks", "bk ", "bk*", "coco bambu", "madeiro", "habibs"], ("Alimentação", "Restaurantes/Lanchonetes")),
-        (["ifood", "rappi", "delivery"], ("Alimentação", "Delivery")),
+        (["alimentos", "bebidas", "distribuidora", "mercado", "supermercado", "formiguinha", "hortifruti", "sacolao", "pao de acucar", "carrefour", "extra", "zona sul", "prezunic", "mundial", "guanabara", "assai", "atacadao", "st marche", "obahortifruti", "swift", "minimercado"], ("Alimentação", "Mercado/Supermercado")),
+        (["restaurante", "lanchonete", "cafe", "pizzaria", "doceria", "acai", "bar e pet", "churrascaria", "burguer", "burger", "mcdonald", "outback", "starbucks", "bk ", "bk*", "coco bambu", "madeiro", "habibs", "spoleto", "giraffas", "subway", "bistro", "confeitaria", "padaria"], ("Alimentação", "Restaurantes/Lanchonetes")),
+        (["ifood", "rappi", "delivery", "entrega", "motoboy"], ("Alimentação", "Delivery")),
         
         # TRANSPORTE
         (["transporte", "taxi", "táxi", "uber", "99pop", "99*", "99app", "zapay", "detran"], ("Transporte", "Aplicativos")),
-        (["posto", "combustivel", "combustível", "gasolina", "petroleo", "petróleo", "shell", "ipiranga", "br distribuidora"], ("Transporte", "Combustivel")),
+        (["posto", "combustivel", "gasolina", "petroleo", "shell", "ipiranga", "br distribuidora", "ale combustiveis", "petrobras"], ("Transporte", "Combustivel")),
+        (["pedagio", "pedágio", "ecovias", "autopista", "viapar", "rodovia", "viario", "ponte niteroi", "sem parar", "veloe", "ccr "], ("Transporte", "Viagens")),
         
         # SAÚDE
-        (["drogaria", "farmacia", "farmácia", "saude", "saúde", "medica", "médica", "clinica", "clínica", "drogasil", "pacheco", "laboratorio", "laboratório", "exame"], ("Saúde", "Farmacia")),
+        (["drogaria", "farmacia", "saude", "medica", "clinica", "drogasil", "pacheco", "laboratorio", "exame", "unimed", "amil", "bradesco saude", "sulamerica", "hapvida", "notredame", "dentista", "psicologo", "terapia"], ("Saúde", "Farmacia")),
         
-        # PET
-        (["petshop", "pet shop", "veterinario", "veterinário", "cobasi", "petz"], ("Pet", "Veterinario")),
+        # VESTUÁRIO E BELEZA
+        (["zara", "renner", "cea", "riachuelo", "hering", "marisa", "calcados", "netshoes", "centauro", "nike", "adidas", "arezzo", "havainas", "shein", "shopee", "aliexpress", "mercado livre", "mercadolivre", "meli", "amaro", "schutz"], ("Vestuário e Beleza", "Roupas e Calcados")),
+        (["salao", "barbearia", "estetica", "manicure", "spa", "oboticario", "natura", "sephora", "ikesaki", "boticario"], ("Vestuário e Beleza", "Beleza")),
         
         # EDUCAÇÃO
-        (["escola", "colegio", "colégio", "faculdade", "ensino", "educacao", "educação", "universidade", "curso", "alura"], ("Educação", "Mensalidade")),
+        (["escola", "colegio", "faculdade", "ensino", "educacao", "universidade", "curso", "alura", "udemy", "hotmart", "fgv", "cultura inglesa"], ("Educação", "Mensalidade")),
         
-        # PARCELAMENTOS
-        (["parc ", "parc.", "parcela"], ("Empréstimos e Financiamentos", "Empréstimo Pessoal")),
+        # PARCELAMENTOS / EMPRÉSTIMOS
+        (["parc ", "parc.", "parcela", "emprestimo", "credito pessoal", "bv financeira", "itau financiamento", "parcela carro", "moto", "consignado"], ("Empréstimos e Financiamentos", "Empréstimo Pessoal")),
     ]
     
     for keywords, category in regras:

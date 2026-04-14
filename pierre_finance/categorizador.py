@@ -1,6 +1,7 @@
 import unicodedata
 import re
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from models import Categoria, Subcategoria, Lancamento
 import logging
 from finance_utils import normalize_financial_type
@@ -38,19 +39,29 @@ def limpar_descricao(descricao: str) -> str:
         "transferencia enviada ", "transferencia recebida ", "pagamento fatura ",
         "transf.enviada ", "transf.recebida ", "pgto ", "pagto ", "liquidacao ",
         "pagamento de conta ", "compra ", "venda ", "pago por ", "enviado por ",
-        "pagamento ", "liquidação "
+        "pagamento ", "liquidação ", "estorno ", "lancamento de debito ",
+        "compra parcelada ", "pgto.titulo ", "pgto.convenio ", "pix transferido "
     ]
     
     for p in prefixos:
         if desc.startswith(p):
             desc = desc[len(p):].strip()
             
+    # Remover ruídos comuns de transferências (CPFs, nomes de bancos, etc)
+    # Mas apenas se a descrição resultante não ficar vazia
+    desc_limpa = desc
+    desc_limpa = re.sub(r'\d{3}\.\d{3}\.\d{3}\-\d{2}', '', desc_limpa) # CPF
+    desc_limpa = re.sub(r'\d{2}\.\d{3}\.\d{3}\/\d{4}\-\d{2}', '', desc_limpa) # CNPJ
+    desc_limpa = re.sub(r' - \w+ \d+', '', desc_limpa) # Sufixos de banco
+    
     # Remover IDs de transação e datas comuns no final (ex: '20240325' ou '12345678')
-    desc = re.sub(r'\d{6,20}', '', desc)
+    desc_limpa = re.sub(r'\d{6,20}', '', desc_limpa)
     # Remover caracteres especiais repetidos que o Open Finance às vezes envia
-    desc = re.sub(r'[\-\*\#\@\(\)\.]+ ', ' ', desc)
-    desc = re.sub(r' +', ' ', desc)
-    return desc.strip()
+    desc_limpa = re.sub(r'[\-\*\#\@\(\)\.]+ ', ' ', desc_limpa)
+    desc_limpa = re.sub(r' +', ' ', desc_limpa)
+    
+    res = desc_limpa.strip()
+    return res if res else desc.strip()
 
 
 # Mapeamento de tipos retornados pela API Open Finance (Pluggy/Pierre)
@@ -71,26 +82,27 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
         'Assinaturas': [
             'netflix', 'spotify', 'amazon prime', 'amazonprime', 'disney', 'hbo', 'globoplay',
             'youtube premium', 'deezer', 'apple tv', 'crunchyroll', 'paramount', 'claro flex',
-            'claro rec', 'vivo', 'tim', 'oi', 'net virtua', 'sky', 'starlink', 'assinatura',
+            'claro rec', 'claro', 'vivo', 'tim', 'oi telecom', 'oi celular', 'net virtua', 'sky', 'starlink', 'assinatura',
             'subscription', 'plano mensal', 'gympass', 'totalpass', 'canva', 'chatgpt', 'openai', 'wellhub',
             'midjourney', 'icloud', 'google one', 'dropbox', 'microsoft 365', 'adobe', 'smartfit',
             'bluefit', 'selfit', 'sky', 'directv', 'globomail', 'uol', 'terra', 'globo.com', 'cr flamengo',
-            'socio torcedor', 'flamengo', 'sportv', 'premiere',
+            'socio torcedor', 'flamengo', 'sportv', 'premiere', 'globo play', 'telecine', 'telecom',
         ],
         'Financeiro': [
             'seguro', 'seguro vida', 'seguro residencial', 'seguro celular', 'pagamento seguro',
+            'itau seg', 'bradesco seg', 'porto seguro', 'sulamerica', 'allianz', 'liberty seg',
         ],
     },
     'JUROS E ENCARGOS': {
-        'Juros': ['juros', 'mora', 'encargo', 'encargos'],
+        'Juros': ['juros', 'mora', 'encargo', 'encargos', 'jur', 'iof'],
         'IOF': ['iof'],
         'Anuidade': ['anuidade', 'taxa anuidade', 'anuidade cartao'],
-        'Multas': ['multa', 'tarifa', 'taxa bancaria', 'tbi', 'tar ', 'cesta servicos', 'manutencao conta', 'mensalidade banco', 'pacote servicos'],
+        'Multas': ['multa', 'tarifa', 'taxa bancaria', 'tbi', 'tar', 'cesta servicos', 'manutencao conta', 'mensalidade banco', 'pacote servicos', 'tarifa bancaria', 'custas'],
     },
     'EMPRÉSTIMOS E FINANCIAMENTOS': {
-        'Parcela de Veículo': ['financiamento veiculo', 'bv financeira', 'itau financiamento', 'parcela carro', 'moto'],
-        'Empréstimo Pessoal': ['emprestimo', 'credito pessoal', 'parcela emprestimo', 'consignado'],
-        'Financiamento Imobiliário': ['financiamento habitacional', 'caixa habita', 'parcela imovel', 'mcmv'],
+        'Parcela de Veículo': ['financiamento veiculo', 'bv financeira', 'itau financiamento', 'parcela carro', 'moto', 'safra financeira', 'pan finance'],
+        'Empréstimo Pessoal': ['emprestimo', 'credito pessoal', 'parcela emprestimo', 'consignado', 'cred pessoal', 'cred pcss'],
+        'Financiamento Imobiliário': ['financiamento habitacional', 'caixa habita', 'parcela imovel', 'mcmv', 'habitacional'],
     },
     'ALIMENTAÇÃO': {
         'Restaurantes/Lanchonetes': [
@@ -98,26 +110,29 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
             'restaurante', 'padaria', 'cafeteria', 'pastelaria', 'sushi', 'japones', 'churrascaria',
             'espetinho', 'outback', 'bacio di latte', 'madeiro', 'coco bambu', 'starbucks', 'habibs',
             'giraffas', 'spoleto', 'bob s', 'domino s', 'pizzaria', 'chocolates', 'cacau show', 'kopenhagen',
-            'sorveteria', 'doceria', 'bar ', 'boteco', 'cervejaria', 'pub', 'gastrobar',
+            'sorveteria', 'doceria', 'bar', 'boteco', 'cervejaria', 'pub', 'gastrobar', 'lanchonete',
+            'cafe', 'confeitaria', 'bistro', 'steakhouse', 'delivery', 'comida', 'pao', 'bakery',
         ],
         'Mercado/Supermercado': [
             'mercado', 'supermercado', 'extra', 'pao de acucar', 'carrefour', 'atacadao', 'assai',
             'hortifruti', 'sacolao', 'feira', 'acougue', 'hortifrutti', 'zona sul', 'mundial', 'prezunic',
             'superprix', 'guanabara', 'st marche', 'obahortifruti', 'supermercados', 'minimercado', 'mercantil',
-            'bahamas', 'dia ', 'condor', 'muffato', 'angeloni', 'zaffari', 'supermkt',
+            'bahamas', 'dia', 'condor', 'muffato', 'angeloni', 'zaffari', 'supermkt', 'vovo', 'quitanda',
+            'swift', 'bebid-in', 'bebidas', 'conveniencia', 'lojas am', 'lojas americanas', 'magalu', 'casas bahia',
         ],
         'Delivery': ['delivery', 'entrega', 'motoboy', 'taxa entrega', 'loggi'],
     },
     'TRANSPORTE': {
-        'Aplicativos': ['uber', '99pop', 'cabify', 'taxi', 'ladydriver', 'indriver', '99app', 'uber trip'],
+        'Aplicativos': ['uber', '99pop', 'cabify', 'taxi', 'ladydriver', 'indriver', '99app', 'uber trip', '99*'],
         'Combustivel': [
             'posto', 'combustivel', 'gasolina', 'etanol', 'shell', 'ipiranga',
-            'br distribuidora', 'ale combustiveis', 'petrobras', 'texaco', 'dislub', 'posto ',
+            'br distribuidora', 'ale combustiveis', 'petrobras', 'texaco', 'dislub', 'posto', 'lubrificante',
         ],
-        'Estacionamento': ['estacionamento', 'parking', 'park', 'zona azul', 'sem parar', 'veloe', 'taggy', 'estac '],
+        'Estacionamento': ['estacionamento', 'parking', 'park', 'zona azul', 'sem parar', 'veloe', 'taggy', 'estac'],
         'Transporte Publico': [
-            'metro', 'metrô', 'onibus', 'oônibus', 'bilhete', 'riocard', 'cartao bom', 'sptrans', 'trem', 'barcas',
+            'metro', 'metrô', 'onibus', 'oônibus', 'bilhete', 'riocard', 'cartao bom', 'sptrans', 'trem', 'barcas', 'ccr',
         ],
+        'Viagens': ['pedagio', 'pedágio', 'ecovias', 'autopista', 'viapar', 'rodovia', 'viario', 'ponte niteroi'],
     },
     'MORADIA': {
         'Aluguel': ['aluguel', 'locacao', 'imobiliaria', 'quinto andar', 'quintoandar', 'loft', 'zap imoveis'],
@@ -132,25 +147,26 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
     'SAÚDE': {
         'Farmacia': [
             'farmacia', 'drogasil', 'drogaria', 'ultrafarma', 'panvel',
-            'onofre', 'nissei', 'pacheco', 'venancio', 'raia', 'droga raia', 'drogarias', 'poupafarma',
+            'onofre', 'nissei', 'pacheco', 'venancio', 'raia', 'droga raia', 'drogarias', 'poupafarma', 'medfarma',
         ],
         'Plano de Saude': [
             'plano saude', 'unimed', 'amil', 'bradesco saude', 'sulamerica saude',
-            'hapvida', 'notredame', 'bradesco saude', 'saude bradesco', 'intermedica', 'porto saude',
+            'hapvida', 'notredame', 'bradesco saude', 'saude bradesco', 'intermedica', 'porto saude', 'prevent senior',
         ],
-        'Consultas': ['consulta medica', 'medico', 'clinica', 'hospital', 'pronto socorro', 'exame', 'laboratorio', 'odontologia', 'dentista', 'psicologo'],
+        'Consultas': ['consulta medica', 'medico', 'clinica', 'hospital', 'pronto socorro', 'exame', 'laboratorio', 'odontologia', 'dentista', 'psicologo', 'terapias', 'terapeuta', 'oftalmo'],
     },
     'EDUCAÇÃO': {
-        'Mensalidade': ['mensalidade', 'escola', 'faculdade', 'universidade', 'colegio', 'curso', 'udemy', 'alura', 'hotmart', 'coursera', 'edx', 'ingles', 'idiomas'],
+        'Mensalidade': ['mensalidade', 'escola', 'faculdade', 'universidade', 'colegio', 'curso', 'udemy', 'alura', 'hotmart', 'coursera', 'edx', 'ingles', 'idiomas', 'cultura inglesa', 'fgv'],
         'Material': ['livraria', 'papelaria', 'saraiva', 'amazon livros', 'leitura', 'cultura', 'nobel'],
     },
     'VESTUÁRIO E BELEZA': {
         'Roupas e Calcados': [
             'zara', 'renner', 'cea', 'riachuelo', 'hering', 'marisa', 'calcados',
-            'netshoes', 'centauro', 'lojas americanas', 'nike', 'adidas', 'arezzo', 'havainas', 'shoestock',
-            'kanui', 'dafiti', 'hering', 'hope', 'intimissimi', 'puket', 'lojas americanas',
+            'netshoes', 'centauro', 'nike', 'adidas', 'arezzo', 'havainas', 'shoestock',
+            'kanui', 'dafiti', 'hope', 'intimissimi', 'puket', 'amaro', 'arezzo', 'schutz',
+            'shein', 'shopee', 'aliexpress', 'mercado livre', 'mercadolivre', 'meli',
         ],
-        'Beleza': ['salao', 'barbearia', 'estetica', 'manicure', 'spa', 'oboticario', 'natura', 'sephora', 'quem disse berenice', 'l occitane', 'ikesaki'],
+        'Beleza': ['salao', 'barbearia', 'estetica', 'manicure', 'spa', 'oboticario', 'natura', 'sephora', 'quem disse berenice', 'l occitane', 'ikesaki', 'boticario'],
     },
     'PET': {
         'Veterinario': ['veterinario', 'clinica veterinaria', 'petshop', 'pet shop', 'petz', 'cobasi', 'doghero', 'banho e tosa', 'petlove'],
@@ -160,7 +176,7 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
         'Jogos': ['steam', 'psn', 'xbox', 'nintendo', 'nuuvem', 'playstation', 'razer', 'epic games', 'roblox', 'free fire', 'fortnite', 'league of legends'],
         'Viagem': [
             'hotel', 'pousada', 'airbnb', 'booking', 'decolar', 'latam', 'gol',
-            'azul', 'ryanair', 'passagem', 'voegol', 'cvc', '123 milhas', 'hurb', 'trivago',
+            'azul', 'ryanair', 'passagem', 'voegol', 'cvc', '123 milhas', 'hurb', 'trivago', 'azul linhas',
         ],
     },
     'FINANÇAS E INVESTIMENTOS': {
@@ -177,12 +193,6 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
     'TRANSFERÊNCIAS': {
         'Enviada': ['pix enviado', 'ted enviado', 'doc enviado', 'transferencia enviada', 'ted enviada'],
         'Fatura': ['pagamento fatura', 'fatura cartao', 'pgto fatura', 'pagamento cartao', 'pagto fatura'],
-    },
-    'JUROS E ENCARGOS': {
-        'Juros': ['juros', 'mora', 'encargo'],
-        'IOF': ['iof'],
-        'Anuidade': ['anuidade', 'taxa anuidade'],
-        'Multas': ['multa', 'tarifa', 'cesta servicos'],
     },
 }
 
@@ -201,7 +211,7 @@ _MAPA_NOME_CATEGORIA: dict[str, str] = {
     'IMPOSTOS E TAXAS':          'Impostos e Taxas',
     'TRANSFERÊNCIAS':            'Transferências',
     'EMPRÉSTIMOS E FINANCIAMENTOS': 'Empréstimos e Financiamentos',
-    'JUROS E ENCARGOS':          'JUROS E ENCARGOS',
+    'JUROS E ENCARGOS':          'Juros e Encargos',
 }
 
 # Fallbacks após regras — candidatos ao refinamento por LLM (híbrido)
@@ -342,7 +352,8 @@ def classificar_nomes_por_regras(
 
         for s_nome, keywords in subcategorias.items():
             for kw in keywords:
-                pattern = _PADROES_COMPILADOS[(c_nome, s_nome, kw)]
+                pattern = _PADROES_COMPILADOS.get((c_nome, s_nome, kw))
+                if not pattern: continue
                 if pattern.search(desc_norm):
                     cat_nome = c_nome
                     subcat_nome = s_nome
@@ -358,7 +369,8 @@ def classificar_nomes_por_regras(
         subcategorias = MAPA_CATEGORIAS[c_nome]
         for s_nome, keywords in subcategorias.items():
             for kw in keywords:
-                pattern = _PADROES_COMPILADOS[(c_nome, s_nome, kw)]
+                pattern = _PADROES_COMPILADOS.get((c_nome, s_nome, kw))
+                if not pattern: continue
                 if pattern.search(desc_original_norm):
                     cat_nome = c_nome
                     subcat_nome = s_nome
@@ -389,7 +401,6 @@ def persistir_ids_categoria(
     if cat_cache is not None and cat_nome_db in cat_cache:
         cat_id = cat_cache[cat_nome_db]
     else:
-        # Busca case-insensitive para evitar duplicatas (ex: ALIMENTACAO vs Alimentação)
         categoria_db = db.query(Categoria).filter(func.lower(Categoria.nome) == func.lower(cat_nome_db)).first()
         if not categoria_db:
             categoria_db = Categoria(nome=cat_nome_db)
@@ -403,7 +414,6 @@ def persistir_ids_categoria(
     if subcat_cache is not None and sub_key in subcat_cache:
         subcat_id = subcat_cache[sub_key]
     else:
-        # Busca case-insensitive para subcategorias
         subcat_db = db.query(Subcategoria).filter(
             func.lower(Subcategoria.nome) == func.lower(subcat_nome),
             Subcategoria.id_categoria == cat_id,

@@ -20,22 +20,23 @@ PROMPT_CATEGORIZACAO = """
 Você é um especialista em finanças pessoais brasileiras e sua tarefa é categorizar transações bancárias.
 Receberei uma lista de transações com descrição, valor e tipo (Receita/Despesa).
 
-Regras de Ouro:
-1. Identifique o estabelecimento/serviço: Limpe a descrição para um nome amigável (ex: "PAG* IFOOD" -> "iFood").
-2. **Assinaturas vs Financiamentos**: 
-   - Se for um serviço recorrente (Netflix, Spotify, Wellhub, Sócio Torcedor, Flamengo, Academias, SaaS), use a categoria "Serviços e Assinaturas" e subcategoria "Assinaturas".
-   - Se for uma parcela de dívida de longo prazo (BV Financeira, Banco Itaú Financiamento, Carro, Moto, Imóvel), use a categoria "Empréstimos e Financiamentos".
-3. Se for um PIX enviado para uma pessoa sem indicação de serviço, use a categoria "Transferências" e subcategoria "PIX Enviado".
-4. Retorne APENAS um JSON no formato:
-[
-  {{"id": 123, "descricao_limpa": "Nome Amigável", "categoria": "Nome Categoria", "subcategoria": "Nome Subcategoria"}},
-  ...
-]
+Regras de Ouro (CRÍTICO):
+1. **PROIBIDO categorizar como 'Outros' ou 'Geral'** se houver qualquer pista mínima na descrição. Use seu conhecimento de mercado brasileiro (Ex: "Zamp" é Burger King, "Raia" é Farmácia, "Ecovias" é Pedágio/Transporte).
+2. **Identifique o estabelecimento**: Limpe a descrição para um nome amigável (ex: "PAG* IFOOD *123" -> "iFood").
+3. **Pix e Transferências**: Se for um Pix enviado para uma pessoa física sem indicação de serviço, use "Transferências" e "PIX Enviado". Se o nome da pessoa sugerir um serviço (ex: "Dr. João Silva"), use "Saúde".
+4. **Assinaturas vs Financiamentos**: 
+   - Serviços recorrentes (Netflix, Academias, SaaS, Cloud) -> "Serviços e Assinaturas".
+   - Parcelas de bancos ou nomes como "BV", "Itaú Fin", "Carro" -> "Empréstimos e Financiamentos".
+5. **Varejo**: Nomes como "Meli", "Mercado Livre", "Shopee", "Shein" -> "Vestuário e Beleza" (se roupas) ou "Outros" (apenas se for impossível distinguir, mas prefira "Vestuário" ou "Moradia" conforme o contexto).
 
 Categorias e Subcategorias Disponíveis:
 {lista_categorias}
 
-Importante: Retorne apenas o JSON, sem explicações.
+Retorne APENAS um JSON no formato:
+[
+  {{"id": 123, "descricao_limpa": "Nome Amigável", "categoria": "Nome Categoria", "subcategoria": "Nome Subcategoria"}},
+  ...
+]
 """
 
 async def categorizar_lote_llm(db: Session, lancamentos: list[Lancamento]) -> int:
@@ -63,6 +64,7 @@ async def categorizar_lote_llm(db: Session, lancamentos: list[Lancamento]) -> in
         dados_transacoes.append({
             "id": l.id,
             "descricao": l.descricao,
+            "nome_estabelecimento": l.nome_contraparte or "",
             "valor": float(l.valor),
             "tipo": l.tipo
         })
