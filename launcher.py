@@ -215,14 +215,6 @@ def signal_handler(signum, frame):
 def apply_migrations():
     """Aplica migrations SQL com rastreamento de versao."""
     try:
-        # --- NOVO: Migração de Emergência para colunas do Pierre ---
-        try:
-            logger.info("🚨 Rodando migração de emergência (Pierre Enrichment)...")
-            from scripts.force_migrate import force_migrate
-            force_migrate()
-        except Exception as fe:
-            logger.error(f"⚠️ Falha na migração de emergência: {fe}")
-
         logger.info("🔄 Verificando migrations pendentes...")
         from pathlib import Path
         from database.database import engine

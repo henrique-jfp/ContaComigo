@@ -2069,9 +2069,14 @@ def miniapp_overview():
                     projection_series.append({"label": label, "historico": None, "futuro": round(future_value, 2)})
 
         # --- SEÇÃO RADAR FINANCEIRO (CARTÕES E PARCELAS) ---
+        # Filtro inteligente: faturas que vencem hoje/futuro OU faturas do mês atual (independente de estarem abertas ou não)
+        current_month_start = today.replace(day=1)
         faturas_db = db.query(FaturaCartao).join(Conta).filter(
             FaturaCartao.id_usuario == usuario.id,
-            or_(FaturaCartao.status.in_(['em_aberto', 'aberta', 'aberto', 'PENDING']), FaturaCartao.data_vencimento >= today)
+            or_(
+                FaturaCartao.data_vencimento >= today,
+                FaturaCartao.mes_referencia >= current_month_start
+            )
         ).order_by(FaturaCartao.data_vencimento.asc()).all()
         
         cards_summary = []

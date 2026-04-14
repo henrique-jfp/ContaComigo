@@ -277,10 +277,19 @@ def _upsert_bill_summaries(usuario: Usuario, db: Session, client: PierreClient, 
             fatura.data_vencimento = ref_date.date()
             
             status_raw = str(s.get("status") or "").upper()
+            hoje = datetime.now(timezone.utc).date()
+            
+            # Lógica de status aprimorada:
+            # 1. Se o Pierre diz que tá pago/fechado, tá pago.
             if any(k in status_raw for k in ["PAID", "PAGO", "FECHADA", "CLOSED"]):
                 fatura.status = "paga"
+            # 2. Se o Pierre diz que tá em atraso, tá atrasada.
             elif any(k in status_raw for k in ["OVERDUE", "ATRASO"]):
                 fatura.status = "atrasada"
+            # 3. Se a fatura é antiga (> 15 dias do vencimento) e não tem status explícito de aberta, marca como paga (limpeza)
+            elif fatura.data_vencimento < (hoje - timedelta(days=15)):
+                fatura.status = "paga"
+            # 4. Caso contrário, permanece em aberto
             else:
                 fatura.status = "em_aberto"
                 
