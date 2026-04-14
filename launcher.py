@@ -254,8 +254,17 @@ def main() -> None:
     if settings.mode == ExecutionMode.LOCAL_DEV:
         logger.info(f"🔄 [INSTANCE:{os.getenv('INSTANCE_ID', 'unknown')}] MODO HÍBRIDO ATIVADO")
         
-        # 1. Thread do Bot em paralelo imediato
-        logger.info("1. Iniciando Thread do Bot...")
+        # 1. Aplicar migrações de forma SÍNCRONA antes de tudo
+        logger.info("1. Aplicando migrações críticas...")
+        try:
+            apply_migrations()
+            logger.info("✅ Migrações aplicadas com sucesso.")
+        except Exception as e:
+            logger.error(f"❌ FALHA CRÍTICA NAS MIGRAÇÕES: {e}")
+            # Em produção, talvez queiramos continuar, mas aqui é a causa do erro 500
+        
+        # 2. Thread do Bot em paralelo
+        logger.info("2. Iniciando Thread do Bot...")
         bot_thread = Thread(
             target=start_telegram_bot,
             kwargs={"enable_health_server": False},
@@ -263,18 +272,8 @@ def main() -> None:
         )
         bot_thread.start()
 
-        # 2. Migrações em background para não travar o boot do HTTP
-        def run_migrations():
-            try:
-                apply_migrations()
-            except Exception as e:
-                logger.error(f"❌ Erro nas migrações em background: {e}")
-        
-        migration_thread = Thread(target=run_migrations, daemon=True)
-        migration_thread.start()
-
-        # 3. Disparar Dashboard (Processo Principal) - Essencial para o Render Health Check
-        logger.info("2. Disparando Dashboard (Main Process)...")
+        # 3. Disparar Dashboard (Processo Principal)
+        logger.info("3. Disparando Dashboard (Main Process)...")
         start_dashboard()
     elif settings.mode == ExecutionMode.BOT:
         apply_migrations()
