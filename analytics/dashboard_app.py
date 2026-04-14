@@ -2068,7 +2068,7 @@ def miniapp_overview():
                     future_value = current_base + (avg_net * passo)
                     projection_series.append({"label": label, "historico": None, "futuro": round(future_value, 2)})
 
-        # --- NOVO: Resumo de Cartões e Parcelas para o Overview ---
+        # --- SEÇÃO RADAR FINANCEIRO (CARTÕES E PARCELAS) ---
         faturas_db = db.query(FaturaCartao).join(Conta).filter(
             FaturaCartao.id_usuario == usuario.id,
             or_(FaturaCartao.status.in_(['em_aberto', 'aberta', 'aberto', 'PENDING']), FaturaCartao.data_vencimento >= today)
@@ -2101,39 +2101,6 @@ def miniapp_overview():
             })
 
         # Top vilões reais dos últimos 90 dias.
-        # --- SEÇÃO PIERRE (CARTÕES E PARCELAS) ---
-        cards_summary = []
-        installments_summary = []
-        if usuario.pierre_api_key:
-            faturas_db = db.query(FaturaCartao).join(Conta).filter(
-                FaturaCartao.id_usuario == usuario.id,
-                or_(FaturaCartao.status.in_(['em_aberto', 'aberta', 'aberto', 'PENDING']), FaturaCartao.data_vencimento >= today)
-            ).order_by(FaturaCartao.data_vencimento.asc()).all()
-            
-            seen_accounts = set()
-            for f in faturas_db:
-                if f.id_conta in seen_accounts: continue
-                seen_accounts.add(f.id_conta)
-                cards_summary.append({
-                    "nome": f.conta.nome,
-                    "fatura": float(f.valor_total),
-                    "limite": float(f.conta.limite_cartao or 0),
-                    "vence": f.data_vencimento.isoformat() if f.data_vencimento else None
-                })
-
-            parcelas_db = db.query(ParcelamentoItem).filter(
-                ParcelamentoItem.id_usuario == usuario.id,
-                or_(ParcelamentoItem.data_proxima_parcela.is_(None), ParcelamentoItem.data_proxima_parcela >= (today - timedelta(days=2)))
-            ).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(3).all()
-            
-            for p in parcelas_db:
-                installments_summary.append({
-                    "desc": p.descricao,
-                    "valor": float(p.valor_parcela),
-                    "parcela": f"{p.parcela_atual}/{p.total_parcelas}",
-                    "vence": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None
-                })
-
         villains_start = today - timedelta(days=90)
         villains_lanc = (
             db.query(Lancamento)
@@ -2141,56 +2108,74 @@ def miniapp_overview():
             .filter(Lancamento.data_transacao >= datetime.combine(villains_start, datetime.min.time()))
             .all()
         )
-        villains_totals: dict[str, float] = {}
+        villains_totals = {}
         for lanc in villains_lanc:
-            if str(lanc.tipo).lower().startswith(("entr", "recei")):
+            try:
+                if not lanc.tipo or str(lanc.tipo).lower().startswith(("entr", "recei")):
+                    continue
+                nome = (lanc.descricao or "Sem nome").strip() or "Sem nome"
+                valor_lanc = abs(float(lanc.valor or 0))
+                villains_totals[nome] = villains_totals.get(nome, 0.0) + valor_lanc
+            except (TypeError, ValueError):
                 continue
-            nome = (lanc.descricao or "Sem nome").strip() or "Sem nome"
-            villains_totals[nome] = villains_totals.get(nome, 0.0) + abs(float(lanc.valor or 0))
+
         top_villains = [
             {"label": nome, "value": round(valor, 2)}
             for nome, valor in sorted(villains_totals.items(), key=lambda x: x[1], reverse=True)[:5]
         ]
 
-        progress_base = receita + despesa
+        progress_base = float(receita + despesa)
         progress_pct = round((despesa / progress_base) * 100) if progress_base > 0 else 0
         xp = int(usuario.xp or 0)
         level = int(usuario.level or 1)
         streak = int(usuario.streak_dias or 0)
-        level_progress = get_level_progress_payload(usuario)
+        
+        try:
+            level_progress = get_level_progress_payload(usuario)
+        except Exception as e:
+            logger.warning(f"Erro ao obter level_progress: {e}")
+            level_progress = {"level": level, "xp": xp, "title": "Usuário"}
 
         # Importa função de label do plano
-        from gerente_financeiro.monetization import _plan_label
-        user_plan = usuario.plan or "free"
-        user_plan_label = _plan_label(user_plan)
+        user_plan = str(usuario.plan or "free").lower()
+        try:
+            from gerente_financeiro.monetization import _plan_label
+            user_plan_label = _plan_label(user_plan)
+        except Exception:
+            user_plan_label = "Plano Free"
+
+        # Garantir que insight nunca seja None para o JSON
+        final_insight = insight or "O Alfredo está analisando seus dados..."
 
         return jsonify({
             "ok": True,
             "summary": {
-                "balance": round(balance, 2),
-                "receita": round(receita, 2),
-                "despesa": round(despesa, 2),
-                "progress_pct": max(0, min(progress_pct, 100)),
+                "balance": round(float(balance), 2),
+                "receita": round(float(receita), 2),
+                "despesa": round(float(despesa), 2),
+                "progress_pct": max(0, min(int(progress_pct), 100)),
                 "level": level,
                 "xp": xp,
                 "streak": streak,
-                "level_title": level_progress.get("title"),
+                "level_title": level_progress.get("title", "Mestre das Finanças"),
                 "level_progress": level_progress,
-                "insight": insight,
+                "insight": final_insight,
                 "badge": _level_badge(level),
                 "badge_svg": _level_badge_svg(level),
-                "cashflow": cashflow,
-                "cashflow_monthly": monthly_cashflow,
-                "categories": categories,
-                "patrimony_series": patrimony_series,
-                "budget_vs_realizado": budget_items,
-                "projection_series": projection_series,
+                "cashflow": cashflow or [],
+                "cashflow_monthly": monthly_cashflow or [],
+                "categories": categories or [],
+                "patrimony_series": patrimony_series or [],
+                "budget_vs_realizado": budget_items or [],
+                "projection_series": projection_series or [],
                 "top_villains": top_villains,
-                "recent": [_serialize_miniapp_lancamento(lanc) for lanc in recent_items],
+                "recent": [_serialize_miniapp_lancamento(lanc) for lanc in (recent_items or [])],
                 "plan": user_plan,
                 "plan_label": user_plan_label,
-                "cards": cards_summary,
-                "installments": installments_summary,
+                "cards": cards_summary or [],
+                "installments": installments_summary or [],
+            }
+        })
             }
         })
     finally:
