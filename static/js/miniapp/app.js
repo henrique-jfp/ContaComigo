@@ -1701,29 +1701,66 @@ lucide.createIcons();
         homeCardsGrid.innerHTML = '';
         if (cards.length > 0) {
           cards.forEach(card => {
-            const vence = card.vence ? new Date(card.vence).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) : 'S/D';
-            const pct = card.limite > 0 ? Math.min(100, (card.fatura / card.limite) * 100) : 0;
-            const statusColor = pct > 85 ? 'text-red-500' : (pct > 50 ? 'text-yellow-500' : 'text-emerald-500');
+            const fatura = card.fatura || 0;
+            const limite = card.limite || 0;
+            const pct = limite > 0 ? Math.min(100, Math.round((fatura / limite) * 100)) : null;
+            
+            // Lógica de Vencimento
+            const hoje = new Date();
+            hoje.setHours(0,0,0,0);
+            const dataVenc = card.vence ? new Date(card.vence) : null;
+            if (dataVenc) dataVenc.setHours(12,0,0,0); // Ajuste de timezone
+            const isVencido = dataVenc && dataVenc < hoje;
+            const venceStr = dataVenc ? dataVenc.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) : 'S/D';
+            
+            let statusColor = 'text-emerald-500';
+            let bgAccent = 'bg-emerald-500/10';
+            let iconColor = 'text-emerald-500';
+            let badge = '';
+
+            if (isVencido) {
+              statusColor = 'text-red-500';
+              bgAccent = 'bg-red-500/10';
+              iconColor = 'text-red-500';
+              badge = '<span class="text-[7px] font-black uppercase bg-red-500 text-white px-1 rounded ml-auto">VENCIDO</span>';
+            } else if (pct !== null) {
+              if (pct > 85) { statusColor = 'text-red-500'; iconColor = 'text-red-500'; }
+              else if (pct > 50) { statusColor = 'text-yellow-500'; iconColor = 'text-yellow-500'; }
+            }
             
             homeCardsGrid.innerHTML += `
-              <div class="min-w-[160px] glass-card rounded-2xl p-3 border border-brand/5 shrink-0 snap-center">
-                <div class="flex items-center gap-2 mb-2">
-                  <div class="w-6 h-6 rounded-lg bg-brand/10 flex items-center justify-center">
-                    <i data-lucide="credit-card" class="w-3.5 h-3.5 text-brand"></i>
+              <div class="min-w-[170px] glass-card rounded-2xl p-3 border border-white/5 shrink-0 snap-center shadow-lg">
+                <div class="flex items-center gap-2 mb-3">
+                  <div class="w-7 h-7 rounded-full ${bgAccent} flex items-center justify-center">
+                    <i data-lucide="credit-card" class="w-3.5 h-3.5 ${iconColor}"></i>
                   </div>
                   <span class="text-[10px] font-bold text-telegram-text truncate">${card.nome}</span>
+                  ${badge}
                 </div>
-                <div class="space-y-1">
+                <div class="space-y-0.5">
                   <p class="text-[9px] font-bold uppercase tracking-tight text-telegram-hint">Fatura Atual</p>
-                  <p class="text-sm font-extrabold text-telegram-text">${formatCurrencyBR(card.fatura)}</p>
-                  <div class="flex items-center justify-between mt-2">
-                    <span class="text-[8px] font-bold text-telegram-hint">Vence ${vence}</span>
-                    <span class="text-[8px] font-black ${statusColor}">${pct.toFixed(0)}%</span>
+                  <p class="text-base font-black text-telegram-text">${formatCurrencyBR(fatura)}</p>
+                  <div class="flex items-end justify-between mt-3">
+                    <div class="flex flex-col">
+                      <span class="text-[8px] font-bold text-telegram-hint uppercase">Vence</span>
+                      <span class="text-[10px] font-extrabold text-telegram-text">${venceStr}</span>
+                    </div>
+                    <div class="text-right">
+                      ${pct !== null ? `
+                        <span class="text-[9px] font-black ${statusColor}">${pct}%</span>
+                        <div class="w-12 h-1 bg-white/5 rounded-full mt-0.5 overflow-hidden">
+                          <div class="h-full ${statusColor.replace('text', 'bg')}" style="width: ${pct}%"></div>
+                        </div>
+                      ` : `
+                        <span class="text-[8px] font-bold text-telegram-hint italic">S/ Limite</span>
+                      `}
+                    </div>
                   </div>
                 </div>
               </div>
             `;
           });
+          if (window.lucide) lucide.createIcons();
         }
       }
 

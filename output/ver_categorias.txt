@@ -1,0 +1,50 @@
+INFO:root:🔧 [DEV] Carregando variáveis de ambiente de: C:\Projetos Pessoais\ContaComigo\.env
+INFO:root:🤖 Modelo Gemini ativo: gemini-flash-latest
+INFO:root:✅ Configurações carregadas:
+INFO:root:   📱 TELEGRAM_TOKEN: ✅ Configurado
+INFO:root:   🤖 GEMINI_API_KEY: ✅ Configurado
+INFO:root:   🗄️ DATABASE_URL: ✅ Configurado
+INFO:root:   📧 EMAIL_HOST_USER: ✅ Configurado
+INFO:root:   📧 EMAIL_HOST_PASSWORD: ✅ Configurado
+INFO:root:   📧 SENDER_EMAIL: ✅ Configurado
+INFO:root:   📧 EMAIL_RECEIVER: ✅ Configurado
+INFO:root:   💳 PIX_KEY: ✅ Configurado
+INFO:root:ℹ️ GOOGLE_APPLICATION_CREDENTIALS não configurado - funcionalidades OCR limitadas
+INFO:root:✅ Conexão com o banco de dados estabelecida com sucesso!
+============================================================
+ID   | CATEGORIA                           | LANÇAMENTOS
+============================================================
+1    | Alimentação                         | 196
+236  | JUROS E ENCARGOS                    | 140
+13   | Transferências                      | 99
+10   | Financeiro                          | 88
+227  | ALIMENTAÇÃO                         | 73
+3    | Transporte                          | 49
+8    | Compras                             | 37
+4    | Saúde                               | 26
+9    | Serviços e Assinaturas              | 25
+11   | Receitas                            | 23
+228  | TRANSPORTE                          | 14
+5    | Lazer e Entretenimento              | 11
+237  | Empréstimos e Financiamentos        | 9
+6    | Cuidados Pessoais                   | 7
+235  | Vestuário e Beleza                  | 6
+232  | SAÚDE                               | 5
+231  | MORADIA                             | 4
+238  | Compras Online                      | 3
+224  | IMPOSTOS E TAXAS                    | 3
+12   | Investimentos                       | 3
+233  | EDUCAÇÃO                            | 2
+225  | LAZER E ENTRETENIMENTO              | 2
+229  | SERVIÇOS                            | 0
+223  | PIX / TRANSFERÊNCIAS                | 0
+234  | Impostos e Taxas                    | 0
+14   | Outros                              | 0
+226  | FINANÇAS E INVESTIMENTOS            | 0
+222  | Receita / Outros                    | 0
+7    | Educação                            | 0
+2    | Moradia                             | 0
+230  | COMPRAS E VESTUÁRIO                 | 0
+------------------------------------------------------------
+N/A  | SEM CATEGORIA (NULL)                | 0
+============================================================
