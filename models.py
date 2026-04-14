@@ -215,6 +215,11 @@ class Agendamento(Base):
     proxima_data_execucao = Column(Date, nullable=False, index=True)
     ativo = Column(Boolean, default=True, index=True)
     
+    # Novos campos para integração Pierre
+    external_id = Column(String, unique=True, nullable=True)
+    origem_externa = Column(String, nullable=True) # Ex: 'pierre'
+    status = Column(String, nullable=True) # active, completed, inactive
+    
     criado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     usuario = relationship("Usuario", back_populates="agendamentos")
@@ -227,6 +232,13 @@ class OrcamentoCategoria(Base):
     id_usuario = Column(Integer, ForeignKey('usuarios.id', ondelete='CASCADE'), nullable=False, index=True)
     id_categoria = Column(Integer, ForeignKey('categorias.id', ondelete='CASCADE'), nullable=False)
     valor_limite = Column(Numeric(12, 2), nullable=False)
+    
+    # Novos campos para integração Pierre
+    external_id = Column(String, unique=True, nullable=True) # ID do Pierre
+    periodo = Column(String, default='monthly') # daily, weekly, monthly
+    recorrente = Column(Boolean, default=True)
+    ativo = Column(Boolean, default=True)
+    
     criado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     usuario = relationship("Usuario")

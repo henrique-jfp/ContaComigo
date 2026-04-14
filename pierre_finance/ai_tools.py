@@ -31,6 +31,23 @@ def obter_tools_pierre():
         {
             "type": "function",
             "function": {
+                "name": "consultar_saldo_conta_especifica",
+                "description": "Retorna o saldo e detalhes de uma conta bancária específica via Open Finance.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "accountId": {
+                            "type": "string",
+                            "description": "ID da conta bancária."
+                        }
+                    },
+                    "required": ["accountId"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "consultar_faturas_cartao_real",
                 "description": "Consulta o resumo da FATURA ATUAL (aberta) dos cartões de crédito.",
                 "parameters": {
@@ -304,6 +321,64 @@ def obter_tools_pierre():
         {
             "type": "function",
             "function": {
+                "name": "consultar_detalhes_limite_gastos",
+                "description": "Retorna o status detalhado (transações que consomem o limite) de um limite de gastos específico.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "limitId": {
+                            "type": "string",
+                            "description": "ID do limite de gastos."
+                        }
+                    },
+                    "required": ["limitId"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "confirmar_criacao_limite_gastos",
+                "description": "Confirma a criação de um limite de gastos após o aviso de gastos atuais.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "category": {
+                            "type": "string",
+                            "description": "Categoria do limite."
+                        },
+                        "limitAmount": {
+                            "type": "number",
+                            "description": "Valor do limite."
+                        },
+                        "period": {
+                            "type": "string",
+                            "description": "Período (monthly, weekly, daily)."
+                        },
+                        "startNextPeriod": {
+                            "type": "boolean",
+                            "description": "Se deve começar apenas no próximo período."
+                        }
+                    },
+                    "required": ["category", "limitAmount", "period"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "obter_fluxo_conexao_whatsapp",
+                "description": "Inicia o fluxo de conexão Open Finance via WhatsApp para o usuário.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "listar_lembretes_pagamento",
                 "description": "Lista os lembretes de pagamento do usuário.",
                 "parameters": {
@@ -432,6 +507,10 @@ def executar_tool_pierre(tool_name: str, arguments: dict, api_key: str) -> any:
     elif tool_name == "consultar_saldo_consolidado_real":
         return client.get_balance()
 
+    elif tool_name == "consultar_saldo_conta_especifica":
+        acc_id = clean_uuid(arguments.get("accountId") or arguments.get("account_id"))
+        return client.get_balance_by_account(account_id=acc_id)
+
     elif tool_name == "consultar_faturas_cartao_real":
         acc_id = clean_uuid(arguments.get("accountId") or arguments.get("account_id"))
         return client.get_bill_summary(account_id=acc_id)
@@ -503,6 +582,15 @@ def executar_tool_pierre(tool_name: str, arguments: dict, api_key: str) -> any:
 
     elif tool_name == "deletar_limite_gastos":
         return client.delete_spending_limit(arguments.get("limitId"))
+
+    elif tool_name == "consultar_detalhes_limite_gastos":
+        return client.get_spending_limit_transactions(arguments.get("limitId"))
+
+    elif tool_name == "confirmar_criacao_limite_gastos":
+        return client.confirm_spending_limit(arguments)
+
+    elif tool_name == "obter_fluxo_conexao_whatsapp":
+        return client.get_open_finance_connection_flow()
 
     elif tool_name == "listar_lembretes_pagamento":
         return client.list_payment_reminders(filter_status=arguments.get("filter"))

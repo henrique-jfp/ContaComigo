@@ -61,6 +61,10 @@ class PierreClient:
         """Retorna saldo consolidado."""
         return self._request("GET", "/get-balance")
 
+    def get_balance_by_account(self, account_id: str):
+        """Retorna o saldo e detalhes de uma conta bancária específica."""
+        return self._request("GET", "/get-balance-by-account", params={"accountId": account_id})
+
     def get_bill_summary(self, account_id=None, closing_day=None, **kwargs):
         """Retorna resumo da fatura atual."""
         params = kwargs.copy()
@@ -124,6 +128,14 @@ class PierreClient:
         """Cria um limite de gastos."""
         return self._request("POST", "/create-spending-limit", json=payload)
 
+    def confirm_spending_limit(self, payload: dict):
+        """Confirma a criação de um limite de gastos."""
+        return self._request("POST", "/confirm-spending-limit", json=payload)
+
+    def get_spending_limit_transactions(self, limit_id: str):
+        """Retorna o status detalhado de um limite de gastos específico."""
+        return self._request("GET", "/get-spending-limit-transactions", params={"limitId": limit_id})
+
     def update_spending_limit(self, payload: dict):
         """Atualiza um limite de gastos."""
         return self._request("PUT", "/update-spending-limit", json=payload)
@@ -151,3 +163,11 @@ class PierreClient:
         payload = {"reminderId": reminder_id}
         if hard_delete: payload["hardDelete"] = True
         return self._request("DELETE", "/delete-payment-reminder", json=payload)
+
+    def get_api_key_info(self):
+        """Obtém informações sobre como gerar e usar chaves de API."""
+        return self._request("GET", "/get-api-key-info")
+
+    def get_open_finance_connection_flow(self):
+        """Inicia o fluxo de conexão Open Finance via WhatsApp."""
+        return self._request("GET", "/get-open-finance-connection-flow")

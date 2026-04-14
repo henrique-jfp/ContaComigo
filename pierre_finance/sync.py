@@ -21,7 +21,8 @@ from .enrichment import enriquecer_lancamentos_pendentes, enriquecer_um_lancamen
 from finance_utils import normalize_financial_type
 from models import (
     Usuario, Conta, Lancamento, SaldoConta,
-    FaturaCartao, ParcelamentoItem,
+    FaturaCartao, ParcelamentoItem, Categoria, Subcategoria,
+    Agendamento, OrcamentoCategoria
 )
 
 logger = logging.getLogger(__name__)
@@ -191,11 +192,22 @@ def _upsert_accounts_and_balances(usuario: Usuario, db: Session, client: PierreC
 
         conta.nome = acc.get("name") or acc.get("displayName") or "Conta Bancária"
         p_type = acc.get("type", "BANK")
-        conta.tipo = {
-            "CREDIT": "Cartão de Crédito",
-            "INVESTMENT": "Investimento",
-            "LOAN": "Empréstimo",
-        }.get(p_type, "Conta Corrente")
+        p_subtype = acc.get("accountSubtype") or acc.get("subtype")
+        
+        if p_type == "CREDIT":
+            conta.tipo = "Cartão de Crédito"
+        elif p_type == "INVESTMENT":
+            conta.tipo = "Investimento"
+        elif p_type == "LOAN":
+            conta.tipo = "Empréstimo"
+        elif p_subtype == "SAVINGS_ACCOUNT":
+            conta.tipo = "Conta Poupança"
+        elif p_subtype == "CHECKING_ACCOUNT":
+            conta.tipo = "Conta Corrente"
+        elif p_subtype == "PAYMENT_ACCOUNT":
+            conta.tipo = "Carteira Digital"
+        else:
+            conta.tipo = "Conta Corrente"
 
         cc = acc.get("creditCard") or {}
         if cc:
@@ -339,6 +351,95 @@ def _upsert_installments(usuario: Usuario, db: Session, client: PierreClient, ac
         return 0
 
 
+def _sync_spending_limits(usuario: Usuario, db: Session, client: PierreClient):
+    """Sincroniza os limites de gastos do Pierre com OrcamentoCategoria."""
+    try:
+        res = client.list_spending_limits()
+        limits = _extrair_lista_de_resposta(res)
+        
+        for lim in limits:
+            ext_id = str(lim.get("id") or "")
+            if not ext_id: continue
+            
+            cat_name = lim.get("category")
+            if not cat_name: continue
+
+            # Busca categoria local para associar
+            cat_db = db.query(Categoria).filter(func.lower(Categoria.nome) == func.lower(cat_name)).first()
+            if not cat_db:
+                cat_db = Categoria(nome=cat_name)
+                db.add(cat_db)
+                db.flush()
+            
+            orc = db.query(OrcamentoCategoria).filter(
+                OrcamentoCategoria.external_id == ext_id,
+                OrcamentoCategoria.id_usuario == usuario.id
+            ).first()
+            
+            if not orc:
+                orc = OrcamentoCategoria(id_usuario=usuario.id, external_id=ext_id)
+                db.add(orc)
+            
+            orc.id_categoria = cat_db.id
+            orc.valor_limite = _safe_decimal(lim.get("limitAmount") or lim.get("amount"))
+            orc.periodo = lim.get("period", "monthly")
+            orc.recorrente = bool(lim.get("isRecurring", True))
+            orc.ativo = bool(lim.get("isActive", True))
+            
+    except Exception as e:
+        logger.error(f"Erro ao sincronizar limites Pierre: {e}")
+
+
+def _sync_payment_reminders(usuario: Usuario, db: Session, client: PierreClient):
+    """Sincroniza os lembretes de pagamento do Pierre com Agendamento."""
+    try:
+        res = client.list_payment_reminders()
+        reminders = _extrair_lista_de_resposta(res)
+        
+        for rem in reminders:
+            ext_id = str(rem.get("id") or "")
+            if not ext_id: continue
+            
+            agend = db.query(Agendamento).filter(
+                Agendamento.external_id == ext_id,
+                Agendamento.id_usuario == usuario.id
+            ).first()
+            
+            if not agend:
+                agend = Agendamento(id_usuario=usuario.id, external_id=ext_id, origem_externa="pierre")
+                db.add(agend)
+            
+            agend.descricao = rem.get("title") or "Lembrete Pierre"
+            agend.valor = _safe_decimal(rem.get("amount") or 0)
+            agend.tipo = "Despesa"
+            
+            dv_raw = rem.get("dueDate")
+            dv = _parse_iso_date(dv_raw)
+            if dv:
+                agend.proxima_data_execucao = dv.date()
+                if not agend.data_primeiro_evento:
+                    agend.data_primeiro_evento = dv.date()
+            
+            agend.frequencia = rem.get("recurrencePattern") or "Único"
+            agend.status = rem.get("status", "active")
+            agend.ativo = (agend.status == "active")
+            
+    except Exception as e:
+        logger.error(f"Erro ao sincronizar lembretes Pierre: {e}")
+
+
+def _enrich_user_profile(usuario: Usuario, client: PierreClient):
+    """Enriquece o perfil IA do usuário com dados do Pierre get-book."""
+    try:
+        book_res = client.get_book(include_categories=True)
+        if isinstance(book_res, dict):
+            summary = book_res.get("summary") or book_res.get("data", {}).get("summary")
+            if summary:
+                usuario.perfil_ia = str(summary)
+    except Exception as e:
+        logger.warning(f"Erro ao enriquecer perfil IA via get-book: {e}")
+
+
 def _extrair_lista_de_resposta(res) -> list:
     if res is None: return []
     if isinstance(res, list): return res
@@ -431,6 +532,9 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
 
     _upsert_bill_summaries(usuario, db, client, accounts_map)
     _upsert_installments(usuario, db, client, accounts_map)
+    _sync_spending_limits(usuario, db, client)
+    _sync_payment_reminders(usuario, db, client)
+    _enrich_user_profile(usuario, client)
 
     usuario.pierre_initial_sync_done = True
     usuario.last_pierre_sync_at = datetime.now(timezone.utc)
@@ -491,6 +595,9 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
 
     faturas_atualizadas = _upsert_bill_summaries(usuario, db, client, accounts_map)
     parcelamentos_atualizados = _upsert_installments(usuario, db, client, accounts_map)
+    _sync_spending_limits(usuario, db, client)
+    _sync_payment_reminders(usuario, db, client)
+    _enrich_user_profile(usuario, client)
 
     usuario.last_pierre_sync_at = datetime.now(timezone.utc)
     db.commit()
