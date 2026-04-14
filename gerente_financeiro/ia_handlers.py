@@ -152,12 +152,17 @@ _ALFREDO_TOOLS = [
             "type": "function",
             "function": {
                 "name": "definir_limite_orcamento",
-                "description": "Define um limite (teto de gastos) mensal de orçamento para uma categoria.",
+                "description": "Define um limite (teto de gastos) de orçamento para uma categoria em um período específico (diário, semanal ou mensal).",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "categoria": {"type": "string", "description": "Nome da categoria (ex: Lazer, Alimentação, Transporte)"},
                         "valor": {"type": "number", "description": "Valor monetário do limite"},
+                        "periodo": {
+                            "type": "string", 
+                            "enum": ["diário", "semanal", "mensal"],
+                            "description": "Período do limite. Se o usuário não mencionar, deixe em branco."
+                        },
                     },
                     "required": ["categoria", "valor"],
                 },
@@ -2125,6 +2130,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 valor = float(str(args.get("valor") or 0).replace(",", "."))
             except (ValueError, TypeError):
                 valor = 0.0
+            
+            periodo = args.get("periodo") # diário, semanal, mensal
 
             if not categoria or valor <= 0:
                 await _enviar_resposta_html_segura(update.message, 
@@ -2137,20 +2144,41 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 "acao": "definir_limite_orcamento",
                 "categoria": categoria,
                 "valor_limite": valor,
+                "periodo": periodo,
                 "origem": "alfredo",
             }
             context.user_data["dados_quick"] = dados_quick
 
-            preview = (
-                "🚧 <b>Confirme o Limite de Orçamento</b>\n\n"
-                f"• <b>Categoria:</b> {escape(categoria)}\n"
-                f"• <b>Limite Mensal:</b> <code>{_formatar_valor_brasileiro(valor)}</code>"
-            )
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Confirmar", callback_data="quick_confirm")],
-                [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")],
-            ])
-            await _enviar_resposta_html_segura(update.message, preview, reply_markup=keyboard)
+            if periodo:
+                periodo_txt = periodo.capitalize()
+                preview = (
+                    "🚧 <b>Confirme o Limite de Orçamento</b>\n\n"
+                    f"• <b>Categoria:</b> {escape(categoria)}\n"
+                    f"• <b>Valor:</b> <code>{_formatar_valor_brasileiro(valor)}</code>\n"
+                    f"• <b>Período:</b> {escape(periodo_txt)}"
+                )
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Confirmar", callback_data="quick_confirm")],
+                    [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")],
+                ])
+                await _enviar_resposta_html_segura(update.message, preview, reply_markup=keyboard)
+            else:
+                # Se não informou o período, pergunta com botões
+                texto_pergunta = (
+                    "🚧 <b>Quase lá!</b>\n\n"
+                    f"Você quer definir um limite de <code>{_formatar_valor_brasileiro(valor)}</code> para <b>{escape(categoria)}</b>.\n\n"
+                    "Qual a frequência desse limite?"
+                )
+                keyboard = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton("📅 Diário", callback_data="limite_periodo_diário"),
+                        InlineKeyboardButton("🗓️ Semanal", callback_data="limite_periodo_semanal"),
+                        InlineKeyboardButton("📊 Mensal", callback_data="limite_periodo_mensal")
+                    ],
+                    [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")]
+                ])
+                await _enviar_resposta_html_segura(update.message, texto_pergunta, reply_markup=keyboard)
+            
             return ConversationHandler.END
 
         if fn_name == "categorizar_lancamentos_pendentes":
@@ -2454,14 +2482,22 @@ async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 if orc:
                     old_valor = orc.valor_limite
                     orc.valor_limite = valor
-                    msg_sucesso = f"🚧 <b>Limite Atualizado!</b>\n\nO teto para <i>{cat.nome}</i> mudou de {_formatar_valor_brasileiro(old_valor)} para <b>{_formatar_valor_brasileiro(valor)}</b>."
+                    # Atualiza período se fornecido
+                    if dados_quick.get("periodo"):
+                        orc.periodo = dados_quick.get("periodo")
+                    
+                    periodo_txt = str(orc.periodo or "mensal").capitalize()
+                    msg_sucesso = f"🚧 <b>Limite Atualizado!</b>\n\nO teto {periodo_txt} para <i>{cat.nome}</i> mudou de {_formatar_valor_brasileiro(old_valor)} para <b>{_formatar_valor_brasileiro(valor)}</b>."
                 else:
+                    periodo = dados_quick.get("periodo") or "mensal"
                     db.add(OrcamentoCategoria(
                         id_usuario=usuario_db.id,
                         id_categoria=cat.id,
-                        valor_limite=valor
+                        valor_limite=valor,
+                        periodo=periodo
                     ))
-                    msg_sucesso = f"🚧 <b>Limite Configurado!</b>\n\nAgora você tem um teto de <b>{_formatar_valor_brasileiro(valor)}</b> para <i>{cat.nome}</i>."
+                    periodo_txt = periodo.capitalize()
+                    msg_sucesso = f"🚧 <b>Limite Configurado!</b>\n\nAgora você tem um teto <b>{periodo_txt}</b> de <b>{_formatar_valor_brasileiro(valor)}</b> para <i>{cat.nome}</i>."
 
                 db.commit()
                 from gerente_financeiro.services import limpar_cache_usuario
@@ -2480,4 +2516,39 @@ async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             context.user_data.pop("dados_quick", None)
             context.user_data.pop("quick_lancamento", None)
 
+    return ConversationHandler.END
+
+
+async def limite_periodo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler para escolha de período de limite via botão."""
+    query = update.callback_query
+    await query.answer()
+    
+    # Callback data: limite_periodo_diário, limite_periodo_semanal, limite_periodo_mensal
+    periodo = query.data.split("_")[-1]
+    
+    dados_quick = context.user_data.get("dados_quick")
+    if not dados_quick or dados_quick.get("acao") != "definir_limite_orcamento":
+        await query.edit_message_text("❌ Sessão expirada. Por favor, peça para definir o limite novamente.")
+        return ConversationHandler.END
+    
+    # Atualiza o período nos dados temporários
+    dados_quick["periodo"] = periodo
+    context.user_data["dados_quick"] = dados_quick
+    
+    categoria = dados_quick.get("categoria")
+    valor = dados_quick.get("valor_limite")
+    periodo_txt = periodo.capitalize()
+    
+    preview = (
+        "🚧 <b>Confirme o Limite de Orçamento</b>\n\n"
+        f"• <b>Categoria:</b> {escape(categoria)}\n"
+        f"• <b>Valor:</b> <code>{_formatar_valor_brasileiro(valor)}</code>\n"
+        f"• <b>Período:</b> {escape(periodo_txt)}"
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Confirmar", callback_data="quick_confirm")],
+        [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")],
+    ])
+    await query.edit_message_text(preview, reply_markup=keyboard, parse_mode='HTML')
     return ConversationHandler.END

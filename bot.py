@@ -161,7 +161,7 @@ from gerente_financeiro.onboarding_handler import configurar_conv, start_onboard
 from gerente_financeiro.relatorio_handler import relatorio_handler
 from gerente_financeiro.fatura_handler import fatura_conv, fatura_start, fatura_receive_file, fatura_confirm
 from gerente_financeiro.ocr_handler import ocr_action_processor, ocr_iniciar_como_subprocesso
-from gerente_financeiro.ia_handlers import processar_mensagem_com_alfredo, quick_action_handler
+from gerente_financeiro.ia_handlers import processar_mensagem_com_alfredo, quick_action_handler, limite_periodo_callback
 from gerente_financeiro.contact_handler import contact_conv, contact_start
 from gerente_financeiro.delete_user_handler import delete_user_conv
 from gerente_financeiro.dashboard_handler import (
@@ -440,6 +440,7 @@ def _register_default_handlers(application: Application, safe_mode: bool = False
         ("gamificacao_callback", lambda: CallbackQueryHandler(handle_gamification_callback, pattern="^(show_rankings|show_stats|show_rewards)$")),
         ("dashboard_callback", lambda: CallbackQueryHandler(dashboard_callback_handler, pattern="^dashboard_")),
         ("quick_callback", lambda: CallbackQueryHandler(quick_action_handler, pattern="^quick_")),
+        ("limite_periodo_callback", lambda: CallbackQueryHandler(limite_periodo_callback, pattern="^limite_periodo_")),
         ("ocr_callback", lambda: CallbackQueryHandler(ocr_action_processor, pattern="^ocr_")),
         ("plan_choice_callback", lambda: CallbackQueryHandler(handle_plan_choice_callback, pattern="^plan_choose_")),
     ]
