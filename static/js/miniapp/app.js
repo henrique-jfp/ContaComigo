@@ -601,20 +601,44 @@ lucide.createIcons();
     }
 
     async function tryRecoverSessionFromStorage() {
+      // 1) Tenta recuperar do localStorage
       const cached = getStoredSessionId();
-      if (!cached) return false;
-      try {
-        const response = await fetch('/api/miniapp/overview', {
-          headers: { 'X-Session-Id': cached },
-        });
-        if (!response.ok) return false;
-        const data = await response.json();
-        if (!data?.ok) return false;
-        sessionId = cached;
-        return true;
-      } catch (_) {
-        return false;
+      if (cached) {
+        try {
+          const response = await fetch('/api/miniapp/overview', {
+            headers: { 'X-Session-Id': cached },
+          });
+          if (response.ok) {
+            const data = await response.json();
+            if (data?.ok) {
+              sessionId = cached;
+              return true;
+            }
+          }
+        } catch (_) {
+          // continue to other fallbacks
+        }
       }
+
+      // 2) Fallback: tentar ler `session_id` da query string (ex: ?session_id=...)
+      try {
+        const urlParam = (new URLSearchParams(window.location.search)).get('session_id');
+        if (urlParam) {
+          try {
+            const resp = await fetch(`/api/miniapp/overview?session_id=${encodeURIComponent(urlParam)}`);
+            if (resp.ok) {
+              const d = await resp.json();
+              if (d?.ok) {
+                sessionId = urlParam;
+                try { storeSessionId(sessionId); } catch (_) {}
+                return true;
+              }
+            }
+          } catch (_) {}
+        }
+      } catch (_) {}
+
+      return false;
     }
 
     async function fetchWithSession(url, options = {}, retryOnUnauthorized = true) {
