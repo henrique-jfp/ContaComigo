@@ -1383,12 +1383,21 @@ def miniapp_modo_deus():
 
         # --- SEÇÃO 2: TOP CATEGORIAS ---
         try:
+            # 1. Busca o TOTAL REAL de gastos no mês para calcular o "Outros"
+            total_gastos_real = db.query(func.sum(func.abs(Lancamento.valor))).filter(
+                Lancamento.id_usuario == user_id,
+                Lancamento.tipo.in_(['Saída', 'Despesa']),
+                Lancamento.data_transacao >= datetime.combine(start_month, time.min),
+                Lancamento.data_transacao <= datetime.combine(end_month, time.max)
+            ).scalar() or 0
+            total_gastos_real = abs(float(total_gastos_real))
+
+            # 2. Busca as Top 6 categorias (gastos reais)
             top_cats_query = db.query(
                 Categoria.id, Categoria.nome, func.sum(func.abs(Lancamento.valor)).label('total')
             ).join(Lancamento, Lancamento.id_categoria == Categoria.id).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.tipo.in_(['Saída', 'Despesa']),
-                func.lower(Categoria.nome).not_like('%receita%'),
                 Lancamento.data_transacao >= datetime.combine(start_month, time.min),
                 Lancamento.data_transacao <= datetime.combine(end_month, time.max)
             ).group_by(Categoria.id, Categoria.nome).order_by(desc('total')).limit(6).all()
@@ -1396,9 +1405,12 @@ def miniapp_modo_deus():
             top_categorias_list = []
             colors = ["#D85A30","#378ADD","#7F77DD","#888780","#1D9E75","#BA7517"]
             
-            grand_total_g = sum(abs(float(c[2])) for c in top_cats_query)
-
+            total_mapeado = 0
             for i, (cat_id, cat_nome, total_cat) in enumerate(top_cats_query):
+                v_cat = abs(float(total_cat))
+                if v_cat < 0.01: continue
+                total_mapeado += v_cat
+                
                 # Busca subcategorias para esta categoria
                 sub_cats = db.query(
                     Subcategoria.nome, func.sum(func.abs(Lancamento.valor)).label('total_sub')
@@ -1416,10 +1428,21 @@ def miniapp_modo_deus():
 
                 top_categorias_list.append({
                     "nome": cat_nome,
-                    "total": abs(float(total_cat)),
-                    "percentual_do_total_gastos": (abs(float(total_cat)) / grand_total_g * 100) if grand_total_g > 0 else 0,
+                    "total": v_cat,
+                    "percentual_do_total_gastos": (v_cat / total_gastos_real * 100) if total_gastos_real > 0 else 0,
                     "cor_hex": colors[i % len(colors)],
                     "subcategorias": subcats_data
+                })
+            
+            # 3. Adiciona o balde de "Outros" se houver diferença
+            restante = total_gastos_real - total_mapeado
+            if restante > 0.01:
+                top_categorias_list.append({
+                    "nome": "Outros",
+                    "total": restante,
+                    "percentual_do_total_gastos": (restante / total_gastos_real * 100) if total_gastos_real > 0 else 0,
+                    "cor_hex": "#94a3b8", # Cinza ardósia para o resto
+                    "subcategorias": [{"nome": "Lançamentos diversos", "total": restante}]
                 })
             
             result['top_categorias'] = top_categorias_list
