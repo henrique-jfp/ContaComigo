@@ -2176,8 +2176,6 @@ def miniapp_overview():
                 "installments": installments_summary or [],
             }
         })
-            }
-        })
     finally:
         db.close()
 
