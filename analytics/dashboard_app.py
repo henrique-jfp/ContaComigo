@@ -1232,7 +1232,7 @@ def miniapp_history():
     offset = max(int(request.args.get("offset", 0)), 0)
     query = (request.args.get("query") or "").strip()
     tipo = (request.args.get("tipo") or "").strip()
-    order = (request.args.get("order") or "added_desc").strip().lower()
+    order = (request.args.get("order") or "date_desc").strip().lower()
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
     db = next(get_db())
@@ -1383,25 +1383,46 @@ def miniapp_modo_deus():
 
         # --- SEÇÃO 2: TOP CATEGORIAS ---
         try:
-            top_cats = db.query(
-                Categoria.nome, func.sum(func.abs(Lancamento.valor)).label('total')
+            top_cats_query = db.query(
+                Categoria.id, Categoria.nome, func.sum(func.abs(Lancamento.valor)).label('total')
             ).join(Lancamento, Lancamento.id_categoria == Categoria.id).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.tipo.in_(['Saída', 'Despesa']),
                 func.lower(Categoria.nome).not_like('%receita%'),
                 Lancamento.data_transacao >= datetime.combine(start_month, time.min),
                 Lancamento.data_transacao <= datetime.combine(end_month, time.max)
-            ).group_by(Categoria.nome).order_by(desc('total')).limit(6).all()
+            ).group_by(Categoria.id, Categoria.nome).order_by(desc('total')).limit(6).all()
             
-            total_g = sum(abs(float(c[1])) for c in top_cats)
+            top_categorias_list = []
             colors = ["#D85A30","#378ADD","#7F77DD","#888780","#1D9E75","#BA7517"]
-            result['top_categorias'] = [
-                {
-                    "nome": c[0], "total": abs(float(c[1])),
-                    "percentual_do_total_gastos": (abs(float(c[1])) / total_g * 100) if total_g > 0 else 0,
-                    "cor_hex": colors[i % len(colors)]
-                } for i, c in enumerate(top_cats)
-            ]
+            
+            grand_total_g = sum(abs(float(c[2])) for c in top_cats_query)
+
+            for i, (cat_id, cat_nome, total_cat) in enumerate(top_cats_query):
+                # Busca subcategorias para esta categoria
+                sub_cats = db.query(
+                    Subcategoria.nome, func.sum(func.abs(Lancamento.valor)).label('total_sub')
+                ).join(Lancamento, Lancamento.id_subcategoria == Subcategoria.id).filter(
+                    Lancamento.id_usuario == user_id,
+                    Lancamento.id_categoria == cat_id,
+                    Lancamento.tipo.in_(['Saída', 'Despesa']),
+                    Lancamento.data_transacao >= datetime.combine(start_month, time.min),
+                    Lancamento.data_transacao <= datetime.combine(end_month, time.max)
+                ).group_by(Subcategoria.nome).order_by(desc('total_sub')).all()
+
+                subcats_data = [
+                    {"nome": s[0] or "Geral", "total": abs(float(s[1]))} for s in sub_cats
+                ]
+
+                top_categorias_list.append({
+                    "nome": cat_nome,
+                    "total": abs(float(total_cat)),
+                    "percentual_do_total_gastos": (abs(float(total_cat)) / grand_total_g * 100) if grand_total_g > 0 else 0,
+                    "cor_hex": colors[i % len(colors)],
+                    "subcategorias": subcats_data
+                })
+            
+            result['top_categorias'] = top_categorias_list
         except Exception as e:
             logger.error(f"Erro Modo Deus (top_categorias): {e}")
             result['top_categorias'] = []
@@ -1824,7 +1845,7 @@ def miniapp_overview():
 
         recent_items = (
             base_query
-            .order_by(Lancamento.id.desc())
+            .order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc())
             .limit(6)
             .all()
         )

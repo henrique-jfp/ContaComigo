@@ -2807,7 +2807,7 @@ lucide.createIcons();
         offset: historyOffset,
         query: historyQuery.value || '',
         tipo: historyTipo.value || '',
-        order: historyOrder.value || 'added_desc'
+        order: historyOrder.value || 'date_desc'
       });
       if (historyDate?.value) {
         params.set('start_date', historyDate.value);
@@ -3189,7 +3189,7 @@ lucide.createIcons();
 
     historyClearFilters.addEventListener('click', () => {
       historyTipo.value = '';
-      historyOrder.value = 'added_desc';
+      historyOrder.value = 'date_desc';
       historyDate.value = '';
       if(historySearchInput) historySearchInput.value = '';
       historyQuery.value = '';
@@ -3537,13 +3537,66 @@ lucide.createIcons();
           if (catsBlock) catsBlock.classList.remove('hidden');
           catsL.innerHTML = '';
           const maxT = topCats[0].total;
-          topCats.forEach(c => {
-            catsL.innerHTML += `<div><div class="flex justify-between text-[11px] mb-1"><span class="text-telegram-text font-bold">${c.nome}</span><span class="text-telegram-text font-black">${fmt.format(c.total)}</span></div><div class="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-full rounded-full" style="width: ${(c.total / maxT * 100)}%; background-color: ${c.cor_hex}"></div></div></div>`;
+          
+          topCats.forEach((c, idx) => {
+            const hasSub = c.subcategorias && c.subcategorias.length > 0;
+            const catId = `md-cat-${idx}`;
+            
+            let subsHtml = '';
+            if (hasSub) {
+              subsHtml = `<div id="${catId}-subs" class="hidden mt-3 pl-4 border-l-2 border-slate-200 dark:border-slate-700 space-y-2">`;
+              c.subcategorias.forEach(s => {
+                const subPerc = (s.total / c.total * 100).toFixed(0);
+                subsHtml += `
+                  <div class="flex justify-between items-center text-[10px]">
+                    <span class="text-telegram-hint font-medium">${s.nome}</span>
+                    <div class="flex items-center gap-2">
+                      <span class="text-telegram-hint font-bold">${fmt.format(s.total)}</span>
+                      <span class="text-[8px] px-1 rounded bg-slate-100 dark:bg-slate-800 text-telegram-hint">${subPerc}%</span>
+                    </div>
+                  </div>
+                `;
+              });
+              subsHtml += `</div>`;
+            }
+
+            const itemHtml = `
+              <div class="category-item">
+                <button onclick="toggleCategorySubs('${catId}')" class="w-full text-left focus:outline-none active:opacity-70 transition-opacity">
+                  <div class="flex justify-between text-[11px] mb-1.5">
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-telegram-text font-bold">${c.nome}</span>
+                      ${hasSub ? `<i data-lucide="chevron-down" id="${catId}-icon" class="w-3 h-3 text-telegram-hint transition-transform duration-300"></i>` : ''}
+                    </div>
+                    <span class="text-telegram-text font-black">${fmt.format(c.total)}</span>
+                  </div>
+                  <div class="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div class="h-full rounded-full transition-all duration-1000" style="width: ${(c.total / maxT * 100)}%; background-color: ${c.cor_hex}"></div>
+                  </div>
+                </button>
+                ${subsHtml}
+              </div>
+            `;
+            catsL.innerHTML += itemHtml;
           });
         } else if (catsBlock) {
           catsBlock.classList.add('hidden');
         }
       }
+
+      // Função global para o toggle
+      window.toggleCategorySubs = function(id) {
+        const subs = document.getElementById(`${id}-subs`);
+        const icon = document.getElementById(`${id}-icon`);
+        if (subs) {
+          const isHidden = subs.classList.contains('hidden');
+          // Fecha outros? (opcional, vamos deixar abrir múltiplos por enquanto)
+          subs.classList.toggle('hidden');
+          if (icon) {
+            icon.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+          }
+        }
+      };
 
       const mdTotalAssinaturas = document.getElementById('mdTotalAssinaturas');
       const assL = document.getElementById('mdAssinaturasList');
