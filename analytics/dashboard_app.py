@@ -415,23 +415,36 @@ def _daily_cashflow(lancamentos: list[Lancamento], start: date, end: date) -> li
 
 def _category_distribution(lancamentos: list[Lancamento]) -> list[dict]:
     totals: dict[str, float] = {}
+    total_geral_gastos = 0.0
+    
     for lanc in lancamentos:
+        # Considera apenas gastos/saídas
         if str(lanc.tipo).lower().startswith(("entr", "recei")):
             continue
+            
+        valor = abs(float(lanc.valor or 0))
+        total_geral_gastos += valor
+        
         categoria = "Sem categoria"
         if getattr(lanc, "categoria", None) and lanc.categoria.nome:
             categoria = lanc.categoria.nome
-            if getattr(lanc, "subcategoria", None) and lanc.subcategoria.nome:
-                categoria = f"{categoria} / {lanc.subcategoria.nome}"
-        totals[categoria] = totals.get(categoria, 0.0) + abs(float(lanc.valor or 0))
+            # Opcional: remover subcategoria do label do gráfico pizza para não poluir
+            # if getattr(lanc, "subcategoria", None) and lanc.subcategoria.nome:
+            #    categoria = f"{categoria} / {lanc.subcategoria.nome}"
+        
+        totals[categoria] = totals.get(categoria, 0.0) + valor
 
     if not totals:
         return []
 
+    # Ordena por valor e pega as top 5
     ordered = sorted(totals.items(), key=lambda item: item[1], reverse=True)
     top = ordered[:5]
-    restante = sum(value for _, value in ordered[5:])
-    if restante > 0:
+    
+    total_mapeado = sum(value for _, value in top)
+    restante = total_geral_gastos - total_mapeado
+    
+    if restante > 0.01:
         top.append(("Outros", restante))
 
     palette = ["#7b1e2d", "#b85d6e", "#16a34a", "#f59e0b", "#2563eb", "#8b5cf6"]
