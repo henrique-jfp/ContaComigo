@@ -642,22 +642,6 @@ for _cat, _subcats in MAPA_CATEGORIAS.items():
 
 # (sinal_normalizado, categoria, subcategoria)
 _SINAIS_FORTES: list[tuple[str, str, str]] = [
-    # Transferências explícitas
-    ("pix enviado", "Transferências", "PIX Enviado"),
-    ("pixenviado", "Transferências", "PIX Enviado"),
-    ("pix transferido", "Transferências", "PIX Enviado"),
-    ("ted enviada", "Transferências", "TED/DOC"),
-    ("ted enviado", "Transferências", "TED/DOC"),
-    ("doc enviado", "Transferências", "TED/DOC"),
-    ("transferencia enviada", "Transferências", "TED/DOC"),
-    ("transf.enviada", "Transferências", "TED/DOC"),
-    # Fatura
-    ("pagamento fatura", "Transferências", "Pagamento de Fatura"),
-    ("pagto fatura", "Transferências", "Pagamento de Fatura"),
-    ("pgto fatura", "Transferências", "Pagamento de Fatura"),
-    ("pgt fatura", "Transferências", "Pagamento de Fatura"),
-    ("pagamento cartao", "Transferências", "Pagamento de Fatura"),
-    ("fatura cartao", "Transferências", "Pagamento de Fatura"),
     # Juros e encargos
     ("juros ", "Juros e Encargos", "Juros"),
     (" juros", "Juros e Encargos", "Juros"),

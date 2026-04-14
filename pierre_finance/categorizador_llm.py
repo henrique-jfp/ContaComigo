@@ -78,16 +78,22 @@ def _build_lista_categorias(db: Session) -> str:
 
 _SYSTEM_PROMPT = """Você é um especialista em finanças pessoais brasileiras. Sua tarefa é categorizar transações bancárias reais.
 
+NOME DO TITULAR DA CONTA: {nome_titular}
+
 CATEGORIAS E SUBCATEGORIAS DISPONÍVEIS:
 {lista_categorias}
 
 REGRAS OBRIGATÓRIAS (siga à risca):
 1. NUNCA retorne "Outros" se houver qualquer pista na descrição. Use seu conhecimento de mercado brasileiro.
-2. IDENTIFIQUE o estabelecimento real: limpe prefixos bancários e retorne o nome amigável.
-   - "PIX ENVIADO NETFLIX COM" → nome limpo: "Netflix", categoria: Serviços e Assinaturas / Streaming
-   - "COMPRA DEBITO IFOOD*PEDIDO" → nome limpo: "iFood", categoria: Alimentação / Delivery
-   - "PAG* STARBUCKS SAO PAULO" → nome limpo: "Starbucks", categoria: Alimentação / Restaurantes/Lanchonetes
-3. ESTABELECIMENTOS CONHECIDOS:
+2. IGNORAR ATIVAMENTE prefixos de meios de pagamento ("Pix enviado", "TED", "DOC", "Transferencia", "Pagamento de Fatura", "Pagamento on line", "Pagamento efetuado").
+   - Foque APENAS na entidade recebedora/pagadora (a contraparte).
+   - "Pix enviado - Food To Save" → Nome Limpo: "Food To Save" → Categoria: Alimentação / Restaurantes/Lanchonetes
+   - "Pix enviado - Shpp Brasil" → Nome Limpo: "Shopee" → Categoria: Compras Online (ou Vestuário e Beleza)
+   - "Pix enviado - Frogpay Solucao" → Nome Limpo: "Frogpay" → Categoria: Compras Online / Marketplace
+3. TRANSFERÊNCIAS INTERNAS E FATURA (CUIDADO REDOBRADO):
+   - Se o nome do remetente/destinatário (na descrição ou na contraparte) for MUITO SIMILAR ou IGUAL ao "NOME DO TITULAR DA CONTA", classifique a categoria como "Transferências" e a subcategoria EXATAMENTE como "Transferência Interna".
+   - Isso vale para pagamentos de fatura ("Pagamento efetuado - Pagamento Fatura", "pagamento on line" com valor de fatura) ou resgates entre contas do próprio titular.
+4. ESTABELECIMENTOS CONHECIDOS:
    - Zamp / Burger King / BK = Alimentação / Restaurantes/Lanchonetes
    - Ecovias / Sem Parar / AutoPista = Transporte / Pedágio
    - Gympass / Wellhub / TotalPass = Serviços e Assinaturas / Academia/Saúde
@@ -98,10 +104,10 @@ REGRAS OBRIGATÓRIAS (siga à risca):
    - 99 / Uber (trip/viagem) = Transporte / Aplicativos
    - Kabum / Pichau / Terabyte = Compras Online / Eletrônicos
    - Shopee / Shein / AliExpress = Vestuário e Beleza / Roupas e Calçados (se roupas) ou Compras Online
-4. PIX para pessoa física SEM indicação de serviço = Transferências / PIX Enviado
-5. PIX para pessoa com título (Dr., Dra., Clínica, Studio, Salão) = categoria específica (Saúde, Beleza, etc)
-6. Valores de parcela (parc, x de, parcela N/M) = Empréstimos e Financiamentos
-7. Descrições de juros, mora, IOF, tarifa = Juros e Encargos
+5. PIX para pessoa física SEM indicação de serviço = Transferências / PIX Enviado (ou PIX Recebido)
+6. PIX para pessoa com título (Dr., Dra., Clínica, Studio, Salão) = categoria específica (Saúde, Beleza, etc)
+7. Valores de parcela (parc, x de, parcela N/M) = Empréstimos e Financiamentos
+8. Descrições de juros, mora, IOF, tarifa = Juros e Encargos
 
 FORMATO DE SAÍDA — retorne APENAS JSON puro, sem markdown, sem explicações:
 [
@@ -130,6 +136,13 @@ async def categorizar_lote_llm(db: Session, lancamentos: list[Lancamento]) -> in
 
     lista_categorias = _build_lista_categorias(db)
 
+    # Obtém o nome do titular para identificação de transferência interna
+    nome_titular = "Usuário"
+    if lancamentos:
+        usuario = db.query(Usuario).filter(Usuario.id == lancamentos[0].id_usuario).first()
+        if usuario and usuario.nome_completo:
+            nome_titular = usuario.nome_completo
+
     # Prepara payload enxuto para o LLM (só o necessário)
     dados = []
     for l in lancamentos:
@@ -144,7 +157,7 @@ async def categorizar_lote_llm(db: Session, lancamentos: list[Lancamento]) -> in
     messages = [
         {
             "role": "system",
-            "content": _SYSTEM_PROMPT.format(lista_categorias=lista_categorias),
+            "content": _SYSTEM_PROMPT.format(lista_categorias=lista_categorias, nome_titular=nome_titular),
         },
         {
             "role": "user",
