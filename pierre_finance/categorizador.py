@@ -389,7 +389,8 @@ def persistir_ids_categoria(
     if cat_cache is not None and cat_nome_db in cat_cache:
         cat_id = cat_cache[cat_nome_db]
     else:
-        categoria_db = db.query(Categoria).filter(Categoria.nome == cat_nome_db).first()
+        # Busca case-insensitive para evitar duplicatas (ex: ALIMENTACAO vs Alimentação)
+        categoria_db = db.query(Categoria).filter(func.lower(Categoria.nome) == func.lower(cat_nome_db)).first()
         if not categoria_db:
             categoria_db = Categoria(nome=cat_nome_db)
             db.add(categoria_db)
@@ -402,8 +403,9 @@ def persistir_ids_categoria(
     if subcat_cache is not None and sub_key in subcat_cache:
         subcat_id = subcat_cache[sub_key]
     else:
+        # Busca case-insensitive para subcategorias
         subcat_db = db.query(Subcategoria).filter(
-            Subcategoria.nome == subcat_nome,
+            func.lower(Subcategoria.nome) == func.lower(subcat_nome),
             Subcategoria.id_categoria == cat_id,
         ).first()
         if not subcat_db:

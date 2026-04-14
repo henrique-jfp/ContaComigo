@@ -132,11 +132,14 @@ def _extrair_nome_da_descricao(descricao: str) -> str | None:
     # Padrão: 'Pix enviado - Nome do Estabelecimento'
     # Padrão: 'Pix recebido - Nome de Alguem'
     # Padrão: 'TRANSFERENCIA PIX - DES Nome'
+    # Padrão: 'COMPRA NO CARTAO - NOME ESTABELECIMENTO - RIO DE JANEIR BRA'
     patterns = [
         r"(?:Pix enviado|Pix recebido)\s*-\s*(.+)",
         r"TRANSFERENCIA PIX\s*-\s*[A-Z]{3}\s*(.+)",
-        r"PAGTO ELETRON\s*COBRANCA\s*-\s*(.+?)\s*-", # Bradesco style
-        r"COMPRA NO CARTAO\s*-\s*(.+?)\s*\d",
+        r"PAGTO ELETRON\s*COBRANCA\s*-\s*(.+?)\s*-",
+        r"COMPRA NO CARTAO\s*-\s*(.+?)\s*(-|\d)",
+        # Fallback genérico para capturar o início da string antes de cidades/país comuns
+        r"^(.+?)\s*(?:RIO DE JANEIR|SAO PAULO|BRA$|BRA\s)",
     ]
     
     for pat in patterns:

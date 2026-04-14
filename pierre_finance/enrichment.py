@@ -54,31 +54,31 @@ def categorizar_por_nome(nome: str, descricao: str = "") -> tuple[str, str] | No
         (["juros", "mora", "multa", "encargo"], ("JUROS E ENCARGOS", "Juros")),
         (["iof"], ("JUROS E ENCARGOS", "IOF")),
         (["anuidade", "taxa anuidade"], ("JUROS E ENCARGOS", "Anuidade")),
-        (["tarifa", "cesta servicos", "mensalidade banco"], ("JUROS E ENCARGOS", "Multas")), # Usando Multas como fallback para taxas
+        (["tarifa", "cesta servicos", "mensalidade banco"], ("JUROS E ENCARGOS", "Multas")),
         
         # ASSINATURAS
-        (["netflix", "spotify", "amazon prime", "disney", "hbo", "gympass", "wellhub", "icloud", "google one", "assinatura", "subscription", "plano mensal"], ("SERVIÇOS E ASSINATURAS", "Assinaturas")),
-        
-        # PARCELAMENTOS (Detecta via descrição se tiver 'parc' ou 'parcela')
-        (["parc ", "parc.", "parcela"], ("EMPRÉSTIMOS E FINANCIAMENTOS", "Empréstimo Pessoal")),
+        (["netflix", "spotify", "amazon prime", "disney", "hbo", "gympass", "wellhub", "icloud", "google one", "assinatura", "subscription", "plano mensal"], ("Serviços e Assinaturas", "Assinaturas")),
         
         # ALIMENTAÇÃO
-        (["alimentos", "bebidas", "distribuidora", "mercado", "supermercado", "formiguinha", "hortifruti", "sacolao", "sacolão", "pao de acucar", "pão de açúcar", "carrefour", "extra"], ("ALIMENTAÇÃO", "Mercado/Supermercado")),
-        (["restaurante", "lanchonete", "cafe", "café", "pizzaria", "doceria", "acai", "açaí", "bar e pet", "churrascaria", "burguer", "burger", "mcdonald", "outback", "starbucks", "bk ", "bk*"], ("ALIMENTAÇÃO", "Restaurantes/Lanchonetes")),
-        (["ifood", "rappi", "delivery"], ("ALIMENTAÇÃO", "Delivery")),
+        (["alimentos", "bebidas", "distribuidora", "mercado", "supermercado", "formiguinha", "hortifruti", "sacolao", "sacolão", "pao de acucar", "pão de açúcar", "carrefour", "extra", "zona sul", "prezunic", "mundial", "guanabara", "assai", "atacadao"], ("Alimentação", "Mercado/Supermercado")),
+        (["restaurante", "lanchonete", "cafe", "café", "pizzaria", "doceria", "acai", "açaí", "bar e pet", "churrascaria", "burguer", "burger", "mcdonald", "outback", "starbucks", "bk ", "bk*", "coco bambu", "madeiro", "habibs"], ("Alimentação", "Restaurantes/Lanchonetes")),
+        (["ifood", "rappi", "delivery"], ("Alimentação", "Delivery")),
         
         # TRANSPORTE
-        (["transporte", "taxi", "táxi", "uber", "99pop", "99*", "99app", "zapay", "detran"], ("TRANSPORTE", "Aplicativos")),
-        (["posto", "combustivel", "combustível", "gasolina", "petroleo", "petróleo", "shell", "ipiranga", "br distribuidora"], ("TRANSPORTE", "Combustivel")),
+        (["transporte", "taxi", "táxi", "uber", "99pop", "99*", "99app", "zapay", "detran"], ("Transporte", "Aplicativos")),
+        (["posto", "combustivel", "combustível", "gasolina", "petroleo", "petróleo", "shell", "ipiranga", "br distribuidora"], ("Transporte", "Combustivel")),
         
         # SAÚDE
-        (["drogaria", "farmacia", "farmácia", "saude", "saúde", "medica", "médica", "clinica", "clínica", "drogasil", "pacheco", "laboratorio", "laboratório", "exame"], ("SAÚDE", "Farmacia")),
+        (["drogaria", "farmacia", "farmácia", "saude", "saúde", "medica", "médica", "clinica", "clínica", "drogasil", "pacheco", "laboratorio", "laboratório", "exame"], ("Saúde", "Farmacia")),
         
         # PET
-        (["petshop", "pet shop", "veterinario", "veterinário", "cobasi", "petz"], ("PET", "Veterinario")),
+        (["petshop", "pet shop", "veterinario", "veterinário", "cobasi", "petz"], ("Pet", "Veterinario")),
         
         # EDUCAÇÃO
-        (["escola", "colegio", "colégio", "faculdade", "ensino", "educacao", "educação", "universidade", "curso", "alura"], ("EDUCAÇÃO", "Mensalidade")),
+        (["escola", "colegio", "colégio", "faculdade", "ensino", "educacao", "educação", "universidade", "curso", "alura"], ("Educação", "Mensalidade")),
+        
+        # PARCELAMENTOS
+        (["parc ", "parc.", "parcela"], ("Empréstimos e Financiamentos", "Empréstimo Pessoal")),
     ]
     
     for keywords, category in regras:
