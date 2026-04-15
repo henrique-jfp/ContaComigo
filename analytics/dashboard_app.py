@@ -410,7 +410,7 @@ def _daily_cashflow(lancamentos: list[Lancamento], start: date, end: date) -> li
             continue
         label = data.strftime("%d/%m")
         tipo = "Entrada" if str(lanc.tipo).lower().startswith(("entr", "recei")) else "Saída"
-        series[label][tipo] += float(lanc.valor or 0)
+        series[label][tipo] += abs(float(lanc.valor or 0))
 
     return [
         {"label": label, "entrada": round(series[label]["Entrada"], 2), "saida": round(series[label]["Saída"], 2)}
@@ -519,7 +519,7 @@ def _serialize_miniapp_lancamento(lanc: Lancamento) -> dict:
     return {
         "id": lanc.id,
         "descricao": lanc.descricao,
-        "valor": float(lanc.valor or 0),
+        "valor": abs(float(lanc.valor or 0)),
         "tipo": lanc.tipo,
         "data": lanc.data_transacao.isoformat() if lanc.data_transacao else None,
         "forma_pagamento": lanc.forma_pagamento,
@@ -1908,12 +1908,11 @@ def miniapp_overview():
             .all()
         )
 
-        receita = sum(float(lanc.valor or 0) for lanc in lancamentos_mes if str(lanc.tipo).lower().startswith(("entr", "recei")))
+        receita = sum(abs(float(lanc.valor or 0)) for lanc in lancamentos_mes if str(lanc.tipo).lower().startswith(("entr", "recei")))
         despesa = sum(abs(float(lanc.valor or 0)) for lanc in lancamentos_mes if str(lanc.tipo).lower().startswith(("desp", "saida")))
         
-        # Saldo Total (Patrimônio) baseado na soma direta dos valores (Receita +, Despesa -)
-        total_acumulado = db.query(func.sum(Lancamento.valor)).filter(Lancamento.id_usuario == usuario.id).scalar() or 0.0
-        balance = float(total_acumulado)
+        # Saldo do mês (Resultado Líquido)
+        balance = receita - despesa
 
         cashflow = _daily_cashflow(lancamentos_mes, start_date, end_date)
         categories = _category_distribution(lancamentos_mes)
@@ -1958,13 +1957,13 @@ def miniapp_overview():
             key = (lanc.data_transacao.year, lanc.data_transacao.month)
             if key not in monthly_map:
                 continue
-            valor = float(lanc.valor or 0)
+            valor = abs(float(lanc.valor or 0))
             is_entrada = str(lanc.tipo).lower().startswith(("entr", "recei"))
             if is_entrada:
-                monthly_map[key]["entrada"] += max(valor, 0)
-                monthly_map[key]["net"] += max(valor, 0)
+                monthly_map[key]["entrada"] += valor
+                monthly_map[key]["net"] += valor
             else:
-                saida = abs(valor)
+                saida = valor
                 monthly_map[key]["saida"] += saida
                 monthly_map[key]["net"] -= saida
 
@@ -1997,8 +1996,8 @@ def miniapp_overview():
         )
         prior_balance = 0.0
         for lanc in prior_lanc:
-            valor = float(lanc.valor or 0)
-            prior_balance += valor if str(lanc.tipo).lower().startswith(("entr", "recei")) else -abs(valor)
+            valor = abs(float(lanc.valor or 0))
+            prior_balance += valor if str(lanc.tipo).lower().startswith(("entr", "recei")) else -valor
 
         patrimony_map: dict[tuple[int, int], float] = {key: 0.0 for key in month_refs_8}
         lanc_8m = (
@@ -2013,8 +2012,8 @@ def miniapp_overview():
             key = (lanc.data_transacao.year, lanc.data_transacao.month)
             if key not in patrimony_map:
                 continue
-            valor = float(lanc.valor or 0)
-            patrimony_map[key] += valor if str(lanc.tipo).lower().startswith(("entr", "recei")) else -abs(valor)
+            valor = abs(float(lanc.valor or 0))
+            patrimony_map[key] += valor if str(lanc.tipo).lower().startswith(("entr", "recei")) else -valor
 
         running_balance = prior_balance
         patrimony_series = []
