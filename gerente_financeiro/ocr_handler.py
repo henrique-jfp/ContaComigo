@@ -935,7 +935,6 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
             dados = _sanitize_ocr_payload(dados)
             context.user_data['dados_ocr'] = dados
 
-            # Lógica de verificação de duplicidade e salvamento (sem alterações)
             user_info = query.from_user
             usuario_db = get_or_create_user(db, user_info.id, user_info.full_name)
             ensure_user_plan_state(db, usuario_db, commit=True)
@@ -946,28 +945,24 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
                 await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
                 return False
 
+            # Lógica de Data
             data_str = dados.get('data', datetime.now().strftime('%d/%m/%Y'))
             hora_str = dados.get('hora', '00:00:00')
             try:
                 data_obj = datetime.strptime(f"{data_str} {hora_str}", '%d/%m/%Y %H:%M:%S')
             except ValueError:
                 data_obj = datetime.strptime(data_str, '%d/%m/%Y')
-            doc_fiscal = re.sub(r'\D', '', str(dados.get('documento_fiscal', ''))) or None
-            time_window_start = data_obj - timedelta(minutes=5)
-            time_window_end = data_obj + timedelta(minutes=5)
-            existing_lancamento = db.query(Lancamento).filter(
-                and_(
-                    Lancamento.id_usuario == usuario_db.id,
-                    Lancamento.valor == dados.get('valor_total'),
-                    Lancamento.documento_fiscal == doc_fiscal,
-                    Lancamento.data_transacao.between(time_window_start, time_window_end)
-                )
-            ).first()
-            if existing_lancamento:
-                await query.edit_message_text("⚠️ Transação Duplicada! Operação cancelada.", parse_mode='Markdown')
-                return False
 
-            # Lógica de encontrar categoria/subcategoria (sem alterações)
+            # --- INTEGRAÇÃO COM RECONCILIATION SERVICE ---
+            from gerente_financeiro.reconciliation_service import ReconciliationService
+            
+            valor_final = float(dados.get('valor_total'))
+            if dados.get('tipo_transacao') == 'Despesa':
+                valor_final = -abs(valor_final)
+            else:
+                valor_final = abs(valor_final)
+
+            # Busca IDs de categoria local (se existirem)
             id_categoria, id_subcategoria = None, None
             if cat_sugerida := dados.get('categoria_sugerida'):
                 categoria_obj = db.query(Categoria).filter(func.lower(Categoria.nome) == func.lower(cat_sugerida)).first()
@@ -979,19 +974,28 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
                     if subcategoria_obj:
                         id_subcategoria = subcategoria_obj.id
 
-            # Criação do lançamento e itens (sem alterações)
-            novo_lancamento = Lancamento(
-                id_usuario=usuario_db.id,
-                data_transacao=data_obj,
+            # Registro via Serviço de Reconciliação
+            novo_lancamento, criado = ReconciliationService.register_transaction(
+                db=db,
+                user_id=usuario_db.id,
+                valor=valor_final,
+                data=data_obj,
                 descricao=dados.get('nome_estabelecimento'),
-                valor=dados.get('valor_total'),
-                tipo=dados.get('tipo_transacao', 'Despesa'),
-                forma_pagamento=dados.get('forma_pagamento', 'Nao_informado'),
-                documento_fiscal=doc_fiscal,
-                id_categoria=id_categoria,
-                id_subcategoria=id_subcategoria,
-                origem="ocr",
+                categoria_id=id_categoria,
+                origem="ocr"
             )
+
+            if not criado:
+                await query.edit_message_text("⚠️ Este lançamento já foi identificado anteriormente. (Duplicidade evitada)")
+                return False
+
+            # Configurações Adicionais
+            doc_fiscal = re.sub(r'\D', '', str(dados.get('documento_fiscal', ''))) or None
+            novo_lancamento.documento_fiscal = doc_fiscal
+            novo_lancamento.id_subcategoria = id_subcategoria
+            novo_lancamento.forma_pagamento = dados.get('forma_pagamento', 'Nao_informado')
+
+            # Salvar itens detalhados
             for item_data in dados.get('itens', []):
                 valor_unit_str = str(item_data.get('valor_unitario', '0')).replace(',', '.')
                 valor_unit = float(valor_unit_str) if valor_unit_str else 0.0
@@ -1004,15 +1008,14 @@ async def ocr_action_processor(update: Update, context: ContextTypes.DEFAULT_TYP
                 )
                 novo_lancamento.itens.append(novo_item)
 
-            db.add(novo_lancamento)
             db.commit()
             try:
                 await give_xp_for_action(query.from_user.id, "LANCAMENTO_CRIADO_OCR", context)
             except Exception:
                 logger.debug("Falha ao conceder XP do OCR (nao critico).")
 
-            # Mensagem de sucesso será enviada pelo handler principal
             context.user_data.pop('dados_ocr', None)
+            await query.edit_message_text("✅ Lançamento registrado na Conta Digital!")
             return True
         except Exception as e:
             db.rollback()

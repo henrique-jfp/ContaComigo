@@ -858,18 +858,35 @@ async def salvar_transacoes_generica(db: Session, usuario_db, transacoes: list,
                 # Prepara os dados da transação
                 lancamento_data = _preparar_dados_lancamento(transacao_data, usuario_db.id, conta_id, db)
                 
+                # --- INTEGRAÇÃO COM RECONCILIATION SERVICE (Conta Digital) ---
+                from gerente_financeiro.reconciliation_service import ReconciliationService
+                
+                # Normaliza valor (Receita +, Despesa -)
+                valor_float = float(lancamento_data.get('valor', 0))
+                if lancamento_data.get('tipo') == 'Despesa':
+                    valor_float = -abs(valor_float)
+                else:
+                    valor_float = abs(valor_float)
 
-                # Filtra apenas campos válidos do modelo Lancamento antes de criar
-                try:
-                    valid_cols = {c.name for c in Lancamento.__table__.columns}
-                except Exception:
-                    # Fallback conservador: campos esperados
-                    valid_cols = {'descricao', 'valor', 'tipo', 'data_transacao', 'forma_pagamento', 'documento_fiscal', 'id_usuario', 'id_categoria', 'id_subcategoria', 'origem'}
+                novo_lancamento, criado = ReconciliationService.register_transaction(
+                    db=db,
+                    user_id=usuario_db.id,
+                    valor=valor_float,
+                    data=lancamento_data.get('data_transacao'),
+                    descricao=lancamento_data.get('descricao'),
+                    categoria_id=lancamento_data.get('id_categoria'),
+                    origem=lancamento_data.get('origem', tipo_origem),
+                    external_id=transacao_data.get('external_id') or transacao_data.get('uuid')
+                )
 
-                lanc_kwargs = {k: v for k, v in lancamento_data.items() if k in valid_cols}
+                if not criado:
+                    stats['duplicadas'] += 1
+                    continue
 
-                # Cria o lançamento usando apenas campos válidos
-                novo_lancamento = Lancamento(**lanc_kwargs)
+                # Configurações adicionais se foi criado agora
+                novo_lancamento.id_subcategoria = lancamento_data.get('id_subcategoria')
+                novo_lancamento.forma_pagamento = lancamento_data.get('forma_pagamento')
+                novo_lancamento.documento_fiscal = transacao_data.get('documento_fiscal')
 
                 # Se a preparação trouxe itens, anexa objetos ItemLancamento ao lançamento antes do commit
                 itens_payload = lancamento_data.get('itens') or []

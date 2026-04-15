@@ -504,10 +504,12 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
     res_txs = client.get_transactions(startDate=date_90, limit=1000, format="raw")
     txs_raw = _extrair_lista_de_resposta(res_txs)
 
+    from gerente_financeiro.reconciliation_service import ReconciliationService
+    
     txs_count = 0
     for tx in txs_raw:
         ext_id = str(tx.get("id") or tx.get("transactionId") or "")
-        if not ext_id or db.query(Lancamento).filter(Lancamento.external_id == ext_id).first():
+        if not ext_id:
             continue
 
         valor_bruto = _safe_decimal(tx.get("amount") or tx.get("value"))
@@ -524,26 +526,29 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
         tipo = _inferir_tipo(descricao, valor_bruto, acc_type, tx_type)
         cnpj, nome_fantasia = _extrair_dados_contraparte(tx)
 
-        acc_id_tx = str(tx.get("accountId") or (tx.get("account") or {}).get("id") or "")
-        
-        lanc = Lancamento(
-            id_usuario=usuario.id,
-            id_conta=accounts_map.get(acc_id_tx),
-            external_id=ext_id,
+        # Converte para valor com sinal (Receita positiva, Despesa negativa) para o ReconciliationService
+        valor_final = abs(float(valor_bruto)) if tipo == "Receita" else -abs(float(valor_bruto))
+        data_tx = _parse_iso_date(tx.get("date")) or datetime.now(timezone.utc)
+
+        # Registro via Serviço de Reconciliação
+        lanc, criado = ReconciliationService.register_transaction(
+            db=db,
+            user_id=usuario.id,
+            valor=valor_final,
+            data=data_tx,
             descricao=descricao,
-            valor=abs(valor_bruto),
-            tipo=tipo,
-            data_transacao=_parse_iso_date(tx.get("date")) or datetime.now(timezone.utc),
             origem="open_finance",
-            forma_pagamento=_normalizar_forma_pagamento(descricao, acc_type),
-            id_categoria=None,
-            id_subcategoria=None,
-            cnpj_contraparte=cnpj,
-            nome_contraparte=nome_fantasia,
+            external_id=ext_id
         )
-        db.add(lanc)
-        await enriquecer_um_lancamento(db, lanc)
-        txs_count += 1
+
+        if criado:
+            # Enriquecimento adicional
+            lanc.cnpj_contraparte = cnpj
+            lanc.nome_contraparte = nome_fantasia
+            lanc.forma_pagamento = _normalizar_forma_pagamento(descricao, acc_type)
+            # Tenta categorizar na hora
+            await enriquecer_um_lancamento(db, lanc)
+            txs_count += 1
 
     _upsert_bill_summaries(usuario, db, client, accounts_map)
     _upsert_installments(usuario, db, client, accounts_map)
@@ -572,10 +577,12 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
     res_txs = client.get_transactions(startDate=date_48h, limit=200, format="raw")
     txs_raw = _extrair_lista_de_resposta(res_txs)
 
+    from gerente_financeiro.reconciliation_service import ReconciliationService
+    
     novos = 0
     for tx in txs_raw:
         ext_id = str(tx.get("id") or tx.get("transactionId") or "")
-        if not ext_id or db.query(Lancamento).filter(Lancamento.external_id == ext_id).first():
+        if not ext_id:
             continue
 
         valor_bruto = _safe_decimal(tx.get("amount") or tx.get("value") or 0)
@@ -592,25 +599,27 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
         tipo = _inferir_tipo(descricao, valor_bruto, acc_type, tx_type)
         cnpj, nome_fantasia = _extrair_dados_contraparte(tx)
 
+        # Converte para valor com sinal (Receita positiva, Despesa negativa)
+        valor_final = abs(float(valor_bruto)) if tipo == "Receita" else -abs(float(valor_bruto))
         data_tx = _parse_iso_date(tx.get("date")) or _parse_iso_date(tx.get("createdAt")) or datetime.now(timezone.utc)
-        acc_id_tx = str(tx.get("accountId") or (tx.get("account") or {}).get("id") or "")
 
-        lanc = Lancamento(
-            id_usuario=usuario.id,
-            id_conta=accounts_map.get(acc_id_tx),
-            external_id=ext_id,
+        # Registro via Serviço de Reconciliação
+        lanc, criado = ReconciliationService.register_transaction(
+            db=db,
+            user_id=usuario.id,
+            valor=valor_final,
+            data=data_tx,
             descricao=descricao,
-            valor=abs(valor_bruto),
-            tipo=tipo,
-            data_transacao=data_tx,
             origem="open_finance",
-            forma_pagamento=_normalizar_forma_pagamento(descricao, acc_type),
-            cnpj_contraparte=cnpj,
-            nome_contraparte=nome_fantasia,
+            external_id=ext_id
         )
-        db.add(lanc)
-        await enriquecer_um_lancamento(db, lanc)
-        novos += 1
+
+        if criado:
+            lanc.cnpj_contraparte = cnpj
+            lanc.nome_contraparte = nome_fantasia
+            lanc.forma_pagamento = _normalizar_forma_pagamento(descricao, acc_type)
+            await enriquecer_um_lancamento(db, lanc)
+            novos += 1
 
     faturas_atualizadas = _upsert_bill_summaries(usuario, db, client, accounts_map)
     parcelamentos_atualizados = _upsert_installments(usuario, db, client, accounts_map)

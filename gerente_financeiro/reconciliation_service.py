@@ -20,10 +20,8 @@ class ReconciliationService:
             conta = Conta(
                 id_usuario=user_id,
                 nome="ContaComigo Digital",
-                tipo="PAYMENT_ACCOUNT",
-                instituicao="ContaComigo",
-                saldo_atual=0,
-                ativo=True
+                tipo="Carteira Digital",
+                external_id=f"digital_wallet_{user_id}"
             )
             db.add(conta)
             db.commit()

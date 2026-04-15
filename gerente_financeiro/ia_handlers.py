@@ -2372,19 +2372,31 @@ async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     if cat:
                         cat_id = cat.id
 
-                novo_lanc = Lancamento(
-                    id_usuario=usuario_db.id,
+                # Funil para Conta Digital via ReconciliationService
+                from gerente_financeiro.reconciliation_service import ReconciliationService
+                
+                # Normaliza valor (Entrada = +, Saída = -) para o serviço
+                valor_final = float(dados_quick.get("valor"))
+                if dados_quick.get("tipo_transacao") == "Despesa":
+                    valor_final = -abs(valor_final)
+                else:
+                    valor_final = abs(valor_final)
+
+                novo_lanc, criado = ReconciliationService.register_transaction(
+                    db=db,
+                    user_id=usuario_db.id,
+                    valor=valor_final,
+                    data=data_tx,
                     descricao=dados_quick.get("descricao"),
-                    valor=dados_quick.get("valor"),
-                    tipo=dados_quick.get("tipo_transacao"),
-                    data_transacao=data_tx,
-                    forma_pagamento=dados_quick.get("forma_pagamento"),
-                    id_categoria=cat_id,
-                    id_subcategoria=subcat_id,
+                    categoria_id=cat_id,
                     origem=dados_quick.get("origem", "alfredo")
                 )
-                db.add(novo_lanc)
-                db.commit()
+                
+                # Configurações adicionais se foi criado agora
+                if criado:
+                    novo_lanc.id_subcategoria = subcat_id
+                    novo_lanc.forma_pagamento = dados_quick.get("forma_pagamento")
+                    db.commit()
                 
                 from gerente_financeiro.gamification_utils import give_xp_for_action
                 try:
@@ -2392,7 +2404,8 @@ async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 except Exception:
                     pass
                     
-                await query.edit_message_text("✅ Lançamento registrado com sucesso!")
+                status_msg = "✅ Lançamento registrado com sucesso!" if criado else "⚠️ Este lançamento já foi registrado anteriormente (duplicidade evitada)."
+                await query.edit_message_text(status_msg)
                 
             elif tipo_acao in ["agendar_receita", "agendar_despesa"]:
                 data_str = dados_quick.get("data")
