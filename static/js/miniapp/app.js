@@ -811,7 +811,7 @@ lucide.createIcons();
 
     function renderHomeRecent(items = []) {
       if (!items.length) {
-        homeRecentList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint font-mono uppercase tracking-widest text-center">No recent records</div>';
+        homeRecentList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint font-mono uppercase tracking-widest text-center">Nenhum registro recente</div>';
         return;
       }
 
@@ -820,8 +820,25 @@ lucide.createIcons();
         const isReceita = isEntradaTipo(item.tipo, numericValue);
         const [badgeLabel, badgeClass] = sourceBadgeConfig(item.origem_label || item.origem);
         const style = getCategoryStyle(item.descricao, item.categoria_nome, item.subcategoria_nome, item.tipo);
-        
-        const iconHtml = style.logoUrl 
+
+        // Formatar data: 14 Abr ou Hoje/Ontem
+        let dataFormatada = '';
+        if (item.data) {
+          const d = new Date(item.data);
+          const hoje = new Date();
+          const ontem = new Date();
+          ontem.setDate(hoje.getDate() - 1);
+
+          if (d.toDateString() === hoje.toDateString()) {
+            dataFormatada = 'Hoje';
+          } else if (d.toDateString() === ontem.toDateString()) {
+            dataFormatada = 'Ontem';
+          } else {
+            dataFormatada = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '');
+          }
+        }
+
+        const iconHtml = style.logoUrl
           ? `<div class="w-10 h-10 rounded-full overflow-hidden bg-white flex items-center justify-center border border-white/10 shadow-sm">
                <img src="${style.logoUrl}" class="w-full h-full object-contain" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                <div class="hidden w-full h-full items-center justify-center bg-brand/5 text-brand"><i data-lucide="${style.icon}" class="w-5 h-5"></i></div>
@@ -836,7 +853,11 @@ lucide.createIcons();
                 <div class="flex items-start justify-between gap-2">
                   <div class="min-w-0">
                     <p class="font-bold text-sm text-telegram-text truncate">${item.descricao || 'Lançamento'}</p>
-                    <p class="text-[10px] font-bold text-telegram-hint uppercase tracking-wider mt-0.5">${item.categoria_nome || 'Uncategorized'}</p>
+                    <div class="flex items-center gap-2 mt-0.5">
+                      <p class="text-[10px] font-bold text-telegram-hint uppercase tracking-wider">${item.categoria_nome || 'Sem categoria'}</p>
+                      <span class="text-[10px] text-telegram-hint/50">•</span>
+                      <p class="text-[10px] font-bold text-brand-soft uppercase tracking-wider">${dataFormatada}</p>
+                    </div>
                   </div>
                   <div class="text-right shrink-0 flex flex-col items-end gap-1">
                     <span class="font-financial text-base font-black ${isReceita ? 'text-emerald-500' : 'text-rose-500'}">${formatMoney(item.valor, item.tipo)}</span>
@@ -849,7 +870,6 @@ lucide.createIcons();
         `;
       }).join('');
     }
-
     function renderHistorySkeleton(count = 5) {
       historyStatus.textContent = '';
       historyList.innerHTML = Array.from({ length: count }).map(() => `

@@ -16,7 +16,7 @@ import re
 import requests
 from urllib.parse import parse_qsl
 from functools import wraps
-from sqlalchemy import and_, func, desc, or_, extract
+from sqlalchemy import and_, func, desc, or_, extract, case
 from flask import Flask, render_template, jsonify, request, g, make_response
 from sqlalchemy.orm import joinedload
 from datetime import datetime, timedelta, date, timezone, time
@@ -352,6 +352,11 @@ def _invalidate_financial_cache(telegram_id: int | None) -> None:
         return
     try:
         limpar_cache_usuario(int(telegram_id))
+        # Limpar cache local do dashboard_app (ex: modo_deus)
+        global _cache
+        keys_to_del = [k for k in _cache.keys() if str(telegram_id) in str(k)]
+        for k in keys_to_del:
+            _cache.pop(k, None)
     except Exception:
         logger.debug("Falha ao invalidar cache financeiro do usuario %s", telegram_id, exc_info=True)
 
@@ -1277,13 +1282,12 @@ def miniapp_history():
             joinedload(Lancamento.subcategoria),
         )
 
-        # Ordem padrao: ultimo inserido primeiro (ordem de adicao no banco).
+        # Ordem padrao: data da transação decrescente (mais recente primeiro)
         if order == "date_asc":
             base_query = base_query.order_by(Lancamento.data_transacao.asc(), Lancamento.id.asc())
-        elif order == "date_desc":
-            base_query = base_query.order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc())
         else:
-            base_query = base_query.order_by(Lancamento.id.desc())
+            # Padrão agora é date_desc
+            base_query = base_query.order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc())
 
         lancamentos = base_query.offset(offset).limit(limit).all()
 
@@ -1875,8 +1879,15 @@ def miniapp_overview():
         receita = sum(float(lanc.valor or 0) for lanc in lancamentos_mes if str(lanc.tipo).lower().startswith(("entr", "recei")))
         despesa = sum(abs(float(lanc.valor or 0)) for lanc in lancamentos_mes if not str(lanc.tipo).lower().startswith(("entr", "recei")))
         
-        # Saldo Total (Patrimônio) baseado na soma histórica de todos os lançamentos
-        total_acumulado = db.query(func.sum(Lancamento.valor)).filter(Lancamento.id_usuario == usuario.id).scalar() or 0.0
+        # Saldo Total (Patrimônio) baseado na soma histórica de todos os lançamentos, respeitando o tipo
+        total_acumulado = db.query(
+            func.sum(
+                case(
+                    [(or_(Lancamento.tipo.ilike('entr%'), Lancamento.tipo.ilike('recei%')), Lancamento.valor)],
+                    else_=-func.abs(Lancamento.valor)
+                )
+            )
+        ).filter(Lancamento.id_usuario == usuario.id).scalar() or 0.0
         balance = float(total_acumulado)
 
         cashflow = _daily_cashflow(lancamentos_mes, start_date, end_date)
