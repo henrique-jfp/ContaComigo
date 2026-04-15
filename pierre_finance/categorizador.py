@@ -190,7 +190,7 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
             "pagamento fatura", "pagto fatura", "pgto fatura",
             "pgt fatura", "fatura cartao", "fatura cartão",
             "pagamento cartao", "pagamento cartão",
-            "pagamento on line",
+            "pagamento on line", "cartoes caixa",
         ],
     },
 
@@ -236,6 +236,7 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
             "walmart", "sam s club", "costco",
             "lojas americanas alim", "americanas alim",
             "swift ", "seara ", "sadia ", "perdigao",
+            "distribuidora",
             # Conveniências (mapeadas aqui por serem alimentação)
             "conveniencia", "loja conv", "am pm ",
         ],
