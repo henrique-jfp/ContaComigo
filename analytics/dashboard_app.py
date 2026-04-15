@@ -1329,22 +1329,54 @@ def miniapp_modo_deus():
         
         result = {}
         
-        # --- SEÇÃO 1: VISÃO GERAL ---
+        # --- SEÇÃO 1: VISÃO GERAL (Cálculo Dinâmico e Tempo Real) ---
         try:
-            subquery = db.query(
-                SaldoConta.id_conta,
-                func.max(SaldoConta.capturado_em).label('max_date')
-            ).filter(SaldoConta.id_usuario == user_id).group_by(SaldoConta.id_conta).subquery()
+            # 1. Busca todas as contas do usuário
+            contas = db.query(Conta).filter(Conta.id_usuario == user_id).all()
+            total_patrimonio_contas = 0.0
+            saldo_disponivel = 0.0
             
-            recent_saldos = db.query(SaldoConta).join(
-                subquery,
-                and_(
-                    SaldoConta.id_conta == subquery.c.id_conta,
-                    SaldoConta.capturado_em == subquery.c.max_date
-                )
-            ).all()
-            
-            total_saldos = sum(float(s.saldo or 0) for s in recent_saldos)
+            # Data mínima para fallback de snapshots (offset-aware para evitar erros de comparação)
+            min_date_aware = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+            for c in contas:
+                # Pega o último snapshot de saldo sincronizado (Pierre/Open Finance)
+                ultimo_snapshot = db.query(SaldoConta).filter(
+                    SaldoConta.id_conta == c.id
+                ).order_by(SaldoConta.capturado_em.desc()).first()
+                
+                base_balance = float(ultimo_snapshot.saldo or 0) if ultimo_snapshot else 0.0
+                since_date = ultimo_snapshot.capturado_em if ultimo_snapshot else min_date_aware
+                
+                # Busca variação líquida de lançamentos manuais/bot após o snapshot para esta conta específica
+                var_receitas = db.query(func.sum(Lancamento.valor)).filter(
+                    Lancamento.id_conta == c.id,
+                    Lancamento.tipo.in_(['Entrada', 'Receita']),
+                    Lancamento.data_transacao > since_date
+                ).scalar() or 0
+                
+                var_despesas = db.query(func.sum(Lancamento.valor)).filter(
+                    Lancamento.id_conta == c.id,
+                    Lancamento.tipo.in_(['Saída', 'Despesa']),
+                    Lancamento.data_transacao > since_date
+                ).scalar() or 0
+                
+                # Saldo real e dinâmico da conta agora
+                current_acc_balance = base_balance + float(var_receitas) - float(var_despesas)
+                
+                # Acumula para o Patrimônio Líquido
+                # IMPORTANTE: Se for Cartão, o saldo representa dívida (fatura), subtraímos do patrimônio
+                if c.tipo == "Cartão de Crédito":
+                    total_patrimonio_contas -= current_acc_balance
+                else:
+                    total_patrimonio_contas += current_acc_balance
+                
+                # Acumula para Liquidez (Saldo Disponível)
+                # Apenas tipos líquidos (Conta Corrente, Carteira Digital, Poupança)
+                if c.tipo in ["Conta Corrente", "Carteira Digital", "Conta Poupança"]:
+                    saldo_disponivel += max(0, current_acc_balance)
+
+            # Investimentos e FIIs
             investments_total = db.query(func.sum(Investment.valor_atual)).filter(
                 Investment.id_usuario == user_id, Investment.ativo == True
             ).scalar() or 0
@@ -1353,9 +1385,9 @@ def miniapp_modo_deus():
                 CarteiraFII.id_usuario == user_id, CarteiraFII.ativo == True
             ).scalar() or 0
             
-            patrimonio_liquido = float(total_saldos) + float(investments_total) + float(fiis_total)
-            saldo_disponivel = sum(float(s.saldo or 0) for s in recent_saldos if s.conta.tipo == "Conta Corrente")
+            patrimonio_liquido = float(total_patrimonio_contas) + float(investments_total) + float(fiis_total)
             
+            # Entradas e Saídas do mês para o Fluxo de Caixa (Visão Mensal)
             entradas_mes = db.query(func.sum(Lancamento.valor)).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.tipo.in_(['Entrada', 'Receita']),
