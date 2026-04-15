@@ -1,0 +1,112 @@
+id,descricao,valor,data_transacao,categoria_nome
+22907,Crédito liberado - Pix No Crédito,3.0,2026-04-12T03:05:59,Financeiro
+22452,Pix enviado  - Veronica Rodrigues Da Silva,8.0,2026-04-10T20:08:58,Transferências
+22455,Veronica Rodrigues,8.0,2026-04-10T03:00:00,Transferências
+22458,Caixa Econômica Federal,611.0,2026-04-09T15:44:15,Financeiro
+22459,Pix enviado  - Michel De Lima Cavalcante,520.0,2026-04-09T15:34:37,Transferências
+22460,Pix recebido - Henrique De Jesus Freitas Pereira,1130.07,2026-04-09T15:32:11,Transferências
+22463,Pix enviado  - 57758469 Celma Da Silva Andrade Ferreira,3.0,2026-04-09T13:38:01,Transferências
+22465,Celma da Silva,3.0,2026-04-09T03:00:00,Transferências
+22467,Pix enviado  - 48015286 Noemia Cruz,6.0,2026-04-08T21:27:06,Transferências
+22471,Noemia Cruz,6.0,2026-04-08T03:00:00,Transferências
+22475,Pix enviado  - 57361048 Maycon Feitosa Ribeiro,22.0,2026-04-07T22:08:14,Transferências
+22476,Pix recebido - Henrique De Jesus Freitas Pereira,5.0,2026-04-07T21:51:59,Transferências
+22477,Pix enviado  - 48015286 Noemia Cruz,9.0,2026-04-07T17:19:50,Transferências
+22479,Pix enviado  - Laura Formighieri Freitas Pereira,30.8,2026-04-07T00:01:09,Transferências
+22480,Pix enviado  - Shpp Brasil Instituicao De Pag,33.11,2026-04-06T23:59:45,Transferências
+22484,Pix enviado  - 57758469 Celma Da Silva Andrade Ferreira,3.0,2026-04-05T13:03:35,Transferências
+22485,Seguro Cartão Protegido,3.9,2026-04-05T08:17:14,Financeiro
+22486,Seguro Cartão Protegido,3.9,2026-04-05T08:10:45,Financeiro
+22505,Pix enviado devolvido - Pagar Me Pagamentos,23.76,2026-04-05T00:34:09,Transferências
+22506,Pix enviado  - Pagar Me Pagamentos,23.76,2026-04-04T23:33:59,Transferências
+22507,Pagamento efetuado - Pagamento Fatura - HENRIQUE DE JESUS FREITAS PEREIRA,1394.94,2026-04-04T21:28:25,Transferências
+22508,Pix recebido - Natasha Gabrielle Andrade Santos,1500.0,2026-04-04T21:27:42,Transferências
+22509,pagamento on line,1394.94,2026-04-04T03:00:00,Financeiro
+22513,Rita Maria Barros,6.0,2026-04-01T08:52:30,Transferências
+22514,Banca do Largo,10.5,2026-03-31T15:13:54,Transferências
+22516,S.M.C. Comércio Atacadista,4.5,2026-03-30T12:41:28,Transferências
+22517,Siqueira Campos,22.0,2026-03-30T10:25:55,Transferências
+22522,HNT Loja,16.79,2026-03-29T11:40:25,Transferências
+22526,Gran Coffee,6.9,2026-03-28T11:34:05,Transferências
+22533,Banca do Largo,7.0,2026-03-26T19:31:17,Transferências
+22540,Rede Luar,43.28,2026-03-24T07:25:06,Transferências
+22545,AE Felicidade Comestível,64.25,2026-03-22T20:06:45,Transferências
+22548,Pagamento efetuado - Pagamento Fatura - HENRIQUE DE JESUS FREITAS PEREIRA,831.2,2026-03-21T14:56:43,Transferências
+22550,Pix recebido - Henrique De Jesus Freitas Pereira,147.02,2026-03-21T14:54:55,Transferências
+22551,Pix recebido - 62 552 384 Henrique De Jesus Freita,682.0,2026-03-21T14:53:56,Transferências
+22552,pagamento on line,831.2,2026-03-21T03:00:00,Financeiro
+22584,Pix enviado  - 62 552 384 Henrique De Jesus Freitas Pereira,1140.0,2026-02-27T14:45:33,Transferências
+22585,Pix recebido - Henrique De Jesus Freitas Pereira,1140.0,2026-02-27T14:42:23,Transferências
+22595,14 Ofício de Notas da,33.68,2026-02-24T16:39:00,Transferências
+22597,Pix enviado  - Ana Lucia Marcolino,12.0,2026-02-24T12:57:51,Transferências
+22599,Pix enviado  - Angela Molinaro,11.5,2026-02-24T11:23:50,Transferências
+22601,Ana Lucia Marcolino,12.0,2026-02-24T03:00:00,Transferências
+22607,Angela Molinaro,11.5,2026-02-24T03:00:00,Transferências
+22611,Pix enviado  - Ana Cristina Da Silva Santos,5.0,2026-02-23T14:29:20,Transferências
+22613,Pix enviado  - Ida Esposito,6.5,2026-02-23T14:17:09,Transferências
+22620,Ida Esposito,6.5,2026-02-23T03:00:00,Transferências
+22619,Ana Cristina da Silva,5.0,2026-02-23T03:00:00,Transferências
+22624,IFD Weydiman de Oliveira,97.89,2026-02-23T02:59:30,Transferências
+22629,S.M.C. Comércio Atacadista,3.99,2026-02-22T17:58:31,Transferências
+22631,Comércio de Milk Shak,30.0,2026-02-22T16:18:03,Transferências
+22644,Pix enviado  - Luiz Antonio Dos Santos Rodrigues,6.0,2026-02-22T00:39:14,Transferências
+22647,Pix enviado  - Mario Jorge Alves Alencar 00928977706,4.0,2026-02-21T21:20:34,Transferências
+22650,Pix enviado  - Gilvan Da Mota De Lima,9.0,2026-02-21T19:04:44,Transferências
+22654,Pix enviado  - 57758469 Celma Da Silva Andrade Ferreira,7.0,2026-02-21T13:47:48,Transferências
+22655,Gilvan da Mota de Lima,9.0,2026-02-21T03:00:00,Transferências
+22656,Luiz Antonio dos Santos,6.0,2026-02-21T03:00:00,Transferências
+22657,Celma da Silva,7.0,2026-02-21T03:00:00,Transferências
+22659,Mario Jorge Alves Alves,4.0,2026-02-21T03:00:00,Transferências
+22663,Pagamento efetuado - Pagamento Fatura - HENRIQUE DE JESUS FREITAS PEREIRA,402.6,2026-02-20T23:50:23,Transferências
+22664,Pix recebido - 62 552 384 Henrique De Jesus Freita,404.78,2026-02-20T23:49:36,Transferências
+22665,Koni,65.0,2026-02-20T23:03:26,Transferências
+22669,pagamento on line,402.6,2026-02-20T03:00:00,Financeiro
+22671,Rio Sul,3.0,2026-02-19T15:36:26,Transferências
+22675,Portucaleense Serviços Lotéricos,100.0,2026-02-18T17:58:40,Financeiro
+22676,Pix recebido - Henrique De Jesus Freitas Pereira,100.0,2026-02-18T17:21:20,Transferências
+22678,Pix enviado  - 57758469 Celma Da Silva Andrade Ferreira,3.0,2026-02-18T13:18:58,Transferências
+22683,Celma da Silva,3.0,2026-02-18T03:00:00,Transferências
+22688,Blackmachine,2.0,2026-02-17T21:04:47,Transferências
+22708,Pix enviado  - 57758469 Celma Da Silva Andrade Ferreira,5.5,2026-02-16T20:41:25,Transferências
+22710,Pix enviado  - Concessao Metroviaria Do Rio De Janeiro S A,15.8,2026-02-16T14:22:34,Transferências
+22714,Cred A Vista,5.5,2026-02-16T03:00:00,Financeiro
+22721,Luizmirandareis,5.0,2026-02-15T11:30:42,Transferências
+22726,Pix enviado  - Valeria Di Blasi,5.0,2026-02-14T15:48:53,Transferências
+22728,Pix enviado  - Tiana Mara Rufino Amaral,12.0,2026-02-14T13:18:18,Transferências
+22731,Cred A Vista,5.0,2026-02-14T03:00:00,Financeiro
+22736,SebastiaoFreire,40.0,2026-02-13T19:03:58,Transferências
+22742,Pagamento efetuado - Pagamento Fatura - HENRIQUE DE JESUS FREITAS PEREIRA,719.27,2026-02-12T19:21:27,Transferências
+22743,Pix recebido - 62 552 384 Henrique De Jesus Freita,718.73,2026-02-12T19:20:27,Transferências
+22747,pagamento on line,719.27,2026-02-12T03:00:00,Financeiro
+22771,Pix enviado  - 57758469 Celma Da Silva Andrade Ferreira,12.0,2026-02-07T17:16:54,Transferências
+22773,Cred A Vista,12.0,2026-02-07T03:00:00,Financeiro
+22778,Pagamento efetuado - Pagamento Fatura - HENRIQUE DE JESUS FREITAS PEREIRA,760.0,2026-02-06T12:46:13,Transferências
+22779,Pix recebido - 62 552 384 Henrique De Jesus Freita,743.0,2026-02-06T12:44:29,Transferências
+22780,pagamento on line,760.0,2026-02-06T03:00:00,Financeiro
+22781,Pix enviado  - Arthur Cerqueira Vieira De Mello Neto,150.0,2026-02-05T23:39:56,Transferências
+22782,Pix recebido - Henrique Jesus Freitas Pereira,18.0,2026-02-05T23:01:12,Transferências
+22783,Pix recebido - Henrique De Jesus Freitas Pereira,68.0,2026-02-05T22:59:22,Transferências
+22784,Pix enviado  - Food To Save Ltda,15.99,2026-02-05T20:45:57,Transferências
+22785,Parodieamorim,2.0,2026-02-05T20:41:38,Transferências
+22788,Pix enviado  - Oasyfy Digital Group,12.56,2026-02-05T09:19:33,Transferências
+22791,Pix enviado  - 23156007 Marcelo Ferreira Da Silva,5.0,2026-02-04T01:23:21,Transferências
+22793,Pix enviado  - Frogpay Solucao Em Pagamentos,222.48,2026-02-03T01:20:30,Transferências
+22794,Pix enviado  - Niteroi Rotativo,4.0,2026-02-02T23:14:48,Transferências
+22799,Pix enviado  - Pushinpay,14.9,2026-02-02T15:41:50,Transferências
+22800,Pix enviado  - Pushinpay,9.9,2026-02-02T15:38:50,Transferências
+22803,Pix recebido - 62 552 384 Henrique De Jesus Freita,468.73,2026-01-30T13:20:11,Transferências
+22810,Seguro Cartão Protegido,3.9,2026-01-27T06:10:33,Financeiro
+22812,Pix enviado  - Davi Carlos Da Silva,6.0,2026-01-26T13:50:35,Transferências
+22839,Pix enviado  - Natasha Gabrielle Andrade Santos,1400.0,2026-01-23T20:10:28,Transferências
+22841,Pix enviado  - Raquel Martins Freitas,50.0,2026-01-23T12:25:05,Transferências
+22842,Pix enviado  - Raquel Martins Freitas,268.0,2026-01-23T10:45:25,Transferências
+22843,Cartoes Caixa Elo PF,309.23,2026-01-23T09:38:32,Financeiro
+22844,Pix recebido - 62 552 384 Henrique De Jesus Freita,2127.65,2026-01-23T09:33:12,Transferências
+22845,Pix enviado  - Online Ips Brazil Administracao De Pagamentos Ltda,29.0,2026-01-23T04:16:57,Transferências
+22846,Pix recebido - Henrique Jesus Freitas Pereira,23.22,2026-01-23T04:16:29,Transferências
+22847,Pix recebido - Henrique De Jesus Freitas Pereira,10.0,2026-01-23T04:15:17,Transferências
+22852,Pix enviado  - Outplan Marketing Interativo,38.5,2026-01-22T17:33:12,Transferências
+22860,Cred A Vista,38.5,2026-01-22T03:00:00,Financeiro
+22884,Pix enviado  - Ronaldo Da Costa Lima,6.0,2026-01-18T01:39:07,Transferências
+22885,Pix enviado  - Mateus Bispo De Oliveira,15.0,2026-01-18T01:09:33,Transferências
+22888,Cred A Vista,6.0,2026-01-17T03:00:00,Financeiro

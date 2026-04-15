@@ -130,8 +130,8 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
     # Prioridade alta: evita classificar tarifa bancária como "Serviços"
     "Juros e Encargos": {
         "Juros": [
-            "juros", "jur ", "mora ", "encargo", "encargos",
-            "juros rotativo", "juros mora", "juros atraso",
+            "juros", "jur ", "juros mora", "juros atraso", "juros rotativo",
+            "encargo", "encargos",
         ],
         "IOF": ["iof ", " iof"],
         "Anuidade": [
@@ -156,7 +156,7 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
             "itau financiamento", "cred veiculo", "credito veiculo",
             "safra financeira", "omni financeira", "aymoré", "aymore",
             "parcela carro", "financiamento auto", "parcela veiculo",
-            "financ veiculo",
+            "financ veiculo", "mora operacao de credito",
         ],
         "Empréstimo Pessoal": [
             "emprestimo", "empréstimo", "credito pessoal", "crédito pessoal",
@@ -164,6 +164,7 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
             "emprest ", "financiamento pessoal", "credcash", "credsystem",
             "crefisa", "bmg ", "banco bmg", "dacasa", "portocred",
             "acordo financeiro", "renegociacao", "renegociação",
+            "contr ", "parc ", "credito liberado", "cred a vista",
         ],
         "Financiamento Imobiliário": [
             "financiamento habitacional", "caixa habita", "parcela imovel",
@@ -189,6 +190,7 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
             "pagamento fatura", "pagto fatura", "pgto fatura",
             "pgt fatura", "fatura cartao", "fatura cartão",
             "pagamento cartao", "pagamento cartão",
+            "pagamento on line",
         ],
     },
 
@@ -367,7 +369,8 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
             "porto seguro", "sulamerica seg", "allianz",
             "liberty seg", "bradesco seg", "itau seg",
             "mapfre", "zurich seg", "hdi seg", "tokio marine",
-            "seguros ", "apolice",
+            "seguros ", "apolice", "seguro cartao", "seguro conta",
+            "seguro protegido",
         ],
     },
 
@@ -646,7 +649,7 @@ _SINAIS_FORTES: list[tuple[str, str, str]] = [
     ("juros ", "Juros e Encargos", "Juros"),
     (" juros", "Juros e Encargos", "Juros"),
     ("jur rot", "Juros e Encargos", "Juros"),
-    ("mora ", "Juros e Encargos", "Juros"),
+    ("juros de mora", "Juros e Encargos", "Juros"),
     ("encargo", "Juros e Encargos", "Juros"),
     ("iof ", "Juros e Encargos", "IOF"),
     (" iof", "Juros e Encargos", "IOF"),
@@ -657,6 +660,9 @@ _SINAIS_FORTES: list[tuple[str, str, str]] = [
     ("manutencao conta", "Juros e Encargos", "Tarifas Bancárias"),
     ("mensalidade banco", "Juros e Encargos", "Tarifas Bancárias"),
     ("pacote servicos", "Juros e Encargos", "Tarifas Bancárias"),
+    # Seguros
+    ("seguro cartao protegido", "Serviços e Assinaturas", "Seguros"),
+    ("seguro protegido", "Serviços e Assinaturas", "Seguros"),
     # Salário
     ("salario", "Financeiro", "Salário"),
     ("salário", "Financeiro", "Salário"),

@@ -1883,7 +1883,7 @@ def miniapp_overview():
         total_acumulado = db.query(
             func.sum(
                 case(
-                    [(or_(Lancamento.tipo.ilike('entr%'), Lancamento.tipo.ilike('recei%')), Lancamento.valor)],
+                    (or_(Lancamento.tipo.ilike('entr%'), Lancamento.tipo.ilike('recei%')), Lancamento.valor),
                     else_=-func.abs(Lancamento.valor)
                 )
             )
