@@ -173,27 +173,6 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
         ],
     },
 
-    # ── TRANSFERÊNCIAS ───────────────────────────────────────────────────────
-    # Detectada por sinais fortes na descrição bruta (antes da limpeza)
-    "Transferências": {
-        "PIX Enviado": [
-            "pix enviado", "pix transferido", "pixenviado",
-        ],
-        "PIX Recebido": [
-            "pix recebido", "pixrecebido",
-        ],
-        "TED/DOC": [
-            "ted enviada", "ted enviado", "doc enviado",
-            "transferencia enviada", "transf enviada",
-        ],
-        "Pagamento de Fatura": [
-            "pagamento fatura", "pagto fatura", "pgto fatura",
-            "pgt fatura", "fatura cartao", "fatura cartão",
-            "pagamento cartao", "pagamento cartão",
-            "pagamento on line", "cartoes caixa",
-        ],
-    },
-
     # ── ALIMENTAÇÃO ──────────────────────────────────────────────────────────
     "Alimentação": {
         "Delivery": [
@@ -572,6 +551,27 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
             "kabum", "pichau", "terabyte", "fast shop",
             "ponto frio", "b2w ", "positivo",
             "apple store", "samsung store",
+        ],
+    },
+
+    # ── TRANSFERÊNCIAS ───────────────────────────────────────────────────────
+    # Movido para o final: só captura se nada mais específico bater
+    "Transferências": {
+        "PIX Enviado": [
+            "pix enviado", "pix transferido", "pixenviado",
+        ],
+        "PIX Recebido": [
+            "pix recebido", "pixrecebido",
+        ],
+        "TED/DOC": [
+            "ted enviada", "ted enviado", "doc enviado",
+            "transferencia enviada", "transf enviada",
+        ],
+        "Pagamento de Fatura": [
+            "pagamento fatura", "pagto fatura", "pgto fatura",
+            "pgt fatura", "fatura cartao", "fatura cartão",
+            "pagamento cartao", "pagamento cartão",
+            "cartoes caixa",
         ],
     },
 }

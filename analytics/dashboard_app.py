@@ -1877,17 +1877,10 @@ def miniapp_overview():
         )
 
         receita = sum(float(lanc.valor or 0) for lanc in lancamentos_mes if str(lanc.tipo).lower().startswith(("entr", "recei")))
-        despesa = sum(abs(float(lanc.valor or 0)) for lanc in lancamentos_mes if not str(lanc.tipo).lower().startswith(("entr", "recei")))
+        despesa = sum(abs(float(lanc.valor or 0)) for lanc in lancamentos_mes if str(lanc.tipo).lower().startswith(("desp", "saida")))
         
-        # Saldo Total (Patrimônio) baseado na soma histórica de todos os lançamentos, respeitando o tipo
-        total_acumulado = db.query(
-            func.sum(
-                case(
-                    (or_(Lancamento.tipo.ilike('entr%'), Lancamento.tipo.ilike('recei%')), Lancamento.valor),
-                    else_=-func.abs(Lancamento.valor)
-                )
-            )
-        ).filter(Lancamento.id_usuario == usuario.id).scalar() or 0.0
+        # Saldo Total (Patrimônio) baseado na soma direta dos valores (Receita +, Despesa -)
+        total_acumulado = db.query(func.sum(Lancamento.valor)).filter(Lancamento.id_usuario == usuario.id).scalar() or 0.0
         balance = float(total_acumulado)
 
         cashflow = _daily_cashflow(lancamentos_mes, start_date, end_date)
