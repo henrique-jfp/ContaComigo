@@ -266,7 +266,7 @@ lucide.createIcons();
       }
       return 'mobile';
     }
-    window.abrirEdicaoOrcamento = function(id_categoria, valor_limite, nome_categoria) {
+    window.abrirEdicaoOrcamento = function(id_categoria, valor_limite, nome_categoria, periodo) {
       if (id_categoria && id_categoria !== 'undefined' && orcamentoCategoria.querySelector(`option[value="${id_categoria}"]`)) {
           orcamentoCategoria.value = id_categoria;
       } else {
@@ -275,6 +275,14 @@ lucide.createIcons();
           if (opt) orcamentoCategoria.value = opt.value;
       }
       orcamentoValor.value = String(valor_limite).replace('.', ',');
+      
+      const orcamentoPeriodo = document.getElementById('orcamentoPeriodo');
+      if (orcamentoPeriodo && periodo) {
+          orcamentoPeriodo.value = periodo;
+      } else if (orcamentoPeriodo) {
+          orcamentoPeriodo.value = 'monthly';
+      }
+      
       openModal('orcamentoModal');
     };
 
@@ -3179,21 +3187,22 @@ lucide.createIcons();
             orcamentoCategoria.innerHTML = data.categorias.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
         }
         if (data.items.length === 0) {
-            orcamentoList.innerHTML = '<div class="text-xs text-telegram-hint text-center p-4 border border-dashed rounded-xl border-telegram-separator bg-telegram-card">Nenhum orçamento definido.</div>';
+            orcamentoList.innerHTML = '<div class="text-xs text-telegram-hint text-center p-4 border border-dashed rounded-xl border-telegram-separator bg-telegram-card">Nenhum limite definido.</div>';
             return;
         }
 
         orcamentoList.innerHTML = data.items.map(o => {
             const pct = Math.min(100, Math.max(0, (o.valor_gasto / o.valor_limite) * 100));
             const color = pct >= 100 ? 'linear-gradient(90deg, #ef4444, #b91c1c)' : (pct >= 80 ? 'linear-gradient(90deg, #f59e0b, #d97706)' : 'linear-gradient(90deg, #10b981, #059669)');
+            const periodoLabel = o.periodo === 'daily' ? 'diário' : (o.periodo === 'weekly' ? 'semanal' : 'mensal');
             return `
-            <div class="mb-3 group cursor-pointer" onclick="abrirEdicaoOrcamento('${o.id_categoria}', ${o.valor_limite}, '${o.categoria_nome}')">
-                <div class="flex justify-between text-xs font-semibold mb-1 text-telegram-text hover:text-brand transition">
-                    <span class="flex items-center gap-1">${o.categoria_nome} <i data-lucide="pencil" class="w-3 h-3 opacity-50"></i></span>
-                    <span>R$ ${o.valor_gasto.toFixed(2).replace('.', ',')} / R$ ${o.valor_limite.toFixed(2).replace('.', ',')}</span>
+            <div class="mb-3 group cursor-pointer" onclick="abrirEdicaoOrcamento('${o.id_categoria}', ${o.valor_limite}, '${o.categoria_nome}', '${o.periodo}')">
+                <div class="flex justify-between text-[10px] font-bold uppercase tracking-wider mb-1 text-telegram-hint group-hover:text-brand transition">
+                    <span class="flex items-center gap-1">${o.categoria_nome} <span class="opacity-60">• ${periodoLabel}</span> <i data-lucide="pencil" class="w-2.5 h-2.5 opacity-40"></i></span>
+                    <span class="text-telegram-text">R$ ${o.valor_gasto.toFixed(2).replace('.', ',')} / R$ ${o.valor_limite.toFixed(2).replace('.', ',')}</span>
                 </div>
-                <div class="h-2 w-full rounded-full bg-telegram-separator overflow-hidden">
-                    <div class="h-full rounded-full transition-all" style="width: ${pct}%; background: ${color};"></div>
+                <div class="h-2 w-full rounded-full bg-telegram-separator overflow-hidden shadow-inner">
+                    <div class="h-full rounded-full transition-all duration-700" style="width: ${pct}%; background: ${color};"></div>
                 </div>
             </div>`;
         }).join('');
@@ -3205,10 +3214,15 @@ lucide.createIcons();
     if (orcamentoSave) orcamentoSave.addEventListener('click', async () => {
       const id_categoria = orcamentoCategoria.value;
       const valor = parseMoneyInput(orcamentoValor.value);
+      const periodo = document.getElementById('orcamentoPeriodo')?.value || 'monthly';
       try {
-          const res = await fetchWithSession('/api/miniapp/orcamentos', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id_categoria, valor_limite: valor}) });
+          const res = await fetchWithSession('/api/miniapp/orcamentos', { 
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'}, 
+            body: JSON.stringify({id_categoria, valor_limite: valor, periodo: periodo}) 
+          });
           if ((await res.json()).ok) {
-              showToast('✅ Limite de orçamento salvo!', 'success');
+              showToast('✅ Limite salvo com sucesso!', 'success');
               closeOrcamentoModal();
               loadOrcamentos();
               loadHomeOverview();

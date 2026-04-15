@@ -2483,9 +2483,18 @@ def miniapp_orcamentos():
 
         if request.method == 'GET':
             orcamentos = db.query(OrcamentoCategoria).options(joinedload(OrcamentoCategoria.categoria)).filter(OrcamentoCategoria.id_usuario == usuario.id).all()
-            start_date = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            today = datetime.now()
             items = []
             for o in orcamentos:
+                periodo = o.periodo or 'monthly'
+                if periodo == 'daily':
+                    start_date = today.replace(hour=0, minute=0, second=0, microsecond=0)
+                elif periodo == 'weekly':
+                    # Começo da semana (segunda-feira)
+                    start_date = (today - timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+                else: # monthly
+                    start_date = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
                 gasto = db.query(func.sum(Lancamento.valor)).filter(
                     Lancamento.id_usuario == usuario.id,
                     Lancamento.id_categoria == o.id_categoria,
@@ -2497,7 +2506,8 @@ def miniapp_orcamentos():
                     "id_categoria": o.id_categoria,
                     "categoria_nome": o.categoria.nome if o.categoria else "Desconhecida",
                     "valor_limite": float(o.valor_limite),
-                    "valor_gasto": float(gasto)
+                    "valor_gasto": float(gasto),
+                    "periodo": periodo
                 })
             categorias = db.query(Categoria).order_by(Categoria.nome).all()
             cats = [{"id": c.id, "nome": c.nome} for c in categorias]
@@ -2506,13 +2516,17 @@ def miniapp_orcamentos():
         data = request.get_json(silent=True) or {}
         id_cat = int(data.get("id_categoria", 0))
         valor = float(str(data.get("valor_limite", 0)).replace(",", "."))
+        periodo = data.get("periodo", "monthly")
 
         if valor <= 0:
             db.query(OrcamentoCategoria).filter(OrcamentoCategoria.id_usuario == usuario.id, OrcamentoCategoria.id_categoria == id_cat).delete()
         else:
             orc = db.query(OrcamentoCategoria).filter(OrcamentoCategoria.id_usuario == usuario.id, OrcamentoCategoria.id_categoria == id_cat).first()
-            if orc: orc.valor_limite = valor
-            else: db.add(OrcamentoCategoria(id_usuario=usuario.id, id_categoria=id_cat, valor_limite=valor))
+            if orc: 
+                orc.valor_limite = valor
+                orc.periodo = periodo
+            else: 
+                db.add(OrcamentoCategoria(id_usuario=usuario.id, id_categoria=id_cat, valor_limite=valor, periodo=periodo))
         db.commit()
         _invalidate_financial_cache(session["user_id"])
         return jsonify({"ok": True})
