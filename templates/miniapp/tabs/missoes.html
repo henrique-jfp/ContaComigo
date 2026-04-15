@@ -3,9 +3,9 @@
         <div class="glass-card rounded-3xl p-6">
           <div class="flex items-center justify-between mb-6">
             <div>
-              <p class="text-[9px] font-black uppercase tracking-[0.3em] text-brand-soft/90 font-mono">Operations</p>
+              <p class="text-[9px] font-black uppercase tracking-[0.3em] text-brand-soft/90 font-mono">Operações</p>
               <h2 class="text-xl font-black text-telegram-text flex items-center gap-2 font-serif tracking-tight">
-                Active Missions
+                Missões Ativas
               </h2>
             </div>
             <button id="missoesRefresh" class="p-2 rounded-xl bg-brand/5 text-brand hover:bg-brand/10 transition" title="Atualizar missões">
@@ -14,24 +14,24 @@
           </div>
 
           <div class="mb-6 flex gap-2 hide-scroll overflow-x-auto">
-            <button data-mission-filter="all" class="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-full border transition whitespace-nowrap mission-filter-btn tab-active border-brand/25 bg-brand/10 text-brand font-mono">All</button>
-            <button data-mission-filter="daily" class="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-full border border-white/5 bg-telegram-card text-telegram-text hover:border-brand/20 transition whitespace-nowrap mission-filter-btn font-mono">Daily</button>
-            <button data-mission-filter="weekly" class="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-full border border-white/5 bg-telegram-card text-telegram-text hover:border-brand/20 transition whitespace-nowrap mission-filter-btn font-mono">Weekly</button>
+            <button data-mission-filter="all" class="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-full border transition whitespace-nowrap mission-filter-btn tab-active border-brand/25 bg-brand/10 text-brand font-mono">Todas</button>
+            <button data-mission-filter="daily" class="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-full border border-white/5 bg-telegram-card text-telegram-text hover:border-brand/20 transition whitespace-nowrap mission-filter-btn font-mono">Diárias</button>
+            <button data-mission-filter="weekly" class="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-full border border-white/5 bg-telegram-card text-telegram-text hover:border-brand/20 transition whitespace-nowrap mission-filter-btn font-mono">Semanais</button>
           </div>
 
           <div id="missoesList" class="space-y-3"></div>
 
           <div class="mt-8 grid grid-cols-3 gap-3">
             <div class="glass-card rounded-2xl p-4 text-center">
-              <p class="text-[8px] font-black uppercase tracking-widest text-telegram-hint mb-1 font-mono">Active</p>
+              <p class="text-[8px] font-black uppercase tracking-widest text-telegram-hint mb-1 font-mono">Ativas</p>
               <p id="missionsCountActive" class="text-2xl font-black text-brand font-financial">0</p>
             </div>
             <div class="glass-card rounded-2xl p-4 text-center">
-              <p class="text-[8px] font-black uppercase tracking-widest text-telegram-hint mb-1 font-mono">Done</p>
+              <p class="text-[8px] font-black uppercase tracking-widest text-telegram-hint mb-1 font-mono">Concluídas</p>
               <p id="missionsCountCompleted" class="text-2xl font-black text-emerald-500 font-financial">0</p>
             </div>
             <div class="glass-card rounded-2xl p-4 text-center">
-              <p class="text-[8px] font-black uppercase tracking-widest text-telegram-hint mb-1 font-mono">Reward</p>
+              <p class="text-[8px] font-black uppercase tracking-widest text-telegram-hint mb-1 font-mono">Recompensa</p>
               <p id="missionsXpReward" class="text-2xl font-black text-orange-500 font-financial">0</p>
             </div>
           </div>

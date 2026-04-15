@@ -56,10 +56,14 @@ class ReconciliationService:
         return None
 
     @staticmethod
-    def register_transaction(db, user_id, valor, data, descricao, categoria_id=None, origem="manual", external_id=None):
+    def register_transaction(db, user_id, valor, data, descricao, categoria_id=None, origem="manual", external_id=None, tipo=None):
         """Registra transação na Conta Digital com detecção de duplicidade."""
         digital_acc = ReconciliationService.get_or_create_digital_account(db, user_id)
         
+        # Se tipo não for informado, infere pelo sinal do valor
+        if not tipo:
+            tipo = "Receita" if float(valor) > 0 else "Despesa"
+
         existing = ReconciliationService.is_duplicate(db, user_id, valor, data, descricao)
         
         if existing:
@@ -75,6 +79,7 @@ class ReconciliationService:
             id_usuario=user_id,
             id_conta=digital_acc.id,
             valor=valor,
+            tipo=tipo,
             data_transacao=data,
             descricao=descricao,
             id_categoria=categoria_id,

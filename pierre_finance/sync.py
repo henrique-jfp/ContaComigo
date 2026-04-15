@@ -538,7 +538,8 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
             data=data_tx,
             descricao=descricao,
             origem="open_finance",
-            external_id=ext_id
+            external_id=ext_id,
+            tipo=tipo
         )
 
         if criado:
@@ -611,7 +612,8 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
             data=data_tx,
             descricao=descricao,
             origem="open_finance",
-            external_id=ext_id
+            external_id=ext_id,
+            tipo=tipo
         )
 
         if criado:
