@@ -1429,11 +1429,11 @@ def miniapp_modo_deus():
             saidas_mes = saidas_mes_real
             resultado_mes = float(entradas_mes) - abs(float(saidas_mes))
             
-            # Limite Diário Seguro (Baseado na sobra projetada se o saldo for positivo)
+            # Limite Diário Seguro (Baseado estritamente no Lucro Mensal)
             dias_restantes = (end_month - today).days + 1
-            if dias_restantes > 0:
-                # Se já gastou mais do que ganhou, o limite é zero ou mínimo
-                limite_diario = max(0, (saldo_disponivel + resultado_mes) / dias_restantes) if (saldo_disponivel + resultado_mes) > 0 else 0
+            if dias_restantes > 0 and resultado_mes > 0:
+                # O usuário só pode gastar o que sobrou de lucro no mês
+                limite_diario = resultado_mes / dias_restantes
             else:
                 limite_diario = 0
             

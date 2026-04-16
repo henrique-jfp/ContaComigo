@@ -3784,23 +3784,22 @@ lucide.createIcons();
       const mdDisponivel = document.getElementById('mdDisponivel');
       const mdLimiteDiario = document.getElementById('mdLimiteDiario');
       if (mdDisponivel && mdLimiteDiario) {
-        if (vg.resultado_mes < 0) {
-          // Se estiver negativo, mostra o "buraco" do mês em vermelho
-          mdDisponivel.textContent = fmt.format(vg.resultado_mes);
-          mdDisponivel.className = 'text-xl font-bold text-red-500 truncate font-financial';
-          
-          mdLimiteDiario.textContent = '🛑 BLOQUEIO DE GASTOS';
-          mdLimiteDiario.className = 'text-[9px] mt-2 text-red-500 font-black font-mono animate-pulse';
+        if (vg.resultado_mes <= 0) {
+          // Se estiver negativo ou zero, o foco é o bloqueio total
+          mdDisponivel.textContent = "🛑 BLOQUEIO";
+          mdDisponivel.className = 'text-xl font-black text-red-500 truncate font-financial animate-pulse';
+
+          mdLimiteDiario.textContent = 'GASTOS CONGELADOS';
+          mdLimiteDiario.className = 'text-[9px] mt-1 text-red-500/80 font-black font-mono';
         } else {
-          // Se estiver positivo, mostra o saldo disponível normal
-          mdDisponivel.textContent = fmt.format(vg.saldo_disponivel || 0);
-          mdDisponivel.className = 'text-xl font-bold text-telegram-text truncate font-financial';
-          
-          mdLimiteDiario.textContent = `${fmt.format(vg.limite_diario_seguro || 0)}/dia`;
-          mdLimiteDiario.className = 'text-[9px] mt-2 text-telegram-hint font-bold font-mono';
+          // Se estiver positivo, o valor principal é quanto ele pode gastar por dia
+          mdDisponivel.textContent = fmt.format(vg.limite_diario_seguro || 0);
+          mdDisponivel.className = 'text-xl font-black text-telegram-text truncate font-financial';
+
+          mdLimiteDiario.textContent = 'LIMITE DIÁRIO SEGURO';
+          mdLimiteDiario.className = 'text-[9px] mt-1 text-emerald-500 font-black font-mono';
         }
       }
-
       const rMes = vg.resultado_mes || 0;
       const rEl = document.getElementById('mdResultado');
       if (rEl) {
