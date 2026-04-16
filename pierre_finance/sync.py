@@ -530,6 +530,30 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
         valor_final = abs(float(valor_bruto)) if tipo == "Receita" else -abs(float(valor_bruto))
         data_tx = _parse_iso_date(tx.get("date")) or datetime.now(timezone.utc)
 
+        # --- Lógica de Deduplicação de Fatura (Transferência) ---
+        # Se o usuário tem pelo menos um cartão de crédito sincronizado via Open Finance,
+        # o pagamento da fatura (que aparece na conta corrente) ou o recebimento do pagamento
+        # (que aparece no cartão) não deve contar como Despesa/Receita nova, pois as 
+        # compras individuais já foram contabilizadas.
+        desc_norm = descricao.lower()
+        is_fatura_transfer = False
+        if acc_type in ("BANK", "PAYMENT_ACCOUNT"):
+            if any(k in desc_norm for k in ["pagamento", "pagto", "pgto", "pgt"]):
+                if any(k in desc_norm for k in ["fatura", "cartao", "cartão", "cartoes", "cartões"]):
+                    is_fatura_transfer = True
+        elif acc_type == "CREDIT":
+            if any(k in desc_norm for k in ["pagamento recebido", "pagamento fatura", "pagamento de fatura", "fatura paga"]):
+                is_fatura_transfer = True
+
+        if is_fatura_transfer:
+            has_synced_card = db.query(Conta).filter(
+                Conta.id_usuario == usuario.id,
+                Conta.tipo == "Cartão de Crédito",
+                Conta.external_id != None
+            ).first() is not None
+            if has_synced_card:
+                tipo = "Transferência"
+
         # Registro via Serviço de Reconciliação
         lanc, criado = ReconciliationService.register_transaction(
             db=db,

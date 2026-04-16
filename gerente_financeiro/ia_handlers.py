@@ -23,9 +23,29 @@ import requests
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ContextTypes, CommandHandler, ConversationHandler
-from sqlalchemy import and_, extract, func, or_
+from sqlalchemy import and_, extract, func, or_, not_
 from database.database import get_db, get_or_create_user
-from models import Lancamento, Usuario, Categoria, Agendamento, Objetivo, ItemLancamento, OrcamentoCategoria
+from models import Lancamento, Usuario, Categoria, Agendamento, Objetivo, ItemLancamento, OrcamentoCategoria, Subcategoria
+
+def _get_subcats_ignore_ids(db) -> list[int]:
+    """Retorna IDs de subcategorias que devem ser ignoradas para evitar duplicidade (Faturas e Transf. Internas)."""
+    subcats = db.query(Subcategoria.id).filter(
+        or_(
+            Subcategoria.nome.ilike('%Pagamento de Fatura%'),
+            Subcategoria.nome.ilike('%Transferência Interna%')
+        )
+    ).all()
+    return [s[0] for s in subcats]
+
+def _filtrar_saidas_reais(lancamentos: list[Lancamento], ignore_ids: list[int]) -> list[Lancamento]:
+    """Retorna apenas os lançamentos que são saídas reais (não duplicatas)."""
+    return [l for l in lancamentos 
+            if not str(l.tipo).lower().startswith(("entr", "recei"))
+            and (l.id_subcategoria not in ignore_ids)]
+
+def _calcular_saidas_reais(lancamentos: list[Lancamento], ignore_ids: list[int]) -> float:
+    """Calcula a soma absoluta de saídas reais."""
+    return sum(abs(float(l.valor or 0)) for l in _filtrar_saidas_reais(lancamentos, ignore_ids))
 import config
 from gerente_financeiro.services import _categorizar_com_mapa_inteligente
 from gerente_financeiro.prompt_manager import PromptManager, PromptConfig
@@ -327,9 +347,14 @@ def _resolve_categoria_id(db, categoria_nome: str) -> int | None:
 
 def _usuario_e_saldo(db, telegram_user) -> tuple[Usuario, float, float, float]:
     usuario_db = get_or_create_user(db, telegram_user.id, telegram_user.full_name)
+    ignore_ids = _get_subcats_ignore_ids(db)
+    
+    # Filtramos despesas duplicadas (faturas sincronizadas e transferências entre contas)
     lancamentos = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id).all()
+    
     entradas = sum(float(l.valor or 0) for l in lancamentos if str(l.tipo).lower().startswith(("entr", "recei")))
-    saidas = sum(abs(float(l.valor or 0)) for l in lancamentos if not str(l.tipo).lower().startswith(("entr", "recei")))
+    saidas = _calcular_saidas_reais(lancamentos, ignore_ids)
+                 
     saldo = entradas - saidas
     return usuario_db, saldo, entradas, saidas
 
@@ -786,6 +811,7 @@ def _resumo_contas_local(db, usuario_id: int) -> str:
 
 def _resumo_comparacao_local(db, usuario_id: int) -> str:
     hoje = datetime.now()
+    ignore_ids = _get_subcats_ignore_ids(db)
     mes_atual_inicio = hoje.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     mes_anterior_fim = mes_atual_inicio - timedelta(microseconds=1)
     mes_anterior_inicio = mes_anterior_fim.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -807,8 +833,10 @@ def _resumo_comparacao_local(db, usuario_id: int) -> str:
         )
         .all()
     )
-    total_atual = sum(abs(float(l.valor or 0)) for l in atual if not str(l.tipo).lower().startswith(("entr", "recei")))
-    total_anterior = sum(abs(float(l.valor or 0)) for l in anterior if not str(l.tipo).lower().startswith(("entr", "recei")))
+    
+    total_atual = _calcular_saidas_reais(atual, ignore_ids)
+    total_anterior = _calcular_saidas_reais(anterior, ignore_ids)
+    
     delta = total_atual - total_anterior
     delta_pct = 0.0 if total_anterior <= 0 else (delta / total_anterior) * 100.0
 
@@ -829,6 +857,7 @@ def _resumo_comparacao_local(db, usuario_id: int) -> str:
 
 def _resumo_alerta_local(db, usuario_id: int) -> str:
     agora = datetime.now()
+    ignore_ids = _get_subcats_ignore_ids(db)
     inicio_mes = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     lanc_mes = (
         db.query(Lancamento)
@@ -838,7 +867,7 @@ def _resumo_alerta_local(db, usuario_id: int) -> str:
         )
         .all()
     )
-    saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith(("entr", "recei")))
+    saidas_mes = _calcular_saidas_reais(lanc_mes, ignore_ids)
     entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith(("entr", "recei")))
     saldo_mes = entradas_mes - saidas_mes
     
@@ -857,6 +886,7 @@ def _resumo_alerta_local(db, usuario_id: int) -> str:
 
 def _resumo_previsao_local(db, usuario_id: int, saldo: float, entradas: float, saidas: float) -> str:
     agora = datetime.now()
+    ignore_ids = _get_subcats_ignore_ids(db)
     inicio_mes = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     lanc_mes = (
         db.query(Lancamento)
@@ -869,8 +899,10 @@ def _resumo_previsao_local(db, usuario_id: int, saldo: float, entradas: float, s
     dias_passados = max(1, agora.day)
     dias_no_mes = monthrange(agora.year, agora.month)[1]
     dias_restantes = max(1, dias_no_mes - agora.day)
-    saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith(("entr", "recei")))
+    
+    saidas_mes = _calcular_saidas_reais(lanc_mes, ignore_ids)
     entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith(("entr", "recei")))
+    
     media_diaria_saida = saidas_mes / dias_passados
     proj_saida = media_diaria_saida * dias_no_mes
     saldo_projetado = entradas_mes - proj_saida
@@ -893,6 +925,7 @@ def _resumo_previsao_local(db, usuario_id: int, saldo: float, entradas: float, s
 
 
 def _resumo_analise_gastos_local(db, usuario_id: int) -> str:
+    ignore_ids = _get_subcats_ignore_ids(db)
     lancamentos = (
         db.query(Lancamento)
         .filter(Lancamento.id_usuario == usuario_id)
@@ -900,8 +933,8 @@ def _resumo_analise_gastos_local(db, usuario_id: int) -> str:
         .limit(180)
         .all()
     )
-    saidas_lanc = [l for l in lancamentos if not str(l.tipo).lower().startswith(("entr", "recei"))]
-    top_categorias = _resumo_categoria_gastos_por_lancamentos(saidas_lanc, limite=5)
+    saidas_lanc = _filtrar_saidas_reais(lancamentos, ignore_ids)
+    top_categorias = _resumo_categoria_gastos_por_lancamentos(saidas_lanc, ignore_ids=ignore_ids, limite=5)
     pequenos = [l for l in saidas_lanc if abs(float(l.valor or 0)) <= 30]
     recorrentes = Counter((l.descricao or "Lançamento").strip().lower() for l in pequenos)
     top_recorrentes = [item for item in recorrentes.most_common(3) if item[1] > 1]
@@ -945,6 +978,7 @@ def _resumo_consultoria_local(db, usuario_id: int, saldo: float, entradas: float
 
 def _resumo_semana_local(db, usuario_id: int) -> str:
     agora = datetime.now()
+    ignore_ids = _get_subcats_ignore_ids(db)
     inicio_semana = agora - timedelta(days=6)
     lancamentos = (
         db.query(Lancamento)
@@ -956,9 +990,9 @@ def _resumo_semana_local(db, usuario_id: int) -> str:
         .all()
     )
     entradas_sem = sum(float(l.valor or 0) for l in lancamentos if str(l.tipo).lower().startswith(("entr", "recei")))
-    saidas_sem = sum(abs(float(l.valor or 0)) for l in lancamentos if not str(l.tipo).lower().startswith(("entr", "recei")))
+    saidas_sem = _calcular_saidas_reais(lancamentos, ignore_ids)
     saldo_sem = entradas_sem - saidas_sem
-    top_categorias = _resumo_categoria_gastos_por_lancamentos(lancamentos, limite=3)
+    top_categorias = _resumo_categoria_gastos_por_lancamentos(lancamentos, ignore_ids=ignore_ids, limite=3)
 
     linhas = [
         f"📊 Nesta semana: Saídas {_formatar_valor_brasileiro(saidas_sem)} | Entradas {_formatar_valor_brasileiro(entradas_sem)}.",
@@ -1001,13 +1035,14 @@ def _resumo_metas_local(db, usuario_id: int) -> str:
 
 def _resumo_mes_local(db, usuario_id: int) -> str:
     agora = datetime.now()
+    ignore_ids = _get_subcats_ignore_ids(db)
     inicio_mes = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     lanc_mes = db.query(Lancamento).filter(
         Lancamento.id_usuario == usuario_id,
         Lancamento.data_transacao >= inicio_mes
     ).all()
     entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith(("entr", "recei")))
-    saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith(("entr", "recei")))
+    saidas_mes = _calcular_saidas_reais(lanc_mes, ignore_ids)
     
     return (
         f"📊 <b>Fechamento Parcial</b>\n\n"
@@ -1464,6 +1499,7 @@ async def _categorizar_lancamentos_sem_categoria_async(db, usuario_id: int) -> t
 
 
 def _resumo_categoria_gastos(db, usuario_id: int, limite: int = 5) -> list[tuple[str, float]]:
+    ignore_ids = _get_subcats_ignore_ids(db)
     lancamentos = (
         db.query(Lancamento)
         .filter(Lancamento.id_usuario == usuario_id)
@@ -1471,14 +1507,18 @@ def _resumo_categoria_gastos(db, usuario_id: int, limite: int = 5) -> list[tuple
         .limit(300)
         .all()
     )
-    return _resumo_categoria_gastos_por_lancamentos(lancamentos, limite=limite)
+    return _resumo_categoria_gastos_por_lancamentos(lancamentos, ignore_ids=ignore_ids, limite=limite)
 
 
-def _resumo_categoria_gastos_por_lancamentos(lancamentos: list[Lancamento], limite: int = 5) -> list[tuple[str, float]]:
+def _resumo_categoria_gastos_por_lancamentos(lancamentos: list[Lancamento], ignore_ids: list[int] = None, limite: int = 5) -> list[tuple[str, float]]:
     categorias: dict[str, float] = {}
     for lanc in lancamentos:
         if str(lanc.tipo).lower().startswith(("entr", "recei")):
             continue
+        # Ignora se for subcategoria de duplicidade
+        if ignore_ids and lanc.id_subcategoria in ignore_ids:
+            continue
+            
         nome = lanc.categoria.nome if getattr(lanc, "categoria", None) and lanc.categoria else "Sem categoria"
         categorias[nome] = categorias.get(nome, 0.0) + abs(float(lanc.valor or 0))
     return sorted(categorias.items(), key=lambda x: x[1], reverse=True)[:limite]
@@ -1657,18 +1697,27 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         hoje = datetime.now()
         hoje_str = hoje.strftime("%A, %d de %B de %Y às %H:%M")
         
+        ignore_ids = _get_subcats_ignore_ids(db)
+        
         inicio_mes = hoje.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         lanc_mes = db.query(Lancamento).filter(
             Lancamento.id_usuario == usuario_db.id,
             Lancamento.data_transacao >= inicio_mes
         ).all()
         
-        saidas_mes = sum(abs(float(l.valor or 0)) for l in lanc_mes if not str(l.tipo).lower().startswith(("entr", "recei")))
+        # Filtro de duplicidade para despesas reais
+        def _filtrar_saidas(lista):
+            return [l for l in lista 
+                    if not str(l.tipo).lower().startswith(("entr", "recei"))
+                    and (l.id_subcategoria not in ignore_ids)]
+
+        saidas_mes_list = _filtrar_saidas(lanc_mes)
+        saidas_mes = sum(abs(float(l.valor or 0)) for l in saidas_mes_list)
         entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith(("entr", "recei")))
 
         inicio_hoje = hoje.replace(hour=0, minute=0, second=0, microsecond=0)
         lanc_hoje = [l for l in lanc_mes if l.data_transacao >= inicio_hoje]
-        saidas_hoje = sum(abs(float(l.valor or 0)) for l in lanc_hoje if not str(l.tipo).lower().startswith(("entr", "recei")))
+        saidas_hoje = sum(abs(float(l.valor or 0)) for l in _filtrar_saidas(lanc_hoje))
         
         # Gastos de Ontem (Otimizado: tenta filtrar de lanc_mes primeiro)
         ontem = hoje - timedelta(days=1)
@@ -1683,31 +1732,35 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 Lancamento.data_transacao >= inicio_ontem,
                 Lancamento.data_transacao <= fim_ontem
             ).all()
-        saidas_ontem = sum(abs(float(l.valor or 0)) for l in lanc_ontem if not str(l.tipo).lower().startswith(("entr", "recei")))
+        saidas_ontem = sum(abs(float(l.valor or 0)) for l in _filtrar_saidas(lanc_ontem))
 
         inicio_semana = hoje - timedelta(days=hoje.weekday())
         inicio_semana = inicio_semana.replace(hour=0, minute=0, second=0, microsecond=0)
         lanc_semana = [l for l in lanc_mes if l.data_transacao >= inicio_semana]
-        saidas_semana = sum(abs(float(l.valor or 0)) for l in lanc_semana if not str(l.tipo).lower().startswith(("entr", "recei")))
+        saidas_semana = sum(abs(float(l.valor or 0)) for l in _filtrar_saidas(lanc_semana))
 
-        # Breakdown por categoria (Mês Atual)
+        # Breakdown por categoria (Mês Atual - Já Filtrado)
         cats_mes: dict[str, float] = {}
-        for l in lanc_mes:
-            if not str(l.tipo).lower().startswith(("entr", "recei")):
-                c_nome = l.categoria.nome if l.categoria else "Sem categoria"
-                cats_mes[c_nome] = cats_mes.get(c_nome, 0.0) + abs(float(l.valor or 0))
+        for l in saidas_mes_list:
+            c_nome = l.categoria.nome if l.categoria else "Sem categoria"
+            cats_mes[c_nome] = cats_mes.get(c_nome, 0.0) + abs(float(l.valor or 0))
         breakdown_mes = sorted(cats_mes.items(), key=lambda x: x[1], reverse=True)
 
-        # Últimos 20 lançamentos (Versão Comprimida)
+        # Últimos 20 lançamentos (Versão Comprimida - Já Filtrada)
         # 💡 Otimização: Se o usuário tem Pierre, mandamos apenas 5 para economizar tokens, já que ele tem acesso ao extrato real via tool
         limit_lanc = 5 if (hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key) else 20
-        ultimos_20 = db.query(Lancamento).filter(
+        
+        # Buscamos um pouco mais para garantir que, após o filtro, tenhamos o limite desejado
+        base_lanc = db.query(Lancamento).filter(
             Lancamento.id_usuario == usuario_db.id
-        ).order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc()).limit(limit_lanc).all()
+        ).order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc()).limit(limit_lanc * 2).all()
+        
+        # Filtramos as duplicidades do histórico
+        ultimos_filtrados = [l for l in base_lanc if l.id_subcategoria not in ignore_ids][:limit_lanc]
         
         resumo_ultimos = [
             f"{l.data_transacao.strftime('%d/%m')} | {l.descricao[:15]} | {'+' if str(l.tipo).lower().startswith('entr') else '-'}R$ {abs(float(l.valor or 0)):.0f}"
-            for l in ultimos_20
+            for l in ultimos_filtrados
         ]
 
         # Metas (Versão Comprimida)
