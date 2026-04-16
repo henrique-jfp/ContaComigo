@@ -1414,7 +1414,8 @@ def miniapp_modo_deus():
                 "saidas_mes": abs(float(saidas_mes)),
                 "dias_restantes_mes": dias_restantes,
                 "limite_diario_seguro": limite_diario,
-                "divida_cartoes": divida_cartoes
+                "divida_cartoes": divida_cartoes,
+                "variacao_patrimonio_pct": 0.0  # TODO: Implementar cálculo real
             }
         except Exception as e:
             logger.error(f"Erro Modo Deus (visao_geral): {e}")

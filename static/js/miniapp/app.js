@@ -3721,8 +3721,13 @@ lucide.createIcons();
       const vpc = vg.variacao_patrimonio_pct;
       const vpcEl = document.getElementById('mdPatrimonioVar');
       if (vpcEl) {
-        vpcEl.textContent = vpc !== null ? `${vpc > 0 ? '+' : ''}${vpc.toFixed(1)}% vs mês ant.` : '--';
-        vpcEl.className = `text-[10px] mt-1 font-semibold ${vpc >= 0 ? 'text-green-600' : 'text-red-600'}`;
+        if (typeof vpc === 'number') {
+          vpcEl.textContent = `${vpc > 0 ? '+' : ''}${vpc.toFixed(1)}% vs mês ant.`;
+          vpcEl.className = `text-[10px] mt-1 font-semibold ${vpc >= 0 ? 'text-green-600' : 'text-red-600'}`;
+        } else {
+          vpcEl.textContent = '--';
+          vpcEl.className = 'text-[10px] mt-1 font-semibold text-telegram-hint';
+        }
       }
 
       const mdDisponivel = document.getElementById('mdDisponivel');

@@ -554,6 +554,16 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
         ],
     },
 
+    # ── CARTÃO DE CRÉDITO ────────────────────────────────────────────────────
+    "Cartão de Crédito": {
+        "Pagamento de Fatura": [
+            "pagamento fatura", "pagto fatura", "pgto fatura",
+            "pgt fatura", "fatura cartao", "fatura cartão",
+            "pagamento cartao", "pagamento cartão",
+            "cartoes caixa",
+        ],
+    },
+
     # ── TRANSFERÊNCIAS ───────────────────────────────────────────────────────
     # Movido para o final: só captura se nada mais específico bater
     "Transferências": {
@@ -566,12 +576,6 @@ MAPA_CATEGORIAS: dict[str, dict[str, list[str]]] = {
         "TED/DOC": [
             "ted enviada", "ted enviado", "doc enviado",
             "transferencia enviada", "transf enviada",
-        ],
-        "Pagamento de Fatura": [
-            "pagamento fatura", "pagto fatura", "pgto fatura",
-            "pgt fatura", "fatura cartao", "fatura cartão",
-            "pagamento cartao", "pagamento cartão",
-            "cartoes caixa",
         ],
     },
 }
@@ -685,6 +689,11 @@ _SINAIS_FORTES: list[tuple[str, str, str]] = [
     ("disney+", "Serviços e Assinaturas", "Streaming"),
     ("hbomax", "Serviços e Assinaturas", "Streaming"),
     ("globoplay", "Serviços e Assinaturas", "Streaming"),
+    # Cartão de Crédito
+    ("pagamento fatura", "Cartão de Crédito", "Pagamento de Fatura"),
+    ("pagto fatura", "Cartão de Crédito", "Pagamento de Fatura"),
+    ("pgto fatura", "Cartão de Crédito", "Pagamento de Fatura"),
+    ("fatura cartao", "Cartão de Crédito", "Pagamento de Fatura"),
 ]
 
 
