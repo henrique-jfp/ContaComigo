@@ -1384,15 +1384,38 @@ def miniapp_modo_deus():
             
             patrimonio_liquido = float(total_receitas_hist) - abs(float(total_despesas_hist))
             
-            # Fluxo de Caixa Mensal
-            entradas_mes = db.query(func.sum(Lancamento.valor)).filter(
+            # Fluxo de Caixa Mensal (Cálculo Granular para evitar duplicidade)
+            lancamentos_entrada_mes = db.query(Lancamento).options(
+                joinedload(Lancamento.categoria),
+                joinedload(Lancamento.subcategoria)
+            ).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.tipo.in_(['Entrada', 'Receita']),
                 Lancamento.data_transacao >= datetime.combine(start_month, time.min),
                 Lancamento.data_transacao <= datetime.combine(end_month, time.max)
-            ).scalar() or 0
+            ).all()
+
+            entradas_mes_real = 0.0
+            for lanc in lancamentos_entrada_mes:
+                cat_nome = (lanc.categoria.nome if lanc.categoria else "").lower()
+                sub_nome = (lanc.subcategoria.nome if lanc.subcategoria else "").lower()
+                desc_lower = (lanc.descricao or "").lower()
+                contra_lower = (lanc.nome_contraparte or "").lower()
+
+                # 1. Regra de Ouro: Recebimento de pagamento no cartão sincronizado não é receita nova
+                if "fatura" in sub_nome or cat_nome == "cartão de crédito":
+                    if any(nome_card in desc_lower or nome_card in contra_lower for nome_card in contas_cartao_sync):
+                        continue
+                
+                # 2. Transferência Interna
+                if sub_nome == "transferência interna" or str(lanc.tipo).lower() == "transferência":
+                    continue
+                
+                entradas_mes_real += abs(float(lanc.valor))
             
-            # --- LÓGICA DE DUPLICIDADE (Filtro Inteligente) ---
+            entradas_mes = entradas_mes_real
+            
+            # --- LÓGICA DE DUPLICIDADE DE SAÍDAS (Filtro Inteligente) ---
             # Pegamos os nomes dos cartões sincronizados (Open Finance)
             contas_cartao_sync = [c.nome.lower() for c in contas if c.tipo == "Cartão de Crédito" and c.external_id]
             
@@ -1421,7 +1444,7 @@ def miniapp_modo_deus():
                         continue
                 
                 # 2. Transferência Interna: Também ignoramos se for explicitamente marcada
-                if sub_nome == "transferência interna":
+                if sub_nome == "transferência interna" or str(lanc.tipo).lower() == "transferência":
                     continue
                 
                 saidas_mes_real += abs(float(lanc.valor))
@@ -1787,15 +1810,18 @@ def miniapp_overview():
             key = (lanc.data_transacao.year, lanc.data_transacao.month)
             if key not in monthly_map:
                 continue
+            
             valor = abs(float(lanc.valor or 0))
-            is_entrada = str(lanc.tipo).lower().startswith(("entr", "recei"))
-            if is_entrada:
+            tipo_norm = str(lanc.tipo).lower()
+            
+            if tipo_norm.startswith(("entr", "recei")):
                 monthly_map[key]["entrada"] += valor
                 monthly_map[key]["net"] += valor
-            else:
+            elif tipo_norm.startswith(("desp", "saida")):
                 saida = valor
                 monthly_map[key]["saida"] += saida
                 monthly_map[key]["net"] -= saida
+            # Se for 'Transferência', ignoramos para o fluxo de caixa
 
         monthly_cashflow = []
         for year, month in month_refs_6:
@@ -1827,7 +1853,11 @@ def miniapp_overview():
         prior_balance = 0.0
         for lanc in prior_lanc:
             valor = abs(float(lanc.valor or 0))
-            prior_balance += valor if str(lanc.tipo).lower().startswith(("entr", "recei")) else -valor
+            tipo_norm = str(lanc.tipo).lower()
+            if tipo_norm.startswith(("entr", "recei")):
+                prior_balance += valor
+            elif tipo_norm.startswith(("desp", "saida")):
+                prior_balance -= valor
 
         patrimony_map: dict[tuple[int, int], float] = {key: 0.0 for key in month_refs_8}
         lanc_8m = (
@@ -1843,7 +1873,11 @@ def miniapp_overview():
             if key not in patrimony_map:
                 continue
             valor = abs(float(lanc.valor or 0))
-            patrimony_map[key] += valor if str(lanc.tipo).lower().startswith(("entr", "recei")) else -valor
+            tipo_norm = str(lanc.tipo).lower()
+            if tipo_norm.startswith(("entr", "recei")):
+                patrimony_map[key] += valor
+            elif tipo_norm.startswith(("desp", "saida")):
+                patrimony_map[key] -= valor
 
         running_balance = prior_balance
         patrimony_series = []
