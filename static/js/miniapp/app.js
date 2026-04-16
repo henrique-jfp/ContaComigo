@@ -3782,14 +3782,20 @@ lucide.createIcons();
       }
 
       const mdDisponivel = document.getElementById('mdDisponivel');
-      if (mdDisponivel) mdDisponivel.textContent = fmt.format(vg.saldo_disponivel || 0);
-
       const mdLimiteDiario = document.getElementById('mdLimiteDiario');
-      if (mdLimiteDiario) {
+      if (mdDisponivel && mdLimiteDiario) {
         if (vg.resultado_mes < 0) {
+          // Se estiver negativo, mostra o "buraco" do mês em vermelho
+          mdDisponivel.textContent = fmt.format(vg.resultado_mes);
+          mdDisponivel.className = 'text-xl font-bold text-red-500 truncate font-financial';
+          
           mdLimiteDiario.textContent = '🛑 BLOQUEIO DE GASTOS';
           mdLimiteDiario.className = 'text-[9px] mt-2 text-red-500 font-black font-mono animate-pulse';
         } else {
+          // Se estiver positivo, mostra o saldo disponível normal
+          mdDisponivel.textContent = fmt.format(vg.saldo_disponivel || 0);
+          mdDisponivel.className = 'text-xl font-bold text-telegram-text truncate font-financial';
+          
           mdLimiteDiario.textContent = `${fmt.format(vg.limite_diario_seguro || 0)}/dia`;
           mdLimiteDiario.className = 'text-[9px] mt-2 text-telegram-hint font-bold font-mono';
         }

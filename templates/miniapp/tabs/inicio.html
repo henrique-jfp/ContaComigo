@@ -330,7 +330,10 @@
                 <div class="mb-3 flex items-center justify-between">
                   <div>
                     <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Evolução</p>
-                    <h3 class="text-lg font-extrabold text-telegram-text">Saúde do Orçamento</h3>
+                    <div class="flex items-center gap-2">
+                      <h3 class="text-lg font-extrabold text-telegram-text">Saúde do Orçamento</h3>
+                      <button onclick="showChartHelp('gauge')" class="opacity-40 hover:opacity-100 transition"><i data-lucide="help-circle" class="w-3.5 h-3.5"></i></button>
+                    </div>
                   </div>
                   <i data-lucide="gauge" class="h-5 w-5 text-brand"></i>
                 </div>
@@ -346,8 +349,11 @@
               <article id="chart-patrimonio" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
                 <div class="mb-3 flex items-center justify-between">
                   <div>
-                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 1</p>
-                    <h3 class="text-lg font-extrabold text-telegram-text">Evolucao Patrimonial</h3>
+                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Histórico</p>
+                    <div class="flex items-center gap-2">
+                      <h3 class="text-lg font-extrabold text-telegram-text">Evolução Patrimonial</h3>
+                      <button onclick="showChartHelp('patrimonio')" class="opacity-40 hover:opacity-100 transition"><i data-lucide="help-circle" class="w-3.5 h-3.5"></i></button>
+                    </div>
                   </div>
                   <i data-lucide="line-chart" class="h-5 w-5 text-brand"></i>
                 </div>
@@ -359,8 +365,11 @@
               <article id="chart-fluxo" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
                 <div class="mb-3 flex items-center justify-between">
                   <div>
-                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 2</p>
-                    <h3 class="text-lg font-extrabold text-telegram-text">Fluxo de Caixa</h3>
+                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Mensal</p>
+                    <div class="flex items-center gap-2">
+                      <h3 class="text-lg font-extrabold text-telegram-text">Fluxo de Caixa</h3>
+                      <button onclick="showChartHelp('fluxo')" class="opacity-40 hover:opacity-100 transition"><i data-lucide="help-circle" class="w-3.5 h-3.5"></i></button>
+                    </div>
                   </div>
                   <i data-lucide="bar-chart-3" class="h-5 w-5 text-brand"></i>
                 </div>
@@ -372,8 +381,11 @@
               <article id="chart-orcamento" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
                 <div class="mb-3 flex items-center justify-between">
                   <div>
-                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 3</p>
-                    <h3 class="text-lg font-extrabold text-telegram-text">Orcamento vs Realizado</h3>
+                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Planejado</p>
+                    <div class="flex items-center gap-2">
+                      <h3 class="text-lg font-extrabold text-telegram-text">Orcamento vs Realizado</h3>
+                      <button onclick="showChartHelp('gauge')" class="opacity-40 hover:opacity-100 transition"><i data-lucide="help-circle" class="w-3.5 h-3.5"></i></button>
+                    </div>
                   </div>
                   <i data-lucide="target" class="h-5 w-5 text-brand"></i>
                 </div>
@@ -385,8 +397,11 @@
               <article id="chart-distribuicao" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
                 <div class="mb-3 flex items-center justify-between">
                   <div>
-                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 4</p>
-                    <h3 class="text-lg font-extrabold text-telegram-text">Distribuicao de Despesas</h3>
+                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Categorias</p>
+                    <div class="flex items-center gap-2">
+                      <h3 class="text-lg font-extrabold text-telegram-text">Distribuicao de Despesas</h3>
+                      <button onclick="showChartHelp('distribuicao')" class="opacity-40 hover:opacity-100 transition"><i data-lucide="help-circle" class="w-3.5 h-3.5"></i></button>
+                    </div>
                   </div>
                   <i data-lucide="pie-chart" class="h-5 w-5 text-brand"></i>
                 </div>
@@ -405,8 +420,11 @@
               <article id="chart-projecao" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
                 <div class="mb-3 flex items-center justify-between">
                   <div>
-                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 5</p>
-                    <h3 class="text-lg font-extrabold text-telegram-text">Projecao de Saldo</h3>
+                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Futuro</p>
+                    <div class="flex items-center gap-2">
+                      <h3 class="text-lg font-extrabold text-telegram-text">Projecao de Saldo</h3>
+                      <button onclick="showChartHelp('projecao')" class="opacity-40 hover:opacity-100 transition"><i data-lucide="help-circle" class="w-3.5 h-3.5"></i></button>
+                    </div>
                   </div>
                   <i data-lucide="trending-up" class="h-5 w-5 text-brand"></i>
                 </div>
@@ -418,8 +436,11 @@
               <article id="chart-viloes" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
                 <div class="mb-3 flex items-center justify-between">
                   <div>
-                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Grafico 6</p>
-                    <h3 class="text-lg font-extrabold text-telegram-text">Top 5 Viloes</h3>
+                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Gastos</p>
+                    <div class="flex items-center gap-2">
+                      <h3 class="text-lg font-extrabold text-telegram-text">Top 5 Viloes</h3>
+                      <button onclick="showChartHelp('viloes')" class="opacity-40 hover:opacity-100 transition"><i data-lucide="help-circle" class="w-3.5 h-3.5"></i></button>
+                    </div>
                   </div>
                   <i data-lucide="alert-triangle" class="h-5 w-5 text-brand"></i>
                 </div>
@@ -432,7 +453,10 @@
                 <div class="mb-3 flex items-center justify-between">
                   <div>
                     <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Fluxo</p>
-                    <h3 class="text-lg font-extrabold text-telegram-text">Caminho do Dinheiro</h3>
+                    <div class="flex items-center gap-2">
+                      <h3 class="text-lg font-extrabold text-telegram-text">Caminho do Dinheiro</h3>
+                      <button onclick="showChartHelp('sankey')" class="opacity-40 hover:opacity-100 transition"><i data-lucide="help-circle" class="w-3.5 h-3.5"></i></button>
+                    </div>
                   </div>
                   <i data-lucide="git-branch" class="h-5 w-5 text-brand"></i>
                 </div>
@@ -445,7 +469,10 @@
                 <div class="mb-3 flex items-center justify-between">
                   <div>
                     <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Densidade</p>
-                    <h3 class="text-lg font-extrabold text-telegram-text">Mapa de Calor de Gastos</h3>
+                    <div class="flex items-center gap-2">
+                      <h3 class="text-lg font-extrabold text-telegram-text">Mapa de Calor de Gastos</h3>
+                      <button onclick="showChartHelp('heatmap')" class="opacity-40 hover:opacity-100 transition"><i data-lucide="help-circle" class="w-3.5 h-3.5"></i></button>
+                    </div>
                   </div>
                   <i data-lucide="layout-grid" class="h-5 w-5 text-brand"></i>
                 </div>
