@@ -576,3 +576,25 @@ class HistoricoAlertaFII(Base):
     enviado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     usuario = relationship("Usuario", backref="historico_alertas_fii")
+
+
+class RegraCategorizacao(Base):
+    """
+    Regras de categorização personalizadas criadas pelo usuário.
+    Prioritário sobre o motor de regras padrão.
+    """
+    __tablename__ = 'regras_categorizacao'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id', ondelete='CASCADE'), nullable=False, index=True)
+    descricao_substring = Column(String(255), nullable=False) # Ex: "Veronica Rodrigues", "Shopee"
+    id_categoria = Column(Integer, ForeignKey('categorias.id'), nullable=False)
+    id_subcategoria = Column(Integer, ForeignKey('subcategorias.id'), nullable=True)
+    criado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    usuario = relationship("Usuario", backref="regras_categorizacao")
+    categoria = relationship("Categoria")
+    subcategoria = relationship("Subcategoria")
+
+    __table_args__ = (
+        UniqueConstraint('id_usuario', 'descricao_substring', name='uq_regra_categorizacao_usuario_desc'),
+    )

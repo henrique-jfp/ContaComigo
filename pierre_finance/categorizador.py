@@ -17,7 +17,7 @@ import re
 import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from models import Categoria, Subcategoria, Lancamento
+from models import Categoria, Subcategoria, Lancamento, RegraCategorizacao
 from finance_utils import normalize_financial_type
 
 logger = logging.getLogger(__name__)
@@ -704,9 +704,12 @@ def classificar_nomes_por_regras(
     descricao: str,
     tipo_raw: str,
     cnae_codigo: str | None = None,
+    usuario_id: int | None = None,
+    db: Session | None = None,
 ) -> tuple[str, str]:
     """
     Classifica uma transação em (categoria, subcategoria) usando múltiplas camadas:
+    0. Regras Personalizadas (Aprendizado do usuário) - Prioridade Máxima
     1. CNAE (dados fiscais oficiais)
     2. Sinais fortes na descrição original (antes da limpeza)
     3. Match por substring no mapa de keywords (descrição limpa)
@@ -717,6 +720,18 @@ def classificar_nomes_por_regras(
     """
     tipo = normalizar_tipo(tipo_raw)
     desc_norm_original = remove_accents(descricao)
+    desc_limpa = limpar_descricao(descricao)
+
+    # ── CAMADA 0: REGRAS PERSONALIZADAS (APRENDIZADO) ────────────────────────
+    if usuario_id and db and desc_limpa:
+        regra = db.query(RegraCategorizacao).filter(
+            RegraCategorizacao.id_usuario == usuario_id,
+            RegraCategorizacao.descricao_substring == desc_limpa
+        ).first()
+        if regra and regra.categoria:
+            cat_nome = regra.categoria.nome
+            sub_nome = regra.subcategoria.nome if regra.subcategoria else "Geral"
+            return cat_nome, sub_nome
 
     # ── CAMADA 1: CNAE ───────────────────────────────────────────────────────
     if cnae_codigo and str(cnae_codigo).strip() not in ("", "nao_encontrado", "no_match", "rule_match"):
@@ -840,6 +855,8 @@ def aplicar_regras_lancamentos_open_finance(
                 lanc.descricao or "",
                 lanc.tipo,
                 cnae_codigo=getattr(lanc, "cnae", None),
+                usuario_id=usuario_id,
+                db=db
             )
             with db.begin_nested():
                 cid, sid = persistir_ids_categoria(
@@ -873,6 +890,7 @@ def categorizar_transacao(
     cat_cache: dict | None = None,
     subcat_cache: dict | None = None,
     cnae_codigo: str | None = None,
+    usuario_id: int | None = None,
 ) -> tuple[int | None, int | None]:
     """
     Categoriza uma transação Open Finance e persiste no banco.
@@ -880,7 +898,9 @@ def categorizar_transacao(
     Returns:
         (categoria_id, subcategoria_id) ou (None, None) em caso de erro.
     """
-    cat_nome_db, subcat_nome = classificar_nomes_por_regras(descricao, tipo_raw, cnae_codigo)
+    cat_nome_db, subcat_nome = classificar_nomes_por_regras(
+        descricao, tipo_raw, cnae_codigo, usuario_id=usuario_id, db=db
+    )
 
     try:
         with db.begin_nested():

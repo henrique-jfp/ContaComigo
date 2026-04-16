@@ -163,6 +163,9 @@ lucide.createIcons();
     const editTipo = document.getElementById('editTipo');
     const editData = document.getElementById('editData');
     const editForma = document.getElementById('editForma');
+    const editCategoria = document.getElementById('editCategoria');
+    const editSubcategoria = document.getElementById('editSubcategoria');
+    const editLearnRule = document.getElementById('editLearnRule');
     const editSave = document.getElementById('editSave');
     const editCancel = document.getElementById('editCancel');
 
@@ -531,6 +534,9 @@ lucide.createIcons();
         editTipo.value = 'Saída';
         editData.value = '';
         editForma.value = '';
+        editCategoria.value = '';
+        editSubcategoria.value = '';
+        editLearnRule.checked = false;
         return;
       }
       editModalBadge.textContent = item.id ? `Editando: ${item.descricao || 'Lançamento'}` : `Pré-edição: ${item.descricao || 'Lançamento'}`;
@@ -539,6 +545,19 @@ lucide.createIcons();
       editTipo.value = item.tipo || 'Saída';
       editData.value = formatDateForInput(item.data);
       editForma.value = item.forma_pagamento || '';
+      editLearnRule.checked = false;
+
+      // Garantir carregamento das categorias no select
+      ensureCategoriesLoaded().then(() => {
+        if (item.id_categoria) {
+          editCategoria.value = item.id_categoria;
+          updateSubcategories(item.id_categoria, item.id_subcategoria);
+        } else {
+          editCategoria.value = '';
+          editSubcategoria.innerHTML = '<option value="">Selecione a subcategoria</option>';
+        }
+      });
+
       if (item.id) {
         editDraftInfo.classList.add('hidden');
         editDraftInfo.innerHTML = '';
@@ -546,6 +565,34 @@ lucide.createIcons();
         applyDraftDetails(item);
       }
     }
+
+    let categoriesDataCache = null;
+    async function ensureCategoriesLoaded() {
+      if (categoriesDataCache && editCategoria.options.length > 1) return;
+      try {
+        const res = await fetchWithSession('/api/miniapp/orcamentos'); // Reaproveita rota que já traz categorias
+        const data = await res.json();
+        if (data.ok && data.categorias) {
+          categoriesDataCache = data.categorias;
+          editCategoria.innerHTML = '<option value="">Selecione a categoria</option>' + 
+            data.categorias.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+        }
+      } catch (e) { console.error('Erro ao carregar categorias:', e); }
+    }
+
+    function updateSubcategories(catId, selectedSubId = null) {
+      if (!categoriesDataCache) return;
+      const cat = categoriesDataCache.find(c => String(c.id) === String(catId));
+      if (cat && cat.subcategorias) {
+        editSubcategoria.innerHTML = '<option value="">Selecione a subcategoria</option>' + 
+          cat.subcategorias.map(s => `<option value="${s.id}">${s.nome}</option>`).join('');
+        if (selectedSubId) editSubcategoria.value = selectedSubId;
+      } else {
+        editSubcategoria.innerHTML = '<option value="">Selecione a subcategoria</option>';
+      }
+    }
+
+    editCategoria.addEventListener('change', (e) => updateSubcategories(e.target.value));
 
     function openEditModal(item) {
       setSelectedLancamento(item);
@@ -2761,6 +2808,9 @@ lucide.createIcons();
         tipo: editTipo.value,
         data_transacao: editData.value,
         forma_pagamento: editForma.value.trim(),
+        id_categoria: editCategoria.value || null,
+        id_subcategoria: editSubcategoria.value || null,
+        learn_rule: editLearnRule.checked,
       };
       try {
         const isDraft = !selectedLancamento.id;
@@ -3648,18 +3698,21 @@ lucide.createIcons();
         mdMonthYear.textContent = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
       }
 
-      // Cálculo do Score no Frontend
-      let score = 100;
-      if (vg.resultado_mes < 0) score -= 20;
-      (data.orcamentos || []).forEach(o => { if (o.status === 'estourado') score -= 10; });
-      (data.cartoes || []).forEach(c => { if (c.dias_para_vencer <= 3) score -= 5; });
-      (data.metas || []).forEach(m => { if (m.percentual > 50) score += 5; });
-      score = Math.max(0, Math.min(100, score));
+      // Saúde Financeira (Score e Label vindos do Backend)
+      const health = data.health || { score: 0, label: 'Erro' };
+      const score = health.score;
+      const label = health.label;
 
       const sEl = document.getElementById('modoDeusScore');
       if (sEl) {
         sEl.textContent = score;
         sEl.style.color = score >= 80 ? '#3B6D11' : (score >= 60 ? '#854F0B' : '#A32D2D');
+      }
+
+      const lEl = document.getElementById('modoDeusScoreLabel');
+      if (lEl) {
+        lEl.textContent = label;
+        lEl.className = `text-[10px] font-bold px-2 py-0.5 rounded-full ${score >= 80 ? 'bg-green-100 text-green-700' : (score >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700')}`;
       }
 
       const mdPatrimonio = document.getElementById('mdPatrimonio');
