@@ -1389,13 +1389,41 @@ def miniapp_modo_deus():
                 Lancamento.data_transacao <= datetime.combine(end_month, time.max)
             ).scalar() or 0
             
-            saidas_mes = db.query(func.sum(Lancamento.valor)).filter(
+            # --- LÓGICA DE DUPLICIDADE (Filtro Inteligente) ---
+            # Pegamos os nomes dos cartões sincronizados (Open Finance)
+            contas_cartao_sync = [c.nome.lower() for c in contas if c.tipo == "Cartão de Crédito" and c.external_id]
+            
+            # Buscamos todos os lançamentos de saída do mês para processamento granular
+            lancamentos_saida_mes = db.query(Lancamento).options(
+                joinedload(Lancamento.categoria),
+                joinedload(Lancamento.subcategoria)
+            ).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.tipo.in_(['Saída', 'Despesa']),
                 Lancamento.data_transacao >= datetime.combine(start_month, time.min),
                 Lancamento.data_transacao <= datetime.combine(end_month, time.max)
-            ).scalar() or 0
+            ).all()
+
+            saidas_mes_real = 0.0
+            for lanc in lancamentos_saida_mes:
+                cat_nome = (lanc.categoria.nome if lanc.categoria else "").lower()
+                sub_nome = (lanc.subcategoria.nome if lanc.subcategoria else "").lower()
+                desc_lower = (lanc.descricao or "").lower()
+                contra_lower = (lanc.nome_contraparte or "").lower()
+
+                # 1. Regra de Ouro: Pagamento de fatura de cartão SINCRONIZADO não é despesa nova
+                if "fatura" in sub_nome or cat_nome == "cartão de crédito":
+                    # Se houver match com algum cartão sync, ignoramos na soma de despesas
+                    if any(nome_card in desc_lower or nome_card in contra_lower for nome_card in contas_cartao_sync):
+                        continue
+                
+                # 2. Transferência Interna: Também ignoramos se for explicitamente marcada
+                if sub_nome == "transferência interna":
+                    continue
+                
+                saidas_mes_real += abs(float(lanc.valor))
             
+            saidas_mes = saidas_mes_real
             resultado_mes = float(entradas_mes) - abs(float(saidas_mes))
             
             # Limite Diário Seguro (Baseado na sobra projetada se o saldo for positivo)
@@ -1423,47 +1451,65 @@ def miniapp_modo_deus():
 
         # --- SEÇÃO 2: TOP CATEGORIAS ---
         try:
-            total_gastos_real = db.query(func.sum(func.abs(Lancamento.valor))).filter(
-                Lancamento.id_usuario == user_id,
-                Lancamento.tipo.in_(['Saída', 'Despesa']),
-                Lancamento.data_transacao >= datetime.combine(start_month, time.min),
-                Lancamento.data_transacao <= datetime.combine(end_month, time.max)
-            ).scalar() or 0
-            total_gastos_real = abs(float(total_gastos_real))
+            # Usamos a soma calculada acima para manter a consistência
+            total_gastos_real = saidas_mes 
 
-            top_cats_query = db.query(
-                Categoria.id, Categoria.nome, func.sum(func.abs(Lancamento.valor)).label('total')
-            ).join(Lancamento, Lancamento.id_categoria == Categoria.id).filter(
-                Lancamento.id_usuario == user_id,
-                Lancamento.tipo.in_(['Saída', 'Despesa']),
-                Lancamento.data_transacao >= datetime.combine(start_month, time.min),
-                Lancamento.data_transacao <= datetime.combine(end_month, time.max)
-            ).group_by(Categoria.id, Categoria.nome).order_by(desc('total')).limit(6).all()
+            # Para o gráfico, agrupamos e aplicamos o mesmo filtro inteligente
+            cat_totals = {}
+            for lanc in lancamentos_saida_mes:
+                cat_nome_display = (lanc.categoria.nome if lanc.categoria else "Outros")
+                cat_nome_lower = cat_nome_display.lower()
+                sub_nome = (lanc.subcategoria.nome if lanc.subcategoria else "").lower()
+                desc_lower = (lanc.descricao or "").lower()
+                contra_lower = (lanc.nome_contraparte or "").lower()
+
+                # Aplicar filtro de duplicidade (Faturas Sync e Transf Interna)
+                if "fatura" in sub_nome or cat_nome_lower == "cartão de crédito":
+                    if any(nome_card in desc_lower or nome_card in contra_lower for nome_card in contas_cartao_sync):
+                        continue
+                if sub_nome == "transferência interna":
+                    continue
+                
+                cat_totals[cat_nome_display] = cat_totals.get(cat_nome_display, 0.0) + abs(float(lanc.valor))
+
+            top_cats_data = sorted(cat_totals.items(), key=lambda x: x[1], reverse=True)[:6]
             
             top_categorias_list = []
             colors = ["#D85A30","#378ADD","#7F77DD","#888780","#1D9E75","#BA7517"]
             total_mapeado = 0
-            for i, (cat_id, cat_nome, total_cat) in enumerate(top_cats_query):
+            for i, (cat_name, total_cat) in enumerate(top_cats_data):
                 v_cat = abs(float(total_cat))
                 if v_cat < 0.01: continue
                 total_mapeado += v_cat
                 
-                sub_cats = db.query(
-                    Subcategoria.nome, func.sum(func.abs(Lancamento.valor)).label('total_sub')
-                ).join(Lancamento, Lancamento.id_subcategoria == Subcategoria.id).filter(
-                    Lancamento.id_usuario == user_id,
-                    Lancamento.id_categoria == cat_id,
-                    Lancamento.tipo.in_(['Saída', 'Despesa']),
-                    Lancamento.data_transacao >= datetime.combine(start_month, time.min),
-                    Lancamento.data_transacao <= datetime.combine(end_month, time.max)
-                ).group_by(Subcategoria.nome).order_by(desc('total_sub')).all()
+                # Buscar subcategorias para este gráfico também com filtro
+                sub_totals = {}
+                for lanc in lancamentos_saida_mes:
+                    if lanc.categoria and lanc.categoria.nome == cat_name:
+                        sub_n = (lanc.subcategoria.nome if lanc.subcategoria else "Geral")
+                        sub_n_lower = sub_n.lower()
+                        d_l = (lanc.descricao or "").lower()
+                        c_l = (lanc.nome_contraparte or "").lower()
+                        
+                        # Filtro nas subs também
+                        if "fatura" in sub_n_lower or cat_name.lower() == "cartão de crédito":
+                            if any(nc in d_l or nc in c_l for nc in contas_cartao_sync):
+                                continue
+                        if sub_n_lower == "transferência interna":
+                            continue
+                            
+                        sub_totals[sub_n] = sub_totals.get(sub_n, 0.0) + abs(float(lanc.valor))
+                
+                top_sub_list = []
+                for sn, sv in sorted(sub_totals.items(), key=lambda x: x[1], reverse=True):
+                    top_sub_list.append({"nome": sn, "total": sv})
 
                 top_categorias_list.append({
-                    "nome": cat_nome,
+                    "nome": cat_name,
                     "total": v_cat,
                     "percentual_do_total_gastos": (v_cat / total_gastos_real * 100) if total_gastos_real > 0 else 0,
                     "cor_hex": colors[i % len(colors)],
-                    "subcategorias": [{"nome": s[0] or "Geral", "total": abs(float(s[1]))} for s in sub_cats]
+                    "subcategorias": top_sub_list
                 })
             
             restante = total_gastos_real - total_mapeado
