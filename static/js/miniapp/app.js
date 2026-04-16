@@ -4025,3 +4025,50 @@ lucide.createIcons();
         });
       }
     }
+
+    // --- SISTEMA DE AJUDA DOS GRÁFICOS ---
+    window.showChartHelp = function(chartId) {
+      const helpData = {
+        'gauge': {
+          title: 'Saúde do Orçamento',
+          msg: 'Mede o quanto você já gastou em relação aos limites (teto) definidos por categoria. Se estiver abaixo de 100%, você está cumprindo seu planejamento.'
+        },
+        'patrimonio': {
+          title: 'Evolução Patrimonial',
+          msg: 'Mostra o acúmulo total do seu dinheiro (contas + investimentos) ao longo do tempo. Serve para ver se sua riqueza líquida está crescendo.'
+        },
+        'fluxo': {
+          title: 'Fluxo de Caixa',
+          msg: 'Comparativo direto entre o que entrou (verde) e o que saiu (vermelho) mês a mês. O ideal é a barra verde ser sempre maior.'
+        },
+        'distribuicao': {
+          title: 'Distribuição de Despesas',
+          msg: 'Quais categorias estão "roubando" mais o seu dinheiro. Útil para identificar para onde seu dinheiro está indo realmente.'
+        },
+        'projecao': {
+          title: 'Projeção de Saldo',
+          msg: 'Uma estimativa baseada no seu comportamento atual de como seu dinheiro estará nos próximos meses se você mantiver o ritmo.'
+        },
+        'viloes': {
+          title: 'Top 5 Vilões',
+          msg: 'Identifica os 5 estabelecimentos ou descrições específicas onde você mais gastou nos últimos 90 dias.'
+        },
+        'sankey': {
+          title: 'Caminho do Dinheiro',
+          msg: 'Visualiza o fluxo completo: desde a sua Renda, passando pelas contas, até o destino final em cada categoria de gasto.'
+        },
+        'heatmap': {
+          title: 'Mapa de Calor',
+          msg: 'Mostra sua rotina de lançamentos por dia da semana. Ajuda a entender em quais dias você é mais ativo financeiramente.'
+        }
+      };
+
+      const info = helpData[chartId];
+      if (info && window.Telegram?.WebApp) {
+        // Vibração tátil suave para indicar interação
+        if (window.Telegram.WebApp.HapticFeedback) {
+          window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+        }
+        window.Telegram.WebApp.showAlert(`${info.title}\n\n${info.msg}`);
+      }
+    };
