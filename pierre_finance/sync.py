@@ -531,28 +531,36 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
         data_tx = _parse_iso_date(tx.get("date")) or datetime.now(timezone.utc)
 
         # --- Lógica de Deduplicação de Fatura (Transferência) ---
-        # Se o usuário tem pelo menos um cartão de crédito sincronizado via Open Finance,
-        # o pagamento da fatura (que aparece na conta corrente) ou o recebimento do pagamento
-        # (que aparece no cartão) não deve contar como Despesa/Receita nova, pois as 
-        # compras individuais já foram contabilizadas.
         desc_norm = descricao.lower()
+        contra_norm = (nome_fantasia or "").lower()
         is_fatura_transfer = False
+        
         if acc_type in ("BANK", "PAYMENT_ACCOUNT"):
-            if any(k in desc_norm for k in ["pagamento", "pagto", "pgto", "pgt"]):
-                if any(k in desc_norm for k in ["fatura", "cartao", "cartão", "cartoes", "cartões"]):
+            if any(k in desc_norm for k in ["pagamento", "pagto", "pgto", "pgt"]) and \
+               any(k in desc_norm for k in ["fatura", "cartao", "cartão", "cartoes", "cartões"]):
+                
+                # Só deduplica se for pagamento de um cartão sincronizado (interno)
+                contas_sync = db.query(Conta).filter(
+                    Conta.id_usuario == usuario.id,
+                    Conta.external_id != None
+                ).all()
+                nomes_sync = [c.nome.lower() for c in contas_sync]
+                
+                is_internal = False
+                for nome in nomes_sync:
+                    if nome and (nome in desc_norm or nome in contra_norm):
+                        is_internal = True
+                        break
+                
+                if is_internal:
                     is_fatura_transfer = True
+                    
         elif acc_type == "CREDIT":
             if any(k in desc_norm for k in ["pagamento recebido", "pagamento fatura", "pagamento de fatura", "fatura paga"]):
                 is_fatura_transfer = True
 
         if is_fatura_transfer:
-            has_synced_card = db.query(Conta).filter(
-                Conta.id_usuario == usuario.id,
-                Conta.tipo == "Cartão de Crédito",
-                Conta.external_id != None
-            ).first() is not None
-            if has_synced_card:
-                tipo = "Transferência"
+            tipo = "Transferência"
 
         # Registro via Serviço de Reconciliação
         lanc, criado = ReconciliationService.register_transaction(
@@ -630,23 +638,35 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
 
         # --- Lógica de Deduplicação de Fatura (Transferência) ---
         desc_norm = descricao.lower()
+        contra_norm = (nome_fantasia or "").lower()
         is_fatura_transfer = False
+        
         if acc_type in ("BANK", "PAYMENT_ACCOUNT"):
-            if any(k in desc_norm for k in ["pagamento", "pagto", "pgto", "pgt"]):
-                if any(k in desc_norm for k in ["fatura", "cartao", "cartão", "cartoes", "cartões"]):
+            if any(k in desc_norm for k in ["pagamento", "pagto", "pgto", "pgt"]) and \
+               any(k in desc_norm for k in ["fatura", "cartao", "cartão", "cartoes", "cartões"]):
+                
+                # Só deduplica se for pagamento de um cartão sincronizado (interno)
+                contas_sync = db.query(Conta).filter(
+                    Conta.id_usuario == usuario.id,
+                    Conta.external_id != None
+                ).all()
+                nomes_sync = [c.nome.lower() for c in contas_sync]
+                
+                is_internal = False
+                for nome in nomes_sync:
+                    if nome and (nome in desc_norm or nome in contra_norm):
+                        is_internal = True
+                        break
+                
+                if is_internal:
                     is_fatura_transfer = True
+                    
         elif acc_type == "CREDIT":
             if any(k in desc_norm for k in ["pagamento recebido", "pagamento fatura", "pagamento de fatura", "fatura paga"]):
                 is_fatura_transfer = True
 
         if is_fatura_transfer:
-            has_synced_card = db.query(Conta).filter(
-                Conta.id_usuario == usuario.id,
-                Conta.tipo == "Cartão de Crédito",
-                Conta.external_id != None
-            ).first() is not None
-            if has_synced_card:
-                tipo = "Transferência"
+            tipo = "Transferência"
 
         # Registro via Serviço de Reconciliação
         lanc, criado = ReconciliationService.register_transaction(
