@@ -99,7 +99,8 @@ lucide.createIcons();
     const homeChartPills = Array.from(document.querySelectorAll('[data-home-chart-pill]'));
     const homeChartCards = Array.from(document.querySelectorAll('[data-home-chart-card]'));
     const homePatrimonyChartEl = document.getElementById('homePatrimonyChart');
-    const homeBudgetGaugeChartEl = document.getElementById('homeBudgetGaugeChart');
+    const homeBudgetGaugesContainer = document.getElementById('homeBudgetGaugesContainer');
+    const homeBudgetGaugeTemplate = document.getElementById('homeBudgetGaugeTemplate');
     const homeCashflowChartEl = document.getElementById('homeCashflowChart');
     const homeBudgetChartEl = document.getElementById('homeBudgetChart');
     const homeCategoryChartEl = document.getElementById('homeCategoryChart');
@@ -1167,6 +1168,7 @@ lucide.createIcons();
         budgetLabels,
         budgetCap,
         budgetRealized,
+        budgetRaw: budgetItems,
         distroLabels,
         distroValues,
         projectionLabels,
@@ -1432,37 +1434,81 @@ lucide.createIcons();
         }
       };
 
-      if (homeBudgetGaugeChartEl) {
-        const totalCap = chartData.budgetCap.reduce((a, b) => a + b, 0);
-        const totalRealized = chartData.budgetRealized.reduce((a, b) => a + b, 0);
-        const overallPercent = totalCap > 0 ? Math.min((totalRealized / totalCap) * 100, 100) : 0;
+      const chartGaugeCard = document.getElementById('chart-gauge');
+      if (homeBudgetGaugesContainer && homeBudgetGaugeTemplate) {
+        const budgets = chartData.budgetRaw || [];
+        const hasBudgets = budgets.length > 0;
         
-        const gaugeValEl = document.getElementById('homeBudgetGaugeValue');
-        if (gaugeValEl) gaugeValEl.textContent = `${Math.round(overallPercent)}%`;
+        // Controle de visibilidade do card e do pill
+        if (chartGaugeCard) chartGaugeCard.classList.toggle('hidden', !hasBudgets);
+        const gaugePill = document.querySelector('[data-home-chart-pill="chart-gauge"]');
+        if (gaugePill) gaugePill.classList.toggle('hidden', !hasBudgets);
+
+        // Limpa container
+        homeBudgetGaugesContainer.innerHTML = '';
         
-        homeCharts.gauge = safeChart(homeBudgetGaugeChartEl, {
-          type: 'doughnut',
-          data: {
-            datasets: [{
-              data: [overallPercent, 100 - overallPercent],
-              backgroundColor: [overallPercent > 90 ? '#881337' : '#D4AF37', 'rgba(212, 175, 55, 0.05)'],
-              borderWidth: 0,
-              circumference: 180,
-              rotation: 270,
-              borderRadius: 10
-            }]
-          },
-          options: {
-            cutout: '85%',
-            aspectRatio: 1.8,
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              tooltip: { enabled: false },
-              legend: { display: false }
-            }
+        if (hasBudgets) {
+          // Ajusta grid se houver mais de um
+          if (budgets.length > 1) {
+            homeBudgetGaugesContainer.classList.remove('grid-cols-1');
+            homeBudgetGaugesContainer.classList.add('grid-cols-2');
+          } else {
+            homeBudgetGaugesContainer.classList.add('grid-cols-1');
+            homeBudgetGaugesContainer.classList.remove('grid-cols-2');
           }
-        });
+
+          budgets.forEach((b, idx) => {
+            const clone = homeBudgetGaugeTemplate.content.cloneNode(true);
+            const canvas = clone.querySelector('.budget-canvas');
+            const pctEl = clone.querySelector('.budget-percent');
+            const nameEl = clone.querySelector('.budget-name');
+            const periodEl = clone.querySelector('.budget-period');
+            const statusEl = clone.querySelector('.budget-status');
+
+            const percent = b.orcamento > 0 ? Math.min((b.realizado / b.orcamento) * 100, 100) : 0;
+            const isOver = b.realizado > b.orcamento;
+
+            pctEl.textContent = `${Math.round((b.realizado / b.orcamento) * 100)}%`;
+            if (isOver) pctEl.classList.add('text-rose-500');
+            
+            nameEl.textContent = b.label || 'Categoria';
+            
+            const periods = { 'daily': 'Diário', 'weekly': 'Semanal', 'monthly': 'Mensal' };
+            periodEl.textContent = periods[b.periodo] || 'Mensal';
+            
+            if (isOver) statusEl.textContent = 'Estourado';
+
+            homeBudgetGaugesContainer.appendChild(clone);
+
+            // Inicializa o gráfico para este item
+            const chartId = `budget_gauge_${idx}`;
+            canvas.id = chartId;
+            
+            homeCharts[chartId] = safeChart(canvas, {
+              type: 'doughnut',
+              data: {
+                datasets: [{
+                  data: [Math.min(percent, 100), Math.max(0, 100 - percent)],
+                  backgroundColor: [percent > 90 ? '#881337' : '#D4AF37', 'rgba(212, 175, 55, 0.05)'],
+                  borderWidth: 0,
+                  circumference: 180,
+                  rotation: 270,
+                  borderRadius: 10
+                }]
+              },
+              options: {
+                cutout: '85%',
+                aspectRatio: 1.8,
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  tooltip: { enabled: false },
+                  legend: { display: false }
+                }
+              }
+            });
+          });
+        }
       }
 
       if (homePatrimonyChartEl) {

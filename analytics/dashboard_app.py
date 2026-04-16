@@ -16,7 +16,7 @@ import re
 import requests
 from urllib.parse import parse_qsl
 from functools import wraps
-from sqlalchemy import and_, func, desc, or_, extract, case
+from sqlalchemy import and_, func, desc, or_, extract, case, not_
 from flask import Flask, render_template, jsonify, request, g, make_response
 from sqlalchemy.orm import joinedload
 from datetime import datetime, timedelta, date, timezone, time
@@ -1855,50 +1855,45 @@ def miniapp_overview():
                 "value": round(running_balance, 2),
             })
 
-        # Orçamento vs realizado por categoria (realizado no mês vs média dos 3 meses anteriores como teto realista).
-        orcamentos_reais = db.query(OrcamentoCategoria).filter(OrcamentoCategoria.id_usuario == usuario.id).all()
-        orcamentos_map = {o.categoria.nome: float(o.valor_limite) for o in orcamentos_reais if o.categoria}
+        # Orçamento vs realizado REAL (apenas o que o usuário cadastrou)
+        orcamentos_reais = db.query(OrcamentoCategoria).filter(
+            OrcamentoCategoria.id_usuario == usuario.id,
+            OrcamentoCategoria.ativo == True
+        ).all()
         
-        current_expenses: dict[str, float] = {}
-        for lanc in lancamentos_mes:
-            if str(lanc.tipo).lower().startswith(("entr", "recei")):
-                continue
-            categoria = lanc.categoria.nome if lanc.categoria and lanc.categoria.nome else "Sem categoria"
-            current_expenses[categoria] = current_expenses.get(categoria, 0.0) + abs(float(lanc.valor or 0))
-
-        sorted_current = sorted(current_expenses.items(), key=lambda x: x[1], reverse=True)[:5]
         budget_items = []
-        if sorted_current:
-            hist_start = date(start_date.year, start_date.month, 1) - timedelta(days=90)
-            hist_lanc = (
-                db.query(Lancamento)
-                .options(joinedload(Lancamento.categoria))
-                .filter(Lancamento.id_usuario == usuario.id)
-                .filter(Lancamento.data_transacao >= datetime.combine(hist_start, datetime.min.time()))
-                .filter(Lancamento.data_transacao < datetime.combine(start_date, datetime.min.time()))
-                .all()
-            )
-
-            hist_by_cat: dict[str, float] = {}
-            for lanc in hist_lanc:
-                if str(lanc.tipo).lower().startswith(("entr", "recei")):
-                    continue
-                categoria = lanc.categoria.nome if lanc.categoria and lanc.categoria.nome else "Sem categoria"
-                hist_by_cat[categoria] = hist_by_cat.get(categoria, 0.0) + abs(float(lanc.valor or 0))
-
-            for categoria, realizado in sorted_current:
-                # Usa o limite real definido pelo usuário, ou a média de fallback
-                if categoria in orcamentos_map:
-                    limite = orcamentos_map[categoria]
-                else:
-                    media_3m = hist_by_cat.get(categoria, 0.0) / 3.0 if hist_by_cat.get(categoria, 0.0) > 0 else realizado
-                    limite = max(realizado, media_3m * 1.1)
-                
-                budget_items.append({
-                    "label": categoria,
-                    "orcamento": round(limite, 2),
-                    "realizado": round(realizado, 2),
-                })
+        for o in orcamentos_reais:
+            if not o.categoria: continue
+            
+            # Determina o intervalo de tempo com base no período
+            b_start = None
+            b_end = today
+            
+            if o.periodo == 'daily':
+                b_start = today
+            elif o.periodo == 'weekly':
+                # Considera a semana atual (segunda a domingo)
+                b_start = today - timedelta(days=today.weekday())
+            else: # monthly ou default
+                b_start = date(today.year, today.month, 1)
+            
+            # Soma despesas da categoria no intervalo
+            realizado = db.query(func.sum(func.abs(Lancamento.valor))).filter(
+                Lancamento.id_usuario == usuario.id,
+                Lancamento.id_categoria == o.id_categoria,
+                Lancamento.data_transacao >= datetime.combine(b_start, datetime.min.time()),
+                Lancamento.data_transacao <= datetime.combine(b_end, datetime.max.time())
+            ).filter(
+                not_(Lancamento.tipo.ilike("entr%")),
+                not_(Lancamento.tipo.ilike("recei%"))
+            ).scalar() or 0.0
+            
+            budget_items.append({
+                "label": o.categoria.nome,
+                "orcamento": float(o.valor_limite),
+                "realizado": float(realizado),
+                "periodo": o.periodo or 'monthly'
+            })
 
         # Projeção simples com base no saldo e média de resultado mensal recente.
         avg_net = sum(monthly_map[key]["net"] for key in month_refs_6) / max(len(month_refs_6), 1)

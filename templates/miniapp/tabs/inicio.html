@@ -326,7 +326,7 @@
             </div>
 
             <div id="homeChartCarousel" class="flex overflow-x-auto snap-x snap-mandatory hide-scroll gap-4 pb-4 home-reveal" style="--delay: 125ms">
-              <article id="chart-gauge" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+              <article id="chart-gauge" data-home-chart-card class="hidden min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
                 <div class="mb-3 flex items-center justify-between">
                   <div>
                     <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Evolução</p>
@@ -337,13 +337,27 @@
                   </div>
                   <i data-lucide="gauge" class="h-5 w-5 text-brand"></i>
                 </div>
-                <div class="h-[200px] flex items-center justify-center relative">
-                  <canvas id="homeBudgetGaugeChart"></canvas>
-                  <div class="absolute inset-0 flex flex-col items-center justify-center pt-8">
-                    <span id="homeBudgetGaugeValue" class="text-3xl font-black text-gold">0%</span>
-                    <span class="text-[10px] font-bold text-telegram-hint uppercase">Consumido</span>
-                  </div>
+                
+                <div id="homeBudgetGaugesContainer" class="grid grid-cols-1 gap-6">
+                  <!-- Injetado via JS -->
                 </div>
+
+                <!-- Template para 1 gauge (escondido) -->
+                <template id="homeBudgetGaugeTemplate">
+                  <div class="budget-gauge-item relative flex flex-col items-center">
+                    <div class="w-full h-[180px] flex items-center justify-center relative">
+                      <canvas class="budget-canvas"></canvas>
+                      <div class="absolute inset-0 flex flex-col items-center justify-center pt-8">
+                        <span class="budget-percent text-3xl font-black text-gold">0%</span>
+                        <span class="budget-status text-[10px] font-bold text-telegram-hint uppercase">Consumido</span>
+                      </div>
+                    </div>
+                    <div class="text-center mt-[-10px]">
+                      <h4 class="budget-name text-sm font-bold text-telegram-text">Categoria</h4>
+                      <p class="budget-period text-[10px] font-semibold text-telegram-hint uppercase tracking-wider">Mensal</p>
+                    </div>
+                  </div>
+                </template>
               </article>
 
               <article id="chart-patrimonio" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
