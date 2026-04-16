@@ -99,6 +99,7 @@ lucide.createIcons();
     const homeChartPills = Array.from(document.querySelectorAll('[data-home-chart-pill]'));
     const homeChartCards = Array.from(document.querySelectorAll('[data-home-chart-card]'));
     const homePatrimonyChartEl = document.getElementById('homePatrimonyChart');
+    const homeBudgetGaugeChartEl = document.getElementById('homeBudgetGaugeChart');
     const homeCashflowChartEl = document.getElementById('homeCashflowChart');
     const homeBudgetChartEl = document.getElementById('homeBudgetChart');
     const homeCategoryChartEl = document.getElementById('homeCategoryChart');
@@ -1395,7 +1396,6 @@ lucide.createIcons();
         },
       };
 
-      // Helper para criar gráficos com segurança usando um mapa global de instâncias
       const safeChart = (id, config) => {
         const el = typeof id === 'string' ? document.getElementById(id) : id;
         if (!el) return null;
@@ -1431,6 +1431,39 @@ lucide.createIcons();
           return null;
         }
       };
+
+      if (homeBudgetGaugeChartEl) {
+        const totalCap = chartData.budgetCap.reduce((a, b) => a + b, 0);
+        const totalRealized = chartData.budgetRealized.reduce((a, b) => a + b, 0);
+        const overallPercent = totalCap > 0 ? Math.min((totalRealized / totalCap) * 100, 100) : 0;
+        
+        const gaugeValEl = document.getElementById('homeBudgetGaugeValue');
+        if (gaugeValEl) gaugeValEl.textContent = `${Math.round(overallPercent)}%`;
+        
+        homeCharts.gauge = safeChart(homeBudgetGaugeChartEl, {
+          type: 'doughnut',
+          data: {
+            datasets: [{
+              data: [overallPercent, 100 - overallPercent],
+              backgroundColor: [overallPercent > 90 ? '#881337' : '#D4AF37', 'rgba(212, 175, 55, 0.05)'],
+              borderWidth: 0,
+              circumference: 180,
+              rotation: 270,
+              borderRadius: 10
+            }]
+          },
+          options: {
+            cutout: '85%',
+            aspectRatio: 1.8,
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              tooltip: { enabled: false },
+              legend: { display: false }
+            }
+          }
+        });
+      }
 
       if (homePatrimonyChartEl) {
         homeCharts.patrimony = safeChart(homePatrimonyChartEl, {
@@ -1508,82 +1541,106 @@ lucide.createIcons();
       }
 
       if (homeBudgetChartEl) {
-        homeCharts.budget = safeChart(homeBudgetChartEl, {
-          type: 'bar',
-          data: {
-            labels: chartData.budgetLabels,
-            datasets: [
-              {
-                label: 'Orçamento',
-                data: chartData.budgetCap,
-                borderRadius: 12,
-                borderSkipped: false,
-                backgroundColor: 'rgba(148, 163, 184, 0.25)',
-                barPercentage: 0.8,
-                categoryPercentage: 0.8,
-              },
-              {
-                label: 'Realizado',
-                data: chartData.budgetRealized,
-                borderRadius: 12,
-                borderSkipped: false,
-                backgroundColor: chartData.budgetRealized.map((value, idx) => value > chartData.budgetCap[idx] ? '#ef4444' : '#f59e0b'),
-                barPercentage: 0.5,
-                categoryPercentage: 0.6,
-              },
-            ],
-          },
-          options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: commonAnimation,
-            plugins: {
-              legend: commonLegend,
-              tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatCurrencyBR(ctx.raw)}` } },
+        const hasData = chartData.budgetLabels.length > 0;
+        if (!hasData) {
+          homeBudgetChartEl.parentElement.innerHTML = '<div class="empty-state"><h3>Sem metas de orçamento</h3><p>Defina limites por categoria para acompanhar.</p></div>';
+        } else {
+          homeCharts.budget = safeChart(homeBudgetChartEl, {
+            type: 'bar',
+            data: {
+              labels: chartData.budgetLabels,
+              datasets: [
+                {
+                  label: 'Orçamento',
+                  data: chartData.budgetCap,
+                  borderRadius: 12,
+                  borderSkipped: false,
+                  backgroundColor: 'rgba(212, 175, 55, 0.1)',
+                  barPercentage: 0.8,
+                  categoryPercentage: 0.8,
+                },
+                {
+                  label: 'Realizado',
+                  data: chartData.budgetRealized,
+                  borderRadius: 12,
+                  borderSkipped: false,
+                  backgroundColor: chartData.budgetRealized.map((value, idx) => value > chartData.budgetCap[idx] ? '#881337' : '#D4AF37'),
+                  barPercentage: 0.5,
+                  categoryPercentage: 0.6,
+                },
+              ],
             },
-            scales: {
-              x: { grid: { color: 'rgba(148, 163, 184, 0.14)' }, ticks: { color: '#64748b', callback: (v) => `R$ ${Number(v).toLocaleString('pt-BR')}` } },
-              y: { grid: { display: false }, ticks: { color: '#475569' } },
+            options: {
+              indexAxis: 'y',
+              responsive: true,
+              maintainAspectRatio: false,
+              animation: commonAnimation,
+              plugins: {
+                legend: { ...commonLegend, position: 'bottom' },
+                tooltip: { 
+                  backgroundColor: '#0A0A0A',
+                  titleColor: '#D4AF37',
+                  bodyColor: '#FFFFFF',
+                  callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatCurrencyBR(ctx.raw)}` } 
+                },
+              },
+              scales: {
+                x: { grid: { color: 'rgba(212, 175, 55, 0.05)' }, ticks: { color: '#64748b', callback: (v) => `R$ ${Number(v).toLocaleString('pt-BR')}` } },
+                y: { grid: { display: false }, ticks: { color: '#D4AF37', font: { weight: 'bold' } } },
+              },
             },
-          },
-        });
+          });
+        }
       }
 
       if (homeCategoryChartEl) {
         const hasCategories = categories.length > 0;
-        const palette = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#00f0ff', '#8b5cf6'];
-        homeCharts.category = safeChart(homeCategoryChartEl, {
-          type: 'doughnut',
-          data: {
-            labels: chartData.distroLabels.slice(0, 6),
-            datasets: [{
-              data: chartData.distroValues.slice(0, 6),
-              backgroundColor: chartData.distroLabels.slice(0, 6).map((_, idx) => categories[idx]?.color || palette[idx % palette.length]),
-              borderWidth: 0,
-              hoverOffset: 8,
-            }],
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: commonAnimation,
-            cutout: '70%',
-            plugins: {
-              legend: commonLegend,
-              tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${formatCurrencyBR(ctx.raw)}` } },
+        const privatePalette = ["#D4AF37", "#444444", "#064E3B", "#881337", "#1E3A8A", "#451A03"];
+        
+        if (!hasCategories) {
+          homeCategoryChartEl.parentElement.innerHTML = '<div class="empty-state"><h3>Sem dados de despesas</h3><p>Alfredo está aguardando seus primeiros lançamentos.</p></div>';
+        } else {
+          homeCharts.category = safeChart(homeCategoryChartEl, {
+            type: 'bar',
+            data: {
+              labels: chartData.distroLabels.slice(0, 6),
+              datasets: [{
+                label: 'Gastos por Categoria',
+                data: chartData.distroValues.slice(0, 6),
+                backgroundColor: chartData.distroLabels.slice(0, 6).map((_, idx) => categories[idx]?.color || privatePalette[idx % privatePalette.length]),
+                borderRadius: 8,
+                barThickness: 20
+              }],
             },
-            onClick: (_, elements) => {
-              if (!elements.length) return;
-              const index = elements[0].index;
-              homeCategoryValue.textContent = formatCurrencyBR(chartData.distroValues[index] || 0);
-              homeCategoryLabel.textContent = chartData.distroLabels[index] || 'Categoria';
+            options: {
+              indexAxis: 'y',
+              responsive: true,
+              maintainAspectRatio: false,
+              animation: commonAnimation,
+              plugins: {
+                legend: { display: false },
+                tooltip: { 
+                  backgroundColor: '#0A0A0A',
+                  titleColor: '#D4AF37',
+                  callbacks: { label: (ctx) => `${ctx.label}: ${formatCurrencyBR(ctx.raw)}` } 
+                },
+              },
+              scales: {
+                x: { display: false },
+                y: { grid: { display: false }, ticks: { color: '#D4AF37', font: { weight: 'bold' } } }
+              },
+              onClick: (_, elements) => {
+                if (!elements.length) return;
+                const index = elements[0].index;
+                homeCategoryValue.textContent = formatCurrencyBR(chartData.distroValues[index] || 0);
+                homeCategoryLabel.textContent = chartData.distroLabels[index] || 'Categoria';
+              },
             },
-          },
-        });
+          });
 
-        homeCategoryValue.textContent = formatCurrencyBR(chartData.distroValues[0] || 0);
-        homeCategoryLabel.textContent = chartData.distroLabels[0] || (hasCategories ? 'Categoria' : 'Sem categoria');
+          homeCategoryValue.textContent = formatCurrencyBR(chartData.distroValues[0] || 0);
+          homeCategoryLabel.textContent = chartData.distroLabels[0] || (hasCategories ? 'Categoria' : 'Sem categoria');
+        }
       }
 
       if (homeProjectionChartEl) {
@@ -3718,23 +3775,25 @@ lucide.createIcons();
       const mdPatrimonio = document.getElementById('mdPatrimonio');
       if (mdPatrimonio) mdPatrimonio.textContent = fmt.format(vg.patrimonio_liquido || 0);
 
-      const vpc = vg.variacao_patrimonio_pct;
       const vpcEl = document.getElementById('mdPatrimonioVar');
       if (vpcEl) {
-        if (typeof vpc === 'number') {
-          vpcEl.textContent = `${vpc > 0 ? '+' : ''}${vpc.toFixed(1)}% vs mês ant.`;
-          vpcEl.className = `text-[10px] mt-1 font-semibold ${vpc >= 0 ? 'text-green-600' : 'text-red-600'}`;
-        } else {
-          vpcEl.textContent = '--';
-          vpcEl.className = 'text-[10px] mt-1 font-semibold text-telegram-hint';
-        }
+        vpcEl.textContent = 'LUCRO/PREJUÍZO ACUMULADO';
+        vpcEl.className = 'text-[10px] mt-1 font-semibold text-brand/70';
       }
 
       const mdDisponivel = document.getElementById('mdDisponivel');
       if (mdDisponivel) mdDisponivel.textContent = fmt.format(vg.saldo_disponivel || 0);
 
       const mdLimiteDiario = document.getElementById('mdLimiteDiario');
-      if (mdLimiteDiario) mdLimiteDiario.textContent = `${fmt.format(vg.limite_diario_seguro || 0)}/dia`;
+      if (mdLimiteDiario) {
+        if (vg.resultado_mes < 0) {
+          mdLimiteDiario.textContent = '🛑 BLOQUEIO DE GASTOS';
+          mdLimiteDiario.className = 'text-[9px] mt-2 text-red-500 font-black font-mono animate-pulse';
+        } else {
+          mdLimiteDiario.textContent = `${fmt.format(vg.limite_diario_seguro || 0)}/dia`;
+          mdLimiteDiario.className = 'text-[9px] mt-2 text-telegram-hint font-bold font-mono';
+        }
+      }
 
       const rMes = vg.resultado_mes || 0;
       const rEl = document.getElementById('mdResultado');

@@ -420,42 +420,43 @@ def _daily_cashflow(lancamentos: list[Lancamento], start: date, end: date) -> li
 
 
 def _category_distribution(lancamentos: list[Lancamento]) -> list[dict]:
+    """Distribuição de gastos com paleta 'Private Bank Gold' e proteção contra omissão."""
     totals: dict[str, float] = {}
     total_geral_gastos = 0.0
     
+    # Paleta Private Bank: Gold, Onyx, Deep Emerald, Crimson Rose
+    palette = ["#D4AF37", "#2C2C2C", "#064E3B", "#881337", "#1E3A8A", "#451A03"]
+    
     for lanc in lancamentos:
-        # Considera apenas gastos/saídas
+        # Filtro rigoroso: apenas saídas reais
         if str(lanc.tipo).lower().startswith(("entr", "recei")):
             continue
             
         valor = abs(float(lanc.valor or 0))
         total_geral_gastos += valor
         
-        categoria = "Sem categoria"
-        if getattr(lanc, "categoria", None) and lanc.categoria.nome:
-            categoria = lanc.categoria.nome
-            # Opcional: remover subcategoria do label do gráfico pizza para não poluir
-            # if getattr(lanc, "subcategoria", None) and lanc.subcategoria.nome:
-            #    categoria = f"{categoria} / {lanc.subcategoria.nome}"
-        
+        categoria = lanc.categoria.nome if (lanc.categoria and lanc.categoria.nome) else "Sem Categoria"
         totals[categoria] = totals.get(categoria, 0.0) + valor
 
     if not totals:
         return []
 
-    # Ordena por valor e pega as top 5
+    # Ordenação decrescente para destacar maiores vilões
     ordered = sorted(totals.items(), key=lambda item: item[1], reverse=True)
     top = ordered[:5]
-    
-    total_mapeado = sum(value for _, value in top)
+    total_mapeado = sum(v for _, v in top)
     restante = total_geral_gastos - total_mapeado
     
     if restante > 0.01:
         top.append(("Outros", restante))
 
-    palette = ["#7b1e2d", "#b85d6e", "#16a34a", "#f59e0b", "#2563eb", "#8b5cf6"]
     return [
-        {"label": label, "value": round(value, 2), "color": palette[i % len(palette)]}
+        {
+            "label": label.upper(), 
+            "value": round(value, 2), 
+            "color": palette[i % len(palette)],
+            "percentage": round((value / total_geral_gastos * 100), 1) if total_geral_gastos > 0 else 0
+        }
         for i, (label, value) in enumerate(top)
     ]
 
@@ -1370,16 +1371,18 @@ def miniapp_modo_deus():
                     if c.tipo in ["Conta Corrente", "Carteira Digital", "Conta Poupança"]:
                         saldo_disponivel += max(0, current_acc_balance)
 
-            # Investimentos e FIIs (Apenas Ativos)
-            investments_total = db.query(func.sum(Investment.valor_atual)).filter(
-                Investment.id_usuario == user_id, Investment.ativo == True
+            # --- LÓGICA DE PATRIMÔNIO HISTÓRICO (Lucro/Prejuízo Total) ---
+            total_receitas_hist = db.query(func.sum(Lancamento.valor)).filter(
+                Lancamento.id_usuario == user_id,
+                Lancamento.tipo.in_(['Entrada', 'Receita'])
             ).scalar() or 0
             
-            fiis_total = db.query(func.sum(CarteiraFII.quantidade_cotas * CarteiraFII.preco_medio)).filter(
-                CarteiraFII.id_usuario == user_id, CarteiraFII.ativo == True
+            total_despesas_hist = db.query(func.sum(Lancamento.valor)).filter(
+                Lancamento.id_usuario == user_id,
+                Lancamento.tipo.in_(['Saída', 'Despesa'])
             ).scalar() or 0
             
-            patrimonio_liquido = float(total_patrimonio_contas) + float(investments_total) + float(fiis_total)
+            patrimonio_liquido = float(total_receitas_hist) - abs(float(total_despesas_hist))
             
             # Fluxo de Caixa Mensal
             entradas_mes = db.query(func.sum(Lancamento.valor)).filter(
