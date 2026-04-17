@@ -76,6 +76,7 @@ def _get_fatura_webapp_url(page: str, token: str) -> str:
     }
     return f"{base_url}/webapp?{urlencode(params)}"
 
+# Versão 2.3.1 - Fix Syntax & Payload
 async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], int, str, float]:
     import config
     if not config.GEMINI_API_KEY:
