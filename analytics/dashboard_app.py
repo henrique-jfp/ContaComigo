@@ -1639,9 +1639,31 @@ def miniapp_modo_deus():
                     "dias_para_vencer": (f.data_vencimento - today).days if f.data_vencimento else None
                 })
             result['cartoes'] = lista_c
+
+            # --- NOVO: HISTÓRICO DE FATURAS PAGAS ---
+            try:
+                faturas_pagas = db.query(FaturaCartao).options(joinedload(FaturaCartao.conta)).filter(
+                    FaturaCartao.id_usuario == user_id,
+                    FaturaCartao.status == 'paga'
+                ).order_by(FaturaCartao.data_vencimento.desc()).limit(6).all()
+                
+                lista_h = []
+                for f in faturas_pagas:
+                    lista_h.append({
+                        "nome_conta": f.conta.nome,
+                        "valor_total": float(f.valor_total),
+                        "data_vencimento": f.data_vencimento.isoformat() if f.data_vencimento else None,
+                        "status": "paga"
+                    })
+                result['faturas_historico'] = lista_h
+            except Exception as e:
+                logger.error(f"Erro ao buscar histórico de faturas: {e}")
+                result['faturas_historico'] = []
+
         except Exception as e:
             logger.error(f"Erro Modo Deus (cartoes): {e}")
             result['cartoes'] = []
+            result['faturas_historico'] = []
 
         # --- SEÇÃO 6: METAS ---
         try:

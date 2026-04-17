@@ -3985,16 +3985,57 @@ lucide.createIcons();
 
       const cartL = document.getElementById('mdCartoesList');
       const cartBlock = cartL?.closest('.glass-card');
-      if (cartL) {
+       if (cartL) {
         const cards = data.cartoes || [];
-        if (cards.length > 0) {
+        const pastBills = data.faturas_historico || [];
+        
+        if (cards.length > 0 || pastBills.length > 0) {
           if (cartBlock) cartBlock.classList.remove('hidden');
           cartL.innerHTML = '';
-          cards.forEach(c => {
-            const v = c.dias_para_vencer;
-            const b = v !== null && v <= 7 ? `<span class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[8px] font-bold">VENCE EM ${v}D</span>` : (v !== null && v <= 14 ? `<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[8px] font-bold">VENCE EM ${v}D</span>` : '');
-            cartL.innerHTML += `<div class="flex items-center gap-3"><div class="w-2 h-2 rounded-full" style="background-color: ${c.cor_hex}"></div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="text-[11px] font-bold text-telegram-text truncate">${c.nome_conta}</span>${b}</div><p class="text-[9px] text-telegram-hint">Vence ${dtFmt(c.data_vencimento)}</p></div><div class="text-right"><div class="text-[11px] font-bold text-telegram-text">${fmt.format(c.valor_total)}</div><p class="text-[9px] text-telegram-hint">de ${fmt.format(c.limite_cartao)}</p></div></div>`;
-          });
+          
+          // 1. Faturas em Aberto
+          if (cards.length > 0) {
+            cards.forEach(c => {
+              const v = c.dias_para_vencer;
+              const b = v !== null && v <= 7 ? `<span class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[8px] font-bold">VENCE EM ${v}D</span>` : (v !== null && v <= 14 ? `<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[8px] font-bold">VENCE EM ${v}D</span>` : '');
+              cartL.innerHTML += `
+                <div class="flex items-center gap-3">
+                  <div class="w-2 h-2 rounded-full" style="background-color: ${c.cor_hex}"></div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span class="text-[11px] font-bold text-telegram-text truncate">${c.nome_conta}</span>${b}
+                    </div>
+                    <p class="text-[9px] text-telegram-hint">Vence ${dtFmt(c.data_vencimento)}</p>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-[11px] font-bold text-telegram-text">${fmt.format(c.valor_total)}</div>
+                    <p class="text-[9px] text-telegram-hint">de ${fmt.format(c.limite_cartao)}</p>
+                  </div>
+                </div>`;
+            });
+          }
+
+          // 2. Histórico de Faturas (Pagas)
+          if (pastBills.length > 0) {
+            cartL.innerHTML += `
+              <div class="mt-4 pt-3 border-t border-telegram-separator">
+                <h4 class="text-[9px] font-bold text-telegram-hint uppercase tracking-wider mb-3">Faturas Pagas Recentemente</h4>
+                <div class="space-y-3">
+                  ${pastBills.map(f => `
+                    <div class="flex items-center justify-between opacity-70">
+                      <div class="min-w-0">
+                        <p class="text-[10px] font-bold text-telegram-text truncate">${f.nome_conta}</p>
+                        <p class="text-[8px] text-telegram-hint">Paga em ${dtFmt(f.data_vencimento)}</p>
+                      </div>
+                      <div class="text-right">
+                        <p class="text-[10px] font-black text-emerald-600">${fmt.format(f.valor_total)}</p>
+                        <span class="text-[7px] font-bold px-1 rounded bg-emerald-100 text-emerald-700">PAGA</span>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>`;
+          }
         } else if (cartBlock) {
           cartBlock.classList.add('hidden');
         }

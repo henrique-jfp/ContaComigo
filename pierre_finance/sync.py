@@ -566,10 +566,27 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
                 
                 if is_internal:
                     is_fatura_transfer = True
+                    # Tenta marcar a fatura como paga no banco de dados
+                    try:
+                        f_vencida = db.query(FaturaCartao).filter(
+                            FaturaCartao.id_usuario == usuario.id,
+                            FaturaCartao.status != "paga"
+                        ).order_by(func.abs(func.extract('day', FaturaCartao.data_vencimento - data_tx.date()))).first()
+                        if f_vencida:
+                            f_vencida.status = "paga"
+                            logger.info(f"Fatura {f_vencida.id} marcada como PAGA via detecção de transação.")
+                    except Exception as fe:
+                        logger.error(f"Erro ao marcar fatura como paga: {fe}")
                     
         elif acc_type == "CREDIT":
             if any(k in desc_norm for k in ["pagamento recebido", "pagamento fatura", "pagamento de fatura", "fatura paga"]):
                 is_fatura_transfer = True
+
+        # --- Detecção de Transferência Interna por Nome ---
+        # Se o nome do usuário aparece no 'Pix recebido', é transferência entre contas dele
+        if usuario.nome_completo and usuario.nome_completo.lower() in desc_norm:
+            if tipo == "Receita":
+                is_fatura_transfer = True # Tratamos como transferência
 
         if is_fatura_transfer:
             tipo = "Transferência"
@@ -585,6 +602,11 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
             external_id=ext_id,
             tipo=tipo
         )
+
+        # Se já existia mas agora identificamos como Transferência, forçamos o tipo
+        if not criado and tipo == "Transferência" and lanc.tipo != "Transferência":
+            lanc.tipo = "Transferência"
+            db.commit()
 
         if criado:
             # Enriquecimento adicional
@@ -672,10 +694,27 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
                 
                 if is_internal:
                     is_fatura_transfer = True
+                    # Tenta marcar a fatura como paga no banco de dados
+                    try:
+                        f_vencida = db.query(FaturaCartao).filter(
+                            FaturaCartao.id_usuario == usuario.id,
+                            FaturaCartao.status != "paga"
+                        ).order_by(func.abs(func.extract('day', FaturaCartao.data_vencimento - data_tx.date()))).first()
+                        if f_vencida:
+                            f_vencida.status = "paga"
+                            logger.info(f"Fatura {f_vencida.id} marcada como PAGA via detecção de transação.")
+                    except Exception as fe:
+                        logger.error(f"Erro ao marcar fatura como paga: {fe}")
                     
         elif acc_type == "CREDIT":
             if any(k in desc_norm for k in ["pagamento recebido", "pagamento fatura", "pagamento de fatura", "fatura paga"]):
                 is_fatura_transfer = True
+
+        # --- Detecção de Transferência Interna por Nome ---
+        # Se o nome do usuário aparece no 'Pix recebido', é transferência entre contas dele
+        if usuario.nome_completo and usuario.nome_completo.lower() in desc_norm:
+            if tipo == "Receita":
+                is_fatura_transfer = True # Tratamos como transferência
 
         if is_fatura_transfer:
             tipo = "Transferência"
@@ -691,6 +730,11 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
             external_id=ext_id,
             tipo=tipo
         )
+
+        # Se já existia mas agora identificamos como Transferência, forçamos o tipo
+        if not criado and tipo == "Transferência" and lanc.tipo != "Transferência":
+            lanc.tipo = "Transferência"
+            db.commit()
 
         if criado:
             lanc.cnpj_contraparte = cnpj
