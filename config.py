@@ -49,24 +49,23 @@ CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
 CEREBRAS_MODEL_NAME = os.getenv("CEREBRAS_MODEL_NAME", "llama3.1-8b") # Ou llama3.1-70b se disponível
 
 # GEMINI MODEL NAME com validação e fallback automático
-_model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash-lite-preview-02-05")
-# Lista de modelos válidos (atualizada em Mar 2026 - API)
-# ⚠️ IMPORTANTE: O modelo Lite é priorizado para economia de cota em PDFs
+_model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-3.1-flash-lite")
+# Lista de modelos válidos (atualizada em Abril 2026 - API)
+# ⚠️ IMPORTANTE: O modelo 3.1 Flash-Lite é o melhor custo-benefício.
 VALID_GEMINI_MODELS = [
-    "gemini-2.0-flash-lite-preview-02-05", # ⭐ Modelo leve e rápido, ideal para não estourar a cota (RECOMENDADO)
-    "gemini-2.0-flash",           # Modelo 2.0 (janela de 1M tokens)
-    "gemini-1.5-flash",           # Modelo 1.5 estável (Cota de 15 RPM no Free Tier)
-    "gemini-2.5-flash",           # Modelo 2.5 estável (pode ter cotas restritas)
-    "gemini-2.5-pro",             # Modelo 2.5 avançado (pensamento complexo)
-    "gemini-flash-latest",        # Alias oficial para versão mais recente
-    "gemini-pro-latest",          # Alias para Pro mais recente
+    "gemini-3.1-flash-lite",       # ⭐ Melhor custo/velocidade (RECOMENDADO)
+    "gemini-3.1-pro",              # Inteligência máxima
+    "gemini-2.5-flash",            # Estável e rápido
+    "gemini-2.5-flash-lite",       # Econômico e estável
+    "gemini-1.5-flash",            # Legado (Fallback de alta cota)
+    "gemini-flash-latest",         # Alias para a versão Flash mais recente
 ]
 
 # Validar e corrigir modelo automaticamente
 if _model_env not in VALID_GEMINI_MODELS:
     logging.warning(f"⚠️ Modelo '{_model_env}' não é válido ou foi descontinuado!")
-    logging.warning(f"⚠️ Usando fallback: 'gemini-2.0-flash-lite-preview-02-05' (alias oficial leve)")
-    GEMINI_MODEL_NAME = "gemini-2.0-flash-lite-preview-02-05"
+    logging.warning(f"⚠️ Usando fallback: 'gemini-3.1-flash-lite'")
+    GEMINI_MODEL_NAME = "gemini-3.1-flash-lite"
 else:
     GEMINI_MODEL_NAME = _model_env
     
