@@ -1453,6 +1453,10 @@ def miniapp_modo_deus():
 
         # --- SEÇÃO 2: TOP CATEGORIAS ---
         try:
+            # Buscar nomes de contas sincronizadas para filtro inteligente
+            contas_sync_obj = db.query(Conta).filter(Conta.id_usuario == user_id, Conta.external_id != None).all()
+            contas_cartao_sync = [c.nome.lower() for c in contas_sync_obj]
+
             # Usamos a soma calculada acima para manter a consistência
             total_gastos_real = saidas_mes 
 

@@ -88,10 +88,10 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
         logger.warning(f"Erro ao re-configurar genai no fatura_handler: {e}")
 
     # Priorizar modelos com maior cota no Free Tier para processamento de arquivos
-    # gemini-1.5-flash é o mais estável para processamento de faturas.
-    preferred_models = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]
+    # gemini-2.0-flash é o melhor custo-benefício disponível.
+    preferred_models = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-flash-latest"]
     
-    current_model = getattr(config, "GEMINI_MODEL_NAME", "gemini-1.5-flash")
+    current_model = getattr(config, "GEMINI_MODEL_NAME", "gemini-2.0-flash")
     if current_model not in preferred_models:
         model_name = preferred_models[0]
     else:
