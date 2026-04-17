@@ -151,27 +151,34 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
                     texto_pdf += page.get_text()
                 doc.close()
                 
+                # Se não extraiu texto (PDF de imagem), tenta OCR
                 if not texto_pdf or len(texto_pdf.strip()) < 20:
-                    raise ValueError("Texto do PDF insuficiente para processamento via Groq.")
+                    logger.info("📸 PDF parece ser imagem. Tentando OCR do Google Vision como Plano C...")
+                    from .ocr_handler import ocr_fallback_gemini 
+                    # Note: ocr_fallback_gemini usa Google Vision se possível
+                    texto_pdf = await ocr_fallback_gemini(file_bytes)
+
+                if not texto_pdf or len(texto_pdf.strip()) < 10:
+                    raise ValueError("Não foi possível extrair texto nem via OCR.")
                 
-                logger.info(f"📄 Texto extraído via fitz ({len(texto_pdf)} chars). Enviando para Groq...")
+                logger.info(f"📄 Texto obtido ({len(texto_pdf)} chars). Enviando para Groq...")
                 
-                # Chamada ao Groq usando o helper de ai_service (ou direto via requests para isolar)
                 from .ai_service import _groq_chat_completion_async
                 messages = [
-                    {"role": "system", "content": "Você é um extrator de faturas. Extraia os dados do texto e retorne APENAS um JSON."},
+                    {"role": "system", "content": "Você é um extrator de faturas. Extraia os dados do texto e retorne APENAS um JSON válido."},
                     {"role": "user", "content": f"{prompt}\n\nTEXTO DA FATURA:\n{texto_pdf}"}
                 ]
                 groq_resp = await _groq_chat_completion_async(messages)
                 
+                # Groq retorna um dict com choices se for via requests direto
                 if isinstance(groq_resp, dict) and "choices" in groq_resp:
                     text = groq_resp["choices"][0]["message"]["content"]
                     logger.info("✅ Sucesso no Failover via Groq!")
                 else:
-                    raise ValueError("Falha na resposta do Groq.")
+                    raise ValueError(f"Resposta inesperada do Groq: {type(groq_resp)}")
             except Exception as failover_exc:
-                logger.error(f"❌ Failover para Groq também falhou: {failover_exc}")
-                raise RuntimeError("Quota do Gemini esgotada e Failover falhou. Tente novamente mais tarde.")
+                logger.error(f"❌ Failover total falhou: {failover_exc}")
+                raise RuntimeError(f"IA indisponível no momento. Erro original: {err_msg}")
         else:
             raise RuntimeError(f"Erro na IA: {err_msg}")
 
