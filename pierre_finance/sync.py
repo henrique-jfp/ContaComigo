@@ -586,12 +586,6 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
                 is_fatura_transfer = True
                 cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
 
-        # --- Detecção de Transferência Interna por Nome ---
-        if usuario.nome_completo and usuario.nome_completo.lower() in desc_norm:
-            if tipo == "Receita":
-                is_fatura_transfer = True # Tratamos como transferência interna
-                cat_manual, subcat_manual = "Financeiro", "Transferência Interna"
-
         # REQUISITO ESPECIAL: Debito de Fatura deve aparecer como Despesa no histórico, mas ser filtrado no KPI.
         # Credito de Fatura (no cartão) deve ser Transferência sempre para não inflar Receita.
         if is_fatura_transfer:
@@ -730,12 +724,6 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
             if any(k in desc_norm for k in ["pagamento recebido", "pagamento fatura", "pagamento de fatura", "fatura paga"]):
                 is_fatura_transfer = True
                 cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
-
-        # --- Detecção de Transferência Interna por Nome ---
-        if usuario.nome_completo and usuario.nome_completo.lower() in desc_norm:
-            if tipo == "Receita":
-                is_fatura_transfer = True # Tratamos como transferência interna
-                cat_manual, subcat_manual = "Financeiro", "Transferência Interna"
 
         # REQUISITO ESPECIAL: Debito de Fatura deve aparecer como Despesa no histórico, mas ser filtrado no KPI.
         # Credito de Fatura (no cartão) deve ser Transferência sempre para não inflar Receita.

@@ -1376,12 +1376,12 @@ def miniapp_modo_deus():
                         saldo_disponivel += max(0, current_acc_balance)
 
             # --- LÓGICA DE PATRIMÔNIO HISTÓRICO (Lucro/Prejuízo Total) ---
-            # Filtro para ignorar Transferências e Faturas (ID Subcat 584) nos totais de Receita/Despesa
+            # Filtro para ignorar APENAS Faturas (ID Subcat 584) nos totais de Receita/Despesa.
+            # Pix entre contas do mesmo usuário deve permanecer como Receita/Despesa conforme solicitado.
             total_receitas_hist = db.query(func.sum(Lancamento.valor)).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.tipo.in_(['Entrada', 'Receita']),
-                Lancamento.id_subcategoria != 584, # Pagamento de Fatura
-                Lancamento.id_subcategoria != 235  # Transferência Interna (ID aproximado, melhor conferir ou usar nome)
+                Lancamento.id_subcategoria != 584
             ).scalar() or 0
             
             total_despesas_hist = db.query(func.sum(Lancamento.valor)).filter(
@@ -1390,17 +1390,10 @@ def miniapp_modo_deus():
                 Lancamento.id_subcategoria != 584
             ).scalar() or 0
             
-            # Melhoria: Filtrar por nome de subcategoria se os IDs variarem entre ambientes
-            # Mas por enquanto, vamos manter IDs se forem consistentes ou adicionar join.
-            # Como queremos performance, vamos usar subquery ou nomes.
-            
             patrimonio_liquido = float(total_receitas_hist) - abs(float(total_despesas_hist))
             
             # Fluxo de Caixa Mensal (Cálculo Granular para evitar duplicidade)
-            lancamentos_entrada_mes = db.query(Lancamento).options(
-                joinedload(Lancamento.categoria),
-                joinedload(Lancamento.subcategoria)
-            ).filter(
+            lancamentos_entrada_mes = db.query(Lancamento).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.tipo.in_(['Entrada', 'Receita']),
                 Lancamento.data_transacao >= datetime.combine(start_month, time.min),
@@ -1409,33 +1402,16 @@ def miniapp_modo_deus():
 
             entradas_mes_real = 0.0
             for lanc in lancamentos_entrada_mes:
-                cat_nome = (lanc.categoria.nome if lanc.categoria else "").lower()
-                sub_nome = (lanc.subcategoria.nome if lanc.subcategoria else "").lower()
-                desc_lower = (lanc.descricao or "").lower()
-                contra_lower = (lanc.nome_contraparte or "").lower()
-
-                # 1. Regra de Ouro: Recebimento de pagamento no cartão sincronizado não é receita nova
-                if "fatura" in sub_nome or cat_nome == "cartão de crédito":
-                    if any(nome_card in desc_lower or nome_card in contra_lower for nome_card in contas_cartao_sync):
-                        continue
-                
-                # 2. Transferência Interna
-                if sub_nome == "transferência interna" or str(lanc.tipo).lower() == "transferência":
+                # Ignora apenas se for explicitamente marcado como Transferência (ex: crédito no cartão)
+                # ou se for pagamento de fatura (ID 584)
+                if str(lanc.tipo).lower() == "transferência" or lanc.id_subcategoria == 584:
                     continue
-                
                 entradas_mes_real += abs(float(lanc.valor))
             
             entradas_mes = entradas_mes_real
             
-            # --- LÓGICA DE DUPLICIDADE DE SAÍDAS (Filtro Inteligente) ---
-            # Pegamos os nomes dos cartões sincronizados (Open Finance)
-            contas_cartao_sync = [c.nome.lower() for c in contas if c.tipo == "Cartão de Crédito" and c.external_id]
-            
-            # Buscamos todos os lançamentos de saída do mês para processamento granular
-            lancamentos_saida_mes = db.query(Lancamento).options(
-                joinedload(Lancamento.categoria),
-                joinedload(Lancamento.subcategoria)
-            ).filter(
+            # --- LÓGICA DE DUPLICIDADE DE SAÍDAS ---
+            lancamentos_saida_mes = db.query(Lancamento).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.tipo.in_(['Saída', 'Despesa']),
                 Lancamento.data_transacao >= datetime.combine(start_month, time.min),
@@ -1444,21 +1420,9 @@ def miniapp_modo_deus():
 
             saidas_mes_real = 0.0
             for lanc in lancamentos_saida_mes:
-                cat_nome = (lanc.categoria.nome if lanc.categoria else "").lower()
-                sub_nome = (lanc.subcategoria.nome if lanc.subcategoria else "").lower()
-                desc_lower = (lanc.descricao or "").lower()
-                contra_lower = (lanc.nome_contraparte or "").lower()
-
-                # 1. Regra de Ouro: Pagamento de fatura de cartão SINCRONIZADO não é despesa nova
-                if "fatura" in sub_nome or cat_nome == "cartão de crédito":
-                    # Se houver match com algum cartão sync, ignoramos na soma de despesas
-                    if any(nome_card in desc_lower or nome_card in contra_lower for nome_card in contas_cartao_sync):
-                        continue
-                
-                # 2. Transferência Interna: Também ignoramos se for explicitamente marcada
-                if sub_nome == "transferência interna" or str(lanc.tipo).lower() == "transferência":
+                # Ignora apenas se for pagamento de fatura (ID 584) para evitar duplicidade com compras individuais
+                if lanc.id_subcategoria == 584 or str(lanc.tipo).lower() == "transferência":
                     continue
-                
                 saidas_mes_real += abs(float(lanc.valor))
             
             saidas_mes = saidas_mes_real
@@ -1796,25 +1760,16 @@ def miniapp_overview():
         )
 
         # --- LÓGICA DE DEDUPLICAÇÃO (Regra de Ouro) ---
-        contas_cartao_sync = [c.nome.lower() for c in db.query(Conta).filter(Conta.id_usuario == usuario.id, Conta.tipo == "Cartão de Crédito", Conta.external_id != None).all()]
-
         receita = 0.0
         despesa = 0.0
         
         for lanc in lancamentos_mes:
             tipo_l = str(lanc.tipo).lower()
-            cat_nome = (lanc.categoria.nome if lanc.categoria else "").lower()
-            sub_nome = (lanc.subcategoria.nome if lanc.subcategoria else "").lower()
-            desc_lower = (lanc.descricao or "").lower()
-            contra_lower = (lanc.nome_contraparte or "").lower()
+            sid = lanc.id_subcategoria
             
-            is_fatura_internal = False
-            if "fatura" in sub_nome or "fatura" in desc_lower or "cartao" in desc_lower or "cartão" in desc_lower:
-                if any(nome_card in desc_lower or nome_card in contra_lower for nome_card in contas_cartao_sync):
-                    is_fatura_internal = True
-
-            # Ignora na soma se for fatura interna ou transferência explícita
-            if is_fatura_internal or tipo_l == "transferência" or sub_nome == "transferência interna":
+            # Filtro rigoroso: Ignora 'Transferência' e 'Pagamento de Fatura' (ID 584) das somas de Receita/Despesa
+            # mas permite que apareçam no histórico (recent_items)
+            if tipo_l == "transferência" or sid == 584:
                 continue
                 
             valor = abs(float(lanc.valor or 0))
