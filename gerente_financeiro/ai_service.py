@@ -146,10 +146,10 @@ async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | N
     def _truncar_mensagens(msgs):
         new_msgs = [m.copy() for m in msgs]
         for m in new_msgs:
-            if m.get("role") == "system" and len(m.get("content", "")) > 3000:
-                m["content"] = m["content"][:3000] + "... [Contexto truncado]"
-            if m.get("role") == "tool" and len(m.get("content", "")) > 2500:
-                m["content"] = m["content"][:2500] + "... [Dados truncados]"
+            if m.get("role") == "system" and len(m.get("content", "")) > 10000:
+                m["content"] = m["content"][:10000] + "... [Contexto truncado]"
+            if m.get("role") == "tool" and len(m.get("content", "")) > 15000:
+                m["content"] = m["content"][:15000] + "... [Dados truncados]"
         return new_msgs
 
     providers = []

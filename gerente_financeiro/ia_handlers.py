@@ -1941,8 +1941,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             else:
                 res_str = json.dumps(resultado_bruto, ensure_ascii=False) if not isinstance(resultado_bruto, str) else resultado_bruto
             
-            if len(res_str) > 6000:
-                res_str = res_str[:6000] + "... [Resultado truncado por ser muito longo]"
+            if len(res_str) > 12000:
+                res_str = res_str[:12000] + "... [Resultado truncado por ser muito longo]"
             
             # Se o resultado for erro 401 ou 403, avisar o usuário diretamente.
             if isinstance(resultado_bruto, dict) and resultado_bruto.get("status_code") in [401, 403]:
@@ -1970,6 +1970,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             })
             
             # Segunda chamada à IA para interpretar os dados
+            logger.info(f"🧠 [ALFREDO] Iniciando interpretação dos dados (Tool: {fn_name}, Tamanho: {len(res_str)} chars)")
             tools_para_ia = list(_ALFREDO_TOOLS)
             from pierre_finance.ai_tools import obter_tools_pierre
             tools_para_ia.extend(obter_tools_pierre())
@@ -1977,7 +1978,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             # Se a segunda chamada falhar (ex: por contexto ainda grande), tentaremos Gemini sem as definições das tools
             completion2 = await _smart_ai_completion_async(messages, tools=tools_para_ia)
             if not completion2:
-                 logger.warning("Tentando Gemini como última esperança para interpretação (sem tools)")
+                 logger.warning("⚠️ [ALFREDO] Orquestrador falhou na interpretação. Tentando Gemini direto como fallback.")
                  completion2 = await _gemini_chat_completion_async(messages)
 
             if completion2:
@@ -1988,6 +1989,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                     ia_message_2 = choice2.get("message") or {}
                     final_text = ia_message_2.get("content")
                 
+                logger.info(f"✅ [ALFREDO] Resposta da IA obtida (Tamanho: {len(final_text or '')} chars)")
+                
                 # 🛡️ ANTI-LEAK: Remove JSON de tool call que o Cerebras/Groq às vezes vaza no texto
                 if final_text and ("{" in final_text and "}" in final_text and "name" in final_text):
                     logger.warning(f"⚠️ [ALFREDO] Leak de JSON detectado na resposta final. Limpando...")
@@ -1996,6 +1999,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                     final_text = "\n".join(linhas).strip()
                 
                 if not final_text or len(final_text.strip()) < 5:
+                    logger.error(f"❌ [ALFREDO] Resposta final muito curta ou vazia: '{final_text}'")
                     final_text = "Recebi os dados do banco, mas eles vieram em um formato complexo. Por favor, tente perguntar de outra forma (ex: 'qual o valor total da minha fatura?') ou verifique o MiniApp."
                 
                 await _enviar_resposta_html_segura(update.message, final_text)

@@ -87,8 +87,17 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     except Exception as e:
         logger.warning(f"Erro ao re-configurar genai no fatura_handler: {e}")
 
-    model_name = getattr(config, "GEMINI_MODEL_NAME", "gemini-flash-latest")
-    logger.info(f"Usando modelo {model_name} para extração de fatura")
+    # Priorizar modelos com maior cota no Free Tier para processamento de arquivos
+    # gemini-1.5-flash costuma ter 15 RPM, enquanto modelos 2.5/Pro são mais restritos.
+    preferred_models = ["gemini-2.0-flash-lite-preview-02-05", "gemini-1.5-flash", "gemini-flash-latest"]
+    
+    current_model = getattr(config, "GEMINI_MODEL_NAME", "gemini-flash-latest")
+    if current_model not in preferred_models:
+        model_name = preferred_models[0]
+    else:
+        model_name = current_model
+
+    logger.info(f"Usando modelo {model_name} para extração de fatura (config original: {current_model})")
     model = genai.GenerativeModel(model_name)
     
     prompt = """

@@ -55,7 +55,8 @@ _model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash-lite-preview-02-05
 VALID_GEMINI_MODELS = [
     "gemini-2.0-flash-lite-preview-02-05", # ⭐ Modelo leve e rápido, ideal para não estourar a cota (RECOMENDADO)
     "gemini-2.0-flash",           # Modelo 2.0 (janela de 1M tokens)
-    "gemini-2.5-flash",           # Modelo 2.5 estável (rápido e eficiente)
+    "gemini-1.5-flash",           # Modelo 1.5 estável (Cota de 15 RPM no Free Tier)
+    "gemini-2.5-flash",           # Modelo 2.5 estável (pode ter cotas restritas)
     "gemini-2.5-pro",             # Modelo 2.5 avançado (pensamento complexo)
     "gemini-flash-latest",        # Alias oficial para versão mais recente
     "gemini-pro-latest",          # Alias para Pro mais recente
@@ -121,6 +122,8 @@ if missing_vars:
 logging.info("✅ Configurações carregadas:")
 logging.info(f"   📱 TELEGRAM_TOKEN: {'✅ Configurado' if TELEGRAM_TOKEN else '❌ Não encontrado'}")
 logging.info(f"   🤖 GEMINI_API_KEY: {'✅ Configurado' if GEMINI_API_KEY else '⚠️ Não encontrado'}")
+logging.info(f"   ⚡ CEREBRAS_API_KEY: {'✅ Configurado' if CEREBRAS_API_KEY else '⚠️ Não encontrado'}")
+logging.info(f"   🧠 GROQ_API_KEY: {'✅ Configurado' if GROQ_API_KEY else '⚠️ Não encontrado'}")
 logging.info(f"   🗄️ DATABASE_URL: {'✅ Configurado' if DATABASE_URL else '⚠️ Não encontrado'}")
 
 # Log das configurações de email e PIX (para debug)
