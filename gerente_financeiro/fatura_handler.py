@@ -156,17 +156,16 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
                 from .ocr_handler import ocr_fallback_gemini 
                 texto_pdf = await ocr_fallback_gemini(file_bytes)
 
-            if not texto_pdf or len(texto_pdf.strip()) < 10:
-                raise ValueError("Não foi possível extrair texto do PDF por nenhum método.")
-            
-            logger.info(f"📄 Texto obtido ({len(texto_pdf)} chars). Enviando para Groq...")
-            
+            # Truncar o texto para evitar erro 413 (Payload Too Large) no Groq
+            texto_pdf_limitado = texto_pdf[:15000] if len(texto_pdf) > 15000 else texto_pdf
+
+            logger.info(f"📄 Texto obtido ({len(texto_pdf)} chars, limitado para {len(texto_pdf_limitado)}). Enviando para Groq...")
+
             from .ai_service import _groq_chat_completion_async
             messages = [
                 {"role": "system", "content": "Você é um extrator de faturas. Extraia os dados do texto e retorne APENAS um JSON válido."},
-                {"role": "user", "content": f"{prompt}\n\nTEXTO DA FATURA:\n{texto_pdf}"}
-            ]
-            groq_resp = await _groq_chat_completion_async(messages)
+                {"role": "user", "content": f"{prompt}\n\nTEXTO DA FATURA (RESUMO):\n{texto_pdf_limitado}"}
+            ]            groq_resp = await _groq_chat_completion_async(messages)
             
             if isinstance(groq_resp, dict) and "choices" in groq_resp:
                 text = groq_resp["choices"][0]["message"]["content"]
