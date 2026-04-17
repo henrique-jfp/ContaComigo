@@ -165,7 +165,8 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
             messages = [
                 {"role": "system", "content": "Você é um extrator de faturas. Extraia os dados do texto e retorne APENAS um JSON válido."},
                 {"role": "user", "content": f"{prompt}\n\nTEXTO DA FATURA (RESUMO):\n{texto_pdf_limitado}"}
-            ]            groq_resp = await _groq_chat_completion_async(messages)
+            ]
+            groq_resp = await _groq_chat_completion_async(messages)
             
             if isinstance(groq_resp, dict) and "choices" in groq_resp:
                 text = groq_resp["choices"][0]["message"]["content"]
