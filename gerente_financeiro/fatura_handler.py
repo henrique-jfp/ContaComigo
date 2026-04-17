@@ -136,23 +136,42 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     
     try:
         response = await model.generate_content_async([prompt, pdf_part])
-        
-        # Verificar se a resposta foi bloqueada por segurança ou erro
         if not response or not hasattr(response, 'text'):
-            if hasattr(response, 'prompt_feedback'):
-                logger.error(f"Feedback do prompt: {response.prompt_feedback}")
-            raise ValueError("O Google Gemini não conseguiu gerar uma resposta para este PDF. Verifique se o arquivo não é protegido ou muito grande.")
-
+            raise ValueError("O Google Gemini não conseguiu gerar uma resposta.")
         text = response.text
     except Exception as gemini_exc:
         err_msg = str(gemini_exc)
-        logger.error(f"Erro na API do Gemini: {err_msg}")
         if "429" in err_msg or "quota" in err_msg:
-            raise RuntimeError("Quota do Gemini esgotada. Tente o modelo 2.0-flash ou mude a chave.")
-        elif "404" in err_msg:
-            raise RuntimeError(f"Modelo {model_name} não encontrado nesta API Key. Use gemini-1.5-flash ou 2.0-flash.")
-        elif "API_KEY_INVALID" in err_msg or "403" in err_msg:
-            raise RuntimeError("A GEMINI_API_KEY configurada no Render parece ser inválida.")
+            logger.warning("⚠️ Cota do Gemini esgotada. Iniciando FAILOVER para GROQ...")
+            try:
+                import fitz  # PyMuPDF
+                doc = fitz.open(stream=file_bytes, filetype="pdf")
+                texto_pdf = ""
+                for page in doc:
+                    texto_pdf += page.get_text()
+                doc.close()
+                
+                if not texto_pdf or len(texto_pdf.strip()) < 20:
+                    raise ValueError("Texto do PDF insuficiente para processamento via Groq.")
+                
+                logger.info(f"📄 Texto extraído via fitz ({len(texto_pdf)} chars). Enviando para Groq...")
+                
+                # Chamada ao Groq usando o helper de ai_service (ou direto via requests para isolar)
+                from .ai_service import _groq_chat_completion_async
+                messages = [
+                    {"role": "system", "content": "Você é um extrator de faturas. Extraia os dados do texto e retorne APENAS um JSON."},
+                    {"role": "user", "content": f"{prompt}\n\nTEXTO DA FATURA:\n{texto_pdf}"}
+                ]
+                groq_resp = await _groq_chat_completion_async(messages)
+                
+                if isinstance(groq_resp, dict) and "choices" in groq_resp:
+                    text = groq_resp["choices"][0]["message"]["content"]
+                    logger.info("✅ Sucesso no Failover via Groq!")
+                else:
+                    raise ValueError("Falha na resposta do Groq.")
+            except Exception as failover_exc:
+                logger.error(f"❌ Failover para Groq também falhou: {failover_exc}")
+                raise RuntimeError("Quota do Gemini esgotada e Failover falhou. Tente novamente mais tarde.")
         else:
             raise RuntimeError(f"Erro na IA: {err_msg}")
 
