@@ -285,26 +285,18 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
         return FATURA_AWAIT_FILE
     except Exception as exc:
         logger.exception("Erro ao processar fatura PDF", exc_info=True)
-        error_str = str(exc).lower()
+        error_str = str(exc)
         
-        if "429" in error_str or "quota" in error_str or "resourceexhausted" in error_str:
-            await process_msg.edit_text(
-                "⚠️ <b>Limite de IA atingido</b>\n\n"
-                "A cota diária de processamento de faturas da minha inteligência gratuita foi esgotada.\n\n"
-                "Por favor, tente novamente em 24 horas ou faça o upgrade para o <b>Plano Pro</b> para processamento ilimitado.",
-                parse_mode="HTML"
-            )
-            return ConversationHandler.END
-            
-        if "password" in error_str or "senha" in error_str or "encrypted" in error_str:
+        if "password" in error_str.lower() or "senha" in error_str.lower() or "encrypted" in error_str.lower():
             await process_msg.edit_text(
                 "🔒 Este PDF está protegido por senha.\n"
                 "Remova a senha no app do banco e envie novamente."
             )
         else:
+            # Mostrar o erro real para debug
             await process_msg.edit_text(
-                "❌ Nao consegui ler esse PDF de fatura.\n"
-                "Verifique se o arquivo não está corrompido ou tente novamente."
+                f"❌ <b>Erro no Processamento</b>\n\n{error_str}",
+                parse_mode="HTML"
             )
         return FATURA_AWAIT_FILE
     else:
