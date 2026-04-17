@@ -158,7 +158,7 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
                 texto_pdf = await ocr_fallback_gemini(file_bytes)
 
             # Truncar o texto para evitar erro 413 (Payload Too Large) no Groq
-            texto_pdf_limitado = texto_pdf[:15000] if len(texto_pdf) > 15000 else texto_pdf
+            texto_pdf_limitado = texto_pdf[:7000] if len(texto_pdf) > 7000 else texto_pdf
 
             logger.info(f"📄 Texto obtido ({len(texto_pdf)} chars, limitado para {len(texto_pdf_limitado)}). Enviando para Groq...")
 
