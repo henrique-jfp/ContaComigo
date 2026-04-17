@@ -41,11 +41,13 @@ def load_secret_env_file():
                 key = key.strip()
                 value = value.strip().strip('"').strip("'")
                 
-                # Só sobrescrever se não existir nas env vars
-                if key not in os.environ:
-                    os.environ[key] = value
-                    loaded_vars += 1
-                    logger.debug(f"✅ Carregado: {key}")
+                # PRIORIDADE: Se a variável já existe no ambiente (setada no Render), NÃO sobrescrever
+                if key in os.environ and os.environ[key]:
+                    logger.debug(f"⏭️ Mantendo valor do sistema para: {key}")
+                    continue
+                
+                os.environ[key] = value
+                loaded_vars += 1
         
         logger.info(f"🎉 {loaded_vars} variáveis carregadas do Secret File!")
         return True

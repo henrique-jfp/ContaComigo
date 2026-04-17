@@ -134,9 +134,28 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
         "data": file_bytes
     }
     
-    response = await model.generate_content_async([prompt, pdf_part])
-    
-    text = response.text
+    try:
+        response = await model.generate_content_async([prompt, pdf_part])
+        
+        # Verificar se a resposta foi bloqueada por segurança ou erro
+        if not response or not hasattr(response, 'text'):
+            if hasattr(response, 'prompt_feedback'):
+                logger.error(f"Feedback do prompt: {response.prompt_feedback}")
+            raise ValueError("O Google Gemini não conseguiu gerar uma resposta para este PDF. Verifique se o arquivo não é protegido ou muito grande.")
+
+        text = response.text
+    except Exception as gemini_exc:
+        err_msg = str(gemini_exc)
+        logger.error(f"Erro na API do Gemini: {err_msg}")
+        if "429" in err_msg or "quota" in err_msg:
+            raise RuntimeError("Quota do Gemini esgotada. Tente o modelo 2.0-flash ou mude a chave.")
+        elif "404" in err_msg:
+            raise RuntimeError(f"Modelo {model_name} não encontrado nesta API Key. Use gemini-1.5-flash ou 2.0-flash.")
+        elif "API_KEY_INVALID" in err_msg or "403" in err_msg:
+            raise RuntimeError("A GEMINI_API_KEY configurada no Render parece ser inválida.")
+        else:
+            raise RuntimeError(f"Erro na IA: {err_msg}")
+
     match = re.search(r'\{.*\}', text, re.DOTALL)
     if not match:
         raise ValueError("A IA não retornou um JSON válido.")
