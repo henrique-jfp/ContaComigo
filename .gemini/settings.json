@@ -40,6 +40,19 @@
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "$GITHUB_PERSONAL_ACCESS_TOKEN"
       }
+    },
+    "pierre-finance": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://pierre.finance/mcp",
+        "--header",
+        "Authorization:${TOKEN}"
+      ],
+      "env": {
+        "TOKEN": "sk-ueZlVRGjhNChMD7EyGq7ZoMPnQETLLWB"
+      }
     }
   }
 

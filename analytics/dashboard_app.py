@@ -410,8 +410,12 @@ def _daily_cashflow(lancamentos: list[Lancamento], start: date, end: date) -> li
         if not data or data < start or data > end:
             continue
         label = data.strftime("%d/%m")
-        tipo = "Entrada" if str(lanc.tipo).lower().startswith(("entr", "recei")) else "Saída"
-        series[label][tipo] += abs(float(lanc.valor or 0))
+        
+        tipo_norm = str(lanc.tipo).lower()
+        if tipo_norm.startswith(("entr", "recei")):
+            series[label]["Entrada"] += abs(float(lanc.valor or 0))
+        elif tipo_norm.startswith(("desp", "saida")):
+            series[label]["Saída"] += abs(float(lanc.valor or 0))
 
     return [
         {"label": label, "entrada": round(series[label]["Entrada"], 2), "saida": round(series[label]["Saída"], 2)}
@@ -428,8 +432,8 @@ def _category_distribution(lancamentos: list[Lancamento]) -> list[dict]:
     palette = ["#D4AF37", "#2C2C2C", "#064E3B", "#881337", "#1E3A8A", "#451A03"]
     
     for lanc in lancamentos:
-        # Filtro rigoroso: apenas saídas reais
-        if str(lanc.tipo).lower().startswith(("entr", "recei")):
+        # Filtro rigoroso: apenas saídas reais (ignora receitas e transferências)
+        if not str(lanc.tipo).lower().startswith(("desp", "saida")):
             continue
             
         valor = abs(float(lanc.valor or 0))

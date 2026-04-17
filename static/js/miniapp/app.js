@@ -1586,12 +1586,19 @@ lucide.createIcons();
         });
       }
 
-      if (homeBudgetChartEl) {
+      const budgetCanvas = document.getElementById('homeBudgetChart');
+      if (budgetCanvas) {
         const hasData = chartData.budgetLabels.length > 0;
         if (!hasData) {
-          homeBudgetChartEl.parentElement.innerHTML = '<div class="empty-state"><h3>Sem metas de orçamento</h3><p>Defina limites por categoria para acompanhar.</p></div>';
+          budgetCanvas.parentElement.innerHTML = `
+            <div class="empty-state">
+              <h3>Sem metas de orçamento</h3>
+              <p>Defina limites por categoria para acompanhar.</p>
+            </div>
+            <canvas id="homeBudgetChart" style="display:none;"></canvas>`;
         } else {
-          homeCharts.budget = safeChart(homeBudgetChartEl, {
+          budgetCanvas.style.display = 'block';
+          homeCharts.budget = safeChart(budgetCanvas, {
             type: 'bar',
             data: {
               labels: chartData.budgetLabels,
