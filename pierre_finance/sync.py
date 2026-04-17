@@ -209,14 +209,26 @@ def _upsert_accounts_and_balances(usuario: Usuario, db: Session, client: PierreC
         else:
             conta.tipo = "Conta Corrente"
 
-        cc = acc.get("creditCard") or {}
+        # Campos específicos para Cartão de Crédito
+        cc = acc.get("creditCard") or acc.get("creditData") or {}
         if cc:
-            conta.limite_cartao = _safe_decimal(cc.get("limit"))
+            # Pierre usa 'creditLimit' ou 'limit'
+            conta.limite_cartao = _safe_decimal(cc.get("creditLimit") or cc.get("limit"))
+            # Fechamento e Vencimento
             conta.dia_fechamento = int(cc.get("closingDay") or 0) or conta.dia_fechamento
-            conta.dia_vencimento = int(cc.get("dueDay") or 0) or conta.dia_vencimento
+            conta.dia_vencimento = int(cc.get("dueDay") or cc.get("due_day") or 0) or conta.dia_vencimento
 
         db.flush()
         accounts_map[ext_id] = conta.id
+
+        # Saldo Diário
+        saldo_val = _safe_decimal(acc.get("balance"))
+        # Para cartões, o Pierre manda saldo disponível em 'availableCreditLimit'
+        saldo_disp = _safe_decimal(
+            acc.get("availableBalance") or 
+            cc.get("availableCreditLimit") or 
+            acc.get("balance")
+        )
 
         hoje = datetime.now(timezone.utc).date()
         saldo_existente = db.query(SaldoConta).filter(
@@ -225,15 +237,15 @@ def _upsert_accounts_and_balances(usuario: Usuario, db: Session, client: PierreC
         ).first()
 
         if saldo_existente:
-            saldo_existente.saldo = _safe_decimal(acc.get("balance"))
-            saldo_existente.saldo_disponivel = _safe_decimal(acc.get("availableBalance") or acc.get("balance"))
+            saldo_existente.saldo = saldo_val
+            saldo_existente.saldo_disponivel = saldo_disp
             saldo_existente.capturado_em = datetime.now(timezone.utc)
         else:
             db.add(SaldoConta(
                 id_usuario=usuario.id,
                 id_conta=conta.id,
-                saldo=_safe_decimal(acc.get("balance")),
-                saldo_disponivel=_safe_decimal(acc.get("availableBalance") or acc.get("balance")),
+                saldo=saldo_val,
+                saldo_disponivel=saldo_disp,
                 capturado_em=datetime.now(timezone.utc)
             ))
 
