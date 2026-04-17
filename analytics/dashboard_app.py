@@ -1376,15 +1376,23 @@ def miniapp_modo_deus():
                         saldo_disponivel += max(0, current_acc_balance)
 
             # --- LÓGICA DE PATRIMÔNIO HISTÓRICO (Lucro/Prejuízo Total) ---
+            # Filtro para ignorar Transferências e Faturas (ID Subcat 584) nos totais de Receita/Despesa
             total_receitas_hist = db.query(func.sum(Lancamento.valor)).filter(
                 Lancamento.id_usuario == user_id,
-                Lancamento.tipo.in_(['Entrada', 'Receita'])
+                Lancamento.tipo.in_(['Entrada', 'Receita']),
+                Lancamento.id_subcategoria != 584, # Pagamento de Fatura
+                Lancamento.id_subcategoria != 235  # Transferência Interna (ID aproximado, melhor conferir ou usar nome)
             ).scalar() or 0
             
             total_despesas_hist = db.query(func.sum(Lancamento.valor)).filter(
                 Lancamento.id_usuario == user_id,
-                Lancamento.tipo.in_(['Saída', 'Despesa'])
+                Lancamento.tipo.in_(['Saída', 'Despesa']),
+                Lancamento.id_subcategoria != 584
             ).scalar() or 0
+            
+            # Melhoria: Filtrar por nome de subcategoria se os IDs variarem entre ambientes
+            # Mas por enquanto, vamos manter IDs se forem consistentes ou adicionar join.
+            # Como queremos performance, vamos usar subquery ou nomes.
             
             patrimonio_liquido = float(total_receitas_hist) - abs(float(total_despesas_hist))
             
@@ -1787,8 +1795,33 @@ def miniapp_overview():
             .all()
         )
 
-        receita = sum(abs(float(lanc.valor or 0)) for lanc in lancamentos_mes if str(lanc.tipo).lower().startswith(("entr", "recei")))
-        despesa = sum(abs(float(lanc.valor or 0)) for lanc in lancamentos_mes if str(lanc.tipo).lower().startswith(("desp", "saida")))
+        # --- LÓGICA DE DEDUPLICAÇÃO (Regra de Ouro) ---
+        contas_cartao_sync = [c.nome.lower() for c in db.query(Conta).filter(Conta.id_usuario == usuario.id, Conta.tipo == "Cartão de Crédito", Conta.external_id != None).all()]
+
+        receita = 0.0
+        despesa = 0.0
+        
+        for lanc in lancamentos_mes:
+            tipo_l = str(lanc.tipo).lower()
+            cat_nome = (lanc.categoria.nome if lanc.categoria else "").lower()
+            sub_nome = (lanc.subcategoria.nome if lanc.subcategoria else "").lower()
+            desc_lower = (lanc.descricao or "").lower()
+            contra_lower = (lanc.nome_contraparte or "").lower()
+            
+            is_fatura_internal = False
+            if "fatura" in sub_nome or "fatura" in desc_lower or "cartao" in desc_lower or "cartão" in desc_lower:
+                if any(nome_card in desc_lower or nome_card in contra_lower for nome_card in contas_cartao_sync):
+                    is_fatura_internal = True
+
+            # Ignora na soma se for fatura interna ou transferência explícita
+            if is_fatura_internal or tipo_l == "transferência" or sub_nome == "transferência interna":
+                continue
+                
+            valor = abs(float(lanc.valor or 0))
+            if tipo_l.startswith(("entr", "recei")):
+                receita += valor
+            elif tipo_l.startswith(("desp", "saida")):
+                despesa += valor
         
         # Saldo do mês (Resultado Líquido)
         balance = receita - despesa

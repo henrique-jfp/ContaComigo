@@ -546,6 +546,8 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
         desc_norm = descricao.lower()
         contra_norm = (nome_fantasia or "").lower()
         is_fatura_transfer = False
+        cat_manual = None
+        subcat_manual = None
         
         if acc_type in ("BANK", "PAYMENT_ACCOUNT"):
             if any(k in desc_norm for k in ["pagamento", "pagto", "pgto", "pgt"]) and \
@@ -566,6 +568,7 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
                 
                 if is_internal:
                     is_fatura_transfer = True
+                    cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
                     # Tenta marcar a fatura como paga no banco de dados
                     try:
                         f_vencida = db.query(FaturaCartao).filter(
@@ -581,15 +584,21 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
         elif acc_type == "CREDIT":
             if any(k in desc_norm for k in ["pagamento recebido", "pagamento fatura", "pagamento de fatura", "fatura paga"]):
                 is_fatura_transfer = True
+                cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
 
         # --- Detecção de Transferência Interna por Nome ---
-        # Se o nome do usuário aparece no 'Pix recebido', é transferência entre contas dele
         if usuario.nome_completo and usuario.nome_completo.lower() in desc_norm:
             if tipo == "Receita":
-                is_fatura_transfer = True # Tratamos como transferência
+                is_fatura_transfer = True # Tratamos como transferência interna
+                cat_manual, subcat_manual = "Financeiro", "Transferência Interna"
 
+        # REQUISITO ESPECIAL: Debito de Fatura deve aparecer como Despesa no histórico, mas ser filtrado no KPI.
+        # Credito de Fatura (no cartão) deve ser Transferência sempre para não inflar Receita.
         if is_fatura_transfer:
-            tipo = "Transferência"
+            if valor_final < 0:
+                tipo = "Despesa" # Mantém despesa para aparecer no histórico (aba Saídas)
+            else:
+                tipo = "Transferência" # Crédito no cartão é transferência
 
         # Registro via Serviço de Reconciliação
         lanc, criado = ReconciliationService.register_transaction(
@@ -603,9 +612,17 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
             tipo=tipo
         )
 
-        # Se já existia mas agora identificamos como Transferência, forçamos o tipo
-        if not criado and tipo == "Transferência" and lanc.tipo != "Transferência":
-            lanc.tipo = "Transferência"
+        # Forçamos a categoria se for fatura/transferência interna
+        if cat_manual and subcat_manual:
+            from pierre_finance.categorizador import persistir_ids_categoria
+            cid, sid = persistir_ids_categoria(db, cat_manual, subcat_manual)
+            lanc.id_categoria = cid
+            lanc.id_subcategoria = sid
+            db.commit()
+
+        # Se já existia mas agora identificamos como especial, forçamos o tipo
+        if not criado and is_fatura_transfer and lanc.tipo != tipo:
+            lanc.tipo = tipo
             db.commit()
 
         if criado:
@@ -674,6 +691,8 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
         desc_norm = descricao.lower()
         contra_norm = (nome_fantasia or "").lower()
         is_fatura_transfer = False
+        cat_manual = None
+        subcat_manual = None
         
         if acc_type in ("BANK", "PAYMENT_ACCOUNT"):
             if any(k in desc_norm for k in ["pagamento", "pagto", "pgto", "pgt"]) and \
@@ -694,6 +713,7 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
                 
                 if is_internal:
                     is_fatura_transfer = True
+                    cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
                     # Tenta marcar a fatura como paga no banco de dados
                     try:
                         f_vencida = db.query(FaturaCartao).filter(
@@ -709,15 +729,21 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
         elif acc_type == "CREDIT":
             if any(k in desc_norm for k in ["pagamento recebido", "pagamento fatura", "pagamento de fatura", "fatura paga"]):
                 is_fatura_transfer = True
+                cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
 
         # --- Detecção de Transferência Interna por Nome ---
-        # Se o nome do usuário aparece no 'Pix recebido', é transferência entre contas dele
         if usuario.nome_completo and usuario.nome_completo.lower() in desc_norm:
             if tipo == "Receita":
-                is_fatura_transfer = True # Tratamos como transferência
+                is_fatura_transfer = True # Tratamos como transferência interna
+                cat_manual, subcat_manual = "Financeiro", "Transferência Interna"
 
+        # REQUISITO ESPECIAL: Debito de Fatura deve aparecer como Despesa no histórico, mas ser filtrado no KPI.
+        # Credito de Fatura (no cartão) deve ser Transferência sempre para não inflar Receita.
         if is_fatura_transfer:
-            tipo = "Transferência"
+            if valor_final < 0:
+                tipo = "Despesa" # Mantém despesa para aparecer no histórico (aba Saídas)
+            else:
+                tipo = "Transferência" # Crédito no cartão é transferência
 
         # Registro via Serviço de Reconciliação
         lanc, criado = ReconciliationService.register_transaction(
@@ -731,9 +757,17 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
             tipo=tipo
         )
 
-        # Se já existia mas agora identificamos como Transferência, forçamos o tipo
-        if not criado and tipo == "Transferência" and lanc.tipo != "Transferência":
-            lanc.tipo = "Transferência"
+        # Forçamos a categoria se for fatura/transferência interna
+        if cat_manual and subcat_manual:
+            from pierre_finance.categorizador import persistir_ids_categoria
+            cid, sid = persistir_ids_categoria(db, cat_manual, subcat_manual)
+            lanc.id_categoria = cid
+            lanc.id_subcategoria = sid
+            db.commit()
+
+        # Se já existia mas agora identificamos como especial, forçamos o tipo
+        if not criado and is_fatura_transfer and lanc.tipo != tipo:
+            lanc.tipo = tipo
             db.commit()
 
         if criado:
