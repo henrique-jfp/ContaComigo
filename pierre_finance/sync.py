@@ -574,7 +574,7 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
                         f_vencida = db.query(FaturaCartao).filter(
                             FaturaCartao.id_usuario == usuario.id,
                             FaturaCartao.status != "paga"
-                        ).order_by(func.abs(func.extract('day', FaturaCartao.data_vencimento - data_tx.date()))).first()
+                        ).order_by(func.abs(FaturaCartao.data_vencimento - data_tx.date())).first()
                         if f_vencida:
                             f_vencida.status = "paga"
                             logger.info(f"Fatura {f_vencida.id} marcada como PAGA via detecção de transação.")
@@ -713,7 +713,7 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
                         f_vencida = db.query(FaturaCartao).filter(
                             FaturaCartao.id_usuario == usuario.id,
                             FaturaCartao.status != "paga"
-                        ).order_by(func.abs(func.extract('day', FaturaCartao.data_vencimento - data_tx.date()))).first()
+                        ).order_by(func.abs(FaturaCartao.data_vencimento - data_tx.date())).first()
                         if f_vencida:
                             f_vencida.status = "paga"
                             logger.info(f"Fatura {f_vencida.id} marcada como PAGA via detecção de transação.")

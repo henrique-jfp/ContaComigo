@@ -49,23 +49,21 @@ CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
 CEREBRAS_MODEL_NAME = os.getenv("CEREBRAS_MODEL_NAME", "llama3.1-8b") # Ou llama3.1-70b se disponível
 
 # GEMINI MODEL NAME com validação e fallback automático
-_model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-3.1-flash-lite")
+_model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
 # Lista de modelos válidos (atualizada em Abril 2026 - API)
-# ⚠️ IMPORTANTE: O modelo 3.1 Flash-Lite é o melhor custo-benefício.
+# ⚠️ IMPORTANTE: O modelo 1.5 Flash é o mais estável para fallback.
 VALID_GEMINI_MODELS = [
-    "gemini-3.1-flash-lite",       # ⭐ Melhor custo/velocidade (RECOMENDADO)
-    "gemini-3.1-pro",              # Inteligência máxima
-    "gemini-2.5-flash",            # Estável e rápido
-    "gemini-2.5-flash-lite",       # Econômico e estável
-    "gemini-1.5-flash",            # Legado (Fallback de alta cota)
+    "gemini-1.5-flash",            # ⭐ Mais estável (RECOMENDADO)
+    "gemini-2.0-flash",            # Rápido e inteligente
+    "gemini-2.0-pro",              # Inteligência máxima
     "gemini-flash-latest",         # Alias para a versão Flash mais recente
 ]
 
 # Validar e corrigir modelo automaticamente
 if _model_env not in VALID_GEMINI_MODELS:
     logging.warning(f"⚠️ Modelo '{_model_env}' não é válido ou foi descontinuado!")
-    logging.warning(f"⚠️ Usando fallback: 'gemini-3.1-flash-lite'")
-    GEMINI_MODEL_NAME = "gemini-3.1-flash-lite"
+    logging.warning(f"⚠️ Usando fallback: 'gemini-1.5-flash'")
+    GEMINI_MODEL_NAME = "gemini-1.5-flash"
 else:
     GEMINI_MODEL_NAME = _model_env
     
