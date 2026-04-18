@@ -750,6 +750,26 @@ def _montar_resposta_local_alfredo(texto_usuario: str, texto_normalizado: str, d
     )
 
 
+def _deve_responder_localmente(texto_normalizado: str) -> bool:
+    """Atalho defensivo para perguntas financeiras objetivas e frequentes."""
+    return any([
+        _intencao_contas(texto_normalizado),
+        _intencao_comparacao_financeira(texto_normalizado),
+        _intencao_alerta_financeiro(texto_normalizado),
+        _intencao_previsao_financeira(texto_normalizado),
+        _intencao_analise_gastos(texto_normalizado),
+        _intencao_consultoria_financeira(texto_normalizado),
+        _intencao_busca_compra(texto_normalizado),
+        _intencao_ultimo_lancamento(texto_normalizado),
+        _intencao_saldo(texto_normalizado),
+        _intencao_metas(texto_normalizado),
+        _intencao_categoria_mais_gasto(texto_normalizado),
+        _intencao_forma_pagamento_mais_usada(texto_normalizado),
+        _intencao_resumo_semana(texto_normalizado),
+        _intencao_resumo_mes(texto_normalizado),
+    ])
+
+
 def _resumo_contas_local(db, usuario_id: int) -> str:
     agendamentos = (
         db.query(Agendamento)
@@ -1693,6 +1713,13 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             )
             return ConversationHandler.END
 
+        if not tool_calls and _deve_responder_localmente(texto_normalizado):
+            resposta_local = _montar_resposta_local_alfredo(
+                texto_usuario, texto_normalizado, db, usuario_db, saldo, entradas, saidas
+            )
+            await _enviar_resposta_html_segura(update.message, resposta_local)
+            return ConversationHandler.END
+
         # --- PREPARAÇÃO DE CONTEXTO RICO PARA O ALFREDO (IA) ---
         hoje = datetime.now()
         hoje_str = hoje.strftime("%A, %d de %B de %Y às %H:%M")
@@ -1950,6 +1977,13 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             args = json.loads(raw_args)
         except json.JSONDecodeError:
             args = {}
+
+        if not fn_name:
+            resposta_local = _montar_resposta_local_alfredo(
+                texto_usuario, texto_normalizado, db, usuario_db, saldo, entradas, saidas
+            )
+            await _enviar_resposta_html_segura(update.message, resposta_local)
+            return ConversationHandler.END
 
         PIERRE_TOOLS_LIST = [
             "consultar_saldos_bancarios_reais", 
@@ -2429,7 +2463,10 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             await _enviar_resposta_html_segura(update.message, answer)
             return ConversationHandler.END
 
-        await update.message.reply_text("Não consegui entender essa ação ainda. Tente reformular a mensagem.")
+        resposta_local = _montar_resposta_local_alfredo(
+            texto_usuario, texto_normalizado, db, usuario_db, saldo, entradas, saidas
+        )
+        await _enviar_resposta_html_segura(update.message, resposta_local)
         return ConversationHandler.END
     except Exception as exc:
         logger.error("Erro no roteador Alfredo: %s", exc, exc_info=True)
