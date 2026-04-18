@@ -141,53 +141,52 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
         "data": file_bytes
     }
     
-    try:
-        response = await model.generate_content_async([prompt, pdf_part])
-        if not response or not hasattr(response, 'text'):
-            raise ValueError("O Google Gemini não conseguiu gerar uma resposta.")
-        text = response.text
-    except Exception as gemini_exc:
-        # 🚨 FORÇAR FAILOVER PARA QUALQUER ERRO
-        logger.warning(f"⚠️ Gemini falhou ({type(gemini_exc).__name__}). Iniciando FAILOVER imediato para GROQ...")
+    # Tentar primeiro o 2.0, mas ter o 1.5 como reserva imediata (cota mais estável)
+    models_to_try = [model_name, "gemini-1.5-flash"]
+    
+    text = None
+    last_exc = None
+    
+    for m_name in models_to_try:
         try:
-            import fitz  # PyMuPDF
-            doc = fitz.open(stream=file_bytes, filetype="pdf")
-            texto_pdf = ""
-            for page in doc:
-                # 🛠️ MELHORIA: Usar "blocks" para preservar a estrutura de colunas e evitar alucinações de valores
-                blocks = page.get_text("blocks")
-                # Ordenar blocos por posição vertical (Y) e depois horizontal (X)
-                for b in sorted(blocks, key=lambda x: (x[1], x[0])):
-                    texto_pdf += f"{b[4]}\n"
-            doc.close()
+            logger.info(f"🤖 Tentando extração com {m_name}...")
+            curr_model = genai.GenerativeModel(m_name)
+            response = await curr_model.generate_content_async([prompt, pdf_part])
+            if response and hasattr(response, 'text') and response.text:
+                text = response.text
+                logger.info(f"✅ Sucesso com o modelo {m_name}!")
+                break
+        except Exception as e:
+            last_exc = e
+            logger.warning(f"⚠️ Modelo {m_name} falhou: {e}")
+            continue
+
+    if not text:
+        logger.warning("❌ Todos os modelos Gemini falharam. Iniciando FAILOVER DE ALTA PRECISÃO (OCR + GROQ)...")
+        try:
+            # 1. Extração via OCR (Muito mais assertivo que texto puro de PDF)
+            from .ocr_handler import ocr_fallback_gemini 
+            texto_ocr = await ocr_fallback_gemini(file_bytes)
             
-            # Se não extraiu texto (PDF de imagem), tenta OCR
-            if not texto_pdf or len(texto_pdf.strip()) < 20:
-                logger.info("📸 PDF parece ser imagem. Tentando OCR do Google Vision como Plano C...")
-                from .ocr_handler import ocr_fallback_gemini 
-                texto_pdf = await ocr_fallback_gemini(file_bytes)
+            if not texto_ocr or len(texto_ocr.strip()) < 10:
+                raise ValueError("OCR não conseguiu ler o arquivo.")
 
-            # Truncar o texto para evitar erro 413 (Payload Too Large) no Groq
-            texto_pdf_limitado = texto_pdf[:7000] if len(texto_pdf) > 7000 else texto_pdf
-
-            logger.info(f"📄 Texto obtido estruturado ({len(texto_pdf)} chars, limitado para {len(texto_pdf_limitado)}). Enviando para Groq...")
-
+            # 2. Processamento via Groq com o texto limpo do OCR
             from .ai_service import _groq_chat_completion_async
-            # Prompt de failover ainda mais rígido contra alucinações
             messages = [
-                {"role": "system", "content": "Você é um extrator de faturas de alta precisão. NÃO INVENTE DADOS. Se não entender algo, ignore. Extraia apenas compras REAIS com data e valor."},
-                {"role": "user", "content": f"{prompt}\n\nTEXTO DA FATURA ESTRUTURADO (RESUMO):\n{texto_pdf_limitado}"}
+                {"role": "system", "content": "Você é um extrator de faturas de alta precisão. Use o texto do OCR para identificar compras. Retorne apenas JSON."},
+                {"role": "user", "content": f"{prompt}\n\nTEXTO ESCANEADO (OCR):\n{texto_ocr[:8000]}"}
             ]
             groq_resp = await _groq_chat_completion_async(messages)
             
             if isinstance(groq_resp, dict) and "choices" in groq_resp:
                 text = groq_resp["choices"][0]["message"]["content"]
-                logger.info("✅ Sucesso no Failover via Groq!")
+                logger.info("✅ Sucesso no Failover OCR + Groq!")
             else:
-                raise ValueError(f"Resposta inesperada do Groq: {groq_resp}")
+                raise ValueError("Falha na resposta do Groq pós-OCR.")
         except Exception as failover_exc:
             logger.error(f"❌ Failover total falhou: {failover_exc}")
-            raise RuntimeError(f"IA indisponível no momento. Gemini: {gemini_exc} | Failover: {failover_exc}")
+            raise RuntimeError(f"IA indisponível. Gemini: {last_exc} | Failover: {failover_exc}")
 
     match = re.search(r'\{.*\}', text, re.DOTALL)
     if not match:
