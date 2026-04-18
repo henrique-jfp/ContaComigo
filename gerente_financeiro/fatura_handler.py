@@ -147,13 +147,21 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
         import fitz
         doc = fitz.open(stream=file_bytes, filetype="pdf")
         for page in doc:
-            # Preserva estrutura de colunas com "blocks"
-            blocks = page.get_text("blocks")
-            for b in sorted(blocks, key=lambda x: (x[1], x[0])):
-                texto_extraido_local += f"{b[4]}\n"
+            # 🛠️ MODO RIGOROSO: Extrai texto preservando espaços e posições (Layout=True)
+            page_text = page.get_text("text", flags=fitz.TEXT_PRESERVE_WHITESPACE | fitz.TEXT_IN_DISPLAY_ORDER)
+            texto_extraido_local += f"{page_text}\n"
         doc.close()
     except Exception as e:
         logger.warning(f"Falha na extração local de texto: {e}")
+
+    # Prompt atualizado com instrução de estrutura de tabela
+    prompt_estruturado = f"""
+    {prompt}
+    
+    INSTRUÇÃO DE ESTRUTURA:
+    O texto abaixo foi extraído de colunas. Identifique o padrão da tabela (geralmente DATA | DESCRIÇÃO | VALOR).
+    NÃO misture valores de linhas diferentes. Se o valor estiver na mesma altura horizontal da descrição, eles pertencem ao mesmo item.
+    """
 
     # 2. ESTRATÉGIA DE EXTRAÇÃO (Otimização de Quota)
     text = None
@@ -169,7 +177,7 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
                 logger.info(f"🤖 Tentando chat com {m_name}...")
                 curr_model = genai.GenerativeModel(m_name)
                 # No modo chat, passamos o texto como string, não o arquivo binário
-                response = await curr_model.generate_content_async(f"{prompt}\n\nTEXTO DA FATURA:\n{texto_extraido_local[:12000]}")
+                response = await curr_model.generate_content_async(f"{prompt_estruturado}\n\nTEXTO DA FATURA:\n{texto_extraido_local[:12000]}")
                 if response and hasattr(response, 'text') and response.text:
                     text = response.text
                     logger.info(f"✅ Sucesso via {m_name} (Modo Texto)!")
@@ -206,7 +214,7 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
             from .ai_service import _groq_chat_completion_async
             messages = [
                 {"role": "system", "content": "Você é um extrator financeiro de alta precisão. Use o texto do OCR para identificar compras. Retorne apenas JSON."},
-                {"role": "user", "content": f"{prompt}\n\nTEXTO OCR:\n{texto_ocr[:8000]}"}
+                {"role": "user", "content": f"{prompt_estruturado}\n\nTEXTO OCR:\n{texto_ocr[:8000]}"}
             ]
             groq_resp = await _groq_chat_completion_async(messages)
             if isinstance(groq_resp, dict) and "choices" in groq_resp:
