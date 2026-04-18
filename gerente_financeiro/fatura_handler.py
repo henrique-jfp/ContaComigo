@@ -148,26 +148,30 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     if not invoice_data or invoice_data.confianca < 0.2:
         raise RuntimeError("Não foi possível extrair dados confiáveis desta fatura. Verifique a qualidade do arquivo.")
 
+    # 2. FILTRAR E HIGIENIZAR DADOS
     total_pdf = invoice_data.valor_total
     transacoes_finais = []
     
+    # Itens que são apenas informativos e devem ser ignorados
+    black_list = [
+        "total", "pagamento efetuado", "saldo anterior", "cartões caixa", 
+        "limite", "demonstrativo", "fatura anterior", "saldo a pagar"
+    ]
+    
     for item in invoice_data.itens:
-        # REGRA DE OURO 1: Evitar alucinação de Total como compra (Erro CARTÕES CAIXA)
-        if total_pdf > 0 and abs(abs(item.valor) - total_pdf) < 0.1:
-            logger.warning(f"Filtrando item que parece ser o total da fatura: {item.descricao}")
+        desc_lower = item.descricao.lower()
+        
+        # REGRA 1: Ignorar apenas lixo de sumário (Juros, IOF e Multas são PERMITIDOS agora)
+        if any(term in desc_lower for term in black_list):
             continue
-            
-        # REGRA DE OURO 2: Ignorar lixo de cabeçalho/sumário e lançamentos de meses anteriores
-        black_list = ["total", "pagamento efetuado", "saldo anterior", "cartões caixa", "limite", "demonstrativo", "encargos"]
-        if any(term in item.descricao.lower() for term in black_list):
+
+        # REGRA 2: Evitar alucinação de Total como compra
+        if total_pdf > 0 and abs(abs(item.valor) - total_pdf) < 0.1:
             continue
 
         try:
-            # O UniversalInvoiceExtractor já garante o formato YYYY-MM-DD
             dt_obj = datetime.strptime(invoice_data.data, "%Y-%m-%d")
-            # Forçar ano de 2026 se a data extraída parecer ser do passado
-            if dt_obj.year < 2026:
-                dt_obj = dt_obj.replace(year=2026)
+            if dt_obj.year < 2026: dt_obj = dt_obj.replace(year=2026)
 
             transacoes_finais.append({
                 "descricao": item.descricao,
@@ -180,11 +184,7 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
         except:
             continue
 
-    banco = invoice_data.estabelecimento
-    ignoradas = 0 # O novo motor já filtra itens no prompt
-    
-    return transacoes_finais, ignoradas, banco, total_pdf
-
+    return transacoes_finais, 0, invoice_data.estabelecimento, total_pdf
 
 async def fatura_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await touch_user_interaction(update.effective_user.id, context)

@@ -66,10 +66,12 @@ class UniversalInvoiceExtractor:
         REGRAS CRÍTICAS:
         1. Identifique o estabelecimento principal e a data da transação.
         2. Se houver múltiplos itens, liste-os no campo 'itens'.
-        3. O 'valor_total' deve ser a soma dos itens.
+        3. O 'valor_total' deve ser a soma dos itens de compra e encargos.
         4. Use valores NEGATIVOS para despesas e POSITIVOS para créditos/estornos.
-        5. Sugira uma categoria baseada no estabelecimento (ex: Restaurante -> Alimentação).
-        6. Retorne APENAS o JSON no formato abaixo, sem markdown ou explicações.
+        5. JUROS, IOF e MULTAS devem ser extraídos como despesas normais.
+        6. IGNORE itens de sumário como "Saldo Anterior", "Pagamento Efetuado" ou "Total da Fatura".
+        7. Sugira uma categoria baseada no estabelecimento (ex: Restaurante -> Alimentação).
+        8. Retorne APENAS o JSON no formato abaixo, sem markdown ou explicações.
 
         ESQUEMA JSON:
         {
