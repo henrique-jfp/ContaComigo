@@ -185,9 +185,27 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     data = json.loads(match.group(0))
     
     transacoes_finais = []
+    ano_atual = datetime.now().year
+    
     for t in data.get("transacoes", []):
         try:
-            dt_obj = datetime.strptime(t["data"], "%Y-%m-%d")
+            data_str = str(t.get("data", ""))
+            dt_obj = None
+            
+            # Tenta diversos formatos de data de forma resiliente
+            for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%d/%m/%y", "%d/%m"]:
+                try:
+                    dt_obj = datetime.strptime(data_str, fmt)
+                    # Se for DD/MM, adiciona o ano atual
+                    if fmt == "%d/%m":
+                        dt_obj = dt_obj.replace(year=ano_atual)
+                    break
+                except:
+                    continue
+            
+            if not dt_obj:
+                raise ValueError(f"Formato de data desconhecido: {data_str}")
+
             transacoes_finais.append({
                 "descricao": str(t.get("descricao", "Sem descrição")),
                 "valor": float(t.get("valor", 0.0)),
@@ -197,7 +215,7 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
                 "parcela": t.get("parcela")
             })
         except Exception as e:
-            logger.warning(f"Erro ao converter data da transação da fatura: {t} - {e}")
+            logger.warning(f"Erro ao processar transação individual da fatura: {t} - {e}")
             continue
             
     banco = str(data.get("banco", "Desconhecido"))
