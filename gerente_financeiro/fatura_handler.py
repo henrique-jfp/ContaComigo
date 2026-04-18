@@ -79,6 +79,11 @@ def _get_fatura_webapp_url(page: str, token: str) -> str:
 # Versão 2.3.1 - Fix Syntax & Payload
 async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], int, str, float]:
     import config
+    # 🕵️ DEBUG DE CHAVE API (Mostra apenas pontas para segurança)
+    api_key_debug = config.GEMINI_API_KEY or ""
+    masked_key = f"{api_key_debug[:4]}...{api_key_debug[-4:]}" if len(api_key_debug) > 8 else "NAO_CONFIGURADA"
+    logger.info(f"🔑 [DEBUG] Chave API Ativa: {masked_key} | Modelo: {config.GEMINI_MODEL_NAME}")
+
     if not config.GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY não configurada")
 
@@ -149,7 +154,11 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
             doc = fitz.open(stream=file_bytes, filetype="pdf")
             texto_pdf = ""
             for page in doc:
-                texto_pdf += page.get_text()
+                # 🛠️ MELHORIA: Usar "blocks" para preservar a estrutura de colunas e evitar alucinações de valores
+                blocks = page.get_text("blocks")
+                # Ordenar blocos por posição vertical (Y) e depois horizontal (X)
+                for b in sorted(blocks, key=lambda x: (x[1], x[0])):
+                    texto_pdf += f"{b[4]}\n"
             doc.close()
             
             # Se não extraiu texto (PDF de imagem), tenta OCR
@@ -161,12 +170,13 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
             # Truncar o texto para evitar erro 413 (Payload Too Large) no Groq
             texto_pdf_limitado = texto_pdf[:7000] if len(texto_pdf) > 7000 else texto_pdf
 
-            logger.info(f"📄 Texto obtido ({len(texto_pdf)} chars, limitado para {len(texto_pdf_limitado)}). Enviando para Groq...")
+            logger.info(f"📄 Texto obtido estruturado ({len(texto_pdf)} chars, limitado para {len(texto_pdf_limitado)}). Enviando para Groq...")
 
             from .ai_service import _groq_chat_completion_async
+            # Prompt de failover ainda mais rígido contra alucinações
             messages = [
-                {"role": "system", "content": "Você é um extrator de faturas. Extraia os dados do texto e retorne APENAS um JSON válido."},
-                {"role": "user", "content": f"{prompt}\n\nTEXTO DA FATURA (RESUMO):\n{texto_pdf_limitado}"}
+                {"role": "system", "content": "Você é um extrator de faturas de alta precisão. NÃO INVENTE DADOS. Se não entender algo, ignore. Extraia apenas compras REAIS com data e valor."},
+                {"role": "user", "content": f"{prompt}\n\nTEXTO DA FATURA ESTRUTURADO (RESUMO):\n{texto_pdf_limitado}"}
             ]
             groq_resp = await _groq_chat_completion_async(messages)
             
