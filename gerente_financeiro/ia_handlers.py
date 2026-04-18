@@ -685,11 +685,11 @@ def _montar_resposta_local_alfredo(texto_usuario: str, texto_normalizado: str, d
     if _intencao_comparacao_financeira(texto_normalizado):
         return _resumo_comparacao_local(db, usuario_db.id)
 
-    if _intencao_alerta_financeiro(texto_normalizado):
-        return _resumo_alerta_local(db, usuario_db.id)
-
     if _intencao_previsao_financeira(texto_normalizado):
         return _resumo_previsao_local(db, usuario_db.id, saldo, entradas, saidas)
+
+    if _intencao_alerta_financeiro(texto_normalizado):
+        return _resumo_alerta_local(db, usuario_db.id)
 
     if _intencao_analise_gastos(texto_normalizado):
         return _resumo_analise_gastos_local(db, usuario_db.id)
@@ -922,6 +922,20 @@ def _resumo_previsao_local(db, usuario_id: int, saldo: float, entradas: float, s
     
     saidas_mes = _calcular_saidas_reais(lanc_mes, ignore_ids)
     entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith(("entr", "recei")))
+
+    if not lanc_mes or (abs(entradas_mes) < 0.01 and abs(saidas_mes) < 0.01):
+        return (
+            "📭 <b>Ainda não tenho base suficiente deste mês</b>\n\n"
+            "Não encontrei lançamentos relevantes de "
+            f"{agora.strftime('%m/%Y')} para projetar se você fecha no vermelho."
+        )
+
+    if entradas_mes <= 0 and saidas_mes > 0:
+        return (
+            "⚠️ <b>Sinal de risco neste mês</b>\n\n"
+            f"Já identifiquei saídas de {_formatar_valor_brasileiro(saidas_mes)} "
+            "e nenhuma entrada registrada no período. Hoje você está em rota de aperto."
+        )
     
     media_diaria_saida = saidas_mes / dias_passados
     proj_saida = media_diaria_saida * dias_no_mes
@@ -1278,6 +1292,13 @@ def _intencao_previsao_financeira(texto: str) -> bool:
         "melhor segurar",
         "dar pra eu comprar",
         "dá pra eu comprar",
+        "fechar no vermelho",
+        "risco de fechar",
+        "fechar esse mês",
+        "fechar este mês",
+        "fechar o mes",
+        "fechar esse mes",
+        "fechar este mes",
     ]
     return any(s in texto for s in sinais)
 
