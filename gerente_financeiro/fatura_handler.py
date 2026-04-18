@@ -192,17 +192,29 @@ _SECAO_ANCORAS = {
         "transacoes de",
         "lançamentos",
         "lancamentos",
+        "detalhamento",
+        "gastos do mes",
+        "gastos do mês",
+        "movimentacao",
+        "movimentação",
     ],
     "parceladas": [
         "compras parceladas",
         "parceladas (cartão",
         "parceladas (cartao",
+        "parcelamentos",
+        "transações parceladas",
+        "lancamentos parcelados",
     ],
     "outros": [
         "outros (cartão",
         "outros (cartao",
         "encargos",
         "anuidade",
+        "taxas",
+        "tarifas",
+        "serviços",
+        "servicos",
     ],
 }
 
@@ -211,7 +223,8 @@ _SECAO_FIM = [
     "total compras parceladas",
     "total outros",
     "total final",
-    "total ",
+    "total a pagar",
+    "pagamento minimo",
 ]
 
 _DESC_BLOQUEADA = [
@@ -307,106 +320,81 @@ def _extrair_texto_pdf_local(file_bytes: bytes) -> list[str]:
     return linhas
 
 
-def _detectar_ano_fatura(linhas: list[str]) -> int:
-    texto = "\n".join(linhas[:200])
-    match = re.search(r"\b(20\d{2})\b", texto)
-    if match:
-        return int(match.group(1))
-    return datetime.now().year
+def _detectar_referencia_fatura(linhas: list[str]) -> tuple[int, int]:
+    """Detecta mês e ano de referência da fatura analisando o início do texto."""
+    texto = "\n".join(linhas[:200]).lower()
+    
+    # 1. Tenta encontrar "Vencimento: DD/MM/AAAA"
+    match_venc = re.search(r"vencimento:?\s*(\d{2})/(\d{2})/(\d{4})", texto)
+    if match_venc:
+        return int(match_venc.group(2)), int(match_venc.group(3))
+        
+    # 2. Tenta encontrar Ano
+    ano_fatura = datetime.now().year
+    match_ano = re.search(r"\b(20\d{2})\b", texto)
+    if match_ano:
+        ano_fatura = int(match_ano.group(1))
+        
+    # 3. Tenta encontrar Nome do Mês
+    for nome_mes, num_mes in _MESES_MAP.items():
+        if f"{nome_mes}/{ano_fatura}" in texto or f"{nome_mes} {ano_fatura}" in texto:
+            return num_mes, ano_fatura
+            
+    return datetime.now().month, ano_fatura
 
 
-def _detectar_banco_fatura(texto: str) -> str:
-    texto_norm = _normalizar_texto_parser(texto)
-    bancos = [
-        ("Nubank", ["nubank"]),
-        ("Inter", ["inter"]),
-        ("Caixa", ["caixa", "cartoes caixa", "cartões caixa"]),
-        ("Bradesco", ["bradesco"]),
-    ]
-    for nome, termos in bancos:
-        if any(termo in texto_norm for termo in termos):
-            return nome
-    return "Desconhecido"
+def _resolver_ano_transacao(dia: int, mes: int, mes_ref: int, ano_ref: int) -> int:
+    """Resolve o ano de uma transação considerando a virada de ano."""
+    # Se a fatura é de Janeiro (1) e o lançamento é de Dezembro (12)
+    if mes == 12 and mes_ref == 1:
+        return ano_ref - 1
+    # Se o lançamento é de um mês muito a frente da fatura (improvável, mas segurança)
+    if mes > mes_ref + 1 and mes != 12:
+         # Pode ser uma fatura antiga sendo lida no ano atual
+         pass
+    return ano_ref
 
 
-def _detectar_secao_linha(linha: str) -> str | None:
-    linha_norm = _normalizar_texto_parser(linha)
-    for secao, ancoras in _SECAO_ANCORAS.items():
-        if any(ancora in linha_norm for ancora in ancoras):
-            return secao
-    return None
-
-
-def _linha_indica_fim_secao(linha: str) -> bool:
-    linha_norm = _normalizar_texto_parser(linha)
-    return any(marcador in linha_norm for marcador in _SECAO_FIM)
-
-
-def _parse_valor_fatura(raw_amount: str, descricao: str) -> float | None:
-    bruto = (raw_amount or "").strip()
-    if not bruto:
-        return None
-
-    marker = None
-    if bruto.endswith(("D", "C")):
-        marker = bruto[-1]
-        bruto = bruto[:-1].strip()
-
-    bruto = bruto.replace("R$", "").replace("US$", "").replace("U$$", "").strip()
-    negativo_expresso = bruto.startswith("-")
-    bruto = bruto.lstrip("+-").strip()
-    bruto = bruto.replace(".", "").replace(",", ".")
-    try:
-        valor = float(bruto)
-    except Exception:
-        return None
-
-    descricao_norm = _normalizar_texto_parser(descricao)
-    if marker == "C":
-        return abs(valor)
-    if marker == "D":
-        return -abs(valor)
-    if negativo_expresso:
-        return -abs(valor)
-    if any(token in descricao_norm for token in ["estorno", "ajuste cred", "credito", "crédito", "cashback"]):
-        return abs(valor)
-    return -abs(valor)
-
-
-def _parse_data_fatura_local(raw_data: str, ano_fatura: int) -> datetime | None:
+def _parse_data_fatura_local(raw_data: str, mes_ref: int, ano_ref: int) -> datetime | None:
     data = (raw_data or "").strip().replace(".", "")
     if not data:
         return None
 
+    # Formato DD/MM ou DD/MM/AAAA
     if re.fullmatch(r"\d{2}/\d{2}(?:/\d{2,4})?", data):
         partes = data.split("/")
         dia = int(partes[0])
         mes = int(partes[1])
-        ano = ano_fatura if len(partes) == 2 else int(partes[2])
-        if ano < 100:
-            ano += 2000
+        if len(partes) == 3:
+            ano = int(partes[2])
+            if ano < 100: ano += 2000
+        else:
+            ano = _resolver_ano_transacao(dia, mes, mes_ref, ano_ref)
         try:
             return datetime(ano, mes, dia)
         except Exception:
             return None
 
-    match_dd_mmm = re.fullmatch(r"(\d{2})\s+([A-Za-zÇç]{3,9})", data)
+    # Formato DD MMM (ex: 25 MAR)
+    match_dd_mmm = re.fullmatch(r"(\d{2})\s+([A-Za-zÇç]{3,9})\.?", data)
     if match_dd_mmm:
         dia = int(match_dd_mmm.group(1))
         mes_txt = _normalizar_texto_parser(match_dd_mmm.group(2))
         mes = _MESES_MAP.get(mes_txt)
         if mes:
+            ano = _resolver_ano_transacao(dia, mes, mes_ref, ano_ref)
             try:
-                return datetime(ano_fatura, mes, dia)
+                return datetime(ano, mes, dia)
             except Exception:
                 return None
 
-    match_ext = re.fullmatch(r"(\d{2})\s+de\s+([A-Za-zÇç]{3,9})(?:\s+(\d{4}))?", data, flags=re.IGNORECASE)
+    # Formato DD de MES de AAAA
+    match_ext = re.fullmatch(r"(\d{2})\s+de\s+([A-Za-zÇç]{3,9})(?:\s+de\s+(\d{4}))?", data, flags=re.IGNORECASE)
     if match_ext:
         dia = int(match_ext.group(1))
         mes_txt = _normalizar_texto_parser(match_ext.group(2))
         mes = _MESES_MAP.get(mes_txt)
-        ano = int(match_ext.group(3)) if match_ext.group(3) else ano_fatura
+        ano = int(match_ext.group(3)) if match_ext.group(3) else _resolver_ano_transacao(dia, mes, mes_ref, ano_ref)
         if mes:
             try:
                 return datetime(ano, mes, dia)
@@ -453,20 +441,20 @@ def _descricao_deve_ser_ignoradas(descricao: str) -> bool:
     return any(token in desc_norm for token in _DESC_BLOQUEADA)
 
 
-def _parse_linha_transacao_fatura(linha: str, ano_fatura: int) -> dict | None:
+def _parse_linha_transacao_fatura(linha: str, mes_ref: int, ano_ref: int) -> dict | None:
     padroes = [
-        re.compile(r"^(?P<data>\d{2}/\d{2}(?:/\d{2,4})?)\s+(?P<corpo>.+?)\s+(?P<valor>-?R?\$?\s?[0-9\.\,]+(?:[DC])?)$"),
-        re.compile(r"^(?P<data>\d{2}\s+de\s+[A-Za-zÇç]{3,9}\.?(?:\s+\d{4})?)\s+(?P<corpo>.+?)\s+(?P<valor>-?R?\$?\s?[0-9\.\,]+(?:[DC])?)$", re.IGNORECASE),
-        re.compile(r"^(?P<data>\d{2}\s+[A-Za-zÇç]{3,9}\.?)\s+(?P<corpo>.+?)\s+(?P<valor>-?R?\$?\s?[0-9\.\,]+)$", re.IGNORECASE),
+        re.compile(r"^(?P<data>\d{2}/\d{2}(?:/\d{2,4})?)\s+(?P<corpo>.+?)\s+(?P<valor>-?R?\$?\s?[0-9\.\,]+\s*(?:[DCdc])?)$"),
+        re.compile(r"^(?P<data>\d{2}\s+de\s+[A-Za-zÇç]{3,9}\.?(?:\s+\d{4})?)\s+(?P<corpo>.+?)\s+(?P<valor>-?R?\$?\s?[0-9\.\,]+\s*(?:[DCdc])?)$", re.IGNORECASE),
+        re.compile(r"^(?P<data>\d{2}\s+[A-Za-zÇç]{3,9}\.?)\s+(?P<corpo>.+?)\s+(?P<valor>-?R?\$?\s?[0-9\.\,]+\s*(?:[DCdc])?)$", re.IGNORECASE),
     ]
 
     for padrao in padroes:
         match = padrao.match(linha.strip())
         if not match:
             continue
-        dt_obj = _parse_data_fatura_local(match.group("data"), ano_fatura)
+        dt_obj = _parse_data_fatura_local(match.group("data"), mes_ref, ano_ref)
         if not dt_obj:
-            return None
+            continue
 
         corpo = match.group("corpo").strip()
         descricao, parcela = _extrair_parcela_da_descricao(corpo)
@@ -530,7 +518,7 @@ def _parse_fatura_pdf_local(file_bytes: bytes) -> Tuple[List[Dict], int, str, fl
     if not linhas:
         return [], 0, "Desconhecido", 0.0
 
-    ano_fatura = _detectar_ano_fatura(linhas)
+    mes_ref, ano_ref = _detectar_referencia_fatura(linhas)
     banco = _detectar_banco_fatura("\n".join(linhas[:160]))
     total_pdf = _detectar_total_fatura_local(linhas)
 
@@ -548,7 +536,7 @@ def _parse_fatura_pdf_local(file_bytes: bytes) -> Tuple[List[Dict], int, str, fl
         if secao_ativa is None:
             continue
 
-        parsed = _parse_linha_transacao_fatura(linha, ano_fatura)
+        parsed = _parse_linha_transacao_fatura(linha, mes_ref, ano_ref)
         if not parsed:
             continue
         parsed["origem"] = f"fatura_parser_{banco.lower().replace(' ', '_')}"
@@ -578,19 +566,12 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     except Exception as e:
         logger.warning(f"Erro ao re-configurar genai no fatura_handler: {e}")
 
-    ano_atual = datetime.now().year
-    mes_atual = datetime.now().month
+    linhas_preview = _extrair_texto_pdf_local(file_bytes)
+    mes_ref, ano_ref = _detectar_referencia_fatura(linhas_preview)
+    
     current_model = getattr(config, "GEMINI_MODEL_NAME", "gemini-2.5-flash")
-    model_candidates = []
-    for candidate in [
-        current_model,
-        "gemini-2.5-flash",
-        "gemini-1.5-flash",
-        "gemini-2.5-flash-lite",
-        "gemini-2.0-flash",
-    ]:
-        if candidate and candidate not in model_candidates:
-            model_candidates.append(candidate)
+    model_candidates = [current_model, "gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
+    model_candidates = list(dict.fromkeys([m for m in model_candidates if m]))
 
     logger.info("Pipeline de fatura: parser local -> Gemini multimodal -> fallback local/Universal")
 
@@ -598,14 +579,15 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     Você é um extrator universal de faturas de cartão de crédito.
     Leia o PDF de QUALQUER banco/cartão e retorne SOMENTE JSON válido.
 
-    DATA DE REFERÊNCIA: {datetime.now().strftime('%d/%m/%Y')}
-    MÊS DE REFERÊNCIA PRINCIPAL: {mes_atual:02d}/{ano_atual}
+    DATA DE REFERÊNCIA (HOJE): {datetime.now().strftime('%d/%m/%Y')}
+    MÊS DE REFERÊNCIA DA FATURA: {mes_ref:02d}/{ano_ref}
 
     REGRAS:
     1. Extraia compras, estornos e créditos reais da fatura aberta.
     2. Ignore totais, saldo anterior, limite, pagamento efetuado, pagamento recebido, linhas como "OBRIGADO PELO PAGAMENTO", "TOTAL DA FATURA ANTERIOR", "SALDO CREDITO ROTATIVO" e blocos de resumo.
     3. Para compras, use valor NEGATIVO. Para estornos/créditos, use valor POSITIVO.
-    4. Preserve a data EXATA do lançamento como aparece no PDF. Se a data vier como DD/MM, complete apenas o ANO {ano_atual}. NÃO troque o mês para o mês atual.
+    4. Para datas DD/MM, use o ano {ano_ref}. 
+       IMPORTANTE: Se a fatura for de JANEIRO e o lançamento for de DEZEMBRO, use o ano {ano_ref - 1}.
     5. Se houver parcelamento como 02/10, retorne isso em "parcela".
     6. A descrição deve ser o estabelecimento real, nunca o nome do banco.
     7. Se tiver dúvida entre manter ou remover uma linha, só mantenha se houver data + valor + estabelecimento plausível.
@@ -617,7 +599,7 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
         "total_fatura": 0.0,
         "transacoes": [
             {{
-                "data": "{ano_atual}-{mes_atual:02d}-01",
+                "data": "{ano_ref}-{mes_ref:02d}-01",
                 "descricao": "ESTABELECIMENTO",
                 "valor": -123.45,
                 "parcela": null
@@ -628,23 +610,20 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     """
 
     def _parse_json_response(text: str) -> dict | None:
-        if not text:
-            return None
+        if not text: return None
         match = re.search(r'\{.*\}', text, re.DOTALL)
-        if not match:
-            return None
+        if not match: return None
         raw_json = re.sub(r',\s*([\]\}])', r'\1', match.group(0))
-        try:
-            return json.loads(raw_json)
-        except Exception:
-            return None
+        try: return json.loads(raw_json)
+        except Exception: return None
 
     def _parse_data_fatura(raw_data: str) -> datetime | None:
         for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d/%m/%y", "%d/%m"):
             try:
                 dt = datetime.strptime(str(raw_data), fmt)
                 if fmt == "%d/%m":
-                    dt = dt.replace(year=ano_atual)
+                    ano = _resolver_ano_transacao(dt.day, dt.month, mes_ref, ano_ref)
+                    dt = dt.replace(year=ano)
                 elif dt.year < 100:
                     dt = dt.replace(year=2000 + dt.year)
                 return dt
