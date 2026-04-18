@@ -70,37 +70,34 @@ class UniversalInvoiceExtractor:
         
         hoje = datetime.now().strftime("%Y-%m-%d")
         prompt = f"""
-        Você é um Especialista em Extração de Dados Bancários de altíssima precisão.
-        Data atual do sistema: {hoje} (Considere o ano de 2026 se não houver ano explícito).
+        Você é um Especialista em Extração de Dados Bancários com meta de 100% de acurácia.
+        Data hoje: {hoje}. Ano referência: 2026.
 
-        INSTRUÇÕES DE EXTRAÇÃO (RIGOROSAS):
-        1. IDENTIFIQUE O TIPO: Se for um extrato/fatura de cartão, o 'estabelecimento' é o banco. Se for uma nota de compra, o 'estabelecimento' é a loja.
-        2. DATA DO DOCUMENTO: Extraia a data de fechamento ou vencimento da fatura.
-        3. LISTA DE ITENS (TRANSAÇÕES):
-           - Extraia TODAS as compras, débitos, juros e taxas.
-           - Para cada item, extraia a 'data' específica (YYYY-MM-DD), 'descricao', 'valor' e 'parcela' (se houver).
-           - Use VALORES NEGATIVOS para despesas/débitos e VALORES POSITIVOS para estornos/créditos.
-        4. FILTRO DE RUÍDO (O QUE IGNORAR):
-           - IGNORE: "Pagamento de Fatura", "Saldo Anterior", "Total a Pagar", "Total da Fatura", "Crédito de Pagamento".
-           - IGNORE: Itens que sejam apenas informativos ou subtotais de categorias.
-           - IGNORE: Parcelas futuras que ainda não foram lançadas nesta fatura atual.
-        5. HIGIENIZAÇÃO: Remova prefixos como "COMPRA NO CARTAO" ou "ESTO -" da descrição. Mantenha o nome real do local.
+        REGRAS DE OURO PARA 98%+ DE PRECISÃO:
+        1. ASSOCIAÇÃO RÍGIDA: Cada 'valor' deve estar vinculado à sua 'data' e 'descrição' exatas na mesma linha/bloco. Proibido repetir o mesmo valor para datas diferentes ou vice-versa.
+        2. DESCRIÇÃO COMPLETA: Extraia o nome INTEGRAL do estabelecimento. Se houver endereços (ex: SBS Quadra 4...), mantenha-os se fizerem parte da identificação única.
+        3. INTELIGÊNCIA TEMPORAL: 
+           - Datas DD/MM devem ser convertidas para YYYY-MM-DD.
+           - Se hoje é Abril/2026, uma data '15/03' é obrigatoriamente '2026-03-15'.
+           - Ignore itens com datas futuras ao fechamento da fatura.
+        4. FILTRO DE TOTARES: Nunca extraia "Total", "Subtotal", "Saldo Anterior" ou "Pagamento" como se fossem compras.
+        5. PARCELAMENTO: Se houver "02/10", extraia "2/10" no campo parcela e mantenha o nome da loja limpo.
 
-        ESQUEMA JSON OBRIGATÓRIO:
+        JSON OBRIGATÓRIO (APENAS O OBJETO):
         {{
-            "data": "YYYY-MM-DD",
-            "valor_total": float (valor final da fatura),
-            "estabelecimento": "string (Nome do Banco ou Loja)",
+            "data": "Data de fechamento (YYYY-MM-DD)",
+            "valor_total": float (valor final a pagar),
+            "estabelecimento": "Banco emissor",
             "itens": [
                 {{
                     "data": "YYYY-MM-DD",
-                    "descricao": "string",
-                    "valor": float (ex: -50.25),
-                    "parcela": "string ou null"
+                    "descricao": "NOME COMPLETO LOJA",
+                    "valor": float (negativo para despesa),
+                    "parcela": "x/y ou null"
                 }}
             ],
             "categoria_sugerida": "string",
-            "confianca": float (0.0 a 1.0)
+            "confianca": float
         }}
         """
 

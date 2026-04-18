@@ -1794,6 +1794,16 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             "Juros_e_Taxas": sum(abs(float(l.valor)) for l in saidas_mes_list if any(x in (l.descricao or "").lower() for x in ["juros", "mora", "multa", "iof", "taxa"]))
         }
 
+        # --- METAS (VERSÃO COMPRIMIDA) ---
+        metas_ativas = db.query(Objetivo).filter(
+            Objetivo.id_usuario == usuario_db.id,
+            func.coalesce(Objetivo.valor_atual, 0) < func.coalesce(Objetivo.valor_meta, 0)
+        ).all()
+        resumo_metas = [
+            f"{m.descricao[:15]}: {int((float(m.valor_atual or 0)/float(m.valor_meta or 0.01))*100)}%"
+            for m in metas_ativas if m.valor_meta and m.valor_meta > 0
+        ]
+
         contexto_financeiro_str = json.dumps(
             {
                 "data_hora_atual": hoje_str,
