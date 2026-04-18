@@ -2006,17 +2006,34 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 "content": res_str
             })
             
-            # Segunda chamada à IA para interpretar os dados
+            # Segunda chamada à IA para interpretar os dados (Orquestrada)
             logger.info(f"🧠 [ALFREDO] Iniciando interpretação dos dados (Tool: {fn_name}, Tamanho: {len(res_str)} chars)")
-            tools_para_ia = list(_ALFREDO_TOOLS)
-            from pierre_finance.ai_tools import obter_tools_pierre
-            tools_para_ia.extend(obter_tools_pierre())
             
-            # Se a segunda chamada falhar (ex: por contexto ainda grande), tentaremos Gemini sem as definições das tools
-            completion2 = await _smart_ai_completion_async(messages, tools=tools_para_ia)
-            if not completion2:
-                 logger.warning("⚠️ [ALFREDO] Orquestrador falhou na interpretação. Tentando Gemini direto como fallback.")
-                 completion2 = await _gemini_chat_completion_async(messages)
+            prompt_interpretacao = f"""
+            Você é o Alfredo, interpretando dados brutos do banco para o usuário.
+            DATA ATUAL: {hoje_str}.
+            CONTEXTO: {contexto_financeiro_str}
+            
+            DADOS RECEBIDOS DA FERRAMENTA '{fn_name}':
+            {res_str}
+            
+            INSTRUÇÃO: Responda a pergunta do usuário de forma humana, direta e precisa usando estes dados. 
+            Se os dados indicarem risco (ex: muitos gastos, pouco saldo), avise com clareza.
+            Mantenha sua personalidade: direto, inteligente e parceiro.
+            """
+
+            messages_interpret = [
+                {"role": "system", "content": prompt_interpretacao},
+                {"role": "user", "content": texto_usuario}
+            ]
+            
+            completion2 = await _smart_ai_completion_async(messages_interpret)
+            
+            # Fallback agressivo se Cerebras/Groq falharem na interpretação
+            if not completion2 or (hasattr(completion2, 'get') and not completion2.get("choices")):
+                logger.warning("⚠️ [ALFREDO] Orquestrador falhou na interpretação. Forçando Gemini...")
+                from gerente_financeiro.ai_service import _gemini_chat_completion_async
+                completion2 = await _gemini_chat_completion_async(messages_interpret)
 
             if completion2:
                 if isinstance(completion2, str):
@@ -2028,32 +2045,16 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 
                 logger.info(f"✅ [ALFREDO] Resposta da IA obtida (Tamanho: {len(final_text or '')} chars)")
                 
-                # 🛡️ ANTI-LEAK: Remove JSON de tool call que o Cerebras/Groq às vezes vaza no texto
+                # Limpeza de vazamento de JSON (Anti-Leak)
                 if final_text and ("{" in final_text and "}" in final_text and "name" in final_text):
-                    logger.warning(f"⚠️ [ALFREDO] Leak de JSON detectado na resposta final. Limpando...")
-                    # Tenta extrair apenas a parte que NÃO é JSON
-                    linhas = []
-                    for l in final_text.split("\n"):
-                        l_strip = l.strip()
-                        if l_strip.startswith("{") or l_strip.endswith("}") or l_strip.startswith('"') or l_strip.startswith("'"):
-                            continue
-                        linhas.append(l)
-                    
-                    texto_limpo = "\n".join(linhas).strip()
-                    # Só aplica a limpeza se o texto resultante não for muito pequeno
-                    if len(texto_limpo) > 10:
-                        final_text = texto_limpo
-                    else:
-                        # Se ficou pequeno demais, remove apenas o bloco JSON usando regex
-                        final_text = re.sub(r'\{.*\}', '', final_text, flags=re.DOTALL).strip()
+                    final_text = re.sub(r'\{.*\}', '', final_text, flags=re.DOTALL).strip()
                 
                 if not final_text or len(final_text.strip()) < 5:
-                    logger.error(f"❌ [ALFREDO] Resposta final muito curta ou vazia: '{final_text}'")
-                    final_text = "Recebi os dados do banco, mas eles vieram em um formato complexo. Por favor, tente perguntar de outra forma (ex: 'qual o valor total da minha fatura?') ou verifique o MiniApp."
+                    final_text = "Recebi os dados do seu banco, mas não consegui gerar uma análise clara agora. No MiniApp você consegue ver o detalhamento completo em tempo real!"
                 
                 await _enviar_resposta_html_segura(update.message, final_text)
             else:
-                await _enviar_resposta_html_segura(update.message, "Não consegui interpretar os dados bancários agora. Pode ser uma instabilidade momentânea na conexão com o banco.")
+                await _enviar_resposta_html_segura(update.message, "Ocorreu uma instabilidade na inteligência de análise. Por favor, verifique seu saldo e lançamentos diretamente no MiniApp.")
             
             return ConversationHandler.END
 

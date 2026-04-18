@@ -152,13 +152,36 @@ class UniversalInvoiceExtractor:
                 return None
 
             clean_json = match.group(1)
-            # Remover possíveis comentários ou lixo antes de dar parse
-            clean_json = re.sub(r'//.*', '', clean_json) # remove comentários de linha única
+            # Limpeza prévia
+            clean_json = re.sub(r'//.*', '', clean_json) # remove comentários
             
-            json_data = json.loads(clean_json)
+            try:
+                json_data = json.loads(clean_json)
+            except json.JSONDecodeError:
+                # Tentar "consertar" JSON truncado ou malformado (comum em IAs)
+                logger.warning("JSON malformado detectado. Tentando reparo automático...")
+                
+                # 1. Remover vírgulas antes de fechamento de array/objeto: ,] ou ,}
+                repaired = re.sub(r',\s*([\]\}])', r'\1', clean_json)
+                
+                # 2. Se terminar em array aberto, tenta fechar
+                if repaired.count('[') > repaired.count(']'):
+                    repaired = repaired.rstrip()
+                    if repaired.endswith(','): repaired = repaired[:-1]
+                    repaired += ']}' # Fecha o item e o objeto raiz
+                
+                # 3. Tentar fechar chaves se faltar
+                open_braces = repaired.count('{')
+                close_braces = repaired.count('}')
+                if open_braces > close_braces:
+                    repaired += '}' * (open_braces - close_braces)
+                
+                json_data = json.loads(repaired)
+                logger.info("✅ JSON reparado com sucesso!")
+            
             return InvoiceSchema(**json_data)
         except Exception as e:
-            logger.error(f"Erro ao decodificar JSON da IA: {e} | Texto: {text[:500]}")
+            logger.error(f"Erro fatal ao decodificar JSON da IA: {e} | Texto: {text[:500]}")
             return None
 
     async def process_and_save(self, db: Session, user_id: int, file_bytes: bytes, mime_type: str = "application/pdf") -> Tuple[bool, str]:
