@@ -1994,9 +1994,21 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 # 🛡️ ANTI-LEAK: Remove JSON de tool call que o Cerebras/Groq às vezes vaza no texto
                 if final_text and ("{" in final_text and "}" in final_text and "name" in final_text):
                     logger.warning(f"⚠️ [ALFREDO] Leak de JSON detectado na resposta final. Limpando...")
-                    # Tenta extrair apenas a parte que NÃO é JSON ou dá fallback
-                    linhas = [l for l in final_text.split("\n") if not (l.strip().startswith("{") or l.strip().endswith("}"))]
-                    final_text = "\n".join(linhas).strip()
+                    # Tenta extrair apenas a parte que NÃO é JSON
+                    linhas = []
+                    for l in final_text.split("\n"):
+                        l_strip = l.strip()
+                        if l_strip.startswith("{") or l_strip.endswith("}") or l_strip.startswith('"') or l_strip.startswith("'"):
+                            continue
+                        linhas.append(l)
+                    
+                    texto_limpo = "\n".join(linhas).strip()
+                    # Só aplica a limpeza se o texto resultante não for muito pequeno
+                    if len(texto_limpo) > 10:
+                        final_text = texto_limpo
+                    else:
+                        # Se ficou pequeno demais, remove apenas o bloco JSON usando regex
+                        final_text = re.sub(r'\{.*\}', '', final_text, flags=re.DOTALL).strip()
                 
                 if not final_text or len(final_text.strip()) < 5:
                     logger.error(f"❌ [ALFREDO] Resposta final muito curta ou vazia: '{final_text}'")

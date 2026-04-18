@@ -69,8 +69,10 @@ async def _gemini_chat_completion_async(messages: list[dict]) -> str | None:
     max_retries = 1
     for attempt in range(max_retries + 1):
         try:
+            # 🛠️ USAR MODELO 2.5 FLASH LITE PARA MAIOR COTA
+            model_name = config.GEMINI_MODEL_NAME or "gemini-2.5-flash-lite"
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
+            model = genai.GenerativeModel(model_name)
             
             prompt_parts = []
             for m in messages:

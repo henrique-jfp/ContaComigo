@@ -93,12 +93,37 @@ class UniversalInvoiceExtractor:
             response = await self.model.generate_content_async(content)
             
             if not response or not hasattr(response, 'text'):
-                logger.error("Resposta do Gemini vazia ou sem texto.")
-                return None
+                raise ValueError("Resposta do Gemini vazia.")
 
             text = response.text
-            # Limpeza básica do JSON (remover ```json ... ``` se houver)
-            match = re.search(r'\{.*\}', text, re.DOTALL)
+        except Exception as e:
+            logger.warning(f"⚠️ Gemini falhou no InvoiceProcessor: {e}. Tentando Failover Groq...")
+            try:
+                # Extrair texto via fitz para o Groq
+                import fitz
+                doc = fitz.open(stream=file_bytes, filetype="pdf")
+                texto_pdf = ""
+                for page in doc:
+                    texto_pdf += page.get_text("text", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+                doc.close()
+
+                from .ai_service import _groq_chat_completion_async
+                messages = [
+                    {"role": "system", "content": "Você é um extrator financeiro de alta precisão. Extraia os dados para JSON."},
+                    {"role": "user", "content": f"{prompt}\n\nTEXTO DA FATURA:\n{texto_pdf[:8000]}"}
+                ]
+                groq_resp = await _groq_chat_completion_async(messages)
+                if isinstance(groq_resp, dict) and "choices" in groq_resp:
+                    text = groq_resp["choices"][0]["message"]["content"]
+                    logger.info("✅ Sucesso no Failover Groq dentro do InvoiceProcessor!")
+                else:
+                    raise ValueError("Falha na resposta do Groq.")
+            except Exception as fe:
+                logger.error(f"❌ Falha total na extração (Gemini & Groq): {fe}")
+                return None
+
+        # Limpeza básica do JSON
+        match = re.search(r'\{.*\}', text, re.DOTALL)
             if not match:
                 logger.error(f"IA não retornou JSON válido. Resposta: {text[:200]}...")
                 return None
