@@ -79,121 +79,232 @@ def _get_fatura_webapp_url(page: str, token: str) -> str:
 # Versão 2.3.1 - Fix Syntax & Payload
 async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], int, str, float]:
     import config
-    # 🕵️ DEBUG DE CHAVE API (Mostra apenas pontas para segurança)
+    if not config.GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY não configurada")
+
     api_key_debug = config.GEMINI_API_KEY or ""
     masked_key = f"{api_key_debug[:4]}...{api_key_debug[-4:]}" if len(api_key_debug) > 8 else "NAO_CONFIGURADA"
     logger.info(f"🔑 [DEBUG] Chave API Ativa: {masked_key} | Modelo: {config.GEMINI_MODEL_NAME}")
 
-    if not config.GEMINI_API_KEY:
-        raise RuntimeError("GEMINI_API_KEY não configurada")
-
-    # A configuração global já deve estar feita em config.py, mas reforçamos aqui
     try:
         genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'\""))
     except Exception as e:
         logger.warning(f"Erro ao re-configurar genai no fatura_handler: {e}")
 
-    current_model = getattr(config, "GEMINI_MODEL_NAME", "gemini-flash-latest")
-    logger.info(
-        "Usando UniversalInvoiceExtractor para extração de fatura (modelo configurado: %s)",
+    ano_atual = datetime.now().year
+    mes_atual = datetime.now().month
+    current_model = getattr(config, "GEMINI_MODEL_NAME", "gemini-2.5-flash")
+    model_candidates = []
+    for candidate in [
         current_model,
-    )
-    
+        "gemini-2.5-flash",
+        "gemini-1.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash",
+    ]:
+        if candidate and candidate not in model_candidates:
+            model_candidates.append(candidate)
+
+    logger.info("Pipeline de fatura: Gemini multimodal direto -> UniversalInvoiceExtractor")
+
     prompt = f"""
-    Você é um extrator de dados de faturas de cartão de crédito especialista e rigoroso.
-    DATA ATUAL DO SISTEMA: {datetime.now().strftime('%d/%m/%Y')} (Considere que estamos em ABRIL de 2026).
-    
-    Analise o texto da fatura e extraia APENAS as compras e créditos REAIS do mês de ABRIL de 2026.
-    
-    REGRAS DE OURO (NÃO DESCUMPRA):
-    1. IGNORE qualquer linha que diga "Total da Fatura", "Saldo Anterior", "Pagamento Efetuado", "Encargos", "Juros" ou "IOF" como se fosse uma compra. 
-    2. Extraia APENAS itens que tenham uma DATA de compra clara e um ESTABELECIMENTO.
-    3. Se o texto extraído via OCR/PDF estiver bagunçado, use sua inteligência para associar a DATA correta ao VALOR correto.
-    4. O valor deve ser NEGATIVO para despesas (ex: -50.00) e POSITIVO para estornos ou pagamentos identificados (ex: 100.00).
-    5. Se a data vier apenas como "DD/MM", assuma SEMPRE o ano de 2026.
-    6. Se encontrar parcelamentos como "Loja X 02/10", extraia a descrição "Loja X" e a parcela "2/10".
-    
-    FORMATO JSON OBRIGATÓRIO:
+    Você é um extrator universal de faturas de cartão de crédito.
+    Leia o PDF de QUALQUER banco/cartão e retorne SOMENTE JSON válido.
+
+    DATA DE REFERÊNCIA: {datetime.now().strftime('%d/%m/%Y')}
+    MÊS DE REFERÊNCIA PRINCIPAL: {mes_atual:02d}/{ano_atual}
+
+    REGRAS:
+    1. Extraia compras, estornos e créditos reais da fatura aberta.
+    2. Ignore totais, saldo anterior, limite, pagamento efetuado, pagamento recebido, encargos, juros, IOF e blocos de resumo.
+    3. Para compras, use valor NEGATIVO. Para estornos/créditos, use valor POSITIVO.
+    4. Se a data vier como DD/MM, complete com o ano {ano_atual}.
+    5. Se houver parcelamento como 02/10, retorne isso em "parcela".
+    6. A descrição deve ser o estabelecimento real, nunca o nome do banco.
+    7. Se tiver dúvida entre manter ou remover uma linha, só mantenha se houver data + valor + estabelecimento plausível.
+
+    JSON OBRIGATÓRIO:
     {{
         "banco": "Nome do Banco",
         "total_fatura": 0.0,
         "transacoes": [
             {{
-                "data": "2026-04-DD",
-                "descricao": "NOME REAL DO ESTABELECIMENTO",
+                "data": "{ano_atual}-{mes_atual:02d}-01",
+                "descricao": "ESTABELECIMENTO",
                 "valor": -123.45,
-                "parcela": "1/12"
+                "parcela": null
             }}
         ],
         "ignoradas": 0
     }}
     """
-    
-    # 1. USAR O NOVO MOTOR UNIVERSAL (MAIS RÍGIDO)
-    from .invoice_processor import UniversalInvoiceExtractor
-    
-    extractor = UniversalInvoiceExtractor()
-    logger.info("🚀 Iniciando extração com UniversalInvoiceExtractor")
-    
-    # Extração via motor universal (IA visual de alta precisão)
-    invoice_data = await extractor.extract_from_file(file_bytes)
-    
-    if not invoice_data or invoice_data.confianca < 0.2:
-        raise RuntimeError("Não foi possível extrair dados confiáveis desta fatura. Verifique a qualidade do arquivo.")
 
-    # 2. FILTRAR E HIGIENIZAR DADOS
-    total_pdf = invoice_data.valor_total
-    transacoes_finais = []
-    ignoradas_count = 0
-    
-    # Itens que são apenas informativos e devem ser ignorados rigorosamente
-    black_list = [
-        "total", "pagamento efetuado", "saldo anterior", "cartões caixa", 
-        "limite", "demonstrativo", "fatura anterior", "saldo a pagar",
-        "pagamento recebido", "crédito de pagamento", "saldo do período",
-        "total a pagar", "valor do pagamento", "pagamento por debito"
-    ]
-    
-    for item in invoice_data.itens:
-        desc_lower = item.descricao.lower()
-        
-        # REGRA 1: Ignorar lixo de sumário e pagamentos de fatura
-        if any(term in desc_lower for term in black_list):
-            ignoradas_count += 1
-            continue
-
-        # REGRA 2: Evitar alucinação de Total como compra
-        if total_pdf > 0 and abs(abs(item.valor) - total_pdf) < 0.01:
-            ignoradas_count += 1
-            continue
-
+    def _parse_json_response(text: str) -> dict | None:
+        if not text:
+            return None
+        match = re.search(r'\{.*\}', text, re.DOTALL)
+        if not match:
+            return None
+        raw_json = re.sub(r',\s*([\]\}])', r'\1', match.group(0))
         try:
-            # Tentar usar a data do item, fallback para a data da fatura
-            data_str = item.data or invoice_data.data
-            dt_obj = datetime.strptime(data_str, "%Y-%m-%d")
-            
-            # Garantir ano 2026 se estiver vindo vazio ou ano errado (conforme contexto do projeto)
-            if dt_obj.year < 2026: 
-                dt_obj = dt_obj.replace(year=2026)
+            return json.loads(raw_json)
+        except Exception:
+            return None
 
-            # Anexar parcela à descrição para visibilidade direta
-            desc_final = item.descricao.strip()
-            if item.parcela:
-                desc_final += f" ({item.parcela})"
+    def _parse_data_fatura(raw_data: str) -> datetime | None:
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d/%m/%y", "%d/%m"):
+            try:
+                dt = datetime.strptime(str(raw_data), fmt)
+                if fmt == "%d/%m":
+                    dt = dt.replace(year=ano_atual)
+                elif dt.year < 100:
+                    dt = dt.replace(year=2000 + dt.year)
+                return dt
+            except Exception:
+                continue
+        return None
 
+    def _normalizar_resultado_bruto(data: dict, origem_prefixo: str) -> Tuple[List[Dict], int, str, float]:
+        transacoes_finais: List[Dict] = []
+        ignoradas_count = int(data.get("ignoradas", 0) or 0)
+        banco = str(data.get("banco", "Desconhecido") or "Desconhecido")
+        total_pdf = float(data.get("total_fatura", 0.0) or 0.0)
+        blacklist = [
+            "total",
+            "pagamento efetuado",
+            "saldo anterior",
+            "limite",
+            "demonstrativo",
+            "fatura anterior",
+            "saldo a pagar",
+            "pagamento recebido",
+            "crédito de pagamento",
+            "credito de pagamento",
+            "saldo do período",
+            "saldo do periodo",
+            "valor do pagamento",
+            "pagamento por debito",
+        ]
+
+        for item in data.get("transacoes", []):
+            try:
+                descricao = str(item.get("descricao", "") or "").strip()
+                if not descricao:
+                    ignoradas_count += 1
+                    continue
+                if any(term in descricao.lower() for term in blacklist):
+                    ignoradas_count += 1
+                    continue
+
+                valor = float(item.get("valor", 0.0) or 0.0)
+                if abs(valor) < 0.009:
+                    ignoradas_count += 1
+                    continue
+
+                dt_obj = _parse_data_fatura(item.get("data"))
+                if not dt_obj:
+                    ignoradas_count += 1
+                    continue
+
+                parcela = item.get("parcela")
+                transacoes_finais.append({
+                    "descricao": descricao,
+                    "valor": valor,
+                    "data_transacao": dt_obj,
+                    "forma_pagamento": "Crédito",
+                    "origem": f"{origem_prefixo}_{banco.lower().replace(' ', '_')}",
+                    "parcela": parcela,
+                })
+            except Exception as item_exc:
+                logger.warning("Erro ao normalizar item bruto da fatura: %s | item=%s", item_exc, item)
+                ignoradas_count += 1
+
+        deduped: List[Dict] = []
+        seen: set[tuple[str, str, float, str]] = set()
+        for item in transacoes_finais:
+            key = (
+                item["data_transacao"].strftime("%Y-%m-%d"),
+                str(item["descricao"]).strip().lower(),
+                round(float(item["valor"]), 2),
+                str(item.get("parcela") or ""),
+            )
+            if key in seen:
+                ignoradas_count += 1
+                continue
+            seen.add(key)
+            deduped.append(item)
+
+        return deduped, ignoradas_count, banco, total_pdf
+
+    def _resultado_parece_valido(transacoes: List[Dict], total_pdf: float) -> bool:
+        if not transacoes:
+            return False
+        if len(transacoes) > 300:
+            logger.warning("Resultado rejeitado por excesso de transações: %s", len(transacoes))
+            return False
+
+        total_debito = sum(abs(float(t["valor"])) for t in transacoes if float(t["valor"]) < 0)
+        if total_pdf > 0 and total_debito > total_pdf * 1.7:
+            logger.warning(
+                "Resultado rejeitado: débitos extraídos muito acima do total do PDF (extraído=%s, pdf=%s)",
+                total_debito,
+                total_pdf,
+            )
+            return False
+        return True
+
+    pdf_part = {"mime_type": "application/pdf", "data": file_bytes}
+
+    for model_name in model_candidates:
+        try:
+            logger.info("🤖 Tentando extração multimodal direta com %s", model_name)
+            response = await genai.GenerativeModel(model_name).generate_content_async(
+                [prompt, pdf_part],
+                generation_config={"response_mime_type": "application/json"},
+            )
+            json_data = _parse_json_response(getattr(response, "text", "") or "")
+            if not json_data:
+                logger.warning("Resposta do Gemini sem JSON utilizável com %s", model_name)
+                continue
+            transacoes, ignoradas, banco, total_pdf = _normalizar_resultado_bruto(json_data, "fatura_pdf")
+            if _resultado_parece_valido(transacoes, total_pdf):
+                logger.info("✅ Extração multimodal direta funcionou com %s (%s transações)", model_name, len(transacoes))
+                return transacoes, ignoradas, banco, total_pdf
+            logger.warning("Resultado do Gemini com %s foi descartado por baixa confiabilidade estrutural.", model_name)
+        except Exception as exc:
+            logger.warning("Falha na extração multimodal direta com %s: %s", model_name, exc)
+
+    from .invoice_processor import UniversalInvoiceExtractor
+
+    extractor = UniversalInvoiceExtractor()
+    logger.info("🧩 Fallback para parser local do UniversalInvoiceExtractor")
+    texto_pdf = extractor._extract_pdf_text(file_bytes)
+    regex_invoice = extractor._build_regex_invoice_schema(texto_pdf)
+    if not regex_invoice or not regex_invoice.itens:
+        raise RuntimeError("Não foi possível extrair transações desta fatura. O PDF foi lido, mas nenhum lançamento confiável foi encontrado.")
+
+    total_pdf = float(regex_invoice.valor_total or 0.0)
+    transacoes_finais: List[Dict] = []
+    ignoradas_count = 0
+    for item in regex_invoice.itens:
+        try:
+            dt_obj = datetime.strptime(item.data or regex_invoice.data, "%Y-%m-%d")
             transacoes_finais.append({
-                "descricao": desc_final,
-                "valor": item.valor,
+                "descricao": str(item.descricao).strip(),
+                "valor": float(item.valor),
                 "data_transacao": dt_obj,
                 "forma_pagamento": "Crédito",
-                "origem": "fatura_universal",
+                "origem": "fatura_regex",
                 "parcela": item.parcela
             })
         except Exception as e:
-            logger.warning(f"Erro ao processar data do item {item.descricao}: {e}")
-            continue
+            logger.warning("Erro ao processar item do parser local da fatura: %s", e)
+            ignoradas_count += 1
 
-    return transacoes_finais, ignoradas_count, invoice_data.estabelecimento, total_pdf
+    if not _resultado_parece_valido(transacoes_finais, total_pdf):
+        raise RuntimeError("A fatura foi lida, mas os dados extraídos ficaram incoerentes com o total do PDF.")
+
+    return transacoes_finais, ignoradas_count, regex_invoice.estabelecimento, total_pdf
 
 async def fatura_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await touch_user_interaction(update.effective_user.id, context)
