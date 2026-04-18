@@ -141,52 +141,80 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
         "data": file_bytes
     }
     
-    # Tentar primeiro o 2.0, mas ter o 1.5 como reserva imediata (cota mais estável)
-    models_to_try = [model_name, "gemini-1.5-flash"]
-    
-    text = None
-    last_exc = None
-    
-    for m_name in models_to_try:
-        try:
-            logger.info(f"🤖 Tentando extração com {m_name}...")
-            curr_model = genai.GenerativeModel(m_name)
-            response = await curr_model.generate_content_async([prompt, pdf_part])
-            if response and hasattr(response, 'text') and response.text:
-                text = response.text
-                logger.info(f"✅ Sucesso com o modelo {m_name}!")
-                break
-        except Exception as e:
-            last_exc = e
-            logger.warning(f"⚠️ Modelo {m_name} falhou: {e}")
-            continue
+    # 1. TENTATIVA DE EXTRAÇÃO LOCAL (Custo Zero / Ganho de Cota)
+    texto_extraido_local = ""
+    try:
+        import fitz
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
+        for page in doc:
+            # Preserva estrutura de colunas com "blocks"
+            blocks = page.get_text("blocks")
+            for b in sorted(blocks, key=lambda x: (x[1], x[0])):
+                texto_extraido_local += f"{b[4]}\n"
+        doc.close()
+    except Exception as e:
+        logger.warning(f"Falha na extração local de texto: {e}")
 
+    # 2. ESTRATÉGIA DE EXTRAÇÃO (Otimização de Quota)
+    text = None
+    
+    # Se temos texto extraído localmente, usamos o modo CHAT (Cota centenas de vezes maior)
+    if len(texto_extraido_local.strip()) > 200:
+        logger.info(f"📄 PDF pesquisável detectado ({len(texto_extraido_local)} chars). Usando modo TEXT-ONLY.")
+        
+        # Tenta modelos na ordem de melhor custo-benefício para chat
+        models_chat = ["gemini-2.5-flash-lite", "gemini-1.5-flash"]
+        for m_name in models_chat:
+            try:
+                logger.info(f"🤖 Tentando chat com {m_name}...")
+                curr_model = genai.GenerativeModel(m_name)
+                # No modo chat, passamos o texto como string, não o arquivo binário
+                response = await curr_model.generate_content_async(f"{prompt}\n\nTEXTO DA FATURA:\n{texto_extraido_local[:12000]}")
+                if response and hasattr(response, 'text') and response.text:
+                    text = response.text
+                    logger.info(f"✅ Sucesso via {m_name} (Modo Texto)!")
+                    break
+            except Exception as e:
+                logger.warning(f"⚠️ Modelo {m_name} falhou no chat: {e}")
+                continue
+
+    # 3. FALLBACK MULTIMODAL (Para PDFs que são imagens ou se o chat falhou)
     if not text:
-        logger.warning("❌ Todos os modelos Gemini falharam. Iniciando FAILOVER DE ALTA PRECISÃO (OCR + GROQ)...")
+        logger.info("📸 PDF parece ser imagem ou extração de texto falhou. Usando modo MULTIMODAL (Cota de Arquivo).")
+        pdf_part = {"mime_type": "application/pdf", "data": file_bytes}
+        models_file = ["gemini-2.5-flash-lite", "gemini-1.5-flash", "gemini-2.0-flash"]
+        
+        for m_name in models_file:
+            try:
+                logger.info(f"🤖 Tentando multimodal com {m_name}...")
+                curr_model = genai.GenerativeModel(m_name)
+                response = await curr_model.generate_content_async([prompt, pdf_part])
+                if response and hasattr(response, 'text') and response.text:
+                    text = response.text
+                    logger.info(f"✅ Sucesso com multimodal {m_name}!")
+                    break
+            except Exception as e:
+                logger.warning(f"⚠️ Modelo {m_name} falhou no modo arquivo: {e}")
+                continue
+
+    # 4. FAILOVER FINAL (Vision OCR + Groq)
+    if not text:
+        logger.warning("❌ Todos os modelos Gemini falharam. Iniciando FAILOVER FINAL (Vision OCR + Groq)...")
         try:
-            # 1. Extração via OCR (Muito mais assertivo que texto puro de PDF)
             from .ocr_handler import ocr_fallback_gemini 
             texto_ocr = await ocr_fallback_gemini(file_bytes)
-            
-            if not texto_ocr or len(texto_ocr.strip()) < 10:
-                raise ValueError("OCR não conseguiu ler o arquivo.")
-
-            # 2. Processamento via Groq com o texto limpo do OCR
             from .ai_service import _groq_chat_completion_async
             messages = [
-                {"role": "system", "content": "Você é um extrator de faturas de alta precisão. Use o texto do OCR para identificar compras. Retorne apenas JSON."},
-                {"role": "user", "content": f"{prompt}\n\nTEXTO ESCANEADO (OCR):\n{texto_ocr[:8000]}"}
+                {"role": "system", "content": "Você é um extrator financeiro de alta precisão. Use o texto do OCR para identificar compras. Retorne apenas JSON."},
+                {"role": "user", "content": f"{prompt}\n\nTEXTO OCR:\n{texto_ocr[:8000]}"}
             ]
             groq_resp = await _groq_chat_completion_async(messages)
-            
             if isinstance(groq_resp, dict) and "choices" in groq_resp:
                 text = groq_resp["choices"][0]["message"]["content"]
-                logger.info("✅ Sucesso no Failover OCR + Groq!")
-            else:
-                raise ValueError("Falha na resposta do Groq pós-OCR.")
-        except Exception as failover_exc:
-            logger.error(f"❌ Failover total falhou: {failover_exc}")
-            raise RuntimeError(f"IA indisponível. Gemini: {last_exc} | Failover: {failover_exc}")
+                logger.info("✅ Sucesso no Failover Vision + Groq!")
+        except Exception as fail_e:
+            logger.error(f"Falha total no processamento: {fail_e}")
+            raise RuntimeError("IA indisponível. Limites excedidos em todos os provedores.")
 
     match = re.search(r'\{.*\}', text, re.DOTALL)
     if not match:
