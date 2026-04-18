@@ -20,31 +20,40 @@ logger = logging.getLogger(__name__)
 
 class InvoiceItemSchema(BaseModel):
     descricao: str = Field(..., description="Nome do estabelecimento ou item")
-    valor: float = Field(..., description="Valor monetário (negativo para despesas)")
+    valor: float = Field(..., description="Valor monetário (negativo para despesas, positivo para créditos/estornos)")
+    data: Optional[str] = Field(None, description="Data da transação específica (YYYY-MM-DD)")
+    parcela: Optional[str] = Field(None, description="Informação de parcela se houver (ex: 1/12)")
 
 class InvoiceSchema(BaseModel):
-    data: str = Field(..., description="Data da transação (YYYY-MM-DD)")
-    valor_total: float = Field(..., description="Valor total consolidado")
-    estabelecimento: str = Field(..., description="Nome do local de compra")
-    itens: List[InvoiceItemSchema] = Field(default_factory=list, description="Detalhamento da fatura")
-    categoria_sugerida: str = Field(..., description="Categoria sugerida (ex: Alimentação, Transporte)")
+    data: str = Field(..., description="Data de emissão ou vencimento do documento (YYYY-MM-DD)")
+    valor_total: float = Field(..., description="Valor total consolidado do documento")
+    estabelecimento: str = Field(..., description="Nome do emissor (ex: Banco Inter) ou local de compra")
+    itens: List[InvoiceItemSchema] = Field(default_factory=list, description="Lista detalhada de transações")
+    categoria_sugerida: str = Field(..., description="Categoria principal sugerida")
     confianca: float = Field(..., ge=0.0, le=1.0, description="Nível de confiança da extração")
 
     @field_validator('data')
     @classmethod
     def validate_date_format(cls, v: str) -> str:
         try:
-            datetime.strptime(v, "%Y-%m-%d")
-            return v
-        except ValueError:
-            raise ValueError("A data deve estar no formato YYYY-MM-DD")
+            # Tentar limpar formatos comuns antes de validar
+            clean_v = re.sub(r'[^\d-]', '', v)
+            if len(clean_v) == 8: # YYYYMMDD
+                 clean_v = f"{clean_v[:4]}-{clean_v[4:6]}-{clean_v[6:]}"
+            
+            datetime.strptime(clean_v, "%Y-%m-%d")
+            return clean_v
+        except Exception:
+            # Se falhar, retorna a data atual formatada para não quebrar o processamento
+            return datetime.now().strftime("%Y-%m-%d")
 
 # --- PROCESSADOR UNIVERSAL ---
 
 class UniversalInvoiceExtractor:
     """
     Serviço de extração e persistência universal de faturas.
-    Utiliza Gemini 2.5 Flash Lite para análise visual e textual.
+    Utiliza Gemini 2.0 Flash Lite para análise visual e textual de faturas e extratos.
+    Otimizado para alto volume e precisão com baixo consumo de cota.
     """
 
     def __init__(self, api_key: Optional[str] = None):
@@ -52,36 +61,47 @@ class UniversalInvoiceExtractor:
         if self.api_key:
             genai.configure(api_key=self.api_key.strip().strip("'\""))
         
-        # Modelo 2.5 Flash Lite (Otimizado para extração e baixo custo)
-        self.model_name = "gemini-2.5-flash-lite"
+        # Modelo Gemini 2.0 Flash Lite (Equilíbrio perfeito entre precisão, custo e cota)
+        self.model_name = "gemini-2.0-flash-lite"
         self.model = genai.GenerativeModel(self.model_name)
 
     async def extract_from_file(self, file_bytes: bytes, mime_type: str = "application/pdf") -> Optional[InvoiceSchema]:
         """Extrai dados estruturados de um arquivo de fatura (PDF ou Imagem)."""
         
-        prompt = """
-        Você é um sistema especialista em extração de faturas financeiras de alta precisão.
-        Analise o documento fornecido e extraia as transações principais.
-        
-        REGRAS CRÍTICAS:
-        1. Identifique o estabelecimento principal e a data da transação.
-        2. Se houver múltiplos itens, liste-os no campo 'itens'.
-        3. O 'valor_total' deve ser a soma dos itens de compra e encargos.
-        4. Use valores NEGATIVOS para despesas e POSITIVOS para créditos/estornos.
-        5. JUROS, IOF e MULTAS devem ser extraídos como despesas normais.
-        6. IGNORE itens de sumário como "Saldo Anterior", "Pagamento Efetuado" ou "Total da Fatura".
-        7. Sugira uma categoria baseada no estabelecimento (ex: Restaurante -> Alimentação).
-        8. Retorne APENAS o JSON no formato abaixo, sem markdown ou explicações.
+        hoje = datetime.now().strftime("%Y-%m-%d")
+        prompt = f"""
+        Você é um Especialista em Extração de Dados Bancários de altíssima precisão.
+        Data atual do sistema: {hoje} (Considere o ano de 2026 se não houver ano explícito).
 
-        ESQUEMA JSON:
-        {
+        INSTRUÇÕES DE EXTRAÇÃO (RIGOROSAS):
+        1. IDENTIFIQUE O TIPO: Se for um extrato/fatura de cartão, o 'estabelecimento' é o banco. Se for uma nota de compra, o 'estabelecimento' é a loja.
+        2. DATA DO DOCUMENTO: Extraia a data de fechamento ou vencimento da fatura.
+        3. LISTA DE ITENS (TRANSAÇÕES):
+           - Extraia TODAS as compras, débitos, juros e taxas.
+           - Para cada item, extraia a 'data' específica (YYYY-MM-DD), 'descricao', 'valor' e 'parcela' (se houver).
+           - Use VALORES NEGATIVOS para despesas/débitos e VALORES POSITIVOS para estornos/créditos.
+        4. FILTRO DE RUÍDO (O QUE IGNORAR):
+           - IGNORE: "Pagamento de Fatura", "Saldo Anterior", "Total a Pagar", "Total da Fatura", "Crédito de Pagamento".
+           - IGNORE: Itens que sejam apenas informativos ou subtotais de categorias.
+           - IGNORE: Parcelas futuras que ainda não foram lançadas nesta fatura atual.
+        5. HIGIENIZAÇÃO: Remova prefixos como "COMPRA NO CARTAO" ou "ESTO -" da descrição. Mantenha o nome real do local.
+
+        ESQUEMA JSON OBRIGATÓRIO:
+        {{
             "data": "YYYY-MM-DD",
-            "valor_total": float,
-            "estabelecimento": "string",
-            "itens": [{"descricao": "string", "valor": float}],
+            "valor_total": float (valor final da fatura),
+            "estabelecimento": "string (Nome do Banco ou Loja)",
+            "itens": [
+                {{
+                    "data": "YYYY-MM-DD",
+                    "descricao": "string",
+                    "valor": float (ex: -50.25),
+                    "parcela": "string ou null"
+                }}
+            ],
             "categoria_sugerida": "string",
             "confianca": float (0.0 a 1.0)
-        }
+        }}
         """
 
         text = None

@@ -151,40 +151,56 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     # 2. FILTRAR E HIGIENIZAR DADOS
     total_pdf = invoice_data.valor_total
     transacoes_finais = []
+    ignoradas_count = 0
     
-    # Itens que são apenas informativos e devem ser ignorados
+    # Itens que são apenas informativos e devem ser ignorados rigorosamente
     black_list = [
         "total", "pagamento efetuado", "saldo anterior", "cartões caixa", 
-        "limite", "demonstrativo", "fatura anterior", "saldo a pagar"
+        "limite", "demonstrativo", "fatura anterior", "saldo a pagar",
+        "pagamento recebido", "crédito de pagamento", "saldo do período",
+        "total a pagar", "valor do pagamento", "pagamento por debito"
     ]
     
     for item in invoice_data.itens:
         desc_lower = item.descricao.lower()
         
-        # REGRA 1: Ignorar apenas lixo de sumário (Juros, IOF e Multas são PERMITIDOS agora)
+        # REGRA 1: Ignorar lixo de sumário e pagamentos de fatura
         if any(term in desc_lower for term in black_list):
+            ignoradas_count += 1
             continue
 
         # REGRA 2: Evitar alucinação de Total como compra
-        if total_pdf > 0 and abs(abs(item.valor) - total_pdf) < 0.1:
+        if total_pdf > 0 and abs(abs(item.valor) - total_pdf) < 0.01:
+            ignoradas_count += 1
             continue
 
         try:
-            dt_obj = datetime.strptime(invoice_data.data, "%Y-%m-%d")
-            if dt_obj.year < 2026: dt_obj = dt_obj.replace(year=2026)
+            # Tentar usar a data do item, fallback para a data da fatura
+            data_str = item.data or invoice_data.data
+            dt_obj = datetime.strptime(data_str, "%Y-%m-%d")
+            
+            # Garantir ano 2026 se estiver vindo vazio ou ano errado (conforme contexto do projeto)
+            if dt_obj.year < 2026: 
+                dt_obj = dt_obj.replace(year=2026)
+
+            # Anexar parcela à descrição para visibilidade direta
+            desc_final = item.descricao.strip()
+            if item.parcela:
+                desc_final += f" ({item.parcela})"
 
             transacoes_finais.append({
-                "descricao": item.descricao,
+                "descricao": desc_final,
                 "valor": item.valor,
                 "data_transacao": dt_obj,
                 "forma_pagamento": "Crédito",
                 "origem": "fatura_universal",
-                "parcela": None
+                "parcela": item.parcela
             })
-        except:
+        except Exception as e:
+            logger.warning(f"Erro ao processar data do item {item.descricao}: {e}")
             continue
 
-    return transacoes_finais, 0, invoice_data.estabelecimento, total_pdf
+    return transacoes_finais, ignoradas_count, invoice_data.estabelecimento, total_pdf
 
 async def fatura_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await touch_user_interaction(update.effective_user.id, context)
@@ -202,8 +218,8 @@ async def fatura_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         db.close()
 
     await update.message.reply_text(
-        "Envie a fatura do Banco Inter em PDF para importar os lancamentos.\n"
-        f"Limite de tamanho: {MAX_PDF_SIZE_MB}MB."
+        "Envie sua fatura de cartão de crédito em PDF para importar os lançamentos.\n"
+        "O sistema agora extrai datas individuais e parcelamentos com alta precisão."
     )
     return FATURA_AWAIT_FILE
 
@@ -245,8 +261,8 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
         return FATURA_AWAIT_FILE
 
     process_msg = await update.message.reply_text(
-        "📄 PDF detectado! Estou processando a fatura.\n"
-        "Se o arquivo for grande, pode demorar um pouco."
+        "📄 PDF detectado! Extraindo lançamentos com IA visual...\n"
+        "Isso pode levar alguns segundos."
     )
 
     try:
@@ -270,9 +286,8 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
                 "Remova a senha no app do banco e envie novamente."
             )
         else:
-            # Mostrar o erro real para debug
             await process_msg.edit_text(
-                f"❌ <b>Erro no Processamento</b>\n\n{error_str}",
+                f"❌ <b>Erro no Processamento IA</b>\n\nOcorreu uma falha ao analisar o PDF. Verifique se o arquivo está legível.",
                 parse_mode="HTML"
             )
         return FATURA_AWAIT_FILE
@@ -284,8 +299,8 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if not transacoes:
         await update.message.reply_text(
-            "❌ Não consegui localizar as transações desta fatura.\n"
-            "Verifique se o PDF é realmente uma fatura de cartão de crédito e tente novamente."
+            "❌ Não identifiquei transações válidas nesta fatura.\n"
+            "Verifique se o arquivo contém compras detalhadas e tente novamente."
         )
         return ConversationHandler.END
 
@@ -296,38 +311,42 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     db = next(get_db())
     try:
-        # Modo Zero Setup: não depende mais de conta/cartão cadastrado.
         context.user_data["fatura_conta_id"] = 0
 
         total_pdf = context.user_data.get("fatura_valor_total_pdf")
-        total_debito_extraido = sum(-float(t["valor"]) for t in transacoes if float(t["valor"]) < 0)
+        # Soma algébrica (despesas são negativas, créditos positivos)
+        saldo_extraido = sum(float(t["valor"]) for t in transacoes)
+        
         ajuste_pdf = 0.0
+        # Ajuste automático apenas se a diferença for pequena (possíveis centavos de arredondamento)
+        # Se a diferença for grande, é melhor NÃO ajustar para não poluir com valores mágicos.
         if isinstance(total_pdf, (int, float)):
-            ajuste_pdf = round(float(total_pdf) - float(total_debito_extraido), 2)
-            if abs(ajuste_pdf) >= 0.01:
+            diferenca = round(float(total_pdf) + float(saldo_extraido), 2) # saldo_extraido já é negativo para despesas
+            if 0.01 <= abs(diferenca) < 5.00:
                 data_ajuste = max((t["data_transacao"] for t in transacoes), default=datetime.now())
                 transacoes.append({
                     "data_transacao": data_ajuste,
-                    "descricao": "AJUSTE FATURA (valor nao detalhado no PDF)",
-                    "valor": -abs(ajuste_pdf),
+                    "descricao": "Ajuste de centavos (Fatura)",
+                    "valor": -diferenca,
                     "forma_pagamento": "Crédito",
                     "origem": "fatura_ajuste_pdf",
                 })
-                context.user_data["fatura_ajuste_pdf"] = abs(ajuste_pdf)
+                context.user_data["fatura_ajuste_pdf"] = abs(diferenca)
                 context.user_data["fatura_transacoes"] = transacoes
         
-        # Show summary directly with Confirm/Edit/Cancel buttons
         total = len(transacoes)
         total_debito = sum(-t["valor"] for t in transacoes if t["valor"] < 0)
         total_credito = sum(t["valor"] for t in transacoes if t["valor"] > 0)
-        total_pdf = context.user_data.get("fatura_valor_total_pdf")
         ajuste_pdf_abs = context.user_data.get("fatura_ajuste_pdf")
 
         preview_lines = []
-        for item in transacoes[:8]:
+        # Sort transactions by date for the preview
+        sorted_transacoes = sorted(transacoes, key=lambda x: x["data_transacao"])
+        for item in sorted_transacoes[:10]:
             data = item["data_transacao"].strftime("%d/%m")
             valor_label = _fmt_brl(item["valor"])
-            desc = _compact_desc(item.get("descricao", ""))
+            parcela = f" ({item['parcela']})" if item.get('parcela') else ""
+            desc = _compact_desc(f"{item.get('descricao', '')}{parcela}")
             preview_lines.append(f"• {data} | {desc} | {valor_label}")
 
         top_debitos = sorted(
@@ -341,31 +360,32 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         preview_text = "\n".join(preview_lines) if preview_lines else "• Sem itens para preview"
         maiores_text = "\n".join(top_lines) if top_lines else "• Sem debitos"
-        origem_label = context.user_data.get("fatura_origem_label", "Inter")
+        origem_label = context.user_data.get("fatura_origem_label", "Desconhecido")
 
         resumo_linhas = [
             f"🧾 <b>Resumo da Fatura ({origem_label})</b>",
             "",
-            f"📌 <b>Transacoes detectadas:</b> <code>{total}</code>",
-            f"↩️ <b>Ignoradas (pagamentos/estornos):</b> <code>{ignoradas}</code>",
-            f"💸 <b>Total debitos:</b> <code>{_fmt_brl(total_debito)}</code>",
-            f"💰 <b>Total creditos:</b> <code>{_fmt_brl(total_credito)}</code>",
+            f"📌 <b>Transações detectadas:</b> <code>{total}</code>",
+            f"↩️ <b>Itens ignorados:</b> <code>{ignoradas}</code>",
+            f"💸 <b>Total débitos:</b> <code>{_fmt_brl(total_debito)}</code>",
+            f"💰 <b>Total créditos:</b> <code>{_fmt_brl(total_credito)}</code>",
         ]
         if isinstance(total_pdf, (int, float)):
             resumo_linhas.append(f"🧮 <b>Total no PDF:</b> <code>{_fmt_brl(total_pdf)}</code>")
         if isinstance(ajuste_pdf_abs, (int, float)) and ajuste_pdf_abs >= 0.01:
-            resumo_linhas.append(f"⚖️ <b>Ajuste automatico aplicado:</b> <code>{_fmt_brl(ajuste_pdf_abs)}</code>")
+            resumo_linhas.append(f"⚖️ <b>Ajuste aplicado:</b> <code>{_fmt_brl(ajuste_pdf_abs)}</code>")
+        
         resumo_linhas.extend([
             "",
-            "🔥 <b>Maiores gastos detectados</b>",
+            "🔥 <b>Maiores gastos</b>",
             maiores_text,
             "",
-            "👀 <b>Preview de lancamentos</b>",
+            "👀 <b>Preview de lançamentos</b>",
             preview_text,
             "",
             "━━━━━━━━━━━━━━━━━━",
-            "✅ <b>Acao:</b> Importar lancamentos?",
-            "Toque em <b>Editar</b> para revisar e corrigir antes de salvar.",
+            "✅ <b>Ação:</b> Importar lançamentos?",
+            "Toque em <b>Editar</b> para revisar antes de salvar.",
         ])
         resumo = "\n".join(resumo_linhas)
 
@@ -376,6 +396,9 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
         ]
         await update.message.reply_text(resumo, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
         return FATURA_CONFIRMATION_STATE
+    finally:
+        db.close()
+
     finally:
         db.close()
 
