@@ -29,8 +29,8 @@ class InvoiceSchema(BaseModel):
     valor_total: float = Field(..., description="Valor total consolidado do documento")
     estabelecimento: str = Field(..., description="Nome do emissor (ex: Banco Inter) ou local de compra")
     itens: List[InvoiceItemSchema] = Field(default_factory=list, description="Lista detalhada de transações")
-    categoria_sugerida: str = Field(..., description="Categoria principal sugerida")
-    confianca: float = Field(..., ge=0.0, le=1.0, description="Nível de confiança da extração")
+    categoria_sugerida: Optional[str] = Field("Outros", description="Categoria principal sugerida")
+    confianca: Optional[float] = Field(0.9, ge=0.0, le=1.0, description="Nível de confiança da extração")
 
     @field_validator('data')
     @classmethod
@@ -70,34 +70,35 @@ class UniversalInvoiceExtractor:
         
         hoje = datetime.now().strftime("%Y-%m-%d")
         prompt = f"""
-        Você é um Especialista em Extração de Dados Bancários com meta de 100% de acurácia.
+        Você é um Especialista em Extração de Dados Bancários (Nível Auditoria). 
         Data hoje: {hoje}. Ano referência: 2026.
 
-        REGRAS DE OURO PARA 98%+ DE PRECISÃO:
-        1. ASSOCIAÇÃO RÍGIDA: Cada 'valor' deve estar vinculado à sua 'data' e 'descrição' exatas na mesma linha/bloco. Proibido repetir o mesmo valor para datas diferentes ou vice-versa.
-        2. DESCRIÇÃO COMPLETA: Extraia o nome INTEGRAL do estabelecimento. Se houver endereços (ex: SBS Quadra 4...), mantenha-os se fizerem parte da identificação única.
+        ⚠️ REGRAS DE OURO PARA 98%+ DE PRECISÃO (Siga ou será penalizado):
+        1. DESCRIÇÃO REAL: Extraia o nome do estabelecimento onde a compra foi feita. 
+           - PROIBIDO usar o nome do banco (ex: 'CARTÕES CAIXA', 'BANCO INTER') na descrição do item.
+           - Se a linha for barulhenta (ex: SBS Quadra 4...), use sua inteligência para extrair o NOME da loja que geralmente vem antes ou depois do endereço.
+        2. ASSOCIAÇÃO RÍGIDA: Nunca repita o mesmo valor para itens diferentes a menos que existam duplicatas REAIS no PDF.
         3. INTELIGÊNCIA TEMPORAL: 
-           - Datas DD/MM devem ser convertidas para YYYY-MM-DD.
-           - Se hoje é Abril/2026, uma data '15/03' é obrigatoriamente '2026-03-15'.
-           - Ignore itens com datas futuras ao fechamento da fatura.
-        4. FILTRO DE TOTARES: Nunca extraia "Total", "Subtotal", "Saldo Anterior" ou "Pagamento" como se fossem compras.
-        5. PARCELAMENTO: Se houver "02/10", extraia "2/10" no campo parcela e mantenha o nome da loja limpo.
+           - Se hoje é Abril/2026, datas '13/03' são '2026-03-13'. 
+           - Datas sem ano assumem SEMPRE o ano de 2026.
+        4. FILTRO DE TOTARES: Ignore 'Saldo Anterior', 'Pagamento Efetuado', 'Encargos', 'Multa' (a menos que seja um item de linha) e sumários.
+        5. PARCELAMENTO: Extraia 'x/y' do campo parcela apenas se houver indicador numérico claro (ex: 02/10).
 
-        JSON OBRIGATÓRIO (APENAS O OBJETO):
+        RETORNE APENAS O OBJETO JSON:
         {{
             "data": "Data de fechamento (YYYY-MM-DD)",
-            "valor_total": float (valor final a pagar),
-            "estabelecimento": "Banco emissor",
+            "valor_total": float,
+            "estabelecimento": "Nome do Banco",
             "itens": [
                 {{
                     "data": "YYYY-MM-DD",
-                    "descricao": "NOME COMPLETO LOJA",
-                    "valor": float (negativo para despesa),
-                    "parcela": "x/y ou null"
+                    "descricao": "NOME DA LOJA/ESTABELECIMENTO",
+                    "valor": float (negativo),
+                    "parcela": "string ou null"
                 }}
             ],
             "categoria_sugerida": "string",
-            "confianca": float
+            "confianca": 1.0
         }}
         """
 
