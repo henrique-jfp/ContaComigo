@@ -76,7 +76,363 @@ def _get_fatura_webapp_url(page: str, token: str) -> str:
     }
     return f"{base_url}/webapp?{urlencode(params)}"
 
-# Versão 2.3.1 - Fix Syntax & Payload
+
+_MESES_MAP = {
+    "jan": 1,
+    "janeiro": 1,
+    "feb": 2,
+    "fev": 2,
+    "fevereiro": 2,
+    "mar": 3,
+    "marco": 3,
+    "março": 3,
+    "apr": 4,
+    "abr": 4,
+    "abril": 4,
+    "may": 5,
+    "mai": 5,
+    "maio": 5,
+    "jun": 6,
+    "junho": 6,
+    "jul": 7,
+    "julho": 7,
+    "aug": 8,
+    "ago": 8,
+    "agosto": 8,
+    "sep": 9,
+    "set": 9,
+    "setembro": 9,
+    "oct": 10,
+    "out": 10,
+    "outubro": 10,
+    "nov": 11,
+    "novembro": 11,
+    "dec": 12,
+    "dez": 12,
+    "dezembro": 12,
+}
+
+_SECAO_ANCORAS = {
+    "compras": [
+        "compras (cartão",
+        "compras (cartao",
+        "despesas da fatura",
+        "transações de",
+        "transacoes de",
+        "lançamentos",
+        "lancamentos",
+    ],
+    "parceladas": [
+        "compras parceladas",
+        "parceladas (cartão",
+        "parceladas (cartao",
+    ],
+    "outros": [
+        "outros (cartão",
+        "outros (cartao",
+        "encargos",
+        "anuidade",
+    ],
+}
+
+_SECAO_FIM = [
+    "total compras",
+    "total compras parceladas",
+    "total outros",
+    "total final",
+    "total ",
+]
+
+_DESC_BLOQUEADA = [
+    "obrigado pelo pagamento",
+    "pagamento efetuado",
+    "pagamento recebido",
+    "total da fatura anterior",
+    "saldo anterior",
+    "saldo credito rotativo",
+    "saldo crédito rotativo",
+    "valor do pagamento",
+    "saldo a pagar",
+    "limite",
+    "demonstrativo",
+]
+
+
+def _normalizar_texto_parser(valor: str) -> str:
+    texto = (valor or "").strip().lower()
+    texto = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"\s+", " ", texto)
+
+
+def _extrair_texto_pdf_local(file_bytes: bytes) -> list[str]:
+    import fitz
+
+    doc = fitz.open(stream=file_bytes, filetype="pdf")
+    linhas: list[str] = []
+    try:
+        for page in doc:
+            page_text = page.get_text("text", flags=fitz.TEXT_PRESERVE_WHITESPACE) or ""
+            for line in page_text.splitlines():
+                clean = re.sub(r"\s+", " ", line).strip()
+                if clean:
+                    linhas.append(clean)
+    finally:
+        doc.close()
+    return linhas
+
+
+def _detectar_ano_fatura(linhas: list[str]) -> int:
+    texto = "\n".join(linhas[:200])
+    match = re.search(r"\b(20\d{2})\b", texto)
+    if match:
+        return int(match.group(1))
+    return datetime.now().year
+
+
+def _detectar_banco_fatura(texto: str) -> str:
+    texto_norm = _normalizar_texto_parser(texto)
+    bancos = [
+        ("Nubank", ["nubank"]),
+        ("Inter", ["inter"]),
+        ("Caixa", ["caixa", "cartoes caixa", "cartões caixa"]),
+        ("Bradesco", ["bradesco"]),
+    ]
+    for nome, termos in bancos:
+        if any(termo in texto_norm for termo in termos):
+            return nome
+    return "Desconhecido"
+
+
+def _detectar_secao_linha(linha: str) -> str | None:
+    linha_norm = _normalizar_texto_parser(linha)
+    for secao, ancoras in _SECAO_ANCORAS.items():
+        if any(ancora in linha_norm for ancora in ancoras):
+            return secao
+    return None
+
+
+def _linha_indica_fim_secao(linha: str) -> bool:
+    linha_norm = _normalizar_texto_parser(linha)
+    return any(marcador in linha_norm for marcador in _SECAO_FIM)
+
+
+def _parse_valor_fatura(raw_amount: str, descricao: str) -> float | None:
+    bruto = (raw_amount or "").strip()
+    if not bruto:
+        return None
+
+    marker = None
+    if bruto.endswith(("D", "C")):
+        marker = bruto[-1]
+        bruto = bruto[:-1].strip()
+
+    bruto = bruto.replace("R$", "").replace("US$", "").replace("U$$", "").strip()
+    negativo_expresso = bruto.startswith("-")
+    bruto = bruto.lstrip("+-").strip()
+    bruto = bruto.replace(".", "").replace(",", ".")
+    try:
+        valor = float(bruto)
+    except Exception:
+        return None
+
+    descricao_norm = _normalizar_texto_parser(descricao)
+    if marker == "C":
+        return abs(valor)
+    if marker == "D":
+        return -abs(valor)
+    if negativo_expresso:
+        return -abs(valor)
+    if any(token in descricao_norm for token in ["estorno", "ajuste cred", "credito", "crédito", "cashback"]):
+        return abs(valor)
+    return -abs(valor)
+
+
+def _parse_data_fatura_local(raw_data: str, ano_fatura: int) -> datetime | None:
+    data = (raw_data or "").strip().replace(".", "")
+    if not data:
+        return None
+
+    if re.fullmatch(r"\d{2}/\d{2}(?:/\d{2,4})?", data):
+        partes = data.split("/")
+        dia = int(partes[0])
+        mes = int(partes[1])
+        ano = ano_fatura if len(partes) == 2 else int(partes[2])
+        if ano < 100:
+            ano += 2000
+        try:
+            return datetime(ano, mes, dia)
+        except Exception:
+            return None
+
+    match_dd_mmm = re.fullmatch(r"(\d{2})\s+([A-Za-zÇç]{3,9})", data)
+    if match_dd_mmm:
+        dia = int(match_dd_mmm.group(1))
+        mes_txt = _normalizar_texto_parser(match_dd_mmm.group(2))
+        mes = _MESES_MAP.get(mes_txt)
+        if mes:
+            try:
+                return datetime(ano_fatura, mes, dia)
+            except Exception:
+                return None
+
+    match_ext = re.fullmatch(r"(\d{2})\s+de\s+([A-Za-zÇç]{3,9})(?:\s+(\d{4}))?", data, flags=re.IGNORECASE)
+    if match_ext:
+        dia = int(match_ext.group(1))
+        mes_txt = _normalizar_texto_parser(match_ext.group(2))
+        mes = _MESES_MAP.get(mes_txt)
+        ano = int(match_ext.group(3)) if match_ext.group(3) else ano_fatura
+        if mes:
+            try:
+                return datetime(ano, mes, dia)
+            except Exception:
+                return None
+
+    return None
+
+
+def _extrair_parcela_da_descricao(descricao: str) -> tuple[str, str | None]:
+    desc = (descricao or "").strip()
+    match_parenteses = re.search(r"\(parcela\s+(\d{1,2})\s+de\s+(\d{1,2})\)", desc, flags=re.IGNORECASE)
+    if match_parenteses:
+        parcela = f"{int(match_parenteses.group(1))}/{int(match_parenteses.group(2))}"
+        desc = re.sub(r"\(parcela\s+\d{1,2}\s+de\s+\d{1,2}\)", "", desc, flags=re.IGNORECASE).strip()
+        return desc, parcela
+
+    match_de = re.search(r"\b(\d{1,2})\s+DE\s+(\d{1,2})\b", desc, flags=re.IGNORECASE)
+    if match_de:
+        parcela = f"{int(match_de.group(1))}/{int(match_de.group(2))}"
+        desc = re.sub(r"\b\d{1,2}\s+DE\s+\d{1,2}\b", "", desc, flags=re.IGNORECASE).strip()
+        return desc, parcela
+
+    match_barra = re.search(r"\b(\d{1,2})/(\d{1,2})\b", desc)
+    if match_barra:
+        parcela = f"{int(match_barra.group(1))}/{int(match_barra.group(2))}"
+        desc = re.sub(r"\b\d{1,2}/\d{1,2}\b", "", desc).strip()
+        return desc, parcela
+
+    return desc, None
+
+
+def _limpar_descricao_fatura(descricao: str) -> str:
+    desc = re.sub(r"\s+", " ", (descricao or "")).strip(" -|:")
+    desc = re.sub(r"\b(?:rio de janeir|rio de janeiro|sao paulo|so paulo|r de janeiro)\b.*$", "", desc, flags=re.IGNORECASE)
+    desc = re.sub(r"\b(?:cartao|cartão)\s+\d{4}\b", "", desc, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", desc).strip(" -|:")
+
+
+def _descricao_deve_ser_ignoradas(descricao: str) -> bool:
+    desc_norm = _normalizar_texto_parser(descricao)
+    if not desc_norm:
+        return True
+    return any(token in desc_norm for token in _DESC_BLOQUEADA)
+
+
+def _parse_linha_transacao_fatura(linha: str, ano_fatura: int) -> dict | None:
+    padroes = [
+        re.compile(r"^(?P<data>\d{2}/\d{2}(?:/\d{2,4})?)\s+(?P<corpo>.+?)\s+(?P<valor>-?R?\$?\s?[0-9\.\,]+(?:[DC])?)$"),
+        re.compile(r"^(?P<data>\d{2}\s+de\s+[A-Za-zÇç]{3,9}\.?(?:\s+\d{4})?)\s+(?P<corpo>.+?)\s+(?P<valor>-?R?\$?\s?[0-9\.\,]+(?:[DC])?)$", re.IGNORECASE),
+        re.compile(r"^(?P<data>\d{2}\s+[A-Za-zÇç]{3,9}\.?)\s+(?P<corpo>.+?)\s+(?P<valor>-?R?\$?\s?[0-9\.\,]+)$", re.IGNORECASE),
+    ]
+
+    for padrao in padroes:
+        match = padrao.match(linha.strip())
+        if not match:
+            continue
+        dt_obj = _parse_data_fatura_local(match.group("data"), ano_fatura)
+        if not dt_obj:
+            return None
+
+        corpo = match.group("corpo").strip()
+        descricao, parcela = _extrair_parcela_da_descricao(corpo)
+        descricao = _limpar_descricao_fatura(descricao)
+        if _descricao_deve_ser_ignoradas(descricao):
+            return None
+
+        valor = _parse_valor_fatura(match.group("valor"), descricao)
+        if valor is None or abs(valor) < 0.009:
+            return None
+
+        return {
+            "descricao": descricao,
+            "valor": valor,
+            "data_transacao": dt_obj,
+            "forma_pagamento": "Crédito",
+            "parcela": parcela,
+        }
+    return None
+
+
+def _deduplicar_transacoes_fatura(transacoes: list[dict]) -> tuple[list[dict], int]:
+    deduped: list[dict] = []
+    seen: set[tuple[str, str, float, str]] = set()
+    ignoradas = 0
+    for item in transacoes:
+        key = (
+            item["data_transacao"].strftime("%Y-%m-%d"),
+            _normalizar_texto_parser(item.get("descricao", "")),
+            round(float(item.get("valor", 0.0)), 2),
+            str(item.get("parcela") or ""),
+        )
+        if key in seen:
+            ignoradas += 1
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped, ignoradas
+
+
+def _detectar_total_fatura_local(linhas: list[str]) -> float:
+    padroes = [
+        r"total final .*?([0-9\.\,]+)\s*[dD]\b",
+        r"total\s+(?:da\s+)?fatura.*?([0-9\.\,]+)\s*[dD]?\b",
+        r"total a pagar.*?([0-9\.\,]+)",
+    ]
+    texto = "\n".join(linhas)
+    for padrao in padroes:
+        match = re.search(padrao, texto, flags=re.IGNORECASE)
+        if match:
+            valor = match.group(1).replace(".", "").replace(",", ".")
+            try:
+                return abs(float(valor))
+            except Exception:
+                continue
+    return 0.0
+
+
+def _parse_fatura_pdf_local(file_bytes: bytes) -> Tuple[List[Dict], int, str, float]:
+    linhas = _extrair_texto_pdf_local(file_bytes)
+    if not linhas:
+        return [], 0, "Desconhecido", 0.0
+
+    ano_fatura = _detectar_ano_fatura(linhas)
+    banco = _detectar_banco_fatura("\n".join(linhas[:160]))
+    total_pdf = _detectar_total_fatura_local(linhas)
+
+    secao_ativa: str | None = None
+    transacoes: list[dict] = []
+    ignoradas = 0
+    for linha in linhas:
+        secao_detectada = _detectar_secao_linha(linha)
+        if secao_detectada:
+            secao_ativa = secao_detectada
+            continue
+        if secao_ativa and _linha_indica_fim_secao(linha):
+            secao_ativa = None
+            continue
+        if secao_ativa is None:
+            continue
+
+        parsed = _parse_linha_transacao_fatura(linha, ano_fatura)
+        if not parsed:
+            continue
+        parsed["origem"] = f"fatura_parser_{banco.lower().replace(' ', '_')}"
+        parsed["secao_origem"] = secao_ativa
+        transacoes.append(parsed)
+
+    transacoes, ignoradas_dedup = _deduplicar_transacoes_fatura(transacoes)
+    ignoradas += ignoradas_dedup
+    return transacoes, ignoradas, banco, total_pdf
+
 async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], int, str, float]:
     import config
     if not config.GEMINI_API_KEY:
@@ -105,7 +461,7 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
         if candidate and candidate not in model_candidates:
             model_candidates.append(candidate)
 
-    logger.info("Pipeline de fatura: Gemini multimodal direto -> UniversalInvoiceExtractor")
+    logger.info("Pipeline de fatura: parser local -> Gemini multimodal -> fallback local/Universal")
 
     prompt = f"""
     Você é um extrator universal de faturas de cartão de crédito.
@@ -116,12 +472,13 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
 
     REGRAS:
     1. Extraia compras, estornos e créditos reais da fatura aberta.
-    2. Ignore totais, saldo anterior, limite, pagamento efetuado, pagamento recebido, encargos, juros, IOF e blocos de resumo.
+    2. Ignore totais, saldo anterior, limite, pagamento efetuado, pagamento recebido, linhas como "OBRIGADO PELO PAGAMENTO", "TOTAL DA FATURA ANTERIOR", "SALDO CREDITO ROTATIVO" e blocos de resumo.
     3. Para compras, use valor NEGATIVO. Para estornos/créditos, use valor POSITIVO.
-    4. Se a data vier como DD/MM, complete com o ano {ano_atual}.
+    4. Preserve a data EXATA do lançamento como aparece no PDF. Se a data vier como DD/MM, complete apenas o ANO {ano_atual}. NÃO troque o mês para o mês atual.
     5. Se houver parcelamento como 02/10, retorne isso em "parcela".
     6. A descrição deve ser o estabelecimento real, nunca o nome do banco.
     7. Se tiver dúvida entre manter ou remover uma linha, só mantenha se houver data + valor + estabelecimento plausível.
+    8. Mantenha juros, mora, multa, IOF e anuidade se aparecerem como lançamentos reais.
 
     JSON OBRIGATÓRIO:
     {{
@@ -172,7 +529,11 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
         blacklist = [
             "total",
             "pagamento efetuado",
+            "obrigado pelo pagamento",
             "saldo anterior",
+            "saldo credito rotativo",
+            "saldo crédito rotativo",
+            "total da fatura anterior",
             "limite",
             "demonstrativo",
             "fatura anterior",
@@ -198,6 +559,16 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
 
                 valor = float(item.get("valor", 0.0) or 0.0)
                 if abs(valor) < 0.009:
+                    ignoradas_count += 1
+                    continue
+
+                descricao_lower = descricao.lower()
+                if valor > 0 and any(term in descricao_lower for term in [
+                    "pagamento",
+                    "saldo credito rotativo",
+                    "saldo crédito rotativo",
+                    "total da fatura anterior",
+                ]):
                     ignoradas_count += 1
                     continue
 
@@ -239,19 +610,45 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     def _resultado_parece_valido(transacoes: List[Dict], total_pdf: float) -> bool:
         if not transacoes:
             return False
-        if len(transacoes) > 300:
+        if len(transacoes) > 200:
             logger.warning("Resultado rejeitado por excesso de transações: %s", len(transacoes))
             return False
 
+        saldo_liquido = abs(sum(float(t["valor"]) for t in transacoes))
         total_debito = sum(abs(float(t["valor"])) for t in transacoes if float(t["valor"]) < 0)
-        if total_pdf > 0 and total_debito > total_pdf * 1.7:
-            logger.warning(
-                "Resultado rejeitado: débitos extraídos muito acima do total do PDF (extraído=%s, pdf=%s)",
-                total_debito,
-                total_pdf,
-            )
-            return False
+        if total_pdf > 0:
+            if saldo_liquido > total_pdf * 1.25:
+                logger.warning(
+                    "Resultado rejeitado: saldo extraído muito acima do total do PDF (extraído=%s, pdf=%s)",
+                    saldo_liquido,
+                    total_pdf,
+                )
+                return False
+            if saldo_liquido < total_pdf * 0.35:
+                logger.warning(
+                    "Resultado rejeitado: saldo extraído muito abaixo do total do PDF (extraído=%s, pdf=%s)",
+                    saldo_liquido,
+                    total_pdf,
+                )
+                return False
+            if total_debito > total_pdf * 1.45:
+                logger.warning(
+                    "Resultado rejeitado: débitos extraídos muito acima do total do PDF (extraído=%s, pdf=%s)",
+                    total_debito,
+                    total_pdf,
+                )
+                return False
         return True
+
+    transacoes_local, ignoradas_local, banco_local, total_local = _parse_fatura_pdf_local(file_bytes)
+    if _resultado_parece_valido(transacoes_local, total_local):
+        logger.info(
+            "✅ Parser local aprovou a fatura sem IA (%s transações, banco=%s, total=%s)",
+            len(transacoes_local),
+            banco_local,
+            total_local,
+        )
+        return transacoes_local, ignoradas_local, banco_local, total_local
 
     pdf_part = {"mime_type": "application/pdf", "data": file_bytes}
 
@@ -273,6 +670,13 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
             logger.warning("Resultado do Gemini com %s foi descartado por baixa confiabilidade estrutural.", model_name)
         except Exception as exc:
             logger.warning("Falha na extração multimodal direta com %s: %s", model_name, exc)
+
+    if transacoes_local:
+        logger.warning(
+            "⚠️ Gemini não entregou resultado confiável. Retornando melhor esforço do parser local (%s transações).",
+            len(transacoes_local),
+        )
+        return transacoes_local, ignoradas_local, banco_local, total_local
 
     from .invoice_processor import UniversalInvoiceExtractor
 
