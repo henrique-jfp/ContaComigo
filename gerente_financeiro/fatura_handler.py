@@ -101,33 +101,34 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     logger.info(f"Usando modelo {model_name} para extração de fatura (config original: {current_model})")
     model = genai.GenerativeModel(model_name)
     
-    prompt = """
-    Você é um extrator de dados de faturas de cartão de crédito especialista e infalível.
-    Analise o documento PDF anexo e extraia as transações com precisão máxima.
+    prompt = f"""
+    Você é um extrator de dados de faturas de cartão de crédito especialista e rigoroso.
+    DATA ATUAL DO SISTEMA: {datetime.now().strftime('%d/%m/%Y')} (Considere que estamos em ABRIL de 2026).
     
-    REGRAS CRÍTICAS:
-    1. Identifique o nome do Banco ou Instituição emissora (ex: Nubank, Itaú, Bradesco, Inter, Santander, C6, etc).
-    2. Identifique o "Valor Total" ou "Total da Fatura" atual.
-    3. Extraia TODOS os lançamentos da fatura do mês atual.
-    4. O valor deve ser NEGATIVO para compras/despesas e POSITIVO para estornos ou pagamentos.
-    5. IGNORE pagamentos da fatura anterior (mas conte quantos itens foram ignorados na chave 'ignoradas').
-    6. Se a descrição indicar um parcelamento (ex: "Compra 01/12", "Lojas X 2/5"), extraia apenas essa fração para a chave "parcela". Ex: "1/12". Caso contrário, deixe null.
-    7. Retorne EXCLUSIVAMENTE um objeto JSON válido, sem nenhum texto extra (sem markdown ```json).
+    Analise o texto da fatura e extraia APENAS as compras e créditos REAIS do mês de ABRIL de 2026.
+    
+    REGRAS DE OURO (NÃO DESCUMPRA):
+    1. IGNORE qualquer linha que diga "Total da Fatura", "Saldo Anterior", "Pagamento Efetuado", "Encargos", "Juros" ou "IOF" como se fosse uma compra. 
+    2. Extraia APENAS itens que tenham uma DATA de compra clara e um ESTABELECIMENTO.
+    3. Se o texto extraído via OCR/PDF estiver bagunçado, use sua inteligência para associar a DATA correta ao VALOR correto.
+    4. O valor deve ser NEGATIVO para despesas (ex: -50.00) e POSITIVO para estornos ou pagamentos identificados (ex: 100.00).
+    5. Se a data vier apenas como "DD/MM", assuma SEMPRE o ano de 2026.
+    6. Se encontrar parcelamentos como "Loja X 02/10", extraia a descrição "Loja X" e a parcela "2/10".
     
     FORMATO JSON OBRIGATÓRIO:
-    {
+    {{
         "banco": "Nome do Banco",
-        "total_fatura": 1234.56,
+        "total_fatura": 0.0,
         "transacoes": [
-            {
-                "data": "YYYY-MM-DD",
-                "descricao": "NOME DO ESTABELECIMENTO",
-                "valor": -150.50,
+            {{
+                "data": "2026-04-DD",
+                "descricao": "NOME REAL DO ESTABELECIMENTO",
+                "valor": -123.45,
                 "parcela": "1/12"
-            }
+            }}
         ],
-        "ignoradas": 2
-    }
+        "ignoradas": 0
+    }}
     """
     
     pdf_part = {
