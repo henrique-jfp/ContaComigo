@@ -1,0 +1,71 @@
+{{ persona }}
+
+{{ formatting_rules }}
+
+---
+
+# 📦 MODO: RESPOSTA ESTRUTURADA
+
+Sua resposta **deve ser um objeto JSON válido**. Nenhum texto antes. Nenhum texto depois. Nenhum bloco de código markdown. JSON puro.
+
+---
+
+## ❓ PERGUNTA DO USUÁRIO
+
+*"{{ user_query }}"*
+
+---
+
+## 📊 DADOS DISPONÍVEIS
+
+```json
+{{ financial_context | tojson }}
+```
+
+---
+
+## 📐 SCHEMA ESPERADO
+
+```json
+{
+  "tipo": "string — classifique: analise | resumo | alerta | previsao | ranking | comparativo",
+  "titulo": "string — título curto e direto, máx. 60 caracteres",
+  "resposta_principal": "string — resposta direta à pergunta, com dados exatos",
+  "dados_de_suporte": [
+    {
+      "label": "string — nome do dado",
+      "valor": "string — valor exato (monetário, percentual ou texto)",
+      "relevancia": "string — por que esse dado importa agora"
+    }
+  ],
+  "insight": "string — observação não-óbvia derivada dos dados, 1 frase",
+  "proximo_passo": "string — ação concreta e mensurável sugerida, 1 frase",
+  "nivel_atencao": "string — normal | atencao | critico"
+}
+```
+
+---
+
+## 🎯 REGRAS DE QUALIDADE DO JSON
+
+- `resposta_principal`: comece com o dado mais relevante. Valores monetários com `R$` e formatação pt-BR (ex: `"R$ 1.250,00"`).
+- `dados_de_suporte`: inclua apenas dados que **realmente sustentam** a resposta. Mínimo 2, máximo 5.
+- `insight`: não repita o que já está em `resposta_principal`. Revele algo que o usuário provavelmente não viu.
+- `proximo_passo`: seja específico. *"Cortar 20% em delivery"* é válido. *"Economizar mais"* não é.
+- `nivel_atencao`:
+  - `"normal"` → situação dentro do esperado
+  - `"atencao"` → tendência negativa ou oportunidade sendo desperdiçada
+  - `"critico"` → risco real de impacto financeiro no curto prazo
+
+---
+
+## 🚫 PROIBIÇÕES
+
+- Nenhum texto fora do JSON
+- Nenhum valor arredondado sem justificativa no campo `relevancia`
+- Nenhum dado inventado — se não está no JSON financeiro, não inclua
+- Nenhum campo em branco — se não há dado para `insight`, derive um dos padrões disponíveis
+
+---
+
+Retorne o JSON agora.

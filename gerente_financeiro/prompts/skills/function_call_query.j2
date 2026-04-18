@@ -2,11 +2,64 @@
 
 {{ function_rules }}
 
-# ❓ PERGUNTA DO USUÁRIO
-Analise a pergunta de "{{ user_name }}": "{{ user_query }}".
+---
 
-**Decida: A intenção é listar lançamentos?**
+# ⚡ MODO: CHAMADA DE FUNÇÃO
 
-**SIM:** Responda APENAS com o JSON de chamada de função.
+Sua única tarefa é analisar a intenção de **{{ user_name }}** e retornar o JSON de chamada de função correto — ou indicar que a pergunta não se aplica a este modo.
 
-**NÃO:** Se a intenção não for estritamente listar lançamentos, indique que você não pode responder a essa pergunta específica usando a ferramenta de listagem, e que outra habilidade seria necessária. Não tente analisar ou gerar texto livre.
+---
+
+## ❓ PERGUNTA DO USUÁRIO
+
+*"{{ user_query }}"*
+
+---
+
+## 🧠 PROTOCOLO DE DECISÃO
+
+### PASSO 1 — CLASSIFICAR A INTENÇÃO
+
+| Intenção | Ação |
+|----------|------|
+| Listar, mostrar, ver transações específicas | Retorne JSON de função |
+| Analisar padrão, entender comportamento | Não é listagem — indique |
+| Registrar gasto/receita | Não é listagem — indique |
+| Comparar períodos, calcular totais | Não é listagem — indique |
+
+### PASSO 2 — SE FOR LISTAGEM, MONTAR O JSON
+
+Extraia com precisão:
+- **`limit`:** número explícito pedido, ou `10` como padrão razoável se não especificado
+- **`categoria_nome`:** apenas se uma categoria específica foi mencionada (use o nome limpo, sem "gastos com", "compras de")
+- **`query`:** apenas se um estabelecimento/descrição específica foi mencionado
+- **`data_inicio` / `data_fim`:** apenas se um período específico foi mencionado (formato YYYY-MM-DD)
+
+### PASSO 3 — RETORNAR
+
+**Se for listagem:**
+```json
+{"funcao": "listar_lancamentos", "parametros": { ... }}
+```
+
+**Se não for listagem:**
+```
+NÃO_APLICAVEL: [classifique a intenção real em uma frase — ex: "análise de padrão de gastos", "registro de transação"]
+```
+
+---
+
+## 🔍 EXEMPLOS DE MAPEAMENTO CORRETO
+
+| Pergunta | JSON ou Não-Aplicável |
+|----------|----------------------|
+| "Último lançamento" | `{"funcao": "listar_lancamentos", "parametros": {"limit": 1}}` |
+| "5 últimos gastos com lazer" | `{"funcao": "listar_lancamentos", "parametros": {"limit": 5, "categoria_nome": "Lazer"}}` |
+| "Compras no iFood esta semana" | `{"funcao": "listar_lancamentos", "parametros": {"query": "iFood", "limit": 20}}` |
+| "Estou gastando demais?" | `NÃO_APLICAVEL: análise comportamental` |
+| "Gastei R$ 50 no mercado" | `NÃO_APLICAVEL: registro de transação` |
+| "Qual meu saldo?" | `NÃO_APLICAVEL: consulta de dados agregados` |
+
+---
+
+Retorne agora. JSON puro ou `NÃO_APLICAVEL:` — nada além disso.
