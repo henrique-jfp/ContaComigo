@@ -19,6 +19,7 @@ import hashlib  # <-- Para gerar chaves de cache
 import json  # <-- Para serialização de dados
 from functools import lru_cache  # <-- Cache em memória
 import time  # <-- Para timestamps do cache
+import requests
 import google.generativeai as genai
 
 from database.database import listar_objetivos_usuario
