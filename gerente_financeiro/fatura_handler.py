@@ -136,132 +136,54 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     }}
     """
     
-    pdf_part = {
-        "mime_type": "application/pdf",
-        "data": file_bytes
-    }
+    # 1. USAR O NOVO MOTOR UNIVERSAL (MAIS RÍGIDO)
+    from .invoice_processor import UniversalInvoiceExtractor
     
-    # 1. PLANO A: GEMINI MULTIMODAL (Inteligência Visual - Prioridade Máxima)
-    # Lista de modelos com nomes normalizados para evitar erro 404
-    models_to_try = [
-        "gemini-1.5-flash", 
-        "gemini-2.0-flash", 
-        "gemini-2.5-flash-lite",
-        "gemini-1.5-flash-latest"
-    ]
+    extractor = UniversalInvoiceExtractor()
+    logger.info("🚀 Iniciando extração com UniversalInvoiceExtractor")
+    
+    # Extração via motor universal (IA visual de alta precisão)
+    invoice_data = await extractor.extract_from_file(file_bytes)
+    
+    if not invoice_data or invoice_data.confianca < 0.2:
+        raise RuntimeError("Não foi possível extrair dados confiáveis desta fatura. Verifique a qualidade do arquivo.")
 
-    for m_name in models_to_try:
-        try:
-            logger.info(f"🤖 Tentando extração MULTIMODAL (Arquivo Direto) com {m_name}...")
-            # Limpar o nome para garantir que o SDK aceite
-            clean_name = m_name.replace("models/", "")
-            curr_model = genai.GenerativeModel(clean_name)
-
-            # Tentar enviar o prompt + arquivo
-            response = await curr_model.generate_content_async([prompt, pdf_part])
-            if response and hasattr(response, 'text') and response.text:
-                text = response.text
-                logger.info(f"✅ Sucesso total com o modelo {m_name}!")
-                break
-        except Exception as e:
-            logger.warning(f"⚠️ Modelo {m_name} falhou no modo arquivo: {e}")
+    total_pdf = invoice_data.valor_total
+    transacoes_finais = []
+    
+    for item in invoice_data.itens:
+        # REGRA DE OURO 1: Evitar alucinação de Total como compra (Erro CARTÕES CAIXA)
+        if total_pdf > 0 and abs(abs(item.valor) - total_pdf) < 0.1:
+            logger.warning(f"Filtrando item que parece ser o total da fatura: {item.descricao}")
+            continue
+            
+        # REGRA DE OURO 2: Ignorar lixo de cabeçalho/sumário e lançamentos de meses anteriores
+        black_list = ["total", "pagamento efetuado", "saldo anterior", "cartões caixa", "limite", "demonstrativo", "encargos"]
+        if any(term in item.descricao.lower() for term in black_list):
             continue
 
-    # 2. FAILOVER (Se o modo arquivo falhar por cota, tentamos extração de texto local + Groq)
-    if not text:
-        logger.warning("❌ Modo Multimodal falhou. Tentando extração de texto local como último recurso...")
         try:
-            import fitz
-            doc = fitz.open(stream=file_bytes, filetype="pdf")
-            texto_extraido_local = ""
-            for page in doc:
-                texto_extraido_local += page.get_text("text", flags=fitz.TEXT_PRESERVE_WHITESPACE)
-            doc.close()
-
-            if len(texto_extraido_local.strip()) > 100:
-                from .ai_service import _groq_chat_completion_async
-                messages = [
-                    {"role": "system", "content": "Você é um extrator financeiro. Extraia dados de fatura deste texto para JSON."},
-                    {"role": "user", "content": f"{prompt}\n\nTEXTO EXTRAÍDO:\n{texto_extraido_local[:8000]}"}
-                ]
-                groq_resp = await _groq_chat_completion_async(messages)
-                if isinstance(groq_resp, dict) and "choices" in groq_resp:
-                    text = groq_resp["choices"][0]["message"]["content"]
-                    logger.info("✅ Sucesso no Failover via Groq!")
-        except Exception as f_err:
-            logger.error(f"Falha total no processamento: {f_err}")
-
-    if not text:
-        raise RuntimeError("IA indisponível. Cota de arquivos e texto esgotada.")
-
-    match = re.search(r'\{.*\}', text, re.DOTALL)
-    if not match:
-        raise ValueError("A IA não retornou um JSON válido.")
-        
-    json_str = match.group(0)
-    
-    # 🛠️ REPARO DE EMERGÊNCIA: Se o JSON estiver quebrado no final (comum em respostas longas)
-    if not json_str.strip().endswith('}'):
-        logger.warning("⚠️ JSON parece truncado. Tentando fechar chaves manualmente...")
-        # Tenta fechar as listas e objetos abertos
-        if json_str.count('[') > json_str.count(']'): json_str += ']'
-        if json_str.count('{') > json_str.count('}'): json_str += '}'
-
-    try:
-        data = json.loads(json_str)
-    except json.JSONDecodeError as e:
-        logger.error(f"Falha ao decodificar JSON da IA: {e}")
-        # Segunda tentativa: Limpeza agressiva de caracteres invisíveis
-        try:
-            import ast
-            # ast.literal_eval às vezes é mais permissivo que json.loads para pequenos erros de sintaxe
-            cleaned_str = json_str.replace('\n', ' ').replace('\r', '')
-            data = json.loads(cleaned_str)
-        except:
-            raise ValueError(f"O formato dos dados retornados pela IA é inválido: {e}")
-    
-    transacoes_finais = []
-    ano_atual = datetime.now().year
-    
-    for t in data.get("transacoes", []):
-        try:
-            data_str = str(t.get("data", ""))
-            dt_obj = None
-            
-            # Tenta diversos formatos de data de forma resiliente
-            for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%d/%m/%y", "%d/%m"]:
-                try:
-                    dt_obj = datetime.strptime(data_str, fmt)
-                    # Se for DD/MM, adiciona o ano atual
-                    if fmt == "%d/%m":
-                        dt_obj = dt_obj.replace(year=ano_atual)
-                    break
-                except:
-                    continue
-            
-            if not dt_obj:
-                raise ValueError(f"Formato de data desconhecido: {data_str}")
+            # O UniversalInvoiceExtractor já garante o formato YYYY-MM-DD
+            dt_obj = datetime.strptime(invoice_data.data, "%Y-%m-%d")
+            # Forçar ano de 2026 se a data extraída parecer ser do passado
+            if dt_obj.year < 2026:
+                dt_obj = dt_obj.replace(year=2026)
 
             transacoes_finais.append({
-                "descricao": str(t.get("descricao", "Sem descrição")),
-                "valor": float(t.get("valor", 0.0)),
+                "descricao": item.descricao,
+                "valor": item.valor,
                 "data_transacao": dt_obj,
                 "forma_pagamento": "Crédito",
-                "origem": f"fatura_pdf_{str(data.get('banco', 'generico')).lower().replace(' ', '_')}",
-                "parcela": t.get("parcela")
+                "origem": "fatura_universal",
+                "parcela": None
             })
-        except Exception as e:
-            logger.warning(f"Erro ao processar transação individual da fatura: {t} - {e}")
+        except:
             continue
-            
-    banco = str(data.get("banco", "Desconhecido"))
-    try:
-        total = float(data.get("total_fatura", 0.0))
-    except (ValueError, TypeError):
-        total = 0.0
-    ignoradas = int(data.get("ignoradas", 0))
+
+    banco = invoice_data.estabelecimento
+    ignoradas = 0 # O novo motor já filtra itens no prompt
     
-    return transacoes_finais, ignoradas, banco, total
+    return transacoes_finais, ignoradas, banco, total_pdf
 
 
 async def fatura_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
