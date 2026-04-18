@@ -1831,6 +1831,11 @@ def miniapp_overview():
             
             valor = abs(float(lanc.valor or 0))
             tipo_norm = str(lanc.tipo).lower()
+            sub_id = lanc.id_subcategoria
+
+            # Filtro inteligente de duplicidade (igual ao da Visão Geral)
+            if sub_id == 584 or tipo_norm == "transferência":
+                continue
             
             if tipo_norm.startswith(("entr", "recei")):
                 monthly_map[key]["entrada"] += valor
