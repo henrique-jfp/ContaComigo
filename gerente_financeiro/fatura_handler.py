@@ -7,6 +7,8 @@ import asyncio
 import time
 import unicodedata
 import io
+import hashlib
+import threading
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 from urllib.parse import quote, urlencode, urlparse
@@ -40,11 +42,79 @@ logger = logging.getLogger(__name__)
 MAX_PDF_SIZE_MB = int(os.getenv("FATURA_MAX_PDF_SIZE_MB", "100"))
 MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024
 MAX_PDF_PARSE_SECONDS = int(os.getenv("FATURA_PARSE_TIMEOUT_SECONDS", "300"))
+_PARSE_CACHE_TTL_SECONDS = int(os.getenv("FATURA_PARSE_CACHE_TTL_SECONDS", "1800"))
+_PARSE_CACHE_LOCK = threading.Lock()
+_PARSE_CACHE: dict[str, dict] = {}
 
 
 def _fmt_brl(value: float) -> str:
     normalized = f"{abs(float(value)):.2f}".replace(".", ",")
     return f"R$ {normalized}"
+
+
+def _get_parse_cache_key(file_bytes: bytes) -> str:
+    return hashlib.sha256(file_bytes).hexdigest()
+
+
+def _cleanup_parse_cache() -> None:
+    now = time.time()
+    expired = [key for key, item in _PARSE_CACHE.items() if item.get("expires_at", 0) <= now]
+    for key in expired:
+        _PARSE_CACHE.pop(key, None)
+
+
+def _serialize_parse_transacoes(transacoes: List[Dict]) -> List[Dict]:
+    serializadas: List[Dict] = []
+    for item in transacoes:
+        novo = dict(item)
+        if isinstance(novo.get("data_transacao"), datetime):
+            novo["data_transacao"] = novo["data_transacao"].isoformat()
+        serializadas.append(novo)
+    return serializadas
+
+
+def _deserialize_parse_transacoes(transacoes: List[Dict]) -> List[Dict]:
+    desserializadas: List[Dict] = []
+    for item in transacoes:
+        novo = dict(item)
+        data_raw = novo.get("data_transacao")
+        if isinstance(data_raw, str):
+            try:
+                novo["data_transacao"] = datetime.fromisoformat(data_raw)
+            except Exception:
+                pass
+        desserializadas.append(novo)
+    return desserializadas
+
+
+def _get_cached_parse_result(file_bytes: bytes) -> tuple[List[Dict], int, str, float] | None:
+    cache_key = _get_parse_cache_key(file_bytes)
+    with _PARSE_CACHE_LOCK:
+        _cleanup_parse_cache()
+        item = _PARSE_CACHE.get(cache_key)
+        if not item:
+            return None
+        cached = item.get("result")
+        if not cached:
+            return None
+        transacoes, ignoradas, origem_label, total_pdf = cached
+        return _deserialize_parse_transacoes(transacoes), int(ignoradas), str(origem_label), float(total_pdf)
+
+
+def _set_cached_parse_result(file_bytes: bytes, result: tuple[List[Dict], int, str, float]) -> None:
+    cache_key = _get_parse_cache_key(file_bytes)
+    transacoes, ignoradas, origem_label, total_pdf = result
+    with _PARSE_CACHE_LOCK:
+        _cleanup_parse_cache()
+        _PARSE_CACHE[cache_key] = {
+            "result": (
+                _serialize_parse_transacoes(transacoes),
+                int(ignoradas),
+                str(origem_label),
+                float(total_pdf),
+            ),
+            "expires_at": time.time() + _PARSE_CACHE_TTL_SECONDS,
+        }
 
 
 def _compact_desc(text: str, max_len: int = 42) -> str:
@@ -494,6 +564,11 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     if not config.GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY não configurada")
 
+    cached = _get_cached_parse_result(file_bytes)
+    if cached:
+        logger.info("♻️ Reutilizando resultado em cache para este PDF de fatura.")
+        return cached
+
     api_key_debug = config.GEMINI_API_KEY or ""
     masked_key = f"{api_key_debug[:4]}...{api_key_debug[-4:]}" if len(api_key_debug) > 8 else "NAO_CONFIGURADA"
     logger.info(f"🔑 [DEBUG] Chave API Ativa: {masked_key} | Modelo: {config.GEMINI_MODEL_NAME}")
@@ -704,7 +779,9 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
             banco_local,
             total_local,
         )
-        return transacoes_local, ignoradas_local, banco_local, total_local
+        result = (transacoes_local, ignoradas_local, banco_local, total_local)
+        _set_cached_parse_result(file_bytes, result)
+        return result
 
     pdf_part = {"mime_type": "application/pdf", "data": file_bytes}
 
@@ -713,7 +790,10 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
             logger.info("🤖 Tentando extração multimodal direta com %s", model_name)
             response = await genai.GenerativeModel(model_name).generate_content_async(
                 [prompt, pdf_part],
-                generation_config={"response_mime_type": "application/json"},
+                generation_config={
+                    "response_mime_type": "application/json",
+                    "temperature": 0,
+                },
             )
             json_data = _parse_json_response(getattr(response, "text", "") or "")
             if not json_data:
@@ -722,7 +802,9 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
             transacoes, ignoradas, banco, total_pdf = _normalizar_resultado_bruto(json_data, "fatura_pdf")
             if _resultado_parece_valido(transacoes, total_pdf):
                 logger.info("✅ Extração multimodal direta funcionou com %s (%s transações)", model_name, len(transacoes))
-                return transacoes, ignoradas, banco, total_pdf
+                result = (transacoes, ignoradas, banco, total_pdf)
+                _set_cached_parse_result(file_bytes, result)
+                return result
             logger.warning("Resultado do Gemini com %s foi descartado por baixa confiabilidade estrutural.", model_name)
         except Exception as exc:
             logger.warning("Falha na extração multimodal direta com %s: %s", model_name, exc)
@@ -732,7 +814,9 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
             "⚠️ Gemini não entregou resultado confiável. Retornando melhor esforço do parser local (%s transações).",
             len(transacoes_local),
         )
-        return transacoes_local, ignoradas_local, banco_local, total_local
+        result = (transacoes_local, ignoradas_local, banco_local, total_local)
+        _set_cached_parse_result(file_bytes, result)
+        return result
 
     from .invoice_processor import UniversalInvoiceExtractor
 
@@ -764,7 +848,9 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     if not _resultado_parece_valido(transacoes_finais, total_pdf):
         raise RuntimeError("A fatura foi lida, mas os dados extraídos ficaram incoerentes com o total do PDF.")
 
-    return transacoes_finais, ignoradas_count, regex_invoice.estabelecimento, total_pdf
+    result = (transacoes_finais, ignoradas_count, regex_invoice.estabelecimento, total_pdf)
+    _set_cached_parse_result(file_bytes, result)
+    return result
 
 async def fatura_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await touch_user_interaction(update.effective_user.id, context)

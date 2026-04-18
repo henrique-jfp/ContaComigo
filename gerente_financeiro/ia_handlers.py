@@ -311,7 +311,13 @@ _ALFREDO_TOOLS = [
             "description": "Categoriza automaticamente todos os lançamentos financeiros do usuário que estão sem categoria registrada.",
             "parameters": {
                 "type": "object",
-                "properties": {},
+                "properties": {
+                    "executar": {
+                        "type": "boolean",
+                        "description": "Sempre true para executar a categorização."
+                    }
+                },
+                "required": ["executar"]
             },
         },
     },
@@ -494,6 +500,11 @@ async def _enviar_mensagem_fatiada(message, texto: str, is_html: bool = True, **
 
 def _intencao_busca_compra(texto: str) -> bool:
     texto = (texto or "").lower()
+    
+    # Se a pergunta pede agregação, análise ou envolve juros, ignorar busca simples para deixar para a IA
+    if any(ex in texto for ex in ["quanto", "total", "juros", "taxa", "rendimento", "score"]):
+        return False
+
     gatilhos = [
         "comprei",
         "comprou",
@@ -1122,6 +1133,10 @@ def _intencao_ultimo_lancamento(texto: str) -> bool:
             "ultima transacao",
             "última compra",
             "ultima compra",
+            "última despesa",
+            "ultima despesa",
+            "última receita",
+            "ultima receita",
             "lançamento mais recente",
             "lancamento mais recente",
             "último gasto",
@@ -1795,7 +1810,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         breakdown_mes = sorted(cats_mes.items(), key=lambda x: x[1], reverse=True)
 
         # --- ÚLTIMOS LANÇAMENTOS (DETALHADOS PARA PRECISÃO) ---
-        limit_lanc = 15 if (hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key) else 30
+        limit_lanc = 10 if (hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key) else 20
         base_lanc = db.query(Lancamento).filter(
             Lancamento.id_usuario == usuario_db.id
         ).order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc()).limit(limit_lanc * 2).all()

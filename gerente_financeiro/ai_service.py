@@ -42,7 +42,11 @@ def _groq_chat_completion(messages: list[dict], tools: list[dict] | None = None,
         json=payload,
         timeout=45,
     )
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except Exception as e:
+        logger.error(f"[GROQ] Erro API: {response.text}")
+        raise e
     return response.json()
 
 async def _groq_chat_completion_async(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> dict:
@@ -123,7 +127,6 @@ async def _cerebras_chat_completion_async(messages: list[dict], tools: list[dict
         payload["tools"] = tools
         if tool_choice:
             payload["tool_choice"] = tool_choice
-
     def _call():
         response = requests.post(
             "https://api.cerebras.ai/v1/chat/completions",
@@ -134,7 +137,11 @@ async def _cerebras_chat_completion_async(messages: list[dict], tools: list[dict
             json=payload,
             timeout=30,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except Exception as e:
+            logger.error(f"[CEREBRAS] Erro API: {response.text}")
+            raise e
         return response.json()
 
     loop = asyncio.get_running_loop()
