@@ -933,6 +933,9 @@ def _resumo_previsao_local(db, usuario_id: int, saldo: float, entradas: float, s
     
     saidas_mes = _calcular_saidas_reais(lanc_mes, ignore_ids)
     entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith(("entr", "recei")))
+    
+    # Saldo do mês atual (Performance Mensal) - Alinhado com MiniApp
+    saldo_mes_atual = entradas_mes - saidas_mes
 
     if not lanc_mes or (abs(entradas_mes) < 0.01 and abs(saidas_mes) < 0.01):
         return (
@@ -951,20 +954,26 @@ def _resumo_previsao_local(db, usuario_id: int, saldo: float, entradas: float, s
     media_diaria_saida = saidas_mes / dias_passados
     proj_saida = media_diaria_saida * dias_no_mes
     saldo_projetado = entradas_mes - proj_saida
-    base_disponivel = saldo if saldo > 0 else entradas_mes - saidas_mes
-    limite_diario = max(0.0, base_disponivel / dias_restantes)
+    
+    # Limite diário baseado no saldo disponível real (ou do mês se for maior)
+    # Se o saldo total for muito baixo por dívidas antigas, o limite diário deve ser conservador.
+    # Mas se o usuário quer ver o "do mês", usamos o saldo_mes_atual como referência primária.
+    base_calculo_limite = max(0.0, saldo_mes_atual)
+    limite_diario = base_calculo_limite / dias_restantes
 
     if saldo_projetado < 0:
-        primeira = f"⚠️ Nesse ritmo, você tende a fechar o mês no vermelho em {_formatar_valor_brasileiro(abs(saldo_projetado))}."
+        primeira = f"⚠️ Nesse ritmo, você tende a fechar o mês no vermelho em <code>{_formatar_valor_brasileiro(abs(saldo_projetado))}</code>."
     elif saldo_projetado > 0:
-        primeira = f"✅ Nesse ritmo, você deve fechar o mês no positivo em {_formatar_valor_brasileiro(saldo_projetado)}."
+        primeira = f"✅ Nesse ritmo, você deve fechar o mês no positivo em <code>{_formatar_valor_brasileiro(saldo_projetado)}</code>."
     else:
         primeira = "➡️ Nesse ritmo, o mês deve fechar no zero a zero."
 
     linhas = [
+        f"📊 <b>Previsão de Fechamento</b>\n",
         primeira,
-        f"Seu limite seguro diário é {_formatar_valor_brasileiro(limite_diario)}.",
-        f"Média diária atual: {_formatar_valor_brasileiro(media_diaria_saida)}.",
+        f"\n💰 <b>Média de gastos:</b> <code>{_formatar_valor_brasileiro(media_diaria_saida)}</code>/dia",
+        f"🎯 <b>Limite seguro:</b> <code>{_formatar_valor_brasileiro(limite_diario)}</code>/dia",
+        f"\n💡 <i>Estes valores consideram apenas seus gastos reais, ignorando transferências e faturas.</i>"
     ]
     return "\n".join(linhas)
 
