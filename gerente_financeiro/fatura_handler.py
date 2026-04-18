@@ -141,15 +141,23 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
         "data": file_bytes
     }
     
-    text = None
     # 1. PLANO A: GEMINI MULTIMODAL (Inteligência Visual - Prioridade Máxima)
-    # Tentamos os modelos em ordem de estabilidade para arquivos
-    models_to_try = ["gemini-1.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
-    
+    # Lista de modelos com nomes normalizados para evitar erro 404
+    models_to_try = [
+        "gemini-1.5-flash", 
+        "gemini-2.0-flash", 
+        "gemini-2.5-flash-lite",
+        "gemini-1.5-flash-latest"
+    ]
+
     for m_name in models_to_try:
         try:
             logger.info(f"🤖 Tentando extração MULTIMODAL (Arquivo Direto) com {m_name}...")
-            curr_model = genai.GenerativeModel(m_name)
+            # Limpar o nome para garantir que o SDK aceite
+            clean_name = m_name.replace("models/", "")
+            curr_model = genai.GenerativeModel(clean_name)
+
+            # Tentar enviar o prompt + arquivo
             response = await curr_model.generate_content_async([prompt, pdf_part])
             if response and hasattr(response, 'text') and response.text:
                 text = response.text
@@ -190,7 +198,27 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     if not match:
         raise ValueError("A IA não retornou um JSON válido.")
         
-    data = json.loads(match.group(0))
+    json_str = match.group(0)
+    
+    # 🛠️ REPARO DE EMERGÊNCIA: Se o JSON estiver quebrado no final (comum em respostas longas)
+    if not json_str.strip().endswith('}'):
+        logger.warning("⚠️ JSON parece truncado. Tentando fechar chaves manualmente...")
+        # Tenta fechar as listas e objetos abertos
+        if json_str.count('[') > json_str.count(']'): json_str += ']'
+        if json_str.count('{') > json_str.count('}'): json_str += '}'
+
+    try:
+        data = json.loads(json_str)
+    except json.JSONDecodeError as e:
+        logger.error(f"Falha ao decodificar JSON da IA: {e}")
+        # Segunda tentativa: Limpeza agressiva de caracteres invisíveis
+        try:
+            import ast
+            # ast.literal_eval às vezes é mais permissivo que json.loads para pequenos erros de sintaxe
+            cleaned_str = json_str.replace('\n', ' ').replace('\r', '')
+            data = json.loads(cleaned_str)
+        except:
+            raise ValueError(f"O formato dos dados retornados pela IA é inválido: {e}")
     
     transacoes_finais = []
     ano_atual = datetime.now().year
