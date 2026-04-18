@@ -147,8 +147,8 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
         import fitz
         doc = fitz.open(stream=file_bytes, filetype="pdf")
         for page in doc:
-            # 🛠️ MODO RIGOROSO: Extrai texto preservando espaços e posições (Layout=True)
-            page_text = page.get_text("text", flags=fitz.TEXT_PRESERVE_WHITESPACE | fitz.TEXT_IN_DISPLAY_ORDER)
+            # 🛠️ MODO COMPATÍVEL: Preserva espaços mas sem usar flag inexistente
+            page_text = page.get_text("text", flags=fitz.TEXT_PRESERVE_WHITESPACE)
             texto_extraido_local += f"{page_text}\n"
         doc.close()
     except Exception as e:
@@ -159,8 +159,12 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     {prompt}
     
     INSTRUÇÃO DE ESTRUTURA:
-    O texto abaixo foi extraído de colunas. Identifique o padrão da tabela (geralmente DATA | DESCRIÇÃO | VALOR).
-    NÃO misture valores de linhas diferentes. Se o valor estiver na mesma altura horizontal da descrição, eles pertencem ao mesmo item.
+    O texto abaixo foi extraído de colunas de um PDF financeiro. 
+    IDENTIFIQUE o padrão da tabela (DATA | DESCRIÇÃO | VALOR).
+    NÃO misture valores de linhas diferentes. 
+    REGRAS DE OURO: 
+    - Se um valor aparecer isolado, associe-o à descrição mais próxima à esquerda.
+    - Ignore qualquer item sem valor monetário claro.
     """
 
     # 2. ESTRATÉGIA DE EXTRAÇÃO (Otimização de Quota)
@@ -544,7 +548,12 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             transacoes = context.user_data.get("fatura_transacoes", [])
             conta_id = context.user_data.get("fatura_conta_id", 0)
             if not transacoes:
-                await query.edit_message_text("❌ Dados da fatura perdidos. Tente novamente.")
+                logger.error(f"❌ Transações não encontradas no user_data para o usuário {query.from_user.id}. Dados perdidos.")
+                await query.edit_message_text(
+                    "❌ <b>Dados da fatura perdidos.</b>\n\n"
+                    "Infelizmente o sistema reiniciou ou a sessão expirou. Por favor, envie o PDF novamente para processar.",
+                    parse_mode="HTML"
+                )
                 return ConversationHandler.END
 
             db = next(get_db())
