@@ -399,9 +399,6 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
     finally:
         db.close()
 
-    finally:
-        db.close()
-
 
 async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
