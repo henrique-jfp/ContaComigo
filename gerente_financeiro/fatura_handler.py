@@ -6,6 +6,7 @@ import uuid
 import asyncio
 import time
 import unicodedata
+import io
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 from urllib.parse import quote, urlencode, urlparse
@@ -164,7 +165,62 @@ def _normalizar_texto_parser(valor: str) -> str:
     return re.sub(r"\s+", " ", texto)
 
 
+def _extrair_linhas_com_pdfplumber(file_bytes: bytes) -> list[str]:
+    """Extrai linhas preservando a geometria visual do PDF via bounding boxes."""
+    import pdfplumber
+
+    linhas: list[str] = []
+    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+        for page in pdf.pages:
+            words = page.extract_words(
+                keep_blank_chars=False,
+                use_text_flow=True,
+                x_tolerance=2,
+                y_tolerance=3,
+                extra_attrs=["x0", "top"],
+            ) or []
+
+            if words:
+                grupos: list[dict] = []
+                for word in sorted(words, key=lambda w: (round(float(w["top"]), 1), float(w["x0"]))):
+                    top = float(word["top"])
+                    texto = str(word.get("text") or "").strip()
+                    if not texto:
+                        continue
+
+                    grupo = None
+                    for existente in grupos:
+                        if abs(existente["top"] - top) <= 3:
+                            grupo = existente
+                            break
+
+                    if grupo is None:
+                        grupo = {"top": top, "words": []}
+                        grupos.append(grupo)
+
+                    grupo["words"].append((float(word["x0"]), texto))
+
+                for grupo in grupos:
+                    textos = [texto for _, texto in sorted(grupo["words"], key=lambda item: item[0])]
+                    linha = re.sub(r"\s+", " ", " ".join(textos)).strip()
+                    if linha:
+                        linhas.append(linha)
+                continue
+
+            page_text = page.extract_text(x_tolerance=2, y_tolerance=3) or ""
+            for line in page_text.splitlines():
+                clean = re.sub(r"\s+", " ", line).strip()
+                if clean:
+                    linhas.append(clean)
+    return linhas
+
+
 def _extrair_texto_pdf_local(file_bytes: bytes) -> list[str]:
+    try:
+        return _extrair_linhas_com_pdfplumber(file_bytes)
+    except Exception as exc:
+        logger.warning("Falha no parser visual com pdfplumber; usando fallback fitz: %s", exc)
+
     import fitz
 
     doc = fitz.open(stream=file_bytes, filetype="pdf")
