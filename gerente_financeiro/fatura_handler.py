@@ -25,7 +25,7 @@ from telegram.ext import (
 from database.database import get_db, get_or_create_user
 from models import Conta
 from .services import salvar_transacoes_generica, limpar_cache_usuario
-from .fatura_draft_store import create_fatura_draft, set_pending_editor_token
+from .fatura_draft_store import create_fatura_draft, set_pending_editor_token, get_fatura_draft, pop_fatura_draft
 from .states import (
     FATURA_AWAIT_FILE,
     FATURA_CONFIRMATION_STATE,
@@ -953,9 +953,18 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
         ])
         resumo = "\n".join(resumo_linhas)
 
+        draft_token = create_fatura_draft(
+            telegram_user_id=update.effective_user.id,
+            conta_id=0,
+            conta_nome="Cartao de Credito",
+            transacoes=transacoes,
+            origem_label=origem_label,
+        )
+        context.user_data["fatura_draft_token"] = draft_token
+
         keyboard = [
-            [InlineKeyboardButton("✅ Confirmar e Salvar", callback_data="fatura_salvar")],
-            [InlineKeyboardButton("✏️ Editar", callback_data="fatura_editar_inline")],
+            [InlineKeyboardButton("✅ Confirmar e Salvar", callback_data=f"fatura_salvar:{draft_token}")],
+            [InlineKeyboardButton("✏️ Editar", callback_data=f"fatura_editar_inline:{draft_token}")],
             [InlineKeyboardButton("❌ Cancelar", callback_data="fatura_cancelar")],
         ]
         await update.message.reply_text(resumo, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
@@ -979,21 +988,26 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     # Processar ação
     try:
-        action = query.data
+        raw_action = query.data or ""
+        action_parts = raw_action.split(":", 1)
+        action = action_parts[0]
+        draft_token = action_parts[1] if len(action_parts) > 1 else (context.user_data.get("fatura_draft_token") or "")
         logger.info(f"fatura_confirm: action={action}, user={query.from_user.id}")
         
         if action == "fatura_cancelar":
             context.user_data.pop("fatura_transacoes", None)
             context.user_data.pop("fatura_conta_id", None)
             context.user_data.pop("fatura_ajuste_pdf", None)
+            context.user_data.pop("fatura_draft_token", None)
             await query.edit_message_text("❌ Importacao cancelada.")
             return ConversationHandler.END
 
         if action == "fatura_editar_inline":
             logger.info("Processando fatura_editar_inline para user=%s", query.from_user.id)
-            transacoes = context.user_data.get("fatura_transacoes", [])
-            conta_id = context.user_data.get("fatura_conta_id")
-            origem_label = context.user_data.get("fatura_origem_label", "Inter")
+            draft_data = get_fatura_draft(draft_token, query.from_user.id) if draft_token else None
+            transacoes = (draft_data or {}).get("transacoes") or context.user_data.get("fatura_transacoes", [])
+            conta_id = (draft_data or {}).get("conta_id")
+            origem_label = (draft_data or {}).get("origem_label") or context.user_data.get("fatura_origem_label", "Inter")
 
             if not transacoes:
                 logger.warning("Dados de fatura expirados: transacoes=%s, conta_id=%s", bool(transacoes), conta_id)
@@ -1037,16 +1051,34 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             return FATURA_CONFIRMATION_STATE
 
         if action == "fatura_salvar":
-            transacoes = context.user_data.get("fatura_transacoes", [])
-            conta_id = context.user_data.get("fatura_conta_id", 0)
+            if draft_token and context.user_data.get("fatura_save_in_progress_token") == draft_token:
+                await query.answer("⏳ Já estou salvando essa fatura.", show_alert=False)
+                return ConversationHandler.END
+
+            if draft_token and context.user_data.get("fatura_save_completed_token") == draft_token:
+                await query.answer("✅ Essa fatura já foi processada.", show_alert=False)
+                return ConversationHandler.END
+
+            draft_data = get_fatura_draft(draft_token, query.from_user.id) if draft_token else None
+            transacoes = (draft_data or {}).get("transacoes") or context.user_data.get("fatura_transacoes", [])
+            conta_id = int((draft_data or {}).get("conta_id") or context.user_data.get("fatura_conta_id", 0))
             if not transacoes:
                 logger.error(f"❌ Transações não encontradas no user_data para o usuário {query.from_user.id}. Dados perdidos.")
-                await query.edit_message_text(
-                    "❌ <b>Dados da fatura perdidos.</b>\n\n"
-                    "Infelizmente o sistema reiniciou ou a sessão expirou. Por favor, envie o PDF novamente para processar.",
-                    parse_mode="HTML"
-                )
+                try:
+                    await query.edit_message_text(
+                        "❌ <b>Dados da fatura perdidos.</b>\n\n"
+                        "Infelizmente o sistema reiniciou ou a sessão expirou. Por favor, envie o PDF novamente para processar.",
+                        parse_mode="HTML"
+                    )
+                except Exception:
+                    await query.answer("❌ Dados da fatura perdidos. Envie o PDF novamente.", show_alert=True)
                 return ConversationHandler.END
+
+            context.user_data["fatura_save_in_progress_token"] = draft_token
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception:
+                pass
 
             db = next(get_db())
             try:
@@ -1061,6 +1093,9 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     db, usuario_db, transacoes, conta_id, tipo_origem=tipo_origem
                 )
                 if ok:
+                    if draft_token:
+                        pop_fatura_draft(draft_token, query.from_user.id)
+                    context.user_data["fatura_save_completed_token"] = draft_token
                     try:
                         await give_xp_for_action(query.from_user.id, "LANCAMENTO_CRIADO_PDF", context)
                     except Exception:
@@ -1075,6 +1110,7 @@ async def fatura_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 return ConversationHandler.END
             finally:
                 db.close()
+                context.user_data.pop("fatura_save_in_progress_token", None)
                 context.user_data.pop("fatura_transacoes", None)
                 context.user_data.pop("fatura_conta_id", None)
                 context.user_data.pop("fatura_ajuste_pdf", None)
