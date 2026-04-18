@@ -135,8 +135,8 @@ class UniversalInvoiceExtractor:
 
                 from .ai_service import _groq_chat_completion_async
                 messages = [
-                    {"role": "system", "content": "Você é um extrator financeiro de alta precisão. Extraia os dados para JSON."},
-                    {"role": "user", "content": f"{prompt}\n\nTEXTO DA FATURA (TRUNCADO SE GRANDE):\n{texto_seguro}"}
+                    {"role": "system", "content": "Você é um extrator financeiro que retorna APENAS JSON puro. Proibido explicações ou markdown."},
+                    {"role": "user", "content": f"Converta o texto desta fatura no JSON solicitado:\n\nTEXTO:\n{texto_seguro}\n\nREGRAS:\n{prompt}"}
                 ]
                 groq_resp = await _groq_chat_completion_async(messages)
                 if isinstance(groq_resp, dict) and "choices" in groq_resp:
@@ -146,17 +146,22 @@ class UniversalInvoiceExtractor:
                 logger.error(f"❌ Falha total na extração (Gemini & Groq): {fe}")
                 raise RuntimeError("O sistema de IA está temporariamente sobrecarregado. Tente novamente em alguns minutos ou use um arquivo menor.")
 
-        # 3. PARSE E VALIDAÇÃO DO JSON
+        # 3. PARSE E VALIDAÇÃO DO JSON (ROBUSTO)
         try:
-            match = re.search(r'\{.*\}', text, re.DOTALL)
+            # Encontrar o maior bloco que parece JSON entre chaves
+            match = re.search(r'(\{.*\})', text, re.DOTALL)
             if not match:
                 logger.error(f"IA não retornou JSON válido. Resposta: {text[:200]}...")
                 return None
 
-            json_data = json.loads(match.group(0))
+            clean_json = match.group(1)
+            # Remover possíveis comentários ou lixo antes de dar parse
+            clean_json = re.sub(r'//.*', '', clean_json) # remove comentários de linha única
+            
+            json_data = json.loads(clean_json)
             return InvoiceSchema(**json_data)
         except Exception as e:
-            logger.error(f"Erro ao decodificar JSON da IA: {e}")
+            logger.error(f"Erro ao decodificar JSON da IA: {e} | Texto: {text[:500]}")
             return None
 
     async def process_and_save(self, db: Session, user_id: int, file_bytes: bytes, mime_type: str = "application/pdf") -> Tuple[bool, str]:

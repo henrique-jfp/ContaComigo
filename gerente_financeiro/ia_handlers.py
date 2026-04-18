@@ -1746,6 +1746,23 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             cats_mes[c_nome] = cats_mes.get(c_nome, 0.0) + abs(float(l.valor or 0))
         breakdown_mes = sorted(cats_mes.items(), key=lambda x: x[1], reverse=True)
 
+        # --- ÚLTIMOS LANÇAMENTOS (DETALHADOS PARA PRECISÃO) ---
+        limit_lanc = 15 if (hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key) else 30
+        base_lanc = db.query(Lancamento).filter(
+            Lancamento.id_usuario == usuario_db.id
+        ).order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc()).limit(limit_lanc * 2).all()
+        
+        ultimos_filtrados = [l for l in base_lanc if l.id_subcategoria not in ignore_ids][:limit_lanc]
+        resumo_ultimos = [
+            {
+                "data": l.data_transacao.strftime('%Y-%m-%d'),
+                "descricao": l.descricao,
+                "valor": float(l.valor or 0) * (1 if str(l.tipo).lower().startswith('entr') else -1),
+                "categoria": l.categoria.nome if l.categoria else "Sem categoria"
+            }
+            for l in ultimos_filtrados
+        ]
+
         # --- MEMÓRIA HISTÓRICA PARA COMPARAÇÃO ---
         mes_anterior_inicio = (inicio_mes - timedelta(days=1)).replace(day=1)
         mes_anterior_fim = inicio_mes - timedelta(microseconds=1)
