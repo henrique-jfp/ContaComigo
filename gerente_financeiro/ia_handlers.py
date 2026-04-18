@@ -1739,62 +1739,65 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         lanc_semana = [l for l in lanc_mes if l.data_transacao >= inicio_semana]
         saidas_semana = sum(abs(float(l.valor or 0)) for l in _filtrar_saidas(lanc_semana))
 
-        # Breakdown por categoria (Mês Atual - Já Filtrado)
-        cats_mes: dict[str, float] = {}
-        for l in saidas_mes_list:
-            c_nome = l.categoria.nome if l.categoria else "Sem categoria"
-            cats_mes[c_nome] = cats_mes.get(c_nome, 0.0) + abs(float(l.valor or 0))
-        breakdown_mes = sorted(cats_mes.items(), key=lambda x: x[1], reverse=True)
-
-        # Últimos 20 lançamentos (Versão Comprimida - Já Filtrada)
-        # 💡 Otimização: Se o usuário tem Pierre, mandamos apenas 5 para economizar tokens, já que ele tem acesso ao extrato real via tool
-        limit_lanc = 5 if (hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key) else 20
+        # --- MEMÓRIA HISTÓRICA PARA COMPARAÇÃO ---
+        mes_anterior_inicio = (inicio_mes - timedelta(days=1)).replace(day=1)
+        mes_anterior_fim = inicio_mes - timedelta(microseconds=1)
         
-        # Buscamos um pouco mais para garantir que, após o filtro, tenhamos o limite desejado
-        base_lanc = db.query(Lancamento).filter(
-            Lancamento.id_usuario == usuario_db.id
-        ).order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc()).limit(limit_lanc * 2).all()
-        
-        # Filtramos as duplicidades do histórico
-        ultimos_filtrados = [l for l in base_lanc if l.id_subcategoria not in ignore_ids][:limit_lanc]
-        
-        resumo_ultimos = [
-            f"{l.data_transacao.strftime('%d/%m')} | {l.descricao[:15]} | {'+' if str(l.tipo).lower().startswith('entr') else '-'}R$ {abs(float(l.valor or 0)):.0f}"
-            for l in ultimos_filtrados
-        ]
-
-        # Metas (Versão Comprimida)
-        metas_ativas = db.query(Objetivo).filter(
-            Objetivo.id_usuario == usuario_db.id,
-            func.coalesce(Objetivo.valor_atual, 0) < func.coalesce(Objetivo.valor_meta, 0)
+        lanc_anterior = db.query(Lancamento).filter(
+            Lancamento.id_usuario == usuario_db.id,
+            Lancamento.data_transacao >= mes_anterior_inicio,
+            Lancamento.data_transacao <= mes_anterior_fim
         ).all()
-        resumo_metas = [
-            f"{m.descricao[:15]}: {int((float(m.valor_atual or 0)/float(m.valor_meta or 0.01))*100)}%"
-            for m in metas_ativas if m.valor_meta and m.valor_meta > 0
-        ]
+        
+        saidas_anterior = _calcular_saidas_reais(lanc_anterior, ignore_ids)
+        entradas_anterior = sum(float(l.valor or 0) for l in lanc_anterior if str(l.tipo).lower().startswith(("entr", "recei")))
+        
+        # Breakdown por categoria (Mês Anterior)
+        cats_anterior: dict[str, float] = {}
+        for l in _filtrar_saidas_reais(lanc_anterior, ignore_ids):
+            c_nome = l.categoria.nome if l.categoria else "Sem categoria"
+            cats_anterior[c_nome] = cats_anterior.get(c_nome, 0.0) + abs(float(l.valor or 0))
+        breakdown_anterior = sorted(cats_anterior.items(), key=lambda x: x[1], reverse=True)[:5]
 
-        # Otimização de Concisão
-        eh_pergunta_curta = len(texto_usuario.split()) <= 5
-        keywords_diretas = ["saldo", "quanto", "tenho", "hoje", "ontem", "última", "ultima", "gasto", "gastei", "entrou"]
-        ser_ultra_direto = eh_pergunta_curta or any(k in texto_normalizado for k in keywords_diretas)
+        # Estatísticas Globais (Entidade Onisciente)
+        total_vida_saidas = saidas # saldo_total já vem do _usuario_e_saldo
+        total_vida_entradas = entradas
+        
+        # Detalhamento por Tipo de Transação (Mês Atual)
+        tipos_movimentacao = {
+            "Pix": sum(abs(float(l.valor)) for l in saidas_mes_list if "pix" in (l.descricao or "").lower() or (l.forma_pagamento == "Pix")),
+            "Cartao_Credito": sum(abs(float(l.valor)) for l in saidas_mes_list if (l.forma_pagamento == "Crédito")),
+            "Juros_e_Taxas": sum(abs(float(l.valor)) for l in saidas_mes_list if any(x in (l.descricao or "").lower() for x in ["juros", "mora", "multa", "iof", "taxa"]))
+        }
 
         contexto_financeiro_str = json.dumps(
             {
                 "data_hora_atual": hoje_str,
-                "saldo_disponivel": round(float(saldo or 0), 2),
-                "entradas_totais": round(float(entradas or 0), 2),
-                "saidas_totais": round(float(saidas or 0), 2),
+                "calendario": {
+                    "mes_atual_nome": hoje.strftime("%B"),
+                    "mes_anterior_nome": mes_anterior_inicio.strftime("%B"),
+                    "dias_restantes_no_mes": monthrange(hoje.year, hoje.month)[1] - hoje.day
+                },
+                "saldo_atual_real": round(float(saldo or 0), 2),
                 "mes_atual": {
-                    "gastos_total": round(saidas_mes, 2),
-                    "receitas_total": round(entradas_mes, 2),
-                    "gastos_por_categoria": [{"nome": n, "valor": round(v, 2)} for n, v in breakdown_mes]
+                    "total_gastos": round(saidas_mes, 2),
+                    "total_receitas": round(entradas_mes, 2),
+                    "breakdown_por_tipo": tipos_movimentacao,
+                    "principais_categorias": [{"nome": n, "valor": round(v, 2)} for n, v in breakdown_mes[:5]]
+                },
+                "mes_anterior": {
+                    "total_gastos": round(saidas_anterior, 2),
+                    "total_receitas": round(entradas_anterior, 2),
+                    "principais_categorias": [{"nome": n, "valor": round(v, 2)} for n, v in breakdown_anterior]
+                },
+                "historico_acumulado_vida": {
+                    "total_entradas": round(total_vida_entradas, 2),
+                    "total_saidas": round(total_vida_saidas, 2)
                 },
                 "gastos_hoje": round(saidas_hoje, 2),
                 "gastos_ontem": round(saidas_ontem, 2),
-                "gastos_esta_semana": round(saidas_semana, 2),
-                "ultimos_20_lancamentos": resumo_ultimos,
+                "ultimos_lancamentos_detalhados": resumo_ultimos,
                 "metas_ativas": resumo_metas,
-                "configuracao_resposta": "ULTRA_DIRETO" if ser_ultra_direto else "ANALISE_DETALHADA"
             },
             ensure_ascii=False,
         )
