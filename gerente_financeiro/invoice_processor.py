@@ -124,13 +124,19 @@ class UniversalInvoiceExtractor:
                 doc = fitz.open(stream=file_bytes, filetype="pdf")
                 texto_pdf = ""
                 for page in doc:
-                    texto_pdf += page.get_text("text", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+                    texto_pdf += page.get_text("text")
                 doc.close()
+
+                # Limpeza básica para economizar tokens
+                texto_pdf = re.sub(r'\s+', ' ', texto_pdf).strip()
+                
+                # Truncar para um limite seguro de tokens do Groq (aprox. 6000 chars para garantir contexto + prompt)
+                texto_seguro = texto_pdf[:6000]
 
                 from .ai_service import _groq_chat_completion_async
                 messages = [
                     {"role": "system", "content": "Você é um extrator financeiro de alta precisão. Extraia os dados para JSON."},
-                    {"role": "user", "content": f"{prompt}\n\nTEXTO DA FATURA:\n{texto_pdf[:8000]}"}
+                    {"role": "user", "content": f"{prompt}\n\nTEXTO DA FATURA (TRUNCADO SE GRANDE):\n{texto_seguro}"}
                 ]
                 groq_resp = await _groq_chat_completion_async(messages)
                 if isinstance(groq_resp, dict) and "choices" in groq_resp:
@@ -138,7 +144,7 @@ class UniversalInvoiceExtractor:
                     logger.info("✅ Sucesso no Failover Groq dentro do InvoiceProcessor!")
             except Exception as fe:
                 logger.error(f"❌ Falha total na extração (Gemini & Groq): {fe}")
-                return None
+                raise RuntimeError("O sistema de IA está temporariamente sobrecarregado. Tente novamente em alguns minutos ou use um arquivo menor.")
 
         # 3. PARSE E VALIDAÇÃO DO JSON
         try:

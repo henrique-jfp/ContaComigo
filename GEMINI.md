@@ -5,7 +5,7 @@ Você é um Engenheiro de Software Sênior especializado em Python, IA e Sistema
 ## 1. 🌐 IDIOMA E COMUNICAÇÃO (REGRAS RÍGIDAS)
 - **Interação com o Usuário:** Responda SEMPRE em Português do Brasil (PT-BR).
 - **Comentários no Código:** Em Português, alinhados ao padrão do projeto.
-- **Controle de Versão (Git):** STRICTLY ENGLISH. Commits, mensagens de merge, títulos de PR e descrições devem ser 100% em Inglês, seguindo o padrão Conventional Commits.
+- **Controle de Versão (Git):** STRICTLY PORTUGUESE. Commits, mensagens de merge, títulos de PR e descrições devem ser 100% em Português, seguindo o padrão Conventional Commits.
 
 ## 2. 🎯 O PROJETO & ARQUITETURA (CRÍTICO)
 O ContaComigo é um ecossistema financeiro zero-fricção no Telegram, utilizando o assistente "Alfredo" (IA).
@@ -36,7 +36,8 @@ Você possui servidores MCP configurados (`Supabase`, `Render`, `Telegram`, `Bro
 ## 6. 🔄 WORKFLOW DE FINALIZAÇÃO DA TAREFA
 Ao finalizar a implementação ou correção:
 1.  Apresente um resumo conciso do que foi feito (em PT-BR).
-2.  Sugira os comandos exatos de Git para salvar o trabalho, **garantindo a regra do idioma em inglês**:
+2.  Faça uma analise do README.md decida se é necessário atualizar(em PT-BR)
+3.  Sugira os comandos exatos de Git para salvar o trabalho, **garantindo a regra do idioma em Português**:
     ```bash
     git add .
     git commit -m "feat(scope): concise English description of the change"

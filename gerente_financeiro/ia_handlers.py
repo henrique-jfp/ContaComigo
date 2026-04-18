@@ -1739,6 +1739,13 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         lanc_semana = [l for l in lanc_mes if l.data_transacao >= inicio_semana]
         saidas_semana = sum(abs(float(l.valor or 0)) for l in _filtrar_saidas(lanc_semana))
 
+        # --- BREAKDOWN POR CATEGORIA (MÊS ATUAL) ---
+        cats_mes: dict[str, float] = {}
+        for l in saidas_mes_list:
+            c_nome = l.categoria.nome if l.categoria else "Sem categoria"
+            cats_mes[c_nome] = cats_mes.get(c_nome, 0.0) + abs(float(l.valor or 0))
+        breakdown_mes = sorted(cats_mes.items(), key=lambda x: x[1], reverse=True)
+
         # --- MEMÓRIA HISTÓRICA PARA COMPARAÇÃO ---
         mes_anterior_inicio = (inicio_mes - timedelta(days=1)).replace(day=1)
         mes_anterior_fim = inicio_mes - timedelta(microseconds=1)
