@@ -82,24 +82,22 @@ class UniversalInvoiceExtractor:
         }
         """
 
+        text = None
         try:
-            # Preparar conteúdo multimodal
+            # 1. TENTATIVA COM GEMINI (MULTIMODAL)
             content = [
                 prompt,
                 {"mime_type": mime_type, "data": file_bytes}
             ]
-
-            # Chamada assíncrona para a API
             response = await self.model.generate_content_async(content)
-            
-            if not response or not hasattr(response, 'text'):
-                raise ValueError("Resposta do Gemini vazia.")
-
-            text = response.text
+            if response and hasattr(response, 'text'):
+                text = response.text
         except Exception as e:
             logger.warning(f"⚠️ Gemini falhou no InvoiceProcessor: {e}. Tentando Failover Groq...")
+
+        # 2. FAILOVER PARA GROQ (TEXT-BASED) SE GEMINI FALHAR
+        if not text:
             try:
-                # Extrair texto via fitz para o Groq
                 import fitz
                 doc = fitz.open(stream=file_bytes, filetype="pdf")
                 texto_pdf = ""
@@ -116,25 +114,21 @@ class UniversalInvoiceExtractor:
                 if isinstance(groq_resp, dict) and "choices" in groq_resp:
                     text = groq_resp["choices"][0]["message"]["content"]
                     logger.info("✅ Sucesso no Failover Groq dentro do InvoiceProcessor!")
-                else:
-                    raise ValueError("Falha na resposta do Groq.")
             except Exception as fe:
                 logger.error(f"❌ Falha total na extração (Gemini & Groq): {fe}")
                 return None
 
-        # Limpeza básica do JSON
-        match = re.search(r'\{.*\}', text, re.DOTALL)
+        # 3. PARSE E VALIDAÇÃO DO JSON
+        try:
+            match = re.search(r'\{.*\}', text, re.DOTALL)
             if not match:
                 logger.error(f"IA não retornou JSON válido. Resposta: {text[:200]}...")
                 return None
 
             json_data = json.loads(match.group(0))
-            
-            # Validar com Pydantic
             return InvoiceSchema(**json_data)
-
         except Exception as e:
-            logger.error(f"Erro na extração Gemini ({self.model_name}): {e}", exc_info=True)
+            logger.error(f"Erro ao decodificar JSON da IA: {e}")
             return None
 
     async def process_and_save(self, db: Session, user_id: int, file_bytes: bytes, mime_type: str = "application/pdf") -> Tuple[bool, str]:
