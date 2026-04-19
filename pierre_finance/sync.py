@@ -629,13 +629,31 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
                 is_fatura_transfer = True
                 cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
 
-        # REQUISITO ESPECIAL: Debito de Fatura deve aparecer como Despesa no histórico, mas ser filtrado no KPI.
-        # Credito de Fatura (no cartão) deve ser Transferência sempre para não inflar Receita.
-        if is_fatura_transfer:
-            if valor_final < 0:
-                tipo = "Despesa" # Mantém despesa para aparecer no histórico (aba Saídas)
+        # REQUISITO ESPECIAL: Pagamento de fatura
+        # Só vira 'Transferência' se o sistema já tiver os detalhes desse cartão (Open Finance ou PDF)
+        termos_pagamento_fatura = ["pagamento on line", "pagamento fatura", "pagamento de fatura", "pagamento efetuado", "pagamento recebido"]
+        if any(k in desc_norm for k in termos_pagamento_fatura):
+            # Busca se o destino do pagamento é uma conta conhecida
+            contas_rastreadas = db.query(Conta).filter(
+                Conta.id_usuario == usuario.id,
+                or_(Conta.external_id != None, Conta.tipo == "Cartão de Crédito")
+            ).all()
+            
+            nomes_rastreados = [c.nome.lower() for c in contas_rastreadas]
+            is_rastreada = False
+            for nome in nomes_rastreados:
+                if nome and (nome in desc_norm or (nome_fantasia and nome in nome_fantasia.lower())):
+                    is_rastreada = True
+                    break
+            
+            # Se a conta é rastreada, é transferência (já temos os itens). 
+            # Se não é, é despesa (precisamos contabilizar o valor total).
+            if is_rastreada:
+                is_fatura_transfer = True
+                cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
+                tipo = "Transferência"
             else:
-                tipo = "Transferência" # Crédito no cartão é transferência
+                tipo = "Despesa"
 
         # Registro via Serviço de Reconciliação (Sempre na Conta Central Única)
         lanc, criado = ReconciliationService.register_transaction(
@@ -768,13 +786,31 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
                 is_fatura_transfer = True
                 cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
 
-        # REQUISITO ESPECIAL: Debito de Fatura deve aparecer como Despesa no histórico, mas ser filtrado no KPI.
-        # Credito de Fatura (no cartão) deve ser Transferência sempre para não inflar Receita.
-        if is_fatura_transfer:
-            if valor_final < 0:
-                tipo = "Despesa" # Mantém despesa para aparecer no histórico (aba Saídas)
+        # REQUISITO ESPECIAL: Pagamento de fatura
+        # Só vira 'Transferência' se o sistema já tiver os detalhes desse cartão (Open Finance ou PDF)
+        termos_pagamento_fatura = ["pagamento on line", "pagamento fatura", "pagamento de fatura", "pagamento efetuado", "pagamento recebido"]
+        if any(k in desc_norm for k in termos_pagamento_fatura):
+            # Busca se o destino do pagamento é uma conta conhecida
+            contas_rastreadas = db.query(Conta).filter(
+                Conta.id_usuario == usuario.id,
+                or_(Conta.external_id != None, Conta.tipo == "Cartão de Crédito")
+            ).all()
+            
+            nomes_rastreados = [c.nome.lower() for c in contas_rastreadas]
+            is_rastreada = False
+            for nome in nomes_rastreados:
+                if nome and (nome in desc_norm or (nome_fantasia and nome in nome_fantasia.lower())):
+                    is_rastreada = True
+                    break
+            
+            # Se a conta é rastreada, é transferência (já temos os itens). 
+            # Se não é, é despesa (precisamos contabilizar o valor total).
+            if is_rastreada:
+                is_fatura_transfer = True
+                cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
+                tipo = "Transferência"
             else:
-                tipo = "Transferência" # Crédito no cartão é transferência
+                tipo = "Despesa"
 
         # Registro via Serviço de Reconciliação (Sempre na Conta Central Única)
         lanc, criado = ReconciliationService.register_transaction(
