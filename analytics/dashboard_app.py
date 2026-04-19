@@ -1026,24 +1026,24 @@ def miniapp_pierre_dashboard():
                 "display_info": display_info
             })
             
-        # 2. Buscar Categorias Caras (últimos 30 dias usando dados locais)
-        trinta_dias_atras = datetime.now(timezone.utc) - timedelta(days=30)
+        # 2. Buscar Categorias Caras (últimos 90 dias usando dados locais - Carga Inicial)
+        noventa_dias_atras = datetime.now(timezone.utc) - timedelta(days=90)
         lancamentos_mes = db.query(Lancamento).filter(
             Lancamento.id_usuario == usuario.id,
-            Lancamento.origem == 'open_finance',
+            Lancamento.origem.in_(['open_finance', 'open_finance_reconciled']),
             Lancamento.tipo.in_(['Saída', 'Despesa']),
-            Lancamento.data_transacao >= trinta_dias_atras
+            Lancamento.data_transacao >= noventa_dias_atras
         ).all()
         
         cleaned_categories = {}
         for l in lancamentos_mes:
             cat_name = l.categoria.nome if l.categoria else "Outros"
-            cleaned_categories[cat_name] = cleaned_categories.get(cat_name, 0) + float(l.valor)
+            cleaned_categories[cat_name] = cleaned_categories.get(cat_name, 0) + float(abs(l.valor))
             
         cleaned_categories = dict(sorted(cleaned_categories.items(), key=lambda item: item[1], reverse=True)[:5])
 
-        # 3. Buscar Parcelamentos (da tabela ParcelamentoItem)
-        parcelas_db = db.query(ParcelamentoItem).filter(ParcelamentoItem.id_usuario == usuario.id).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(15).all()
+        # 3. Buscar Parcelamentos (da tabela parcelamentos)
+        parcelas_db = db.query(Parcelamento).filter(Parcelamento.id_usuario == usuario.id).order_by(Parcelamento.data_proxima_parcela.asc()).limit(15).all()
         installments_res = []
         for p in parcelas_db:
             installments_res.append({
