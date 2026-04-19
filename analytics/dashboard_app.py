@@ -1749,7 +1749,16 @@ def miniapp_overview():
         if not usuario:
             return jsonify({"ok": False, "error": "user_not_found"}), 404
 
-        start_date, end_date = _month_bounds()
+        # Filtro de período: padrão é o mês atual, mas aceita '90d' para visão MACRO
+        period = request.args.get("period", "monthly")
+        
+        if period == "90d":
+            start_date = datetime.utcnow().date() - timedelta(days=90)
+            end_date = datetime.utcnow().date() + timedelta(days=30)
+        else:
+            # Comportamento padrão: Mês Atual
+            start_date, end_date = _month_bounds()
+        
         base_query = (
             db.query(Lancamento)
             .options(joinedload(Lancamento.categoria), joinedload(Lancamento.subcategoria))

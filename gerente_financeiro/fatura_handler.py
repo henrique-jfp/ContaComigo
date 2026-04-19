@@ -197,6 +197,9 @@ _SECAO_ANCORAS = {
         "gastos do mês",
         "movimentacao",
         "movimentação",
+        "compras nacionais",
+        "compras internacionais",
+        "servicos nps",
     ],
     "parceladas": [
         "compras parceladas",
@@ -205,6 +208,7 @@ _SECAO_ANCORAS = {
         "parcelamentos",
         "transações parceladas",
         "lancamentos parcelados",
+        "compras parceladas nps",
     ],
     "outros": [
         "outros (cartão",
@@ -215,6 +219,8 @@ _SECAO_ANCORAS = {
         "tarifas",
         "serviços",
         "servicos",
+        "movimentacoes de encargos",
+        "encargos e tarifas",
     ],
 }
 
@@ -648,48 +654,48 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     logger.info("Pipeline de fatura: Gemini Multimodal (Prioridade) -> Parser Local Heurístico -> Universal")
 
     prompt = f"""
-    Você é um extrator universal de faturas de cartão de crédito de ALTA PRECISÃO.
-    Leia o PDF e retorne SOMENTE JSON válido.
+    Você é um SISTEMA DE AUDITORIA FINANCEIRA de ALTA PRECISÃO.
+    Sua tarefa é ler este PDF de fatura de cartão de crédito e extrair TODAS as transações sem exceção.
 
-    DATA DE REFERÊNCIA (HOJE): {datetime.now().strftime('%d/%m/%Y')}
-    MÊS DE REFERÊNCIA DA FATURA: {mes_ref:02d}/{ano_ref}
+    DATA ATUAL: {datetime.now().strftime('%d/%m/%Y')}
+    REFERÊNCIA: {mes_ref:02d}/{ano_ref}
 
-    REGRAS CRÍTICAS:
-    1. DESCRIÇÃO: Extraia apenas o nome do estabelecimento. 
-       - CAIXA: Ignore números longos de documento (ex: 123456789) que aparecem após o nome da loja.
-       - NUBANK/INTER: Mantenha a descrição fiel à loja.
-    2. VALORES: 
-       - Despesas/Compras: Valor NEGATIVO (ex: -50.00).
-       - Estornos/Créditos/Pagamentos: Valor POSITIVO (ex: 100.00).
-       - Ignore as letras 'D' ou 'C' ao final do valor, mas use-as para definir o sinal se houver dúvida.
-    3. DATAS: Use o formato YYYY-MM-DD. 
-       - Se a data for DD/MM, use o ano {ano_ref}. 
-       - Se for uma fatura de JANEIRO e o lançamento for DEZEMBRO, use o ano {ano_ref - 1}.
-    4. O QUE IGNORAR: 'Saldo Anterior', 'Pagamento de Fatura', 'Limite', 'Total a Pagar', 'Pagamento Efetuado', 'Obigado pelo pagamento'.
-    5. PARCELAMENTO: Se vir algo como '02/10', coloque em 'parcela'.
+    DIRETRIZES UNIVERSAIS:
+    1. BUSCA EXAUSTIVA: Procure transações em todas as seções: 'Compras Nacionais', 'Compras Internacionais', 'Movimentações', 'Serviços', 'Parcelamentos' e 'Encargos'.
+    2. LIMPEZA DE DESCRIÇÃO: 
+       - Extraia apenas o nome do estabelecimento comercial.
+       - Remova números de documento, cidades ou códigos que venham após o nome (especialmente comum na CAIXA).
+       - Exemplo: 'MERCADO EXTRA 123456 RIO DE JANEIRO' -> 'MERCADO EXTRA'.
+    3. VALORES E SINAIS:
+       - Gastos, Compras, IOF, Juros: Valor NEGATIVO (ex: -150.40).
+       - Pagamentos de Fatura, Estornos, Créditos, Cashback: Valor POSITIVO (ex: 500.00).
+       - Ignore as letras 'D' ou 'C', use-as apenas para confirmar o sinal.
+    4. INTEGRIDADE MATEMÁTICA: 
+       - Localize o valor de 'TOTAL DA FATURA' ou 'VALOR A PAGAR' no documento.
+       - A soma de todas as transações (positivas e negativas) deve chegar o mais próximo possível deste total.
 
     JSON OBRIGATÓRIO:
     {{
-        "banco": "Nome do Banco",
+        "banco": "Nome da Instituição",
         "total_fatura": 0.0,
         "transacoes": [
             {{
-                "data": "{ano_ref}-{mes_ref:02d}-01",
-                "descricao": "NOME DA LOJA",
+                "data": "YYYY-MM-DD",
+                "descricao": "NOME LIMPO",
                 "valor": -123.45,
-                "parcela": "1/10"
+                "parcela": "01/10 (se houver)"
             }}
-        ],
-        "ignoradas": 0
+        ]
     }}
     """
 
     def _parse_json_response(text: str) -> dict | None:
         if not text: return None
+        # Limpa blocos de código markdown se existirem
+        text = re.sub(r'```json\s*|\s*```', '', text)
         match = re.search(r'\{.*\}', text, re.DOTALL)
         if not match: return None
-        raw_json = re.sub(r',\s*([\]\}])', r'\1', match.group(0))
-        try: return json.loads(raw_json)
+        try: return json.loads(match.group(0))
         except Exception: return None
 
     def _parse_data_fatura(raw_data: str) -> datetime | None:
@@ -708,117 +714,74 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
 
     def _normalizar_resultado_bruto(data: dict, origem_prefixo: str) -> Tuple[List[Dict], int, str, float]:
         transacoes_finais: List[Dict] = []
-        ignoradas_count = int(data.get("ignoradas", 0) or 0)
+        ignoradas_count = 0
         banco = str(data.get("banco", "Desconhecido") or "Desconhecido")
         total_pdf = float(data.get("total_fatura", 0.0) or 0.0)
+        
+        # Blacklist reduzida: Ignora apenas o 'Total' da fatura para não duplicar, 
+        # mas mantém itens que parecem transações de serviço.
         blacklist = [
-            "total",
-            "pagamento efetuado",
-            "obrigado pelo pagamento",
             "saldo anterior",
-            "saldo credito rotativo",
-            "saldo crédito rotativo",
-            "total da fatura anterior",
+            "total da fatura",
             "limite",
             "demonstrativo",
             "fatura anterior",
             "saldo a pagar",
             "pagamento recebido",
-            "crédito de pagamento",
-            "credito de pagamento",
-            "saldo do período",
-            "saldo do periodo",
             "valor do pagamento",
-            "pagamento por debito",
         ]
 
         for item in data.get("transacoes", []):
             try:
                 descricao = str(item.get("descricao", "") or "").strip()
-                if not descricao:
-                    ignoradas_count += 1
-                    continue
-                if any(term in descricao.lower() for term in blacklist):
-                    ignoradas_count += 1
+                if not descricao or any(term in descricao.lower() for term in blacklist):
                     continue
 
                 valor = float(item.get("valor", 0.0) or 0.0)
-                if abs(valor) < 0.009:
-                    ignoradas_count += 1
-                    continue
-
-                descricao_lower = descricao.lower()
-                if valor > 0 and any(term in descricao_lower for term in [
-                    "pagamento",
-                    "saldo credito rotativo",
-                    "saldo crédito rotativo",
-                    "total da fatura anterior",
-                ]):
-                    ignoradas_count += 1
-                    continue
+                if abs(valor) < 0.01: continue
 
                 dt_obj = _parse_data_fatura(item.get("data"))
-                if not dt_obj:
-                    ignoradas_count += 1
-                    continue
+                if not dt_obj: continue
 
-                parcela = item.get("parcela")
                 transacoes_finais.append({
                     "descricao": descricao,
                     "valor": valor,
                     "data_transacao": dt_obj,
                     "forma_pagamento": "Crédito",
                     "origem": f"{origem_prefixo}_{banco.lower().replace(' ', '_')}",
-                    "parcela": parcela,
+                    "parcela": item.get("parcela"),
                 })
-            except Exception as item_exc:
-                logger.warning("Erro ao normalizar item bruto da fatura: %s | item=%s", item_exc, item)
+            except Exception:
                 ignoradas_count += 1
 
+        # Deduplicação Final
         deduped: List[Dict] = []
-        seen: set[tuple[str, str, float, str]] = set()
-        for item in transacoes_finais:
-            key = (
-                item["data_transacao"].strftime("%Y-%m-%d"),
-                str(item["descricao"]).strip().lower(),
-                round(float(item["valor"]), 2),
-                str(item.get("parcela") or ""),
-            )
-            if key in seen:
-                ignoradas_count += 1
-                continue
+        seen = set()
+        for t in transacoes_finais:
+            key = (t["data_transacao"].strftime("%Y-%m-%d"), t["descricao"].lower(), round(t["valor"], 2))
+            if key in seen: continue
             seen.add(key)
-            deduped.append(item)
+            deduped.append(t)
 
         return deduped, ignoradas_count, banco, total_pdf
 
     def _resultado_parece_valido(transacoes: List[Dict], total_pdf: float) -> bool:
-        if not transacoes:
-            return False
-        if len(transacoes) > 250: # Aumentado de 200 para 250 (faturas da Caixa podem ser longas)
-            logger.warning("Resultado rejeitado por excesso de transações: %s", len(transacoes))
-            return False
-
-        saldo_liquido = abs(sum(float(t["valor"]) for t in transacoes))
-        total_debito = sum(abs(float(t["valor"])) for t in transacoes if float(t["valor"]) < 0)
+        if not transacoes: return False
         
+        # Saldo líquido extraído (soma algébrica)
+        saldo_extraido = sum(float(t["valor"]) for t in transacoes)
+        
+        # Se temos o total do PDF, o rigor é de 90% (alguns centavos/IOF podem variar)
         if total_pdf > 0:
-            # Tolerância maior (1.5x) para lidar com faturas da Caixa que somam limites e outros campos no PDF
-            if saldo_liquido > total_pdf * 1.50:
-                logger.warning(
-                    "Resultado rejeitado: saldo extraído muito acima do total do PDF (extraído=%s, pdf=%s)",
-                    saldo_liquido,
-                    total_pdf,
-                )
+            # Em faturas, o total declarado é o que o usuário deve pagar (geralmente saldo negativo)
+            # Mas o PDF costuma mostrar o valor absoluto.
+            diferenca = abs(abs(saldo_extraido) - abs(total_pdf))
+            percentual_erro = (diferenca / abs(total_pdf)) if total_pdf != 0 else 0
+            
+            if percentual_erro > 0.15: # Erro maior que 15% rejeita
+                logger.warning(f"Extração Rejeitada: Soma R$ {saldo_extraido:.2f} vs PDF R$ {total_pdf:.2f} (Erro: {percentual_erro:.1%})")
                 return False
-            # Tolerância menor (0.25x) permitida se houver pelo menos 1 item, para não travar faturas quase zeradas
-            if saldo_liquido < total_pdf * 0.25 and len(transacoes) > 1:
-                logger.warning(
-                    "Resultado rejeitado: saldo extraído muito abaixo do total do PDF (extraído=%s, pdf=%s)",
-                    saldo_liquido,
-                    total_pdf,
-                )
-                return False
+                
         return True
 
     # 1. TENTATIVA PRINCIPAL: GEMINI MULTIMODAL
