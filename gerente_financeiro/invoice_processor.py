@@ -70,10 +70,10 @@ class UniversalInvoiceExtractor:
         candidates = [
             configured,
             "gemini-2.5-flash-lite",
+            "gemini-2.0-flash-lite",
             "gemini-2.5-flash",
             "gemini-2.0-flash",
             "gemini-flash-latest",
-            "gemini-2.0-flash-lite",
         ]
         deduped: List[str] = []
         for candidate in candidates:

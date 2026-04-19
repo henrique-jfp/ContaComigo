@@ -640,11 +640,12 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     linhas_preview = _extrair_texto_pdf_local(file_bytes)
     mes_ref, ano_ref = _detectar_referencia_fatura(linhas_preview)
     
-    current_model = getattr(config, "GEMINI_MODEL_NAME", "gemini-2.5-flash")
-    model_candidates = [current_model, "gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
+    # Prioridade para modelos Lite (maior cota e rapidez)
+    current_model = getattr(config, "GEMINI_MODEL_NAME", "gemini-2.5-flash-lite")
+    model_candidates = [current_model, "gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-2.5-flash", "gemini-1.5-flash"]
     model_candidates = list(dict.fromkeys([m for m in model_candidates if m]))
 
-    logger.info("Pipeline de fatura: parser local -> Gemini multimodal -> fallback local/Universal")
+    logger.info("Pipeline de fatura: Gemini Multimodal (Prioridade) -> Parser Local Heurístico -> Universal")
 
     prompt = f"""
     Você é um extrator universal de faturas de cartão de crédito de ALTA PRECISÃO.
@@ -820,20 +821,8 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
                 return False
         return True
 
-    transacoes_local, ignoradas_local, banco_local, total_local = _parse_fatura_pdf_local(file_bytes)
-    if _resultado_parece_valido(transacoes_local, total_local):
-        logger.info(
-            "✅ Parser local aprovou a fatura sem IA (%s transações, banco=%s, total=%s)",
-            len(transacoes_local),
-            banco_local,
-            total_local,
-        )
-        result = (transacoes_local, ignoradas_local, banco_local, total_local)
-        _set_cached_parse_result(file_bytes, result)
-        return result
-
+    # 1. TENTATIVA PRINCIPAL: GEMINI MULTIMODAL
     pdf_part = {"mime_type": "application/pdf", "data": file_bytes}
-
     for model_name in model_candidates:
         try:
             logger.info("🤖 Tentando extração multimodal direta com %s", model_name)
@@ -848,19 +837,34 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
             if not json_data:
                 logger.warning("Resposta do Gemini sem JSON utilizável com %s", model_name)
                 continue
+                
             transacoes, ignoradas, banco, total_pdf = _normalizar_resultado_bruto(json_data, "fatura_pdf")
             if _resultado_parece_valido(transacoes, total_pdf):
-                logger.info("✅ Extração multimodal direta funcionou com %s (%s transações)", model_name, len(transacoes))
+                logger.info("✅ Extração Gemini Multimodal funcionou com %s (%s transações)", model_name, len(transacoes))
                 result = (transacoes, ignoradas, banco, total_pdf)
                 _set_cached_parse_result(file_bytes, result)
                 return result
-            logger.warning("Resultado do Gemini com %s foi descartado por baixa confiabilidade estrutural.", model_name)
+            logger.warning("Resultado do Gemini com %s foi descartado por inconsistência matemática.", model_name)
         except Exception as exc:
             logger.warning("Falha na extração multimodal direta com %s: %s", model_name, exc)
 
+    # 2. FALLBACK: PARSER LOCAL HEURÍSTICO
+    logger.info("⚠️ Gemini falhou ou foi inconsistente. Acionando fallback: Parser Local Heurístico.")
+    transacoes_local, ignoradas_local, banco_local, total_local = _parse_fatura_pdf_local(file_bytes)
+    if _resultado_parece_valido(transacoes_local, total_local):
+        logger.info(
+            "✅ Parser local aprovou a fatura (%s transações, banco=%s, total=%s)",
+            len(transacoes_local),
+            banco_local,
+            total_local,
+        )
+        result = (transacoes_local, ignoradas_local, banco_local, total_local)
+        _set_cached_parse_result(file_bytes, result)
+        return result
+
     if transacoes_local:
         logger.warning(
-            "⚠️ Gemini não entregou resultado confiável. Retornando melhor esforço do parser local (%s transações).",
+            "⚠️ Parser local também é impreciso matematicamente, mas retornando melhor esforço (%s transações).",
             len(transacoes_local),
         )
         result = (transacoes_local, ignoradas_local, banco_local, total_local)
