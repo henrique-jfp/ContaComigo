@@ -347,24 +347,42 @@ def _upsert_installments(usuario: Usuario, db: Session, client: PierreClient, ac
         res_inst = client.get_installments()
         # Schema Pierre: { "purchases": [ { "id", "description", "installments": [...] } ] }
         purchases = _extrair_parcelamentos(res_inst)
+        logger.info(f"Sincronizando {len(purchases)} parcelamentos para usuário {usuario.id}")
         updated = 0
 
         for p in purchases:
+            # Tenta ID explícito, senão gera um determinístico baseado em dados da compra
             p_id = str(p.get("id") or p.get("purchaseId") or "")
             p_desc = (p.get("description") or p.get("name") or "Compra Parcelada").strip()
+            p_date = p.get("purchaseDate") or p.get("date") or ""
+            p_acc_name = p.get("accountName") or ""
+            
+            if not p_id:
+                # Gera um ID baseado na descrição, data e conta para ser estável
+                import hashlib
+                raw_id = f"{p_desc}_{p_date}_{p_acc_name}_{p.get('totalAmount')}"
+                p_id = "gen_" + hashlib.md5(raw_id.encode()).hexdigest()[:12]
+
             p_acc_id = str(p.get("accountId") or p.get("account_id") or "")
             conta_id = accounts_map.get(p_acc_id)
             
-            # Cada compra pode ter uma lista de parcelas (installments)
+            # Se não achou pelo ID, tenta pelo nome da conta como fallback
+            if not conta_id and p_acc_name:
+                c_fallback = db.query(Conta).filter(Conta.id_usuario == usuario.id, func.lower(Conta.nome) == p_acc_name.lower()).first()
+                if c_fallback: conta_id = c_fallback.id
             installments = p.get("installments") or []
             if not installments:
                 # Se não tem lista interna, tenta tratar o objeto raiz como uma parcela (legado)
                 installments = [p]
 
             for inst in installments:
-                # ID Único da Parcela: PurchaseID + Número da Parcela
+                # ID Único da Parcela: PurchaseID + Número da Parcela + Hash da descrição da parcela
                 idx = inst.get("installmentNumber") or inst.get("currentInstallment") or 1
-                ext_id = f"inst_{p_id}_{idx}" if p_id else None
+                inst_desc = (inst.get("description") or "").strip()
+                
+                import hashlib
+                inst_hash = hashlib.md5(inst_desc.encode()).hexdigest()[:6]
+                ext_id = f"inst_{p_id}_{idx}_{inst_hash}" if p_id else None
                 
                 if not ext_id: continue
 
@@ -620,6 +638,15 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
                 tipo = "Transferência" # Crédito no cartão é transferência
 
         # Registro via Serviço de Reconciliação
+        acc_id_raw = str(tx.get("account_id") or tx.get("accountId") or (tx.get("account") or {}).get("id") or "")
+        target_conta_id = accounts_map.get(acc_id_raw)
+        if not target_conta_id:
+            # Tenta buscar pelo nome da conta se o ID falhar
+            acc_name = tx.get("account_name") or tx.get("accountName") or (tx.get("account") or {}).get("name")
+            if acc_name:
+                c_fallback = db.query(Conta).filter(Conta.id_usuario == usuario.id, func.lower(Conta.nome) == acc_name.lower()).first()
+                if c_fallback: target_conta_id = c_fallback.id
+
         lanc, criado = ReconciliationService.register_transaction(
             db=db,
             user_id=usuario.id,
@@ -628,7 +655,8 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
             descricao=descricao,
             origem="open_finance",
             external_id=ext_id,
-            tipo=tipo
+            tipo=tipo,
+            id_conta=target_conta_id
         )
 
         # Forçamos a categoria se for fatura/transferência interna
@@ -674,10 +702,10 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
         return res.get("lancamentos", 0) if isinstance(res, dict) else 0
 
     client = PierreClient(usuario.pierre_api_key)
-    date_48h = (datetime.now(timezone.utc) - timedelta(hours=48)).strftime('%Y-%m-%d')
+    date_168h = (datetime.now(timezone.utc) - timedelta(hours=168)).strftime('%Y-%m-%d')
 
     accounts_map = _upsert_accounts_and_balances(usuario, db, client)
-    res_txs = client.get_transactions(startDate=date_48h, limit=200, format="raw")
+    res_txs = client.get_transactions(startDate=date_168h, limit=200, format="raw")
     txs_raw = _extrair_lista_de_resposta(res_txs)
 
     from gerente_financeiro.reconciliation_service import ReconciliationService
@@ -759,6 +787,15 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
                 tipo = "Transferência" # Crédito no cartão é transferência
 
         # Registro via Serviço de Reconciliação
+        acc_id_raw = str(tx.get("account_id") or tx.get("accountId") or (tx.get("account") or {}).get("id") or "")
+        target_conta_id = accounts_map.get(acc_id_raw)
+        if not target_conta_id:
+            # Tenta buscar pelo nome da conta se o ID falhar
+            acc_name = tx.get("account_name") or tx.get("accountName") or (tx.get("account") or {}).get("name")
+            if acc_name:
+                c_fallback = db.query(Conta).filter(Conta.id_usuario == usuario.id, func.lower(Conta.nome) == acc_name.lower()).first()
+                if c_fallback: target_conta_id = c_fallback.id
+
         lanc, criado = ReconciliationService.register_transaction(
             db=db,
             user_id=usuario.id,
@@ -767,7 +804,8 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
             descricao=descricao,
             origem="open_finance",
             external_id=ext_id,
-            tipo=tipo
+            tipo=tipo,
+            id_conta=target_conta_id
         )
 
         # Forçamos a categoria se for fatura/transferência interna
