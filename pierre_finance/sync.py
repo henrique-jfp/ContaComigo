@@ -80,26 +80,51 @@ _SINAIS_DESPESA_FORTE = {
     "pagamento fatura", "pagto fatura", "pgt fatura",
     "compra credito", "compra debito", "pix enviado",
     "transferencia enviada", "transf.enviada", "iof", "tarifa",
+    "pag boleto", "pagamento boleto", "pgto boleto", "pagamento titulo",
+    "pagto titulo", "pgto titulo", "liquidação boleto", "liquidacao boleto",
 }
+
+def _is_self_transfer(usuario_nome: str | None, contraparte_nome: str | None) -> bool:
+    """Verifica se a contraparte parece ser o próprio usuário (mesma titularidade)."""
+    if not usuario_nome or not contraparte_nome:
+        return False
+    
+    u_parts = set(re.findall(r"\w+", usuario_nome.lower()))
+    c_parts = set(re.findall(r"\w+", contraparte_nome.lower()))
+    
+    # Se o primeiro nome e pelo menos um sobrenome baterem (ou parte dele), é provável que seja self-transfer
+    common = u_parts.intersection(c_parts)
+    # Filtra conectores comuns
+    common = {p for p in common if len(p) > 2}
+    
+    return len(common) >= 2 or (len(u_parts) == 1 and len(common) >= 1)
 
 def _inferir_tipo(
     descricao: str,
     valor_bruto: Decimal,
     account_type: str,
     transaction_type: str | None = None,
+    nome_contraparte: str | None = None,
+    usuario_nome: str | None = None
 ) -> str:
     desc_norm = (descricao or "").lower()
 
-    for sinal in _SINAIS_RECEITA_FORTE:
-        if sinal in desc_norm:
-            return "Receita"
-            
+    # 1. Checa auto-transferência primeiro
+    if _is_self_transfer(usuario_nome, nome_contraparte):
+        return "Transferência"
+
+    # 2. Checa sinais fortes de despesa (importante para boletos com sinal invertido)
     for sinal in _SINAIS_DESPESA_FORTE:
         if sinal in desc_norm:
             return "Despesa"
 
+    # 3. Checa sinais fortes de receita
+    for sinal in _SINAIS_RECEITA_FORTE:
+        if sinal in desc_norm:
+            return "Receita"
+
     tipo_tx_norm = normalize_financial_type(transaction_type, default="")
-    if tipo_tx_norm in {"Receita", "Despesa"}:
+    if tipo_tx_norm in {"Receita", "Despesa", "Transferência"}:
         return tipo_tx_norm
 
     if account_type == "CREDIT":
@@ -535,8 +560,8 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
             logger.info(f"Ignorando lançamento Inter 'Crédito liberado': {ext_id}")
             continue
 
-        tipo = _inferir_tipo(descricao, valor_bruto, acc_type, tx_type)
         cnpj, nome_fantasia = _extrair_dados_contraparte(tx)
+        tipo = _inferir_tipo(descricao, valor_bruto, acc_type, tx_type, nome_contraparte=nome_fantasia, usuario_nome=usuario.nome_completo)
 
         # Converte para valor com sinal (Receita positiva, Despesa negativa) para o ReconciliationService
         valor_final = abs(float(valor_bruto)) if tipo == "Receita" else -abs(float(valor_bruto))
@@ -674,8 +699,8 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
             logger.info(f"Ignorando lançamento Inter 'Crédito liberado': {ext_id}")
             continue
 
-        tipo = _inferir_tipo(descricao, valor_bruto, acc_type, tx_type)
         cnpj, nome_fantasia = _extrair_dados_contraparte(tx)
+        tipo = _inferir_tipo(descricao, valor_bruto, acc_type, tx_type, nome_contraparte=nome_fantasia, usuario_nome=usuario.nome_completo)
 
         # Converte para valor com sinal (Receita positiva, Despesa negativa)
         valor_final = abs(float(valor_bruto)) if tipo == "Receita" else -abs(float(valor_bruto))
