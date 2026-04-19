@@ -29,17 +29,23 @@ class ReconciliationService:
         return conta
 
     @staticmethod
-    def is_duplicate(db, user_id, valor, data, descricao, threshold_days=2):
+    def is_duplicate(db, user_id, valor, data, descricao, external_id=None, threshold_days=1):
         """
-        Verifica se um lançamento já existe na Conta Digital.
-        Critérios: Mesmo valor absoluto, data próxima (+/- threshold) e similaridade básica.
+        Verifica se um lançamento já existe.
+        Critérios: ID Externo idêntico OU (Mesmo valor E descrição similar no mesmo dia).
         """
+        if external_id:
+            existing_ext = db.query(Lancamento).filter(
+                Lancamento.id_usuario == user_id,
+                Lancamento.external_id == external_id
+            ).first()
+            if existing_ext: return existing_ext
+
         valor_abs = abs(float(valor))
         data_inicio = data - timedelta(days=threshold_days)
         data_fim = data + timedelta(days=threshold_days)
         
-        # Busca potenciais duplicados
-        # Filtramos por valor exato primeiro (mais performático)
+        # Busca potenciais duplicados por valor e data aproximada
         potenciais = db.query(Lancamento).filter(
             Lancamento.id_usuario == user_id,
             func.abs(Lancamento.valor) == valor_abs,
@@ -47,26 +53,26 @@ class ReconciliationService:
             Lancamento.data_transacao <= data_fim
         ).all()
         
-        if potenciais:
-            # Se houver mais de um, poderíamos usar fuzzy string matching
-            # Por enquanto, se o valor e data batem, consideramos duplicado para evitar sujeira
-            logger.info(f"Duplicidade detectada: {descricao} | Valor: {valor_abs}")
-            return potenciais[0]
+        desc_nova = str(descricao).lower().strip()
+        for p in potenciais:
+            desc_existente = str(p.descricao).lower().strip()
+            # Se a descrição for muito parecida ou o external_id bater, é duplicado
+            if desc_nova == desc_existente:
+                logger.info(f"Duplicidade exata detectada: {descricao} | R$ {valor_abs}")
+                return p
         
         return None
 
     @staticmethod
     def register_transaction(db, user_id, valor, data, descricao, categoria_id=None, origem="manual", external_id=None, tipo=None, id_conta=None):
         """Registra transação na ContaComigo Digital (Conta Central Única)."""
-        # Sempre utiliza a Conta Digital central do ContaComigo
         digital_acc = ReconciliationService.get_or_create_digital_account(db, user_id)
-        target_id_conta = digital_acc.id
         
-        # Se tipo não for informado, infere pelo sinal do valor
         if not tipo:
             tipo = "Receita" if float(valor) > 0 else "Despesa"
 
-        existing = ReconciliationService.is_duplicate(db, user_id, valor, data, descricao)
+        # Passamos o external_id para a verificação ser precisa
+        existing = ReconciliationService.is_duplicate(db, user_id, valor, data, descricao, external_id=external_id)
         
         if existing:
             # Se veio do Open Finance, apenas garantimos o external_id para evitar duplicatas futuras
@@ -78,7 +84,7 @@ class ReconciliationService:
         # Cria novo lançamento na conta central
         novo = Lancamento(
             id_usuario=user_id,
-            id_conta=target_id_conta,
+            id_conta=digital_acc.id,
             valor=valor,
             tipo=tipo,
             data_transacao=data,

@@ -1030,11 +1030,10 @@ def miniapp_pierre_dashboard():
                 "display_info": display_info
             })
             
-        # 2. Buscar Categorias Caras (últimos 90 dias usando dados locais - Carga Inicial)
+        # 2. Buscar Categorias Caras (últimos 90 dias usando dados locais - Livro Único)
         noventa_dias_atras = datetime.now(timezone.utc) - timedelta(days=90)
         lancamentos_mes = db.query(Lancamento).filter(
             Lancamento.id_usuario == usuario.id,
-            Lancamento.origem.in_(['open_finance', 'open_finance_reconciled']),
             Lancamento.tipo.in_(['Saída', 'Despesa']),
             Lancamento.data_transacao >= noventa_dias_atras
         ).all()
@@ -1776,19 +1775,12 @@ def miniapp_overview():
             .all()
         )
 
-        # --- LÓGICA DE DEDUPLICAÇÃO (Regra de Ouro) ---
+        # --- LÓGICA DE DEDUPLICAÇÃO (Livro Único - Mostra TUDO) ---
         receita = 0.0
         despesa = 0.0
         
         for lanc in lancamentos_mes:
             tipo_l = str(lanc.tipo).lower()
-            sid = lanc.id_subcategoria
-            
-            # Filtro rigoroso: Ignora 'Transferência' e 'Pagamento de Fatura' (ID 584) das somas de Receita/Despesa
-            # mas permite que apareçam no histórico (recent_items)
-            if tipo_l == "transferência" or sid == 584:
-                continue
-                
             valor = abs(float(lanc.valor or 0))
             if tipo_l.startswith(("entr", "recei")):
                 receita += valor
