@@ -355,6 +355,64 @@ def _resolver_ano_transacao(dia: int, mes: int, mes_ref: int, ano_ref: int) -> i
     return ano_ref
 
 
+def _detectar_banco_fatura(texto: str) -> str:
+    texto_norm = _normalizar_texto_parser(texto)
+    bancos = [
+        ("Nubank", ["nubank"]),
+        ("Inter", ["inter"]),
+        ("Caixa", ["caixa", "cartoes caixa", "cartões caixa"]),
+        ("Bradesco", ["bradesco"]),
+    ]
+    for nome, termos in bancos:
+        if any(termo in texto_norm for termo in termos):
+            return nome
+    return "Desconhecido"
+
+
+def _detectar_secao_linha(linha: str) -> str | None:
+    linha_norm = _normalizar_texto_parser(linha)
+    for secao, ancoras in _SECAO_ANCORAS.items():
+        if any(ancora in linha_norm for ancora in ancoras):
+            return secao
+    return None
+
+
+def _linha_indica_fim_secao(linha: str) -> bool:
+    linha_norm = _normalizar_texto_parser(linha)
+    return any(marcador in linha_norm for marcador in _SECAO_FIM)
+
+
+def _parse_valor_fatura(raw_amount: str, descricao: str) -> float | None:
+    bruto = (raw_amount or "").strip()
+    if not bruto:
+        return None
+
+    marker = None
+    if bruto.upper().endswith(("D", "C")):
+        marker = bruto[-1].upper()
+        bruto = bruto[:-1].strip()
+
+    bruto = bruto.replace("R$", "").replace("US$", "").replace("U$$", "").strip()
+    negativo_expresso = bruto.startswith("-")
+    bruto = bruto.lstrip("+-").strip()
+    bruto = bruto.replace(".", "").replace(",", ".")
+    try:
+        valor = float(bruto)
+    except Exception:
+        return None
+
+    descricao_norm = _normalizar_texto_parser(descricao)
+    if marker == "C":
+        return abs(valor)
+    if marker == "D":
+        return -abs(valor)
+    if negativo_expresso:
+        return -abs(valor)
+    if any(token in descricao_norm for token in ["estorno", "ajuste cred", "credito", "crédito", "cashback"]):
+        return abs(valor)
+    return -abs(valor)
+
+
 def _parse_data_fatura_local(raw_data: str, mes_ref: int, ano_ref: int) -> datetime | None:
     data = (raw_data or "").strip().replace(".", "")
     if not data:
