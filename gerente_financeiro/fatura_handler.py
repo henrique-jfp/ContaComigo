@@ -500,23 +500,36 @@ def _descricao_deve_ser_ignoradas(descricao: str) -> bool:
 
 
 def _parse_linha_transacao_fatura(linha: str, mes_ref: int, ano_ref: int) -> dict | None:
+    # Regexes ultra-flexíveis: procuram data em qualquer lugar e valor no final, 
+    # permitindo ruído (como número de documento da Caixa) no meio.
     padroes = [
-        re.compile(r"^(?P<data>\d{2}/\d{2}(?:/\d{2,4})?)\s+(?P<corpo>.+?)\s+(?P<valor>-?R?\$?\s?[0-9\.\,]+\s*(?:[DCdc])?)$"),
-        re.compile(r"^(?P<data>\d{2}\s+de\s+[A-Za-zÇç]{3,9}\.?(?:\s+\d{4})?)\s+(?P<corpo>.+?)\s+(?P<valor>-?R?\$?\s?[0-9\.\,]+\s*(?:[DCdc])?)$", re.IGNORECASE),
-        re.compile(r"^(?P<data>\d{2}\s+[A-Za-zÇç]{3,9}\.?)\s+(?P<corpo>.+?)\s+(?P<valor>-?R?\$?\s?[0-9\.\,]+\s*(?:[DCdc])?)$", re.IGNORECASE),
+        # Formato: DD/MM (opcional /AAAA) ... Ruído ... Valor
+        re.compile(r"(?P<data>\d{2}/\d{2}(?:/\d{2,4})?)\s+(?P<corpo>.+?)\s+(?P<valor>-?R?\$?\s?[0-9\.\,]+\s*(?:[DCdc])?)$"),
+        # Formato: DD de MÊS ... Ruído ... Valor
+        re.compile(r"(?P<data>\d{2}\s+de\s+[A-Za-zÇç]{3,9}\.?(?:\s+\d{4})?)\s+(?P<corpo>.+?)\s+(?P<valor>-?R?\$?\s?[0-9\.\,]+\s*(?:[DCdc])?)$", re.IGNORECASE),
+        # Formato: DD MÊS (ex: 25 MAR) ... Ruído ... Valor
+        re.compile(r"(?P<data>\d{2}\s+[A-Za-zÇç]{3,9}\.?)\s+(?P<corpo>.+?)\s+(?P<valor>-?R?\$?\s?[0-9\.\,]+\s*(?:[DCdc])?)$", re.IGNORECASE),
     ]
 
+    linha_limpa = linha.strip()
     for padrao in padroes:
-        match = padrao.match(linha.strip())
+        match = padrao.search(linha_limpa) # search em vez de match para ignorar prefixos inúteis
         if not match:
             continue
+            
         dt_obj = _parse_data_fatura_local(match.group("data"), mes_ref, ano_ref)
         if not dt_obj:
             continue
 
         corpo = match.group("corpo").strip()
+        
+        # Especial Caixa: Se o corpo terminar com um número longo (documento), removemos
+        # Ex: "LOJA XPTO 123456789" -> "LOJA XPTO"
+        corpo = re.sub(r"\s+\d{6,}\s*$", "", corpo)
+        
         descricao, parcela = _extrair_parcela_da_descricao(corpo)
         descricao = _limpar_descricao_fatura(descricao)
+        
         if _descricao_deve_ser_ignoradas(descricao):
             return None
 
@@ -634,22 +647,25 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     logger.info("Pipeline de fatura: parser local -> Gemini multimodal -> fallback local/Universal")
 
     prompt = f"""
-    Você é um extrator universal de faturas de cartão de crédito.
-    Leia o PDF de QUALQUER banco/cartão e retorne SOMENTE JSON válido.
+    Você é um extrator universal de faturas de cartão de crédito de ALTA PRECISÃO.
+    Leia o PDF e retorne SOMENTE JSON válido.
 
     DATA DE REFERÊNCIA (HOJE): {datetime.now().strftime('%d/%m/%Y')}
     MÊS DE REFERÊNCIA DA FATURA: {mes_ref:02d}/{ano_ref}
 
-    REGRAS:
-    1. Extraia compras, estornos e créditos reais da fatura aberta.
-    2. Ignore totais, saldo anterior, limite, pagamento efetuado, pagamento recebido, linhas como "OBRIGADO PELO PAGAMENTO", "TOTAL DA FATURA ANTERIOR", "SALDO CREDITO ROTATIVO" e blocos de resumo.
-    3. Para compras, use valor NEGATIVO. Para estornos/créditos, use valor POSITIVO.
-    4. Para datas DD/MM, use o ano {ano_ref}. 
-       IMPORTANTE: Se a fatura for de JANEIRO e o lançamento for de DEZEMBRO, use o ano {ano_ref - 1}.
-    5. Se houver parcelamento como 02/10, retorne isso em "parcela".
-    6. A descrição deve ser o estabelecimento real, nunca o nome do banco.
-    7. Se tiver dúvida entre manter ou remover uma linha, só mantenha se houver data + valor + estabelecimento plausível.
-    8. Mantenha juros, mora, multa, IOF e anuidade se aparecerem como lançamentos reais.
+    REGRAS CRÍTICAS:
+    1. DESCRIÇÃO: Extraia apenas o nome do estabelecimento. 
+       - CAIXA: Ignore números longos de documento (ex: 123456789) que aparecem após o nome da loja.
+       - NUBANK/INTER: Mantenha a descrição fiel à loja.
+    2. VALORES: 
+       - Despesas/Compras: Valor NEGATIVO (ex: -50.00).
+       - Estornos/Créditos/Pagamentos: Valor POSITIVO (ex: 100.00).
+       - Ignore as letras 'D' ou 'C' ao final do valor, mas use-as para definir o sinal se houver dúvida.
+    3. DATAS: Use o formato YYYY-MM-DD. 
+       - Se a data for DD/MM, use o ano {ano_ref}. 
+       - Se for uma fatura de JANEIRO e o lançamento for DEZEMBRO, use o ano {ano_ref - 1}.
+    4. O QUE IGNORAR: 'Saldo Anterior', 'Pagamento de Fatura', 'Limite', 'Total a Pagar', 'Pagamento Efetuado', 'Obigado pelo pagamento'.
+    5. PARCELAMENTO: Se vir algo como '02/10', coloque em 'parcela'.
 
     JSON OBRIGATÓRIO:
     {{
@@ -658,9 +674,9 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
         "transacoes": [
             {{
                 "data": "{ano_ref}-{mes_ref:02d}-01",
-                "descricao": "ESTABELECIMENTO",
+                "descricao": "NOME DA LOJA",
                 "valor": -123.45,
-                "parcela": null
+                "parcela": "1/10"
             }}
         ],
         "ignoradas": 0
@@ -778,31 +794,27 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     def _resultado_parece_valido(transacoes: List[Dict], total_pdf: float) -> bool:
         if not transacoes:
             return False
-        if len(transacoes) > 200:
+        if len(transacoes) > 250: # Aumentado de 200 para 250 (faturas da Caixa podem ser longas)
             logger.warning("Resultado rejeitado por excesso de transações: %s", len(transacoes))
             return False
 
         saldo_liquido = abs(sum(float(t["valor"]) for t in transacoes))
         total_debito = sum(abs(float(t["valor"])) for t in transacoes if float(t["valor"]) < 0)
+        
         if total_pdf > 0:
-            if saldo_liquido > total_pdf * 1.25:
+            # Tolerância maior (1.5x) para lidar com faturas da Caixa que somam limites e outros campos no PDF
+            if saldo_liquido > total_pdf * 1.50:
                 logger.warning(
                     "Resultado rejeitado: saldo extraído muito acima do total do PDF (extraído=%s, pdf=%s)",
                     saldo_liquido,
                     total_pdf,
                 )
                 return False
-            if saldo_liquido < total_pdf * 0.35:
+            # Tolerância menor (0.25x) permitida se houver pelo menos 1 item, para não travar faturas quase zeradas
+            if saldo_liquido < total_pdf * 0.25 and len(transacoes) > 1:
                 logger.warning(
                     "Resultado rejeitado: saldo extraído muito abaixo do total do PDF (extraído=%s, pdf=%s)",
                     saldo_liquido,
-                    total_pdf,
-                )
-                return False
-            if total_debito > total_pdf * 1.45:
-                logger.warning(
-                    "Resultado rejeitado: débitos extraídos muito acima do total do PDF (extraído=%s, pdf=%s)",
-                    total_debito,
                     total_pdf,
                 )
                 return False
