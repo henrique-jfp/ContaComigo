@@ -646,12 +646,10 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     linhas_preview = _extrair_texto_pdf_local(file_bytes)
     mes_ref, ano_ref = _detectar_referencia_fatura(linhas_preview)
     
-    # Prioridade para modelos Lite (maior cota e rapidez)
-    current_model = getattr(config, "GEMINI_MODEL_NAME", "gemini-2.5-flash-lite")
-    model_candidates = [current_model, "gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-2.5-flash", "gemini-1.5-flash"]
-    model_candidates = list(dict.fromkeys([m for m in model_candidates if m]))
+    # Prioridade para o modelo 1.5 Flash: Mais estável e com maior cota gratuita (1500 RPD)
+    model_candidates = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]
 
-    logger.info("Pipeline de fatura: Gemini Multimodal (Prioridade) -> Parser Local Heurístico -> Universal")
+    logger.info("Pipeline de fatura: Gemini Multimodal (Prioridade 1.5 Flash) -> Auditoria Universal")
 
     prompt = f"""
     Você é um SISTEMA DE AUDITORIA FINANCEIRA de ALTA PRECISÃO.
@@ -789,14 +787,21 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     for model_name in model_candidates:
         try:
             logger.info("🤖 Tentando extração multimodal direta com %s", model_name)
-            response = await genai.GenerativeModel(model_name).generate_content_async(
+            model = genai.GenerativeModel(model_name)
+            response = await model.generate_content_async(
                 [prompt, pdf_part],
                 generation_config={
                     "response_mime_type": "application/json",
                     "temperature": 0,
                 },
             )
-            json_data = _parse_json_response(getattr(response, "text", "") or "")
+            
+            resp_text = getattr(response, "text", "")
+            if not resp_text:
+                logger.warning(f"Resposta vazia de {model_name}")
+                continue
+
+            json_data = _parse_json_response(resp_text)
             if not json_data:
                 logger.warning("Resposta do Gemini sem JSON utilizável com %s", model_name)
                 continue
@@ -809,7 +814,11 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
                 return result
             logger.warning("Resultado do Gemini com %s foi descartado por inconsistência matemática.", model_name)
         except Exception as exc:
-            logger.warning("Falha na extração multimodal direta com %s: %s", model_name, exc)
+            err_msg = str(exc)
+            if "429" in err_msg or "quota" in err_msg.lower():
+                logger.error("🛑 Cota atingida (429) no modelo %s. Interrompendo loop.", model_name)
+                raise RuntimeError("Limite de IA atingido. Tente novamente em 1 minuto.")
+            logger.warning("Falha na extração multimodal direta com %s: %s", model_name, err_msg)
 
     # 2. FALLBACK: PARSER LOCAL HEURÍSTICO
     logger.info("⚠️ Gemini falhou ou foi inconsistente. Acionando fallback: Parser Local Heurístico.")
