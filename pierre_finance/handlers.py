@@ -66,7 +66,17 @@ async def sincronizar_manual(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return
 
         try:
-            novos = await sincronizar_incremental(usuario, db)
+            # Sincronização incremental via thread com sessão local thread-safe
+            def _run_incremental_thread(uid):
+                local_db = next(get_db())
+                try:
+                    local_user = local_db.query(Usuario).get(uid)
+                    import asyncio as aio
+                    return aio.run(sincronizar_incremental(local_user, local_db))
+                finally:
+                    local_db.close()
+
+            novos = await asyncio.to_thread(_run_incremental_thread, usuario.id)
             asyncio.create_task(_pipeline_categorizacao_em_segundo_plano(usuario.id))
             await msg.edit_text(
                 f"✅ <b>Sincronização concluída!</b>\n\n"
@@ -74,6 +84,7 @@ async def sincronizar_manual(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 f"• Categorização (regras + IA) em segundo plano. 🧠",
                 parse_mode='HTML',
             )
+
         except Exception as e:
             logger.error(f"Erro no sync manual: {e}")
             await msg.edit_text("❌ Ocorreu um erro na comunicação com o banco. Tente novamente mais tarde.")
@@ -97,8 +108,18 @@ async def recategorizar_tudo(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if not usuario or not usuario.pierre_api_key:
             await msg.edit_text("❌ Open Finance não configurado. Use /pierre primeiro.")
             return
-        n_regras = aplicar_regras_lancamentos_open_finance(db, usuario.id, escopo="tudo")
-        n_llm = await processar_fallback_outros_llm(db, usuario.id)
+
+        # Executa processos bloqueantes em thread com sessão própria
+        def _run_recat_thread(uid):
+            local_db = next(get_db())
+            try:
+                return aplicar_regras_lancamentos_open_finance(local_db, uid, escopo="tudo")
+            finally:
+                local_db.close()
+
+        n_regras = await asyncio.to_thread(_run_recat_thread, usuario.id)
+        n_llm = await processar_fallback_outros_llm(db, usuario.id) # Esse já é async interno
+
         await msg.edit_text(
             f"✅ <b>Recategorização local concluída!</b>\n\n"
             f"• <b>{n_regras}</b> lançamentos atualizados pelas regras.\n"
@@ -195,9 +216,23 @@ async def receive_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "✅ Chave salva! Iniciando carga inicial dos seus dados bancários... ⏳\nIsso pode levar alguns segundos."
         )
         
-        # Carga Inicial Assíncrona
+        # Carga Inicial Assíncrona via Thread para não travar o Bot
         try:
-            res = await sincronizar_carga_inicial(usuario, db)
+            # Sincronização pode levar tempo e faz muitas chamadas DB síncronas.
+            # Criamos uma função interna que abre sua própria sessão DB para ser thread-safe.
+            def _run_carga_thread(uid):
+                local_db = next(get_db())
+                try:
+                    local_user = local_db.query(Usuario).get(uid)
+                    # Sincronização carga inicial (chamada síncrona dentro da thread)
+                    # Como sincronizar_carga_inicial é async, precisamos de um loop interno aqui
+                    import asyncio as aio
+                    return aio.run(sincronizar_carga_inicial(local_user, local_db))
+                finally:
+                    local_db.close()
+
+            res = await asyncio.to_thread(_run_carga_thread, usuario.id)
+            
             if isinstance(res, dict) and "error" in res:
                 await status_msg.edit_text("✅ Chave salva com sucesso, mas a carga inicial falhou.\nUse /sincronizar_banco para tentar novamente.")
             else:

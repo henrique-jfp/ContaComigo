@@ -103,8 +103,8 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.info(f"🗑️ Usuário {username} (ID: {user_id}) confirmou deleção total de dados")
         await query.edit_message_text("🔄 Processando deleção... ⏳\n\nIsso pode levar alguns segundos...")
         try:
-            # Chama a função do banco de dados para fazer a exclusão
-            sucesso = deletar_todos_dados_usuario(telegram_id=user_id)
+            # Chama a função do banco de dados em uma thread separada para não travar o bot
+            sucesso = await asyncio.to_thread(deletar_todos_dados_usuario, telegram_id=user_id)
             from .analytics_utils import track_analytics
             try:
                 from analytics.bot_analytics import BotAnalytics
