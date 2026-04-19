@@ -1670,6 +1670,49 @@ def _formatar_metas_ativas(objetivos: list[Objetivo]) -> str:
     return "\n".join(linhas)
 
 
+def _carregar_historico_recente_ia(db, user_id: int, limite: int = 5) -> list[dict]:
+    """Busca as últimas trocas de mensagens do usuário para dar memória à IA."""
+    from models import Base
+    # Importação dinâmica para evitar circularidade se necessário
+    from sqlalchemy import text
+    
+    try:
+        # Busca histórico ordenado pelo ID decrescente (mais recentes primeiro)
+        # Retorna lista de dicts no formato esperado pela OpenAI/Groq/Gemini
+        rows = db.execute(text(
+            "SELECT user_message, ai_response FROM chat_history "
+            "WHERE id_usuario = :uid ORDER BY id DESC LIMIT :lim"
+        ), {"uid": user_id, "lim": limite}).fetchall()
+        
+        history = []
+        # Inverte para que fiquem em ordem cronológica (antiga -> nova)
+        for row in reversed(rows):
+            if row[0]: # user_message
+                history.append({"role": "user", "content": row[0]})
+            if row[1]: # ai_response
+                history.append({"role": "assistant", "content": row[1]})
+        return history
+    except Exception as e:
+        logger.warning(f"Erro ao carregar histórico do chat: {e}")
+        return []
+
+def _registrar_historico_ia(db, user_id: int, user_msg: str, ai_msg: str):
+    """Salva a interação no banco para memória futura."""
+    from sqlalchemy import text
+    try:
+        db.execute(text(
+            "INSERT INTO chat_history (id_usuario, user_message, ai_response, created_at) "
+            "VALUES (:uid, :umsg, :amsg, :now)"
+        ), {
+            "uid": user_id, 
+            "umsg": user_msg[:4000], # Limite de segurança
+            "amsg": ai_msg[:4000], 
+            "now": datetime.now(timezone.utc)
+        })
+        db.commit()
+    except Exception as e:
+        logger.warning(f"Erro ao registrar histórico do chat: {e}")
+
 async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Roteador sempre ativo: texto/voz -> Groq tools -> execução local."""
     if not update.message or not update.effective_user:
@@ -1819,21 +1862,23 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         breakdown_mes = sorted(cats_mes.items(), key=lambda x: x[1], reverse=True)
 
         # --- ÚLTIMOS LANÇAMENTOS (DETALHADOS PARA PRECISÃO) ---
-        limit_lanc = 10 if (hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key) else 20
+        limit_lanc = 15 if (hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key) else 25
         base_lanc = db.query(Lancamento).filter(
             Lancamento.id_usuario == usuario_db.id
-        ).order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc()).limit(limit_lanc * 2).all()
+        ).order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc()).limit(limit_lanc * 3).all()
         
-        ultimos_filtrados = [l for l in base_lanc if l.id_subcategoria not in ignore_ids][:limit_lanc]
-        resumo_ultimos = [
-            {
+        # Filtros para o JSON de contexto
+        def _fmt_l(l):
+            return {
                 "data": l.data_transacao.strftime('%Y-%m-%d'),
                 "descricao": l.descricao,
-                "valor": float(l.valor or 0) * (1 if str(l.tipo).lower().startswith('entr') else -1),
+                "valor": float(l.valor or 0),
+                "tipo": l.tipo,
                 "categoria": l.categoria.nome if l.categoria else "Sem categoria"
             }
-            for l in ultimos_filtrados
-        ]
+
+        ultimas_receitas = [_fmt_l(l) for l in base_lanc if str(l.tipo).lower().startswith(('entr', 'recei'))][:10]
+        ultimas_despesas = [_fmt_l(l) for l in base_lanc if not str(l.tipo).lower().startswith(('entr', 'recei')) and l.id_subcategoria not in ignore_ids][:15]
 
         # --- MEMÓRIA HISTÓRICA PARA COMPARAÇÃO ---
         mes_anterior_inicio = (inicio_mes - timedelta(days=1)).replace(day=1)
@@ -1855,8 +1900,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             cats_anterior[c_nome] = cats_anterior.get(c_nome, 0.0) + abs(float(l.valor or 0))
         breakdown_anterior = sorted(cats_anterior.items(), key=lambda x: x[1], reverse=True)[:5]
 
-        # Estatísticas Globais (Entidade Onisciente)
-        total_vida_saidas = saidas # saldo_total já vem do _usuario_e_saldo
+        # Estatísticas Globais
+        total_vida_saidas = saidas
         total_vida_entradas = entradas
         
         # Detalhamento por Tipo de Transação (Mês Atual)
@@ -1866,7 +1911,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             "Juros_e_Taxas": sum(abs(float(l.valor)) for l in saidas_mes_list if any(x in (l.descricao or "").lower() for x in ["juros", "mora", "multa", "iof", "taxa"]))
         }
 
-        # --- METAS (VERSÃO COMPRIMIDA) ---
+        # --- METAS ---
         metas_ativas = db.query(Objetivo).filter(
             Objetivo.id_usuario == usuario_db.id,
             func.coalesce(Objetivo.valor_atual, 0) < func.coalesce(Objetivo.valor_meta, 0)
@@ -1902,7 +1947,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 },
                 "gastos_hoje": round(saidas_hoje, 2),
                 "gastos_ontem": round(saidas_ontem, 2),
-                "ultimos_lancamentos_detalhados": resumo_ultimos,
+                "ultimas_receitas_detalhadas": ultimas_receitas,
+                "ultimas_despesas_detalhadas": ultimas_despesas,
                 "metas_ativas": resumo_metas,
             },
             ensure_ascii=False,
@@ -1938,10 +1984,18 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         completion = None
         # Só chamamos a IA se o interceptor de Regex não capturou uma ação direta
         if not tool_calls:
+            # Carrega histórico recente (memória de curto prazo)
+            chat_history_messages = _carregar_historico_recente_ia(db, usuario_db.id, limite=6)
+            
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": texto_usuario},
             ]
+            
+            # Adiciona o histórico antes da pergunta atual
+            if chat_history_messages:
+                messages.extend(chat_history_messages)
+                
+            messages.append({"role": "user", "content": texto_usuario})
 
             # Feature Secreta: Injeção do Open Finance
             tools_para_ia = list(_ALFREDO_TOOLS)
@@ -2005,6 +2059,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             tool_calls = _extrair_tool_calls_do_texto(resposta_direta)
             
             if not tool_calls:
+                # Salva no histórico para memória
+                _registrar_historico_ia(db, usuario_db.id, texto_usuario, resposta_direta)
                 await _enviar_resposta_html_segura(update.message, resposta_direta)
                 return ConversationHandler.END
 
@@ -2131,6 +2187,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 if not final_text or len(final_text.strip()) < 5:
                     final_text = "Recebi os dados do seu banco, mas não consegui gerar uma análise clara agora. No MiniApp você consegue ver o detalhamento completo em tempo real!"
                 
+                # Salva no histórico para memória
+                _registrar_historico_ia(db, usuario_db.id, texto_usuario, final_text)
                 await _enviar_resposta_html_segura(update.message, final_text)
             else:
                 await _enviar_resposta_html_segura(update.message, "Ocorreu uma instabilidade na inteligência de análise. Por favor, verifique seu saldo e lançamentos diretamente no MiniApp.")
