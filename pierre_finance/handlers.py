@@ -7,7 +7,7 @@ from telegram.ext import (
     ContextTypes, 
     CallbackQueryHandler
 )
-from database.database import get_db
+from database.database import get_db, get_or_create_user
 from models import Usuario
 import logging
 import asyncio
@@ -181,40 +181,39 @@ async def receive_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     db = next(get_db())
     try:
-        usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
-        if usuario:
-            usuario.pierre_api_key = chave
-            usuario.pierre_initial_sync_done = False # Reset obrigatório
-            db.commit()
+        # Busca ou recria o usuário se ele tiver sido deletado do banco
+        usuario = get_or_create_user(db, user_id, update.effective_user.full_name)
+        
+        usuario.pierre_api_key = chave
+        usuario.pierre_initial_sync_done = False # Reset obrigatório
+        db.commit()
             
-            try: await update.message.delete()
-            except: pass
-                
-            status_msg = await update.message.reply_text(
-                "✅ Chave salva! Iniciando carga inicial dos seus dados bancários... ⏳\nIsso pode levar alguns segundos."
-            )
+        try: await update.message.delete()
+        except: pass
             
-            # Carga Inicial Assíncrona
-            try:
-                res = await sincronizar_carga_inicial(usuario, db)
-                if isinstance(res, dict) and "error" in res:
-                    await status_msg.edit_text("✅ Chave salva com sucesso, mas a carga inicial falhou.\nUse /sincronizar_banco para tentar novamente.")
-                else:
-                    asyncio.create_task(_pipeline_categorizacao_em_segundo_plano(usuario.id))
-                    await status_msg.edit_text(
-                        "✅ <b>Conexão Direta Estabelecida!</b>\n\n"
-                        "📊 <b>Relatório de Importação:</b>\n"
-                        f"• <b>{res.get('contas', 0)}</b> contas bancárias mapeadas\n"
-                        f"• <b>{res.get('lancamentos', 0)}</b> transações importadas\n"
-                        f"• Categorização (regras + IA) em segundo plano. 🧠\n\n"
-                        "O Alfredo agora conhece seu histórico financeiro real. Use /sincronizar_banco para atualizações.",
-                        parse_mode='HTML',
-                    )
-            except Exception as sync_err:
-                logger.error(f"Erro na carga inicial Pierre: {sync_err}", exc_info=True)
-                await status_msg.edit_text("✅ Chave salva com sucesso, mas ocorreu um erro na carga inicial. Tente /sincronizar_banco em instantes.")
-        else:
-            await update.message.reply_text("❌ Usuário não encontrado no banco de dados.")
+        status_msg = await update.message.reply_text(
+            "✅ Chave salva! Iniciando carga inicial dos seus dados bancários... ⏳\nIsso pode levar alguns segundos."
+        )
+        
+        # Carga Inicial Assíncrona
+        try:
+            res = await sincronizar_carga_inicial(usuario, db)
+            if isinstance(res, dict) and "error" in res:
+                await status_msg.edit_text("✅ Chave salva com sucesso, mas a carga inicial falhou.\nUse /sincronizar_banco para tentar novamente.")
+            else:
+                asyncio.create_task(_pipeline_categorizacao_em_segundo_plano(usuario.id))
+                await status_msg.edit_text(
+                    "✅ <b>Conexão Direta Estabelecida!</b>\n\n"
+                    "📊 <b>Relatório de Importação:</b>\n"
+                    f"• <b>{res.get('contas', 0)}</b> contas bancárias mapeadas\n"
+                    f"• <b>{res.get('lancamentos', 0)}</b> transações importadas\n"
+                    f"• Categorização (regras + IA) em segundo plano. 🧠\n\n"
+                    "O Alfredo agora conhece seu histórico financeiro real. Use /sincronizar_banco para atualizações.",
+                    parse_mode='HTML',
+                )
+        except Exception as sync_err:
+            logger.error(f"Erro na carga inicial Pierre: {sync_err}", exc_info=True)
+            await status_msg.edit_text("✅ Chave salva com sucesso, mas ocorreu um erro na carga inicial. Tente /sincronizar_banco em instantes.")
     finally:
         db.close()
 
