@@ -999,24 +999,28 @@ def miniapp_pierre_dashboard():
         if not usuario or not usuario.pierre_api_key:
             return jsonify({"ok": False, "error": "pierre_not_configured"}), 403
 
-        # 1. Buscar Contas e Saldos
+        # 1. Buscar Contas e Saldo Unificado (Conta Digital Central)
+        digital_acc = db.query(Conta).filter(Conta.id_usuario == usuario.id, Conta.nome == "ContaComigo Digital").first()
+        
+        # O Saldo Total é a soma histórica de lançamentos (receitas - despesas)
+        total_balance = db.query(func.sum(Lancamento.valor)).filter(Lancamento.id_usuario == usuario.id).scalar() or 0.0
+        total_balance = float(total_balance)
+
         contas = db.query(Conta).filter(Conta.id_usuario == usuario.id).all()
         accounts_res = []
-        total_balance = 0
         
         for c in contas:
-            ultimo_saldo = db.query(SaldoConta).filter(SaldoConta.id_conta == c.id).order_by(SaldoConta.capturado_em.desc()).first()
-            saldo_val = float(ultimo_saldo.saldo) if ultimo_saldo else 0
+            # Se for a conta central, mostramos o saldo calculado. 
+            # Se forem contas externas do Pierre, mostramos o último saldo capturado via API.
+            if c.id == (digital_acc.id if digital_acc else None):
+                saldo_val = total_balance
+            else:
+                ultimo_saldo = db.query(SaldoConta).filter(SaldoConta.id_conta == c.id).order_by(SaldoConta.capturado_em.desc()).first()
+                saldo_val = float(ultimo_saldo.saldo) if ultimo_saldo else 0.0
             
             display_info = None
             if c.tipo == "Cartão de Crédito":
-                avail = float(ultimo_saldo.saldo_disponivel) if ultimo_saldo and ultimo_saldo.saldo_disponivel is not None else float(c.limite_cartao or 0)
-                if avail:
-                    display_info = f"Limite: R$ {avail:.2f}"
-                else:
-                    display_info = f"Fatura: R$ {saldo_val:.2f}"
-            else:
-                total_balance += saldo_val
+                display_info = f"Fatura: R$ {abs(saldo_val):.2f}"
                 
             accounts_res.append({
                 "id": c.external_id or str(c.id),
@@ -1801,7 +1805,7 @@ def miniapp_overview():
         recent_items = (
             base_query
             .order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc())
-            .limit(6)
+            .limit(10)
             .all()
         )
 

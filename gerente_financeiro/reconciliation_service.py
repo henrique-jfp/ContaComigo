@@ -57,11 +57,10 @@ class ReconciliationService:
 
     @staticmethod
     def register_transaction(db, user_id, valor, data, descricao, categoria_id=None, origem="manual", external_id=None, tipo=None, id_conta=None):
-        """Registra transação com detecção de duplicidade, opcionalmente em uma conta específica."""
-        # Se não informada a conta, usa a Conta Digital padrão
-        if not id_conta:
-            digital_acc = ReconciliationService.get_or_create_digital_account(db, user_id)
-            id_conta = digital_acc.id
+        """Registra transação na ContaComigo Digital (Conta Central Única)."""
+        # Sempre utiliza a Conta Digital central do ContaComigo
+        digital_acc = ReconciliationService.get_or_create_digital_account(db, user_id)
+        target_id_conta = digital_acc.id
         
         # Se tipo não for informado, infere pelo sinal do valor
         if not tipo:
@@ -70,24 +69,16 @@ class ReconciliationService:
         existing = ReconciliationService.is_duplicate(db, user_id, valor, data, descricao)
         
         if existing:
-            # Se veio do Open Finance, garantimos que o external_id e a conta estejam corretos
-            if origem == "open_finance":
-                if not existing.external_id:
-                    existing.external_id = external_id
-                    existing.origem = "open_finance_reconciled"
-                
-                # Sempre atualiza para a conta real se estiver na digital ou se for diferente
-                if id_conta and existing.id_conta != id_conta:
-                    logger.info(f"Corrigindo conta do lançamento {existing.id}: {existing.id_conta} -> {id_conta}")
-                    existing.id_conta = id_conta
-                
+            # Se veio do Open Finance, apenas garantimos o external_id para evitar duplicatas futuras
+            if origem == "open_finance" and not existing.external_id:
+                existing.external_id = external_id
                 db.commit()
             return existing, False # False = Não foi criado um novo
             
-        # Cria novo lançamento
+        # Cria novo lançamento na conta central
         novo = Lancamento(
             id_usuario=user_id,
-            id_conta=id_conta,
+            id_conta=target_id_conta,
             valor=valor,
             tipo=tipo,
             data_transacao=data,

@@ -637,16 +637,7 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
             else:
                 tipo = "Transferência" # Crédito no cartão é transferência
 
-        # Registro via Serviço de Reconciliação
-        acc_id_raw = str(tx.get("account_id") or tx.get("accountId") or (tx.get("account") or {}).get("id") or "")
-        target_conta_id = accounts_map.get(acc_id_raw)
-        if not target_conta_id:
-            # Tenta buscar pelo nome da conta se o ID falhar
-            acc_name = tx.get("account_name") or tx.get("accountName") or (tx.get("account") or {}).get("name")
-            if acc_name:
-                c_fallback = db.query(Conta).filter(Conta.id_usuario == usuario.id, func.lower(Conta.nome) == acc_name.lower()).first()
-                if c_fallback: target_conta_id = c_fallback.id
-
+        # Registro via Serviço de Reconciliação (Sempre na Conta Central Única)
         lanc, criado = ReconciliationService.register_transaction(
             db=db,
             user_id=usuario.id,
@@ -655,8 +646,7 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
             descricao=descricao,
             origem="open_finance",
             external_id=ext_id,
-            tipo=tipo,
-            id_conta=target_conta_id
+            tipo=tipo
         )
 
         # Forçamos a categoria se for fatura/transferência interna
@@ -786,16 +776,7 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
             else:
                 tipo = "Transferência" # Crédito no cartão é transferência
 
-        # Registro via Serviço de Reconciliação
-        acc_id_raw = str(tx.get("account_id") or tx.get("accountId") or (tx.get("account") or {}).get("id") or "")
-        target_conta_id = accounts_map.get(acc_id_raw)
-        if not target_conta_id:
-            # Tenta buscar pelo nome da conta se o ID falhar
-            acc_name = tx.get("account_name") or tx.get("accountName") or (tx.get("account") or {}).get("name")
-            if acc_name:
-                c_fallback = db.query(Conta).filter(Conta.id_usuario == usuario.id, func.lower(Conta.nome) == acc_name.lower()).first()
-                if c_fallback: target_conta_id = c_fallback.id
-
+        # Registro via Serviço de Reconciliação (Sempre na Conta Central Única)
         lanc, criado = ReconciliationService.register_transaction(
             db=db,
             user_id=usuario.id,
@@ -804,8 +785,7 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
             descricao=descricao,
             origem="open_finance",
             external_id=ext_id,
-            tipo=tipo,
-            id_conta=target_conta_id
+            tipo=tipo
         )
 
         # Forçamos a categoria se for fatura/transferência interna
