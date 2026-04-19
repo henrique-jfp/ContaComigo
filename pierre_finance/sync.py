@@ -585,34 +585,80 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
         valor_final = abs(float(valor_bruto)) if tipo == "Receita" else -abs(float(valor_bruto))
         data_tx = _parse_iso_date(tx.get("date")) or datetime.now(timezone.utc)
 
-        # --- Lógica de Deduplicação de Fatura (Transferência) ---
+        # --- Lógica de Deduplicação e Categorização Inteligente (Livro Único) ---
         desc_norm = descricao.lower()
         contra_norm = (nome_fantasia or "").lower()
-        is_fatura_transfer = False
+        u_nome_norm = (usuario.nome_completo or "").lower()
+        is_transfer_logic = False
         cat_manual = None
         subcat_manual = None
         
-        if acc_type in ("BANK", "PAYMENT_ACCOUNT"):
-            if any(k in desc_norm for k in ["pagamento", "pagto", "pgto", "pgt"]) and \
-               any(k in desc_norm for k in ["fatura", "cartao", "cartão", "cartoes", "cartões"]):
-                
-                # Só deduplica se for pagamento de um cartão sincronizado (interno)
-                contas_sync = db.query(Conta).filter(
-                    Conta.id_usuario == usuario.id,
-                    Conta.external_id != None
-                ).all()
-                nomes_sync = [c.nome.lower() for c in contas_sync]
-                
-                is_internal = False
-                for nome in nomes_sync:
-                    if nome and (nome in desc_norm or nome in contra_norm):
-                        is_internal = True
-                        break
-                
-                if is_internal:
-                    is_fatura_transfer = True
-                    cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
-                    # Tenta marcar a fatura como paga no banco de dados
+        # 1. Detecção de Mesma Titularidade (Self-Transfer)
+        # Se o nome do usuário aparece na descrição/contraparte de uma transferência
+        if "pix" in desc_norm or "transferencia" in desc_norm or "ted" in desc_norm:
+            # Lógica de match parcial de nomes (mínimo 2 palavras significativas)
+            u_parts = [p for p in u_nome_norm.split() if len(p) > 2]
+            c_text = (desc_norm + " " + contra_norm)
+            
+            is_self = False
+            if u_parts:
+                # Se o primeiro nome bater E houver qualquer outra parte do nome (mesmo que abreviada)
+                # Ou se simplesmente houver um match de nome completo por substring
+                if u_nome_norm in c_text:
+                    is_self = True
+                else:
+                    # Verifica se o primeiro nome está lá
+                    first_name = u_parts[0]
+                    if first_name in c_text:
+                        # Se o primeiro nome bate, procuramos por abreviações das outras partes
+                        # Ex: 'Andrade' -> 'And'
+                        for part in u_parts[1:]:
+                            if part[:3] in c_text: # Match por prefixo de 3 letras (ex: 'And' para 'Andrade')
+                                is_self = True
+                                break
+            
+            if is_self:
+                is_transfer_logic = True
+                cat_manual, subcat_manual = "Outros", "Transferência Interna"
+
+        # 2. Detecção de Investimentos (Aplicações e Resgates)
+        termos_investimento = ["aplicacao", "aplicação", "investimento", "resgate", "cdb", "cdi", "tesouro", "poupanca", "poupança", "fundo de inv"]
+        if any(k in desc_norm for k in termos_investimento) or any(k in contra_norm for k in termos_investimento):
+            is_transfer_logic = True
+            cat_manual, subcat_manual = "Investimentos", "Aporte" if valor_final < 0 else "Resgate"
+
+        # 3. Detecção de Pagamento de Fatura (Aprimorada)
+        termos_fatura = [
+            "pagamento on line", "pagamento fatura", "pagamento de fatura", 
+            "pagamento efetuado", "pagamento recebido", "pagto eletron", 
+            "pag boleto bancario", "pagamento de titulo", "pagamento boleto", 
+            "liquidacao boleto", "fatura paga"
+        ]
+        
+        if any(k in desc_norm for k in termos_fatura):
+            # Busca se o destino do pagamento é uma conta/cartão conhecido no sistema
+            contas_rastreadas = db.query(Conta).filter(
+                Conta.id_usuario == usuario.id,
+                or_(Conta.external_id != None, Conta.tipo == "Cartão de Crédito")
+            ).all()
+            
+            nomes_rastreados = [c.nome.lower() for c in contas_rastreadas]
+            item_bank_name = (tx.get("item_bank_name") or "").lower()
+            is_rastreada = False
+
+            for nome in nomes_rastreados:
+                if not nome: continue
+                # Match por nome na descrição ou pelo banco fornecido pela API
+                if nome in desc_norm or (nome_fantasia and nome in nome_fantasia.lower()) or \
+                   (item_bank_name and (nome in item_bank_name or item_bank_name in nome or "inter" in item_bank_name and "inter" in nome)):
+                    is_rastreada = True
+                    break
+            
+            if is_rastreada:
+                is_transfer_logic = True
+                cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
+                # Tenta marcar fatura como paga se for banco nacional
+                if acc_type in ("BANK", "PAYMENT_ACCOUNT"):
                     try:
                         f_vencida = db.query(FaturaCartao).filter(
                             FaturaCartao.id_usuario == usuario.id,
@@ -620,48 +666,15 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
                         ).order_by(func.abs(FaturaCartao.data_vencimento - data_tx.date())).first()
                         if f_vencida:
                             f_vencida.status = "paga"
-                            logger.info(f"Fatura {f_vencida.id} marcada como PAGA via detecção de transação.")
-                    except Exception as fe:
-                        logger.error(f"Erro ao marcar fatura como paga: {fe}")
-                    
-        elif acc_type == "CREDIT":
-            if any(k in desc_norm for k in ["pagamento recebido", "pagamento fatura", "pagamento de fatura", "fatura paga"]):
-                is_fatura_transfer = True
-                cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
-
-        # REQUISITO ESPECIAL: Pagamento de fatura
-        # Só vira 'Transferência' se o sistema já tiver os detalhes desse cartão (Open Finance ou PDF)
-        termos_pagamento_fatura = ["pagamento on line", "pagamento fatura", "pagamento de fatura", "pagamento efetuado", "pagamento recebido"]
-        if any(k in desc_norm for k in termos_pagamento_fatura):
-            # Busca se o destino do pagamento é uma conta conhecida
-            contas_rastreadas = db.query(Conta).filter(
-                Conta.id_usuario == usuario.id,
-                or_(Conta.external_id != None, Conta.tipo == "Cartão de Crédito")
-            ).all()
-            
-            nomes_rastreados = [c.nome.lower() for c in contas_rastreadas]
-            is_rastreada = False
-            item_bank_name = (tx.get("item_bank_name") or "").lower()
-
-            for nome in nomes_rastreados:
-                if not nome: continue
-                # Se o nome do cartão rastreado está na descrição (ex: 'pagamento efetuado - cartões caixa')
-                if nome in desc_norm or (nome_fantasia and nome in nome_fantasia.lower()):
-                    is_rastreada = True
-                    break
-                # Se a descrição é genérica (ex: 'pagamento on line') e o banco da transação for igual ao do cartão rastreado
-                if item_bank_name and (nome in item_bank_name or item_bank_name in nome or "inter" in item_bank_name and "inter" in nome):
-                    is_rastreada = True
-                    break
-            
-            # Se a conta é rastreada, é transferência (já temos os itens). 
-            # Se não é, é despesa (precisamos contabilizar o valor total).
-            if is_rastreada:
-                is_fatura_transfer = True
-                cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
-                tipo = "Transferência"
+                            logger.info(f"Fatura {f_vencida.id} marcada como PAGA.")
+                    except Exception: pass
             else:
+                # Se não rastreou, vira despesa para não sumir do mapa
                 tipo = "Despesa"
+
+        # Finaliza o tipo se caiu em alguma regra de transferência
+        if is_transfer_logic:
+            tipo = "Transferência"
 
         # Registro via Serviço de Reconciliação (Sempre na Conta Central Única)
         lanc, criado = ReconciliationService.register_transaction(
@@ -684,7 +697,7 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
             db.commit()
 
         # Se já existia mas agora identificamos como especial, forçamos o tipo
-        if not criado and is_fatura_transfer and lanc.tipo != tipo:
+        if not criado and is_transfer_logic and lanc.tipo != tipo:
             lanc.tipo = tipo
             db.commit()
 
@@ -750,34 +763,80 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
         valor_final = abs(float(valor_bruto)) if tipo == "Receita" else -abs(float(valor_bruto))
         data_tx = _parse_iso_date(tx.get("date")) or _parse_iso_date(tx.get("createdAt")) or datetime.now(timezone.utc)
 
-        # --- Lógica de Deduplicação de Fatura (Transferência) ---
+        # --- Lógica de Deduplicação e Categorização Inteligente (Livro Único) ---
         desc_norm = descricao.lower()
         contra_norm = (nome_fantasia or "").lower()
-        is_fatura_transfer = False
+        u_nome_norm = (usuario.nome_completo or "").lower()
+        is_transfer_logic = False
         cat_manual = None
         subcat_manual = None
         
-        if acc_type in ("BANK", "PAYMENT_ACCOUNT"):
-            if any(k in desc_norm for k in ["pagamento", "pagto", "pgto", "pgt"]) and \
-               any(k in desc_norm for k in ["fatura", "cartao", "cartão", "cartoes", "cartões"]):
-                
-                # Só deduplica se for pagamento de um cartão sincronizado (interno)
-                contas_sync = db.query(Conta).filter(
-                    Conta.id_usuario == usuario.id,
-                    Conta.external_id != None
-                ).all()
-                nomes_sync = [c.nome.lower() for c in contas_sync]
-                
-                is_internal = False
-                for nome in nomes_sync:
-                    if nome and (nome in desc_norm or nome in contra_norm):
-                        is_internal = True
-                        break
-                
-                if is_internal:
-                    is_fatura_transfer = True
-                    cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
-                    # Tenta marcar a fatura como paga no banco de dados
+        # 1. Detecção de Mesma Titularidade (Self-Transfer)
+        # Se o nome do usuário aparece na descrição/contraparte de uma transferência
+        if "pix" in desc_norm or "transferencia" in desc_norm or "ted" in desc_norm:
+            # Lógica de match parcial de nomes (mínimo 2 palavras significativas)
+            u_parts = [p for p in u_nome_norm.split() if len(p) > 2]
+            c_text = (desc_norm + " " + contra_norm)
+            
+            is_self = False
+            if u_parts:
+                # Se o primeiro nome bater E houver qualquer outra parte do nome (mesmo que abreviada)
+                # Ou se simplesmente houver um match de nome completo por substring
+                if u_nome_norm in c_text:
+                    is_self = True
+                else:
+                    # Verifica se o primeiro nome está lá
+                    first_name = u_parts[0]
+                    if first_name in c_text:
+                        # Se o primeiro nome bate, procuramos por abreviações das outras partes
+                        # Ex: 'Andrade' -> 'And'
+                        for part in u_parts[1:]:
+                            if part[:3] in c_text: # Match por prefixo de 3 letras (ex: 'And' para 'Andrade')
+                                is_self = True
+                                break
+            
+            if is_self:
+                is_transfer_logic = True
+                cat_manual, subcat_manual = "Outros", "Transferência Interna"
+
+        # 2. Detecção de Investimentos (Aplicações e Resgates)
+        termos_investimento = ["aplicacao", "aplicação", "investimento", "resgate", "cdb", "cdi", "tesouro", "poupanca", "poupança", "fundo de inv"]
+        if any(k in desc_norm for k in termos_investimento) or any(k in contra_norm for k in termos_investimento):
+            is_transfer_logic = True
+            cat_manual, subcat_manual = "Investimentos", "Aporte" if valor_final < 0 else "Resgate"
+
+        # 3. Detecção de Pagamento de Fatura (Aprimorada)
+        termos_fatura = [
+            "pagamento on line", "pagamento fatura", "pagamento de fatura", 
+            "pagamento efetuado", "pagamento recebido", "pagto eletron", 
+            "pag boleto bancario", "pagamento de titulo", "pagamento boleto", 
+            "liquidacao boleto", "fatura paga"
+        ]
+        
+        if any(k in desc_norm for k in termos_fatura):
+            # Busca se o destino do pagamento é uma conta/cartão conhecido no sistema
+            contas_rastreadas = db.query(Conta).filter(
+                Conta.id_usuario == usuario.id,
+                or_(Conta.external_id != None, Conta.tipo == "Cartão de Crédito")
+            ).all()
+            
+            nomes_rastreados = [c.nome.lower() for c in contas_rastreadas]
+            item_bank_name = (tx.get("item_bank_name") or "").lower()
+            is_rastreada = False
+
+            for nome in nomes_rastreados:
+                if not nome: continue
+                # Match por nome na descrição ou pelo banco fornecido pela API
+                if nome in desc_norm or (nome_fantasia and nome in nome_fantasia.lower()) or \
+                   (item_bank_name and (nome in item_bank_name or item_bank_name in nome or "inter" in item_bank_name and "inter" in nome)):
+                    is_rastreada = True
+                    break
+            
+            if is_rastreada:
+                is_transfer_logic = True
+                cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
+                # Tenta marcar fatura como paga se for banco nacional
+                if acc_type in ("BANK", "PAYMENT_ACCOUNT"):
                     try:
                         f_vencida = db.query(FaturaCartao).filter(
                             FaturaCartao.id_usuario == usuario.id,
@@ -785,48 +844,15 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
                         ).order_by(func.abs(FaturaCartao.data_vencimento - data_tx.date())).first()
                         if f_vencida:
                             f_vencida.status = "paga"
-                            logger.info(f"Fatura {f_vencida.id} marcada como PAGA via detecção de transação.")
-                    except Exception as fe:
-                        logger.error(f"Erro ao marcar fatura como paga: {fe}")
-                    
-        elif acc_type == "CREDIT":
-            if any(k in desc_norm for k in ["pagamento recebido", "pagamento fatura", "pagamento de fatura", "fatura paga"]):
-                is_fatura_transfer = True
-                cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
-
-        # REQUISITO ESPECIAL: Pagamento de fatura
-        # Só vira 'Transferência' se o sistema já tiver os detalhes desse cartão (Open Finance ou PDF)
-        termos_pagamento_fatura = ["pagamento on line", "pagamento fatura", "pagamento de fatura", "pagamento efetuado", "pagamento recebido"]
-        if any(k in desc_norm for k in termos_pagamento_fatura):
-            # Busca se o destino do pagamento é uma conta conhecida
-            contas_rastreadas = db.query(Conta).filter(
-                Conta.id_usuario == usuario.id,
-                or_(Conta.external_id != None, Conta.tipo == "Cartão de Crédito")
-            ).all()
-            
-            nomes_rastreados = [c.nome.lower() for c in contas_rastreadas]
-            is_rastreada = False
-            item_bank_name = (tx.get("item_bank_name") or "").lower()
-
-            for nome in nomes_rastreados:
-                if not nome: continue
-                # Se o nome do cartão rastreado está na descrição (ex: 'pagamento efetuado - cartões caixa')
-                if nome in desc_norm or (nome_fantasia and nome in nome_fantasia.lower()):
-                    is_rastreada = True
-                    break
-                # Se a descrição é genérica (ex: 'pagamento on line') e o banco da transação for igual ao do cartão rastreado
-                if item_bank_name and (nome in item_bank_name or item_bank_name in nome or "inter" in item_bank_name and "inter" in nome):
-                    is_rastreada = True
-                    break
-            
-            # Se a conta é rastreada, é transferência (já temos os itens). 
-            # Se não é, é despesa (precisamos contabilizar o valor total).
-            if is_rastreada:
-                is_fatura_transfer = True
-                cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
-                tipo = "Transferência"
+                            logger.info(f"Fatura {f_vencida.id} marcada como PAGA.")
+                    except Exception: pass
             else:
+                # Se não rastreou, vira despesa para não sumir do mapa
                 tipo = "Despesa"
+
+        # Finaliza o tipo se caiu em alguma regra de transferência
+        if is_transfer_logic:
+            tipo = "Transferência"
 
         # Registro via Serviço de Reconciliação (Sempre na Conta Central Única)
         lanc, criado = ReconciliationService.register_transaction(
@@ -849,7 +875,7 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
             db.commit()
 
         # Se já existia mas agora identificamos como especial, forçamos o tipo
-        if not criado and is_fatura_transfer and lanc.tipo != tipo:
+        if not criado and is_transfer_logic and lanc.tipo != tipo:
             lanc.tipo = tipo
             db.commit()
 
