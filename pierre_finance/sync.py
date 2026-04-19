@@ -12,7 +12,7 @@ Correções aplicadas v3:
 
 import logging
 import re
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal, InvalidOperation
@@ -641,8 +641,16 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
             
             nomes_rastreados = [c.nome.lower() for c in contas_rastreadas]
             is_rastreada = False
+            item_bank_name = (tx.get("item_bank_name") or "").lower()
+
             for nome in nomes_rastreados:
-                if nome and (nome in desc_norm or (nome_fantasia and nome in nome_fantasia.lower())):
+                if not nome: continue
+                # Se o nome do cartão rastreado está na descrição (ex: 'pagamento efetuado - cartões caixa')
+                if nome in desc_norm or (nome_fantasia and nome in nome_fantasia.lower()):
+                    is_rastreada = True
+                    break
+                # Se a descrição é genérica (ex: 'pagamento on line') e o banco da transação for igual ao do cartão rastreado
+                if item_bank_name and (nome in item_bank_name or item_bank_name in nome or "inter" in item_bank_name and "inter" in nome):
                     is_rastreada = True
                     break
             
@@ -798,8 +806,16 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
             
             nomes_rastreados = [c.nome.lower() for c in contas_rastreadas]
             is_rastreada = False
+            item_bank_name = (tx.get("item_bank_name") or "").lower()
+
             for nome in nomes_rastreados:
-                if nome and (nome in desc_norm or (nome_fantasia and nome in nome_fantasia.lower())):
+                if not nome: continue
+                # Se o nome do cartão rastreado está na descrição (ex: 'pagamento efetuado - cartões caixa')
+                if nome in desc_norm or (nome_fantasia and nome in nome_fantasia.lower()):
+                    is_rastreada = True
+                    break
+                # Se a descrição é genérica (ex: 'pagamento on line') e o banco da transação for igual ao do cartão rastreado
+                if item_bank_name and (nome in item_bank_name or item_bank_name in nome or "inter" in item_bank_name and "inter" in nome):
                     is_rastreada = True
                     break
             
