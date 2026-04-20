@@ -248,12 +248,12 @@ def apply_migrations():
             len(summary.get("skipped", [])),
         )
         
-        # 🧹 LIMPEZA TEMPORÁRIA DE DADOS CORROMPIDOS (Abril 2026)
-        try:
-            from scripts.cleanup_bad_data import cleanup_bad_transactions
-            cleanup_bad_transactions()
-        except Exception as e:
-            logger.warning(f"⚠️ Falha na limpeza de dados: {e}")
+        # 🧹 LIMPEZA TEMPORÁRIA DESATIVADA (Causava perda de dados no restart)
+        # try:
+        #    from scripts.cleanup_bad_data import cleanup_bad_transactions
+        #    cleanup_bad_transactions()
+        # except Exception as e:
+        #    logger.warning(f"⚠️ Falha na limpeza de dados: {e}")
         
     except Exception as e:
         logger.error(f"❌ Erro ao aplicar migrations: {e}")

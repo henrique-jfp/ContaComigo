@@ -51,10 +51,9 @@ _PARSE_CACHE: dict[str, dict] = {}
 # IDs validados contra a API pública de 2025/2026.
 # ─────────────────────────────────────────────────────────────────────────────
 _GEMINI_MODEL_CANDIDATES = [
-    "gemini-2.5-flash",           # Flash 2.5 – melhor custo/benefício com alta cota
+    "gemini-2.5-flash-lite",      # ⭐ Melhor economia/velocidade (NOVO 2026)
     "gemini-2.0-flash",           # Flash 2.0 – fallback estável
     "gemini-2.5-pro",             # Pro 2.5  – mais inteligente, cota menor
-    "gemini-1.5-flash",           # Flash 1.5 – último recurso, amplamente disponível
 ]
 
 # Tolerância percentual para validação matemática.

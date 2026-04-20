@@ -109,9 +109,9 @@ def _inferir_tipo(
 ) -> str:
     desc_norm = (descricao or "").lower()
 
-    # 1. Checa auto-transferência primeiro
-    if _is_self_transfer(usuario_nome, nome_contraparte):
-        return "Transferência"
+    # 1. Checa auto-transferência (DESATIVADO: Usuário prefere ver como Receita/Despesa no Livro Único)
+    # if _is_self_transfer(usuario_nome, nome_contraparte):
+    #    return "Transferência"
 
     # 2. Checa sinais fortes de despesa (importante para boletos com sinal invertido)
     for sinal in _SINAIS_DESPESA_FORTE:
@@ -655,7 +655,10 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
         if is_transfer_logic:
             tipo = "Transferência"
 
-        # Registro via Serviço de Reconciliação (Sempre na Conta Central Única)
+        # Registro via Serviço de Reconciliação (Com ID de Conta Correto)
+        acc_id_ext = str(tx.get("accountId") or (tx.get("account") or {}).get("id") or "")
+        conta_id_dest = accounts_map.get(acc_id_ext)
+
         lanc, criado = ReconciliationService.register_transaction(
             db=db,
             user_id=usuario.id,
@@ -664,23 +667,18 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
             descricao=descricao,
             origem="open_finance",
             external_id=ext_id,
-            tipo=tipo
+            tipo=tipo,
+            id_conta=conta_id_dest
         )
 
-        # Forçamos a categoria se for fatura/transferência interna
-        if cat_manual and subcat_manual:
-            from pierre_finance.categorizador import persistir_ids_categoria
-            cid, sid = persistir_ids_categoria(db, cat_manual, subcat_manual)
-            lanc.id_categoria = cid
-            lanc.id_subcategoria = sid
-            db.commit()
-
-        # Se já existia mas agora identificamos como especial, forçamos o tipo
-        if not criado and is_transfer_logic and lanc.tipo != tipo:
-            lanc.tipo = tipo
-            db.commit()
-
+        # Só forçamos a categoria/tipo se for um lançamento NOVO
         if criado:
+            if cat_manual and subcat_manual:
+                from pierre_finance.categorizador import persistir_ids_categoria
+                cid, sid = persistir_ids_categoria(db, cat_manual, subcat_manual)
+                lanc.id_categoria = cid
+                lanc.id_subcategoria = sid
+            
             # Enriquecimento adicional
             lanc.cnpj_contraparte = cnpj
             lanc.nome_contraparte = nome_fantasia
@@ -688,6 +686,10 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
             # Tenta categorizar na hora
             await enriquecer_um_lancamento(db, lanc)
             txs_count += 1
+        else:
+            # Se já existia, mas não tinha external_id, o register_transaction já cuidou do commit.
+            # EVITAMOS mudar o tipo (tipo=tipo) para não ocultar do dashboard o que o usuário já tinha.
+            pass
 
     _upsert_bill_summaries(usuario, db, client, accounts_map)
     _upsert_installments(usuario, db, client, accounts_map)
@@ -812,7 +814,10 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
         if is_transfer_logic:
             tipo = "Transferência"
 
-        # Registro via Serviço de Reconciliação (Sempre na Conta Central Única)
+        # Registro via Serviço de Reconciliação (Com ID de Conta Correto)
+        acc_id_ext = str(tx.get("accountId") or (tx.get("account") or {}).get("id") or "")
+        conta_id_dest = accounts_map.get(acc_id_ext)
+
         lanc, criado = ReconciliationService.register_transaction(
             db=db,
             user_id=usuario.id,
@@ -821,28 +826,26 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
             descricao=descricao,
             origem="open_finance",
             external_id=ext_id,
-            tipo=tipo
+            tipo=tipo,
+            id_conta=conta_id_dest
         )
 
-        # Forçamos a categoria se for fatura/transferência interna
-        if cat_manual and subcat_manual:
-            from pierre_finance.categorizador import persistir_ids_categoria
-            cid, sid = persistir_ids_categoria(db, cat_manual, subcat_manual)
-            lanc.id_categoria = cid
-            lanc.id_subcategoria = sid
-            db.commit()
-
-        # Se já existia mas agora identificamos como especial, forçamos o tipo
-        if not criado and is_transfer_logic and lanc.tipo != tipo:
-            lanc.tipo = tipo
-            db.commit()
-
+        # Só forçamos a categoria/tipo se for um lançamento NOVO
         if criado:
+            if cat_manual and subcat_manual:
+                from pierre_finance.categorizador import persistir_ids_categoria
+                cid, sid = persistir_ids_categoria(db, cat_manual, subcat_manual)
+                lanc.id_categoria = cid
+                lanc.id_subcategoria = sid
+
             lanc.cnpj_contraparte = cnpj
             lanc.nome_contraparte = nome_fantasia
             lanc.forma_pagamento = _normalizar_forma_pagamento(descricao, acc_type)
             await enriquecer_um_lancamento(db, lanc)
             novos += 1
+        else:
+            # Se já existia, evitamos mudar o tipo para não ocultar do dashboard.
+            pass
 
     faturas_atualizadas = _upsert_bill_summaries(usuario, db, client, accounts_map)
     parcelamentos_atualizados = _upsert_installments(usuario, db, client, accounts_map)

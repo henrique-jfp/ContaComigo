@@ -56,17 +56,26 @@ class ReconciliationService:
         desc_nova = str(descricao).lower().strip()
         for p in potenciais:
             desc_existente = str(p.descricao).lower().strip()
-            # Se a descrição for muito parecida ou o external_id bater, é duplicado
-            if desc_nova == desc_existente:
-                logger.info(f"Duplicidade exata detectada: {descricao} | R$ {valor_abs}")
+            # Se a descrição for muito parecida (uma contida na outra), o valor for idêntico e a data próxima, é duplicado
+            if desc_nova == desc_existente or desc_nova in desc_existente or desc_existente in desc_nova:
+                logger.info(f"Duplicidade detectada (flexível): '{descricao}' vs '{p.descricao}' | R$ {valor_abs}")
                 return p
         
         return None
 
     @staticmethod
     def register_transaction(db, user_id, valor, data, descricao, categoria_id=None, origem="manual", external_id=None, tipo=None, id_conta=None):
-        """Registra transação na ContaComigo Digital (Conta Central Única)."""
-        digital_acc = ReconciliationService.get_or_create_digital_account(db, user_id)
+        """
+        Registra transação. 
+        Se id_conta for fornecido, usa ele. Caso contrário, usa a ContaComigo Digital.
+        """
+        if id_conta:
+            conta = db.query(Conta).filter(Conta.id == id_conta, Conta.id_usuario == user_id).first()
+            if not conta:
+                logger.warning(f"Conta {id_conta} não encontrada para usuário {user_id}. Usando conta digital.")
+                conta = ReconciliationService.get_or_create_digital_account(db, user_id)
+        else:
+            conta = ReconciliationService.get_or_create_digital_account(db, user_id)
         
         if not tipo:
             tipo = "Receita" if float(valor) > 0 else "Despesa"
@@ -76,15 +85,15 @@ class ReconciliationService:
         
         if existing:
             # Se veio do Open Finance, apenas garantimos o external_id para evitar duplicatas futuras
-            if origem == "open_finance" and not existing.external_id:
+            if origem == "open_finance" and not existing.external_id and external_id:
                 existing.external_id = external_id
                 db.commit()
             return existing, False # False = Não foi criado um novo
             
-        # Cria novo lançamento na conta central
+        # Cria novo lançamento
         novo = Lancamento(
             id_usuario=user_id,
-            id_conta=digital_acc.id,
+            id_conta=conta.id,
             valor=valor,
             tipo=tipo,
             data_transacao=data,
