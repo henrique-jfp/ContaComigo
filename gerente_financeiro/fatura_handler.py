@@ -338,11 +338,13 @@ def _detectar_banco_fatura(texto: str) -> str:
         ("Nubank", ["nubank"]),
         ("Inter", ["inter"]),
         ("Caixa", ["caixa", "cartoes caixa", "cartões caixa"]),
-        ("Bradesco", ["bradesco"]),
-        ("Itaú", ["itau", "itaú"]),
+        ("Itau", ["itau", "itaucard", "pão de açucar", "personalite"]),
+        ("Bradesco", ["bradesco", "bradescard"]),
         ("Santander", ["santander"]),
+        ("BB", ["banco do brasil"]),
+        ("BTG", ["btg pactual"]),
         ("C6", ["c6 bank", "c6bank"]),
-        ("XP", ["xp investimentos", "xp card"]),
+        ("XP", ["xp investimentos", "xp"]),
     ]
     for nome, termos in bancos:
         if any(termo in texto_norm for termo in termos):
