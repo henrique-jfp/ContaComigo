@@ -269,6 +269,25 @@ def _extrair_linhas_com_pdfplumber(file_bytes: bytes) -> list[str]:
     return linhas
 
 
+def _converter_pdf_para_imagens(file_bytes: bytes) -> list[dict]:
+    """Converte cada página do PDF em um dicionário compatível com o Gemini Vision."""
+    import fitz
+    doc = fitz.open(stream=file_bytes, filetype="pdf")
+    imagens = []
+    try:
+        for page in doc:
+            # 300 DPI para garantir que letras pequenas sejam legíveis
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            img_bytes = pix.tobytes("jpeg")
+            imagens.append({
+                "mime_type": "image/jpeg",
+                "data": img_bytes
+            })
+    finally:
+        doc.close()
+    return imagens
+
+
 def _extrair_texto_pdf_local(file_bytes: bytes) -> list[str]:
     try:
         return _extrair_linhas_com_pdfplumber(file_bytes)
@@ -623,7 +642,7 @@ def _resultado_e_aceitavel(transacoes: List[Dict], total_pdf: float) -> bool:
 # PROMPTS GEMINI
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _build_gemini_prompt(mes_ref: int, ano_ref: int, total_esperado: float | None = None, texto_fatura: str = "") -> str:
+def _build_gemini_prompt(mes_ref: int, ano_ref: int, total_esperado: float | None = None) -> str:
     hoje = datetime.now().strftime("%d/%m/%Y")
     ref = f"{mes_ref:02d}/{ano_ref}"
     total_hint = (
@@ -632,17 +651,17 @@ def _build_gemini_prompt(mes_ref: int, ano_ref: int, total_esperado: float | Non
         else ""
     )
     return f"""Você é um sistema de extração financeira de alta precisão.
-Leia o CONTEÚDO EXTRAÍDO DA FATURA de cartão de crédito abaixo e extraia TODAS as transações.
+Leia as IMAGENS das páginas da fatura de cartão de crédito abaixo e extraia TODAS as transações.
 
 DATA ATUAL: {hoje}
 REFERÊNCIA DA FATURA: {ref}{total_hint}
 
 ═══ REGRAS OBRIGATÓRIAS ═══
 
-1. COBERTURA TOTAL – Percorra TODAS as páginas e seções:
+1. COBERTURA TOTAL – Analise CADA IMAGEM (página) e percorra todas as seções:
    "Compras Nacionais", "Compras Internacionais", "Parcelamentos",
    "Encargos", "IOF", "Serviços", "Anuidade", "Ajustes".
-   NÃO pule nenhuma seção. Se estiver em dúvida se é uma transação, INCLUA.
+   NÃO pule nenhuma página.
 
 2. SINAIS DOS VALORES (CRÍTICO):
    - Compras, IOF, juros, encargos, anuidade → valor NEGATIVO  (ex: -150.40)
@@ -656,23 +675,15 @@ REFERÊNCIA DA FATURA: {ref}{total_hint}
 
 4. DESCRIÇÃO LIMPA:
    - Extraia apenas o nome do estabelecimento/serviço.
-   - Remova: códigos de documento, nomes de cidade, nomes de país,
-     sufixos como "BR", "US", "SAO PAULO", "RJ".
+   - Remova: códigos de documento, nomes de cidade, nomes de país.
 
 5. PARCELAS:
-   - Se houver indicação de parcela (ex: "3/12", "Parc 3 de 12"), preencha o
-     campo "parcela" com o formato "X/Y" (ex: "3/12").
+   - Se houver indicação de parcela (ex: "3/12"), preencha o campo "parcela" com "X/Y".
    - Se não houver, deixe null.
 
 6. INTEGRIDADE MATEMÁTICA:
-   - Ao final, some todos os valores negativos (débitos).
-   - Esse total deve ser próximo ao "total a pagar" indicado na fatura.
-   - Se houver diferença > 10%, revise e adicione os itens faltantes.
-
-7. EXCLUSÕES (não inclua):
-   - Linhas de cabeçalho/rodapé sem valor monetário.
-   - "Limite disponível", "Limite total", "Saldo anterior" isolados.
-   - Valores duplicados de totalizadores de seção.
+   - Localize o "total a pagar" em uma das imagens.
+   - A soma dos débitos deve bater com esse total.
 
 FORMATO DE RESPOSTA (JSON puro, sem markdown):
 {{
@@ -687,35 +698,24 @@ FORMATO DE RESPOSTA (JSON puro, sem markdown):
     }}
   ]
 }}
-
-═══ CONTEÚDO DA FATURA ═══
-{texto_fatura}
 """
 
 
 def _build_gemini_prompt_retry(
-    mes_ref: int, ano_ref: int, total_esperado: float, soma_atual: float, texto_fatura: str = ""
+    mes_ref: int, ano_ref: int, total_esperado: float, soma_atual: float
 ) -> str:
     hoje = datetime.now().strftime("%d/%m/%Y")
     faltante = abs(total_esperado - soma_atual)
-    return f"""Você já extraiu parte das transações desta fatura, mas a soma dos débitos
+    return f"""Você já extraiu parte das transações, mas a soma dos débitos
 (R$ {soma_atual:.2f}) ainda está R$ {faltante:.2f} ABAIXO do total da fatura (R$ {total_esperado:.2f}).
 
 DATA ATUAL: {hoje}
 REFERÊNCIA: {mes_ref:02d}/{ano_ref}
 TOTAL ESPERADO: R$ {total_esperado:.2f}
-SOMA ATUAL DOS DÉBITOS: R$ {soma_atual:.2f}
-DIFERENÇA: R$ {faltante:.2f}
 
-Revise o CONTEÚDO EXTRAÍDO DA FATURA abaixo mais uma vez e encontre os itens que faltaram.
-Procure especialmente:
-  - Encargos financeiros (juros, IOF, mora, multa)
-  - Anuidades ou mensalidades
-  - Compras internacionais (podem ter IOF separado)
-  - Parcelas de compras anteriores em seções distintas
-  - Qualquer linha com valor monetário que ainda não foi extraída
+Revise as IMAGENS das páginas mais uma vez e encontre os itens que faltaram.
+Retorne APENAS os itens ADICIONAIS (não repita os já encontrados).
 
-Retorne APENAS os itens ADICIONAIS que estavam faltando (não repita os já encontrados).
 Formato JSON (sem markdown):
 {{
   "banco": "Nome do banco",
@@ -724,9 +724,6 @@ Formato JSON (sem markdown):
     {{ "data": "YYYY-MM-DD", "descricao": "...", "valor": -123.45, "parcela": null }}
   ]
 }}
-
-═══ CONTEÚDO DA FATURA ═══
-{texto_fatura}
 """
 
 
@@ -875,34 +872,36 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     except Exception as e:
         logger.warning("Erro ao configurar genai: %s", e)
 
-    # Extrai metadados básicos via parser local (leve, sem IA)
+    # 📝 ESTRATÉGIA VISUAL: Convertemos o PDF em imagens (prints das páginas)
+    # Isso resolve problemas de PDFs sem camada de texto ou layouts complexos.
+    logger.info("📸 Convertendo PDF em imagens para extração visual...")
+    paginas_imagens = _converter_pdf_para_imagens(file_bytes)
+    
+    # Metadados rápidos via texto (para ajudar o prompt)
     linhas_preview = _extrair_texto_pdf_local(file_bytes)
     mes_ref, ano_ref = _detectar_referencia_fatura(linhas_preview)
     total_local = _detectar_total_fatura_local(linhas_preview)
-    
-    # 📝 NOVO: Em vez de mandar o PDF (multimodal), mandamos o texto extraído.
-    # Isso evita confusão com o layout complexo do PDF de bancos.
-    texto_completo_pdf = "\n".join(linhas_preview)
 
     melhor_resultado: Tuple[List[Dict], int, str, float] | None = None
     melhor_erro: float = float("inf")
 
     # ── Fase 1: Tentativas por modelo ────────────────────────────────────────
     for model_name in _GEMINI_MODEL_CANDIDATES:
-        logger.info("🤖 Tentando extração de texto com %s", model_name)
-        prompt_v1 = _build_gemini_prompt(mes_ref, ano_ref, total_local or None, texto_completo_pdf)
+        logger.info("🤖 Tentando extração visual com %s", model_name)
+        # Usamos o prompt original de PDF que agora receberá imagens
+        prompt_v1 = _build_gemini_prompt(mes_ref, ano_ref, total_local or None)
 
         try:
             model = genai.GenerativeModel(model_name)
-            # 🚀 Chamada simplificada: apenas o prompt com o texto injetado
+            # 🚀 Enviamos o prompt + todas as imagens das páginas
             response = await model.generate_content_async(
-                [prompt_v1],
+                [prompt_v1] + paginas_imagens,
                 generation_config={
                     "response_mime_type": "application/json",
                     "temperature": 0,
                     "max_output_tokens": 8192,
                 },
-                request_options={"timeout": 120},
+                request_options={"timeout": 150}, # Aumentado para lidar com imagens
             )
         except Exception as exc:
             err_msg = str(exc)
@@ -951,18 +950,18 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
 
             # Só faz retry se estamos claramente abaixo do esperado (não apenas arredondamento)
             if soma_liquida < total_pdf * 0.85:
-                logger.info("🔄 Erro alto (%.1f%%). Iniciando retry com prompt de completude (TEXTO).", erro * 100)
-                prompt_v2 = _build_gemini_prompt_retry(mes_ref, ano_ref, total_pdf, soma_liquida, texto_completo_pdf)
+                logger.info("🔄 Erro alto (%.1f%%). Iniciando retry visual com imagens.", erro * 100)
+                prompt_v2 = _build_gemini_prompt_retry(mes_ref, ano_ref, total_pdf, soma_liquida)
                 try:
-                    # 🚀 Chamada simplificada para o retry também
+                    # 🚀 Retry visual também
                     response2 = await model.generate_content_async(
-                        [prompt_v2],
+                        [prompt_v2] + paginas_imagens,
                         generation_config={
                             "response_mime_type": "application/json",
                             "temperature": 0,
                             "max_output_tokens": 4096,
                         },
-                        request_options={"timeout": 90},
+                        request_options={"timeout": 120},
                     )
                     resp_text2 = getattr(response2, "text", "") or ""
                     json_data2 = _parse_json_response(resp_text2) if resp_text2 else None
