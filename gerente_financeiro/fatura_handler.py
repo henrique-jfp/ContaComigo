@@ -641,48 +641,49 @@ def _resultado_e_aceitavel(transacoes: List[Dict], total_pdf: float) -> bool:
 # PROMPTS GEMINI
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _build_gemini_prompt(mes_ref: int, ano_ref: int, total_esperado: float | None = None, texto_bruto: str = "") -> str:
+def _build_gemini_prompt(mes_ref: int, ano_ref: int, total_esperado: float | None = None, texto_bruto: str = "", banco_sugerido: str = "Desconhecido") -> str:
     hoje = datetime.now().strftime("%d/%m/%Y")
     ref = f"{mes_ref:02d}/{ano_ref}"
     total_val = float(total_esperado or 0.0)
     
-    return f"""Você é um sistema de AUDITORIA FINANCEIRA.
-Sua tarefa é extrair os lançamentos desta fatura usando as IMAGENS para entender o layout e o TEXTO abaixo para garantir os valores exatos.
+    return f"""Você é um sistema de AUDITORIA FINANCEIRA UNIVERSAL.
+Sua missão é extrair transações de faturas de cartão de crédito de QUALQUER banco com precisão total.
 
+INSTITUIÇÃO PROVÁVEL: {banco_sugerido}
 DATA ATUAL: {hoje}
 REFERÊNCIA: {ref}
 TOTAL ESPERADO (DÉBITOS): R$ {total_val:.2f}
 
-═══ REGRAS DE EXTRAÇÃO ═══
+═══ HEURÍSTICAS DE RECONHECIMENTO (SIGA RIGOROSAMENTE) ═══
 
-1. FONTE DOS DADOS: Use o 'CONTEÚDO TEXTUAL' abaixo como base de nomes e valores. As IMAGENS servem para confirmar seções e datas.
+1. IDENTIFICAÇÃO DE PADRÃO:
+   - Analise o 'CONTEÚDO TEXTUAL' para identificar o padrão de datas (ex: DD/MM ou DD/MM/AAAA) e a posição dos valores.
+   - Use as IMAGENS para confirmar se os itens pertencem ao detalhamento de compras ou a resumos de categorias/limites.
 
-2. O QUE EXTRAIR (OBRIGATÓRIO):
-   - Compras em lojas, apps, serviços.
-   - Lançamentos de Parcelamento: "PARC.FACIL", "Encargos sobreparcelado", "IOF adicional/diário sobreparcelado". (Isso é CRÍTICO para faturas do Bradesco).
-   - Tarifas e Juros: "Anuidade", "Mora", "Multa", "Juros Rotativo", "IOF Rotativo".
-   - Identifique parcelas no formato "05/12".
+2. O QUE EXTRAIR (REGRA GERAL):
+   - Compras reais em lojas, apps, serviços.
+   - Encargos, Juros, Multas, IOF e Anuidades (débitos reais).
+   - Lançamentos parcelados: capture o nome e a parcela (ex: 02/12).
 
-3. O QUE NÃO EXTRAIR (PROIBIDO):
-   - Pagamentos da fatura: "PAG BOLETO BANCARIO", "Pagamento Efetuado", "Internet Banking", "Obrigado pelo pagamento".
-   - NÃO EXTRAIA linhas de "Total para [NOME]", "Total da Fatura" ou "Saldo Anterior".
+3. O QUE IGNORAR (FILTRO DE RUÍDO):
+   - Pagamentos da fatura: "PAGAMENTO EFETUADO", "INTERNET BANKING", "OBRIGADO PELO PAGAMENTO", "PAG BOLETO".
+   - Totalizadores e Resumos: "TOTAL DA FATURA", "TOTAL PARA [NOME]", "SALDO ANTERIOR", "LIMITE".
    - NÃO INVENTE DADOS. Siga o texto rigorosamente.
 
-4. DATAS:
-   - Formato: "YYYY-MM-DD". No Bradesco, a data (DD/MM) costuma estar na EXTREMA ESQUERDA da descrição.
-   - Exemplo: "13/10 PG *TON" -> Data 13 de Outubro.
+4. SINAIS (LÓGICA CONTÁBIL):
+   - Tudo o que AUMENTA a dívida (compras/taxas): valor NEGATIVO (ex: -50.00).
+   - Tudo o que DIMINUI a dívida (pagamentos/estornos): valor POSITIVO (ex: 100.00).
 
-5. SINAIS E MATEMÁTICA:
-   - Gastos/Taxas/Juros: NEGATIVO (ex: -15.50).
-   - Créditos/Pagamentos: POSITIVO (ex: 100.00).
-   - A soma dos valores NEGATIVOS deve bater com o "Valor total desta fatura" de R$ {total_val:.2f}.
+5. VALIDAÇÃO MATEMÁTICA:
+   - A soma dos valores negativos (débitos) extraídos deve fechar próximo de R$ {total_val:.2f}.
+   - Se a soma der muito mais, você extraiu totalizadores ou pagamentos indevidamente. Revise!
 
 FORMATO JSON:
 {{
-  "banco": "Nome do Banco",
+  "banco": "{banco_sugerido}",
   "total_fatura": {total_val:.2f},
   "transacoes": [
-    {{ "data": "YYYY-MM-DD", "descricao": "NOME", "valor": -12.34, "parcela": "X/Y ou null" }}
+    {{ "data": "YYYY-MM-DD", "descricao": "NOME LIMPO", "valor": -12.34, "parcela": "X/Y ou null" }}
   ]
 }}
 
@@ -900,6 +901,7 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     linhas_preview = _extrair_texto_pdf_local(file_bytes)
     mes_ref, ano_ref = _detectar_referencia_fatura(linhas_preview)
     total_local = _detectar_total_fatura_local(linhas_preview)
+    banco_detectado = _detectar_banco_fatura("\n".join(linhas_preview))
     
     # 📝 MODO HÍBRIDO: Texto bruto para precisão + Imagens para layout
     texto_fatura_completo = "\n".join(linhas_preview)
@@ -909,9 +911,9 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
 
     # ── Fase 1: Tentativas por modelo ────────────────────────────────────────
     for model_name in _GEMINI_MODEL_CANDIDATES:
-        logger.info("🤖 [Modo Híbrido] Tentando extração visual + texto com %s", model_name)
-        # Passamos o texto completo dentro do prompt
-        prompt_v1 = _build_gemini_prompt(mes_ref, ano_ref, total_local or None, texto_fatura_completo)
+        logger.info("🤖 [Modo Híbrido] Tentando extração universal com %s", model_name)
+        # Passamos o texto completo e o banco detectado
+        prompt_v1 = _build_gemini_prompt(mes_ref, ano_ref, total_local or None, texto_fatura_completo, banco_detectado)
 
         try:
             model = genai.GenerativeModel(model_name)
