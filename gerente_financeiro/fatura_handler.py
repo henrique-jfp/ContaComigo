@@ -641,65 +641,50 @@ def _resultado_e_aceitavel(transacoes: List[Dict], total_pdf: float) -> bool:
 # PROMPTS GEMINI
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _build_gemini_prompt(mes_ref: int, ano_ref: int, total_esperado: float | None = None) -> str:
+def _build_gemini_prompt(mes_ref: int, ano_ref: int, total_esperado: float | None = None, texto_bruto: str = "") -> str:
     hoje = datetime.now().strftime("%d/%m/%Y")
     ref = f"{mes_ref:02d}/{ano_ref}"
-    
-    # Garantir valor numérico para formatação
     total_val = float(total_esperado or 0.0)
     
-    total_hint = (
-        f"\n    TOTAL ESPERADO DA FATURA: R$ {total_val:.2f} – a soma dos débitos extraídos DEVE fechar próximo a esse valor."
-        if total_val > 0
-        else ""
-    )
-    return f"""Você é um sistema de extração financeira de alta precisão.
-Leia as IMAGENS das páginas da fatura de cartão de crédito abaixo e extraia TODAS as transações.
+    return f"""Você é um sistema de AUDITORIA FINANCEIRA.
+Sua tarefa é extrair os lançamentos desta fatura usando as IMAGENS para entender o layout e o TEXTO abaixo para garantir os valores exatos.
 
 DATA ATUAL: {hoje}
-REFERÊNCIA DA FATURA: {ref}{total_hint}
+REFERÊNCIA: {ref}
+TOTAL ESPERADO (DÉBITOS): R$ {total_val:.2f}
 
-═══ REGRAS OBRIGATÓRIAS ═══
+═══ REGRAS DE EXTRAÇÃO ═══
 
-1. COBERTURA TOTAL E ESTRITA – Analise CADA IMAGEM.
-   Extraia transações APENAS das listas detalhadas de compras/movimentações.
-   IGNORE COMPLETAMENTE qualquer seção de "Resumo", "Gráficos", "Saldo Anterior" ou "Totalizadores".
+1. FONTE DOS DADOS: Use o 'CONTEÚDO TEXTUAL' abaixo como sua base principal de nomes e valores. Use as imagens para confirmar datas e seções.
 
-2. SINAIS DOS VALORES (CRÍTICO):
-   - Compras, juros, encargos, anuidade → valor NEGATIVO  (ex: -150.40)
-   - Pagamentos, estornos, créditos, cashback → valor POSITIVO (ex:  500.00)
+2. O QUE EXTRAIR (OBRIGATÓRIO):
+   - Compras em lojas, apps, serviços.
+   - Encargos: Juros, Multa, Mora, IOF, Anuidade. (Isso é muito importante!)
+   - Lançamentos parcelados (ex: "05/10").
 
-3. O QUE NÃO EXTRAIR (MUITO IMPORTANTE - REGRAS DE OURO):
-   - NÃO EXTRAIA a linha de "Total a Pagar", "Total da Fatura", "Saldo Atual" ou "Valor do Pagamento" como uma compra.
-   - NÃO EXTRAIA pagamentos de fatura (ex: "Pagamento Efetuado", "Internet Banking", "Pagamento de Fatura", "Autenticação", "Loterica"). Isso NÃO é uma compra.
-   - NÃO EXTRAIA totalizadores de categoria (ex: "Total Shopping", "Total em Supermercado").
-   - Resumindo: Extraia apenas compras REAIS feitas em lojas, aplicativos ou serviços (ex: Uber, Netflix, Mercado, Posto).
+3. O QUE NÃO EXTRAIR (PROIBIDO):
+   - Pagamentos da fatura (ex: "Pagamento Efetuado", "Internet Banking", "Recebimento").
+   - Linhas de "Total da Fatura", "Saldo Anterior" ou "Limite".
+   - NÃO INVENTE DADOS. Se não estiver no texto, não extraia.
 
-4. SINAIS (ATENÇÃO):
-   - Gastos reais (compras/lojas) devem ter valor NEGATIVO.
-   - Pagamentos/Créditos/Estornos devem ser POSITIVOS (mas você deve evitar extraí-los se possível).
+4. SINAIS:
+   - TUDO que for gasto, taxa ou juros: valor NEGATIVO (ex: -15.50).
+   - Estornos ou pagamentos: valor POSITIVO (ex: 100.00).
 
-5. INTEGRIDADE MATEMÁTICA E VALIDAÇÃO:
-   - Some mentalmente todos os gastos (valores negativos) que você encontrou.
-   - Se a soma der MUITO MAIS que R$ {total_val:.2f}, você cometeu um erro grave e incluiu o pagamento da fatura ou um totalizador como gasto. Remova esses itens falsos e mantenha apenas as compras de lojas.
+5. VALIDAÇÃO:
+   - A soma dos valores negativos deve bater com o total de R$ {total_val:.2f}.
 
-6. DESCRIÇÃO LIMPA:
-   - Extraia apenas o nome do estabelecimento/serviço.
-   - Remova: códigos de documento, nomes de cidade, nomes de país.
-
-FORMATO DE RESPOSTA (JSON puro, sem markdown):
+FORMATO JSON:
 {{
-  "banco": "Nome do banco/emissor",
+  "banco": "Nome do Banco",
   "total_fatura": {total_val:.2f},
   "transacoes": [
-    {{
-      "data": "YYYY-MM-DD",
-      "descricao": "NOME DO ESTABELECIMENTO",
-      "valor": -123.45,
-      "parcela": "1/12"
-    }}
+    {{ "data": "YYYY-MM-DD", "descricao": "NOME", "valor": -12.34, "parcela": "X/Y ou null" }}
   ]
 }}
+
+═══ CONTEÚDO TEXTUAL BRUTO DA FATURA ═══
+{texto_bruto}
 """
 
 
@@ -911,19 +896,22 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     linhas_preview = _extrair_texto_pdf_local(file_bytes)
     mes_ref, ano_ref = _detectar_referencia_fatura(linhas_preview)
     total_local = _detectar_total_fatura_local(linhas_preview)
+    
+    # 📝 MODO HÍBRIDO: Texto bruto para precisão + Imagens para layout
+    texto_fatura_completo = "\n".join(linhas_preview)
 
     melhor_resultado: Tuple[List[Dict], int, str, float] | None = None
     melhor_erro: float = float("inf")
 
     # ── Fase 1: Tentativas por modelo ────────────────────────────────────────
     for model_name in _GEMINI_MODEL_CANDIDATES:
-        logger.info("🤖 Tentando extração visual com %s", model_name)
-        # Usamos o prompt original de PDF que agora receberá imagens
-        prompt_v1 = _build_gemini_prompt(mes_ref, ano_ref, total_local or None)
+        logger.info("🤖 [Modo Híbrido] Tentando extração visual + texto com %s", model_name)
+        # Passamos o texto completo dentro do prompt
+        prompt_v1 = _build_gemini_prompt(mes_ref, ano_ref, total_local or None, texto_fatura_completo)
 
         try:
             model = genai.GenerativeModel(model_name)
-            # 🚀 Enviamos o prompt + todas as imagens das páginas
+            # 🚀 Enviamos o prompt (com o texto dentro) + todas as imagens das páginas
             response = await model.generate_content_async(
                 [prompt_v1] + paginas_imagens,
                 generation_config={
