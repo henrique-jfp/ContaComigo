@@ -1782,8 +1782,8 @@ def miniapp_overview():
         for lanc in lancamentos_mes:
             tipo_l = str(lanc.tipo).lower()
             
-            # Filtro rigoroso: Ignora 'Transferência' das somas de Receita/Despesa para não inflar KPIs
-            if tipo_l == "transferência":
+            # Filtro ultra-rigoroso: Ignora variações de 'Transferência' (com ou sem acento)
+            if tipo_l in ["transferencia", "transferência", "transfer"]:
                 continue
                 
             valor = abs(float(lanc.valor or 0))

@@ -645,6 +645,12 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
                 tipo = "Despesa"
                 tipo = "Despesa"
 
+        # REQUISITO CRÍTICO: Crédito em Cartão (Pagamento de Fatura)
+        # Qualquer valor positivo entrando no cartão é um pagamento e NÃO pode ser Receita.
+        if acc_type == "CREDIT" and valor_final > 0:
+            is_transfer_logic = True
+            cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
+
         # Finaliza o tipo se caiu em alguma regra de transferência
         if is_transfer_logic:
             tipo = "Transferência"
@@ -795,6 +801,12 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
                 # Se não rastreou o cartão, vira despesa para o usuário não 'ganhar' dinheiro fantasma
                 tipo = "Despesa"
                 tipo = "Despesa"
+
+        # REQUISITO CRÍTICO: Crédito em Cartão (Pagamento de Fatura)
+        # Qualquer valor positivo entrando no cartão é um pagamento e NÃO pode ser Receita.
+        if acc_type == "CREDIT" and valor_final > 0:
+            is_transfer_logic = True
+            cat_manual, subcat_manual = "Cartão de Crédito", "Pagamento de Fatura"
 
         # Finaliza o tipo se caiu em alguma regra de transferência
         if is_transfer_logic:
