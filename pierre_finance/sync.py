@@ -593,41 +593,13 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
         cat_manual = None
         subcat_manual = None
         
-        # 1. Detecção de Mesma Titularidade (Self-Transfer)
-        # Se o nome do usuário aparece na descrição/contraparte de uma transferência
-        if "pix" in desc_norm or "transferencia" in desc_norm or "ted" in desc_norm:
-            # Lógica de match parcial de nomes (mínimo 2 palavras significativas)
-            u_parts = [p for p in u_nome_norm.split() if len(p) > 2]
-            c_text = (desc_norm + " " + contra_norm)
-            
-            is_self = False
-            if u_parts:
-                # Se o primeiro nome bater E houver qualquer outra parte do nome (mesmo que abreviada)
-                # Ou se simplesmente houver um match de nome completo por substring
-                if u_nome_norm in c_text:
-                    is_self = True
-                else:
-                    # Verifica se o primeiro nome está lá
-                    first_name = u_parts[0]
-                    if first_name in c_text:
-                        # Se o primeiro nome bate, procuramos por abreviações das outras partes
-                        # Ex: 'Andrade' -> 'And'
-                        for part in u_parts[1:]:
-                            if part[:3] in c_text: # Match por prefixo de 3 letras (ex: 'And' para 'Andrade')
-                                is_self = True
-                                break
-            
-            if is_self:
-                is_transfer_logic = True
-                cat_manual, subcat_manual = "Outros", "Transferência Interna"
-
-        # 2. Detecção de Investimentos (Aplicações e Resgates)
+        # 1. Detecção de Investimentos (Aplicações e Resgates)
+        # Serão tratados como Despesa/Receita naturalmente para não sumir do fluxo de caixa.
         termos_investimento = ["aplicacao", "aplicação", "investimento", "resgate", "cdb", "cdi", "tesouro", "poupanca", "poupança", "fundo de inv"]
         if any(k in desc_norm for k in termos_investimento) or any(k in contra_norm for k in termos_investimento):
-            is_transfer_logic = True
             cat_manual, subcat_manual = "Investimentos", "Aporte" if valor_final < 0 else "Resgate"
 
-        # 3. Detecção de Pagamento de Fatura (Aprimorada)
+        # 2. Detecção de Pagamento de Fatura (A ÚNICA coisa que vira Transferência se for rastreada)
         termos_fatura = [
             "pagamento on line", "pagamento fatura", "pagamento de fatura", 
             "pagamento efetuado", "pagamento recebido", "pagto eletron", 
@@ -669,7 +641,8 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
                             logger.info(f"Fatura {f_vencida.id} marcada como PAGA.")
                     except Exception: pass
             else:
-                # Se não rastreou, vira despesa para não sumir do mapa
+                # Se não rastreou o cartão, vira despesa para o usuário não 'ganhar' dinheiro fantasma
+                tipo = "Despesa"
                 tipo = "Despesa"
 
         # Finaliza o tipo se caiu em alguma regra de transferência
@@ -771,41 +744,13 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
         cat_manual = None
         subcat_manual = None
         
-        # 1. Detecção de Mesma Titularidade (Self-Transfer)
-        # Se o nome do usuário aparece na descrição/contraparte de uma transferência
-        if "pix" in desc_norm or "transferencia" in desc_norm or "ted" in desc_norm:
-            # Lógica de match parcial de nomes (mínimo 2 palavras significativas)
-            u_parts = [p for p in u_nome_norm.split() if len(p) > 2]
-            c_text = (desc_norm + " " + contra_norm)
-            
-            is_self = False
-            if u_parts:
-                # Se o primeiro nome bater E houver qualquer outra parte do nome (mesmo que abreviada)
-                # Ou se simplesmente houver um match de nome completo por substring
-                if u_nome_norm in c_text:
-                    is_self = True
-                else:
-                    # Verifica se o primeiro nome está lá
-                    first_name = u_parts[0]
-                    if first_name in c_text:
-                        # Se o primeiro nome bate, procuramos por abreviações das outras partes
-                        # Ex: 'Andrade' -> 'And'
-                        for part in u_parts[1:]:
-                            if part[:3] in c_text: # Match por prefixo de 3 letras (ex: 'And' para 'Andrade')
-                                is_self = True
-                                break
-            
-            if is_self:
-                is_transfer_logic = True
-                cat_manual, subcat_manual = "Outros", "Transferência Interna"
-
-        # 2. Detecção de Investimentos (Aplicações e Resgates)
+        # 1. Detecção de Investimentos (Aplicações e Resgates)
+        # Serão tratados como Despesa/Receita naturalmente para não sumir do fluxo de caixa.
         termos_investimento = ["aplicacao", "aplicação", "investimento", "resgate", "cdb", "cdi", "tesouro", "poupanca", "poupança", "fundo de inv"]
         if any(k in desc_norm for k in termos_investimento) or any(k in contra_norm for k in termos_investimento):
-            is_transfer_logic = True
             cat_manual, subcat_manual = "Investimentos", "Aporte" if valor_final < 0 else "Resgate"
 
-        # 3. Detecção de Pagamento de Fatura (Aprimorada)
+        # 2. Detecção de Pagamento de Fatura (A ÚNICA coisa que vira Transferência se for rastreada)
         termos_fatura = [
             "pagamento on line", "pagamento fatura", "pagamento de fatura", 
             "pagamento efetuado", "pagamento recebido", "pagto eletron", 
@@ -847,7 +792,8 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
                             logger.info(f"Fatura {f_vencida.id} marcada como PAGA.")
                     except Exception: pass
             else:
-                # Se não rastreou, vira despesa para não sumir do mapa
+                # Se não rastreou o cartão, vira despesa para o usuário não 'ganhar' dinheiro fantasma
+                tipo = "Despesa"
                 tipo = "Despesa"
 
         # Finaliza o tipo se caiu em alguma regra de transferência
