@@ -669,19 +669,19 @@ REFERÊNCIA DA FATURA: {ref}{total_hint}
    - Compras, juros, encargos, anuidade → valor NEGATIVO  (ex: -150.40)
    - Pagamentos, estornos, créditos, cashback → valor POSITIVO (ex:  500.00)
 
-3. O QUE NÃO EXTRAIR (MUITO IMPORTANTE):
-   - NÃO EXTRAIA a linha de "Total a Pagar", "Total da Fatura" ou "Saldo Atual" como transação.
-   - NÃO EXTRAIA o pagamento da fatura atual (ex: "Pagamento Efetuado", "Internet Banking", "Pagamento de Fatura").
-   - NÃO EXTRAIA "Limite de Crédito", "Limite Disponível" ou "Saldo Anterior".
-   - NÃO EXTRAIA totalizadores de categoria (ex: "Total Shopping", "Total Alimentação").
+3. O QUE NÃO EXTRAIR (MUITO IMPORTANTE - REGRAS DE OURO):
+   - NÃO EXTRAIA a linha de "Total a Pagar", "Total da Fatura", "Saldo Atual" ou "Valor do Pagamento" como uma compra.
+   - NÃO EXTRAIA pagamentos de fatura (ex: "Pagamento Efetuado", "Internet Banking", "Pagamento de Fatura", "Autenticação", "Loterica"). Isso NÃO é uma compra.
+   - NÃO EXTRAIA totalizadores de categoria (ex: "Total Shopping", "Total em Supermercado").
+   - Resumindo: Extraia apenas compras REAIS feitas em lojas, aplicativos ou serviços (ex: Uber, Netflix, Mercado, Posto).
 
-4. DATAS E PARCELAS:
-   - Formato da data: "YYYY-MM-DD". Se não houver ano, use {ano_ref}.
-   - Parcelas: use o formato "X/Y" se indicado (ex: "3/12"). Senão, null.
+4. SINAIS (ATENÇÃO):
+   - Gastos reais (compras/lojas) devem ter valor NEGATIVO.
+   - Pagamentos/Créditos/Estornos devem ser POSITIVOS (mas você deve evitar extraí-los se possível).
 
 5. INTEGRIDADE MATEMÁTICA E VALIDAÇÃO:
-   - A soma EXCLUSIVA dos débitos extraídos (valores negativos) deve chegar BEM PRÓXIMO de R$ {total_val:.2f}.
-   - Se o total de seus débitos extraídos passar muito de R$ {total_val:.2f}, você extraiu lixo (totalizadores ou pagamentos). Revise e remova-os!
+   - Some mentalmente todos os gastos (valores negativos) que você encontrou.
+   - Se a soma der MUITO MAIS que R$ {total_val:.2f}, você cometeu um erro grave e incluiu o pagamento da fatura ou um totalizador como gasto. Remova esses itens falsos e mantenha apenas as compras de lojas.
 
 6. DESCRIÇÃO LIMPA:
    - Extraia apenas o nome do estabelecimento/serviço.
@@ -800,7 +800,9 @@ def _normalizar_resultado_gemini(
         "saldo anterior", "total da fatura", "limite", "demonstrativo",
         "fatura anterior", "saldo a pagar", "pagamento recebido",
         "valor do pagamento", "total de compras", "total de lançamentos",
-        "total parcelamentos",
+        "total parcelamentos", "pagamento de fatura", "internet banking",
+        "autoatendimento", "autenticacao", "autorénticação", "lotérica",
+        "comprovante", "saldo atual", "total faturas",
     }
 
     for item in data.get("transacoes", []):
@@ -827,6 +829,13 @@ def _normalizar_resultado_gemini(
                 continue
 
             if abs(valor) < 0.01:
+                ignoradas_count += 1
+                continue
+
+            # 🛡️ Trava de segurança: Se o valor for idêntico ao total da fatura, 
+            # provavelmente é a linha de "Total a Pagar" ou o pagamento do boleto.
+            if total_pdf > 0 and abs(abs(valor) - abs(total_pdf)) < 0.05:
+                logger.info(f"🚫 Ignorando transação suspeita de ser o totalizador: {descricao} (R$ {valor})")
                 ignoradas_count += 1
                 continue
 
