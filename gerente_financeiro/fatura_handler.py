@@ -815,10 +815,10 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
             logger.warning("Resultado do Gemini com %s foi descartado por inconsistência matemática.", model_name)
         except Exception as exc:
             err_msg = str(exc)
-            if "429" in err_msg or "quota" in err_msg.lower():
-                logger.error("🛑 Cota atingida (429) no modelo %s. Interrompendo loop.", model_name)
-                raise RuntimeError("Limite de IA atingido. Tente novamente em 1 minuto.")
-            logger.warning("Falha na extração multimodal direta com %s: %s", model_name, err_msg)
+            if \"429\" in err_msg or \"quota\" in err_msg.lower():
+                logger.error(\"🛑 Cota atingida (429) no modelo %s. Interrompendo loop para tentar fallbacks.\", model_name)
+                break
+            logger.warning(\"Falha na extração multimodal direta com %s: %s\", model_name, err_msg)
 
     # 2. FALLBACK: PARSER LOCAL HEURÍSTICO
     logger.info("⚠️ Gemini falhou ou foi inconsistente. Acionando fallback: Parser Local Heurístico.")

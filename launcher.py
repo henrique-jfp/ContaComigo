@@ -151,6 +151,7 @@ def start_telegram_bot(enable_health_server: bool = True):
         try:
             logger.info("📦 Importando módulo bot...")
             from bot import create_application
+            import telegram.error
             logger.info("✅ Módulo bot importado com sucesso!")
             
             logger.info("🔧 Criando aplicação do bot...")
@@ -167,23 +168,39 @@ def start_telegram_bot(enable_health_server: bool = True):
                     logger.info("🔁 Event loop criado para a thread do bot.")
 
                 logger.info("🚀 Iniciando polling do bot (isso pode demorar 10-30s)...")
-                # Em execução em thread, não é possível registrar sinais do SO.
-                # Desativar stop_signals evita o crash em add_signal_handler.
-                application.run_polling(
-                    allowed_updates=None,
-                    drop_pending_updates=True,
-                    stop_signals=(),
-                )
-                logger.info("✅ Bot iniciado com sucesso!")
+                
+                # Loop de retry para o bot em caso de conflito (múltiplas instâncias no Render)
+                retry_count = 0
+                max_retries = 5
+                while retry_count < max_retries:
+                    try:
+                        application.run_polling(
+                            allowed_updates=None,
+                            drop_pending_updates=True,
+                            stop_signals=(),
+                        )
+                        break # Se retornar normalmente, sai do loop
+                    except telegram.error.Conflict:
+                        retry_count += 1
+                        logger.warning(f"⚠️ Conflito de instâncias detectado (Tentativa {retry_count}/{max_retries}). Aguardando 10s...")
+                        import time
+                        time.sleep(10)
+                    except Exception as e:
+                        logger.error(f"❌ Erro durante o polling do bot: {e}")
+                        break
+                
+                logger.info("✅ Thread do bot encerrada.")
             else:
                 logger.error("❌ Falha ao criar aplicação do bot")
-                sys.exit(1)
+                # Não damos sys.exit(1) aqui para não derrubar o dashboard
                 
         except Exception as e:
             logger.error(f"❌ ERRO FATAL ao importar/iniciar bot: {e}", exc_info=True)
             import traceback
             logger.error(f"📋 Traceback completo:\n{traceback.format_exc()}")
-            sys.exit(1)
+            # Se for um erro de importação ou configuração inicial crítica, talvez queiramos parar
+            # Mas em modo Híbrido, queremos que o Dashboard continue se possível
+
         
     except Exception as e:
         logger.error(f"❌ Erro no bot do Telegram: {e}", exc_info=True)
