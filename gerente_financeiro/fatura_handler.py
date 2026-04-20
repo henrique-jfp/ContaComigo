@@ -644,9 +644,13 @@ def _resultado_e_aceitavel(transacoes: List[Dict], total_pdf: float) -> bool:
 def _build_gemini_prompt(mes_ref: int, ano_ref: int, total_esperado: float | None = None) -> str:
     hoje = datetime.now().strftime("%d/%m/%Y")
     ref = f"{mes_ref:02d}/{ano_ref}"
+    
+    # Garantir valor numérico para formatação
+    total_val = float(total_esperado or 0.0)
+    
     total_hint = (
-        f"\n    TOTAL ESPERADO DA FATURA: R$ {total_esperado:.2f} – a soma dos débitos extraídos DEVE fechar próximo a esse valor."
-        if total_esperado and total_esperado > 0
+        f"\n    TOTAL ESPERADO DA FATURA: R$ {total_val:.2f} – a soma dos débitos extraídos DEVE fechar próximo a esse valor."
+        if total_val > 0
         else ""
     )
     return f"""Você é um sistema de extração financeira de alta precisão.
@@ -676,8 +680,8 @@ REFERÊNCIA DA FATURA: {ref}{total_hint}
    - Parcelas: use o formato "X/Y" se indicado (ex: "3/12"). Senão, null.
 
 5. INTEGRIDADE MATEMÁTICA E VALIDAÇÃO:
-   - A soma EXCLUSIVA dos débitos extraídos (valores negativos) deve chegar BEM PRÓXIMO de R$ {total_esperado:.2f}.
-   - Se o total de seus débitos extraídos passar muito de R$ {total_esperado:.2f}, você extraiu lixo (totalizadores ou pagamentos). Revise e remova-os!
+   - A soma EXCLUSIVA dos débitos extraídos (valores negativos) deve chegar BEM PRÓXIMO de R$ {total_val:.2f}.
+   - Se o total de seus débitos extraídos passar muito de R$ {total_val:.2f}, você extraiu lixo (totalizadores ou pagamentos). Revise e remova-os!
 
 6. DESCRIÇÃO LIMPA:
    - Extraia apenas o nome do estabelecimento/serviço.
@@ -686,7 +690,7 @@ REFERÊNCIA DA FATURA: {ref}{total_hint}
 FORMATO DE RESPOSTA (JSON puro, sem markdown):
 {{
   "banco": "Nome do banco/emissor",
-  "total_fatura": {total_esperado:.2f},
+  "total_fatura": {total_val:.2f},
   "transacoes": [
     {{
       "data": "YYYY-MM-DD",
@@ -700,16 +704,18 @@ FORMATO DE RESPOSTA (JSON puro, sem markdown):
 
 
 def _build_gemini_prompt_retry(
-    mes_ref: int, ano_ref: int, total_esperado: float, soma_atual: float
+    mes_ref: int, ano_ref: int, total_esperado: float | None = None, soma_atual: float = 0.0
 ) -> str:
     hoje = datetime.now().strftime("%d/%m/%Y")
-    faltante = abs(total_esperado - soma_atual)
+    total_val = float(total_esperado or 0.0)
+    faltante = abs(total_val - soma_atual)
+    
     return f"""Você já extraiu parte das transações, mas a soma dos débitos
-(R$ {soma_atual:.2f}) ainda está R$ {faltante:.2f} ABAIXO do total da fatura (R$ {total_esperado:.2f}).
+(R$ {soma_atual:.2f}) ainda está R$ {faltante:.2f} ABAIXO do total da fatura (R$ {total_val:.2f}).
 
 DATA ATUAL: {hoje}
 REFERÊNCIA: {mes_ref:02d}/{ano_ref}
-TOTAL ESPERADO: R$ {total_esperado:.2f}
+TOTAL ESPERADO: R$ {total_val:.2f}
 
 Revise as IMAGENS das páginas mais uma vez e encontre os itens que faltaram.
 IGNORE ativamente linhas de "Total", "Resumo" ou "Pagamento de Fatura".
@@ -718,7 +724,7 @@ Retorne APENAS os itens ADICIONAIS de compras reais que estavam faltando.
 Formato JSON (sem markdown):
 {{
   "banco": "Nome do banco",
-  "total_fatura": {total_esperado:.2f},
+  "total_fatura": {total_val:.2f},
   "transacoes": [
     {{ "data": "YYYY-MM-DD", "descricao": "...", "valor": -123.45, "parcela": null }}
   ]
