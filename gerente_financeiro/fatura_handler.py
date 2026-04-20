@@ -733,18 +733,34 @@ Formato JSON (sem markdown):
 def _parse_json_response(text: str) -> dict | None:
     if not text:
         return None
-    text = re.sub(r"```(?:json)?\s*|\s*```", "", text).strip()
+    # 1. Limpeza agressiva de markdown e espaços
+    clean_text = re.sub(r"```(?:json)?\s*|\s*```", "", text).strip()
+    
+    # 2. Tenta parse direto
     try:
-        return json.loads(text)
+        return json.loads(clean_text)
     except Exception:
         pass
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        return None
+        
+    # 3. Busca o maior bloco entre { e } (extração de JSON aninhado)
+    match = re.search(r"(\{.*\})", clean_text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1))
+        except Exception:
+            pass
+            
+    # 4. Caso extremo: tenta limpar caracteres ilegais/invisíveis
     try:
-        return json.loads(match.group(0))
-    except Exception:
-        return None
+        # Remove caracteres de controle ASCII exceto tab, newline, etc
+        sanitized = "".join(ch for ch in clean_text if ord(ch) >= 32 or ch in "\n\r\t")
+        match_sanitized = re.search(r"(\{.*\})", sanitized, re.DOTALL)
+        if match_sanitized:
+            return json.loads(match_sanitized.group(1))
+    except Exception as e:
+        logger.warning(f"Falha total no parse de JSON: {e}")
+        
+    return None
 
 
 def _parse_data_gemini(raw_data: str, mes_ref: int, ano_ref: int) -> datetime | None:
@@ -896,11 +912,10 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
             response = await model.generate_content_async(
                 [prompt_v1] + paginas_imagens,
                 generation_config={
-                    "response_mime_type": "application/json",
-                    "temperature": 0,
-                    "max_output_tokens": 8192,
+                    "temperature": 0.1, # Um pouco de criatividade ajuda a não travar em layouts estranhos
+                    "max_output_tokens": 12000, # Aumentado significativamente para faturas longas
                 },
-                request_options={"timeout": 150}, # Aumentado para lidar com imagens
+                request_options={"timeout": 180}, # Aumentado para 3 minutos para faturas multi-página
             )
         except Exception as exc:
             err_msg = str(exc)
@@ -920,7 +935,7 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
 
         json_data = _parse_json_response(resp_text)
         if not json_data:
-            logger.warning("JSON inválido retornado por %s", model_name)
+            logger.warning("JSON inválido retornado por %s. Início da resposta: %s", model_name, resp_text[:150])
             continue
 
         transacoes, ignoradas, banco, total_pdf = _normalizar_resultado_gemini(
