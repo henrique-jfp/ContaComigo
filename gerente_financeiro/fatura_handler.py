@@ -657,37 +657,36 @@ REFERÊNCIA DA FATURA: {ref}{total_hint}
 
 ═══ REGRAS OBRIGATÓRIAS ═══
 
-1. COBERTURA TOTAL – Analise CADA IMAGEM (página) e percorra todas as seções:
-   "Compras Nacionais", "Compras Internacionais", "Parcelamentos",
-   "Encargos", "IOF", "Serviços", "Anuidade", "Ajustes".
-   NÃO pule nenhuma página.
+1. COBERTURA TOTAL E ESTRITA – Analise CADA IMAGEM.
+   Extraia transações APENAS das listas detalhadas de compras/movimentações.
+   IGNORE COMPLETAMENTE qualquer seção de "Resumo", "Gráficos", "Saldo Anterior" ou "Totalizadores".
 
 2. SINAIS DOS VALORES (CRÍTICO):
-   - Compras, IOF, juros, encargos, anuidade → valor NEGATIVO  (ex: -150.40)
+   - Compras, juros, encargos, anuidade → valor NEGATIVO  (ex: -150.40)
    - Pagamentos, estornos, créditos, cashback → valor POSITIVO (ex:  500.00)
-   Nunca inverta os sinais.
 
-3. DATAS:
-   - Use o formato "YYYY-MM-DD".
-   - Para transações sem ano explícito, use {ano_ref} como padrão.
-   - Se o mês da transação for 12 e a fatura é de Janeiro, use {ano_ref - 1}.
+3. O QUE NÃO EXTRAIR (MUITO IMPORTANTE):
+   - NÃO EXTRAIA a linha de "Total a Pagar", "Total da Fatura" ou "Saldo Atual" como transação.
+   - NÃO EXTRAIA o pagamento da fatura atual (ex: "Pagamento Efetuado", "Internet Banking", "Pagamento de Fatura").
+   - NÃO EXTRAIA "Limite de Crédito", "Limite Disponível" ou "Saldo Anterior".
+   - NÃO EXTRAIA totalizadores de categoria (ex: "Total Shopping", "Total Alimentação").
 
-4. DESCRIÇÃO LIMPA:
+4. DATAS E PARCELAS:
+   - Formato da data: "YYYY-MM-DD". Se não houver ano, use {ano_ref}.
+   - Parcelas: use o formato "X/Y" se indicado (ex: "3/12"). Senão, null.
+
+5. INTEGRIDADE MATEMÁTICA E VALIDAÇÃO:
+   - A soma EXCLUSIVA dos débitos extraídos (valores negativos) deve chegar BEM PRÓXIMO de R$ {total_esperado:.2f}.
+   - Se o total de seus débitos extraídos passar muito de R$ {total_esperado:.2f}, você extraiu lixo (totalizadores ou pagamentos). Revise e remova-os!
+
+6. DESCRIÇÃO LIMPA:
    - Extraia apenas o nome do estabelecimento/serviço.
    - Remova: códigos de documento, nomes de cidade, nomes de país.
-
-5. PARCELAS:
-   - Se houver indicação de parcela (ex: "3/12"), preencha o campo "parcela" com "X/Y".
-   - Se não houver, deixe null.
-
-6. INTEGRIDADE MATEMÁTICA:
-   - Localize o "total a pagar" em uma das imagens.
-   - A soma dos débitos deve bater com esse total.
 
 FORMATO DE RESPOSTA (JSON puro, sem markdown):
 {{
   "banco": "Nome do banco/emissor",
-  "total_fatura": 1234.56,
+  "total_fatura": {total_esperado:.2f},
   "transacoes": [
     {{
       "data": "YYYY-MM-DD",
@@ -713,7 +712,8 @@ REFERÊNCIA: {mes_ref:02d}/{ano_ref}
 TOTAL ESPERADO: R$ {total_esperado:.2f}
 
 Revise as IMAGENS das páginas mais uma vez e encontre os itens que faltaram.
-Retorne APENAS os itens ADICIONAIS (não repita os já encontrados).
+IGNORE ativamente linhas de "Total", "Resumo" ou "Pagamento de Fatura".
+Retorne APENAS os itens ADICIONAIS de compras reais que estavam faltando.
 
 Formato JSON (sem markdown):
 {{
