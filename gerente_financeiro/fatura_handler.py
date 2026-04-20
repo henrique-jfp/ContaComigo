@@ -623,7 +623,7 @@ def _resultado_e_aceitavel(transacoes: List[Dict], total_pdf: float) -> bool:
 # PROMPTS GEMINI
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _build_gemini_prompt(mes_ref: int, ano_ref: int, total_esperado: float | None = None) -> str:
+def _build_gemini_prompt(mes_ref: int, ano_ref: int, total_esperado: float | None = None, texto_fatura: str = "") -> str:
     hoje = datetime.now().strftime("%d/%m/%Y")
     ref = f"{mes_ref:02d}/{ano_ref}"
     total_hint = (
@@ -632,7 +632,7 @@ def _build_gemini_prompt(mes_ref: int, ano_ref: int, total_esperado: float | Non
         else ""
     )
     return f"""Você é um sistema de extração financeira de alta precisão.
-Leia o PDF de fatura de cartão de crédito e extraia TODAS as transações.
+Leia o CONTEÚDO EXTRAÍDO DA FATURA de cartão de crédito abaixo e extraia TODAS as transações.
 
 DATA ATUAL: {hoje}
 REFERÊNCIA DA FATURA: {ref}{total_hint}
@@ -687,11 +687,14 @@ FORMATO DE RESPOSTA (JSON puro, sem markdown):
     }}
   ]
 }}
+
+═══ CONTEÚDO DA FATURA ═══
+{texto_fatura}
 """
 
 
 def _build_gemini_prompt_retry(
-    mes_ref: int, ano_ref: int, total_esperado: float, soma_atual: float
+    mes_ref: int, ano_ref: int, total_esperado: float, soma_atual: float, texto_fatura: str = ""
 ) -> str:
     hoje = datetime.now().strftime("%d/%m/%Y")
     faltante = abs(total_esperado - soma_atual)
@@ -704,7 +707,7 @@ TOTAL ESPERADO: R$ {total_esperado:.2f}
 SOMA ATUAL DOS DÉBITOS: R$ {soma_atual:.2f}
 DIFERENÇA: R$ {faltante:.2f}
 
-Revise o PDF mais uma vez e encontre os itens que faltaram.
+Revise o CONTEÚDO EXTRAÍDO DA FATURA abaixo mais uma vez e encontre os itens que faltaram.
 Procure especialmente:
   - Encargos financeiros (juros, IOF, mora, multa)
   - Anuidades ou mensalidades
@@ -721,6 +724,9 @@ Formato JSON (sem markdown):
     {{ "data": "YYYY-MM-DD", "descricao": "...", "valor": -123.45, "parcela": null }}
   ]
 }}
+
+═══ CONTEÚDO DA FATURA ═══
+{texto_fatura}
 """
 
 
@@ -873,21 +879,24 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     linhas_preview = _extrair_texto_pdf_local(file_bytes)
     mes_ref, ano_ref = _detectar_referencia_fatura(linhas_preview)
     total_local = _detectar_total_fatura_local(linhas_preview)
-
-    pdf_part = {"mime_type": "application/pdf", "data": file_bytes}
+    
+    # 📝 NOVO: Em vez de mandar o PDF (multimodal), mandamos o texto extraído.
+    # Isso evita confusão com o layout complexo do PDF de bancos.
+    texto_completo_pdf = "\n".join(linhas_preview)
 
     melhor_resultado: Tuple[List[Dict], int, str, float] | None = None
     melhor_erro: float = float("inf")
 
     # ── Fase 1: Tentativas por modelo ────────────────────────────────────────
     for model_name in _GEMINI_MODEL_CANDIDATES:
-        logger.info("🤖 Tentando extração multimodal com %s", model_name)
-        prompt_v1 = _build_gemini_prompt(mes_ref, ano_ref, total_local or None)
+        logger.info("🤖 Tentando extração de texto com %s", model_name)
+        prompt_v1 = _build_gemini_prompt(mes_ref, ano_ref, total_local or None, texto_completo_pdf)
 
         try:
             model = genai.GenerativeModel(model_name)
+            # 🚀 Chamada simplificada: apenas o prompt com o texto injetado
             response = await model.generate_content_async(
-                [prompt_v1, pdf_part],
+                [prompt_v1],
                 generation_config={
                     "response_mime_type": "application/json",
                     "temperature": 0,
@@ -942,11 +951,12 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
 
             # Só faz retry se estamos claramente abaixo do esperado (não apenas arredondamento)
             if soma_liquida < total_pdf * 0.85:
-                logger.info("🔄 Erro alto (%.1f%%). Iniciando retry com prompt de completude.", erro * 100)
-                prompt_v2 = _build_gemini_prompt_retry(mes_ref, ano_ref, total_pdf, soma_liquida)
+                logger.info("🔄 Erro alto (%.1f%%). Iniciando retry com prompt de completude (TEXTO).", erro * 100)
+                prompt_v2 = _build_gemini_prompt_retry(mes_ref, ano_ref, total_pdf, soma_liquida, texto_completo_pdf)
                 try:
+                    # 🚀 Chamada simplificada para o retry também
                     response2 = await model.generate_content_async(
-                        [prompt_v2, pdf_part],
+                        [prompt_v2],
                         generation_config={
                             "response_mime_type": "application/json",
                             "temperature": 0,
