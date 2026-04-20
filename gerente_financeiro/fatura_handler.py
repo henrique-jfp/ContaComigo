@@ -655,24 +655,27 @@ TOTAL ESPERADO (DÉBITOS): R$ {total_val:.2f}
 
 ═══ REGRAS DE EXTRAÇÃO ═══
 
-1. FONTE DOS DADOS: Use o 'CONTEÚDO TEXTUAL' abaixo como sua base principal de nomes e valores. Use as imagens para confirmar datas e seções.
+1. FONTE DOS DADOS: Use o 'CONTEÚDO TEXTUAL' abaixo como base de nomes e valores. As IMAGENS servem para confirmar seções e datas.
 
 2. O QUE EXTRAIR (OBRIGATÓRIO):
    - Compras em lojas, apps, serviços.
-   - Encargos: Juros, Multa, Mora, IOF, Anuidade. (Isso é muito importante!)
-   - Lançamentos parcelados (ex: "05/10").
+   - Lançamentos de Parcelamento: "PARC.FACIL", "Encargos sobreparcelado", "IOF adicional/diário sobreparcelado". (Isso é CRÍTICO para faturas do Bradesco).
+   - Tarifas e Juros: "Anuidade", "Mora", "Multa", "Juros Rotativo", "IOF Rotativo".
+   - Identifique parcelas no formato "05/12".
 
 3. O QUE NÃO EXTRAIR (PROIBIDO):
-   - Pagamentos da fatura (ex: "Pagamento Efetuado", "Internet Banking", "Recebimento").
-   - Linhas de "Total da Fatura", "Saldo Anterior" ou "Limite".
-   - NÃO INVENTE DADOS. Se não estiver no texto, não extraia.
+   - Pagamentos da fatura: "PAG BOLETO BANCARIO", "Pagamento Efetuado", "Internet Banking", "Obrigado pelo pagamento".
+   - NÃO EXTRAIA linhas de "Total para [NOME]", "Total da Fatura" ou "Saldo Anterior".
+   - NÃO INVENTE DADOS. Siga o texto rigorosamente.
 
-4. SINAIS:
-   - TUDO que for gasto, taxa ou juros: valor NEGATIVO (ex: -15.50).
-   - Estornos ou pagamentos: valor POSITIVO (ex: 100.00).
+4. DATAS:
+   - Formato: "YYYY-MM-DD". No Bradesco, a data (DD/MM) costuma estar na EXTREMA ESQUERDA da descrição.
+   - Exemplo: "13/10 PG *TON" -> Data 13 de Outubro.
 
-5. VALIDAÇÃO:
-   - A soma dos valores negativos deve bater com o total de R$ {total_val:.2f}.
+5. SINAIS E MATEMÁTICA:
+   - Gastos/Taxas/Juros: NEGATIVO (ex: -15.50).
+   - Créditos/Pagamentos: POSITIVO (ex: 100.00).
+   - A soma dos valores NEGATIVOS deve bater com o "Valor total desta fatura" de R$ {total_val:.2f}.
 
 FORMATO JSON:
 {{
@@ -787,7 +790,8 @@ def _normalizar_resultado_gemini(
         "valor do pagamento", "total de compras", "total de lançamentos",
         "total parcelamentos", "pagamento de fatura", "internet banking",
         "autoatendimento", "autenticacao", "autorénticação", "lotérica",
-        "comprovante", "saldo atual", "total faturas",
+        "comprovante", "saldo atual", "total faturas", "obrigado pelo pagamento",
+        "total para", "total final",
     }
 
     for item in data.get("transacoes", []):
