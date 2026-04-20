@@ -660,18 +660,17 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     REFERÊNCIA: {mes_ref:02d}/{ano_ref}
 
     DIRETRIZES UNIVERSAIS:
-    1. BUSCA EXAUSTIVA: Procure transações em todas as seções: 'Compras Nacionais', 'Compras Internacionais', 'Movimentações', 'Serviços', 'Parcelamentos' e 'Encargos'.
+    1. BUSCA EXAUSTIVA (MUITO IMPORTANTE): Este PDF pode ter MÚLTIPLAS PÁGINAS. Você deve percorrer TODAS as páginas.
+       Procure transações em todas as seções: 'Compras Nacionais', 'Compras Internacionais', 'Movimentações', 'Serviços', 'Parcelamentos' e 'Encargos'.
     2. LIMPEZA DE DESCRIÇÃO: 
        - Extraia apenas o nome do estabelecimento comercial.
-       - Remova números de documento, cidades ou códigos que venham após o nome (especialmente comum na CAIXA).
-       - Exemplo: 'MERCADO EXTRA 123456 RIO DE JANEIRO' -> 'MERCADO EXTRA'.
+       - Remova números de documento, cidades ou códigos que venham após o nome.
     3. VALORES E SINAIS:
        - Gastos, Compras, IOF, Juros: Valor NEGATIVO (ex: -150.40).
        - Pagamentos de Fatura, Estornos, Créditos, Cashback: Valor POSITIVO (ex: 500.00).
-       - Ignore as letras 'D' ou 'C', use-as apenas para confirmar o sinal.
     4. INTEGRIDADE MATEMÁTICA: 
-       - Localize o valor de 'TOTAL DA FATURA' ou 'VALOR A PAGAR' no documento.
-       - A soma de todas as transações (positivas e negativas) deve chegar o mais próximo possível deste total.
+       - Localize o valor de 'TOTAL DA FATURA', 'SALDO ATUAL' ou 'VALOR A PAGAR'.
+       - A soma de todas as transações (positivas e negativas) deve fechar com o total da fatura. Não pare de extrair até que a conta bata.
 
     JSON OBRIGATÓRIO:
     {{
@@ -813,7 +812,17 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
                 result = (transacoes, ignoradas, banco, total_pdf)
                 _set_cached_parse_result(file_bytes, result)
                 return result
-            logger.warning("Resultado do Gemini com %s foi descartado por inconsistência matemática.", model_name)
+            
+            if transacoes:
+                logger.warning("⚠️ Resultado do Gemini com %s é matematicamente inconsistente (erro > 15%%), mas será retornado como parcial.", model_name)
+                # Marcamos a origem como parcial para alertar o bot se necessário
+                for t in transacoes:
+                    t["origem"] = f"{t['origem']}_parcial"
+                result = (transacoes, ignoradas, banco, total_pdf)
+                _set_cached_parse_result(file_bytes, result)
+                return result
+
+            logger.warning("Resultado do Gemini com %s foi descartado por estar vazio ou inválido.", model_name)
         except Exception as exc:
             err_msg = str(exc)
             if "429" in err_msg or "quota" in err_msg.lower():
@@ -1045,6 +1054,8 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
         maiores_text = "\n".join(top_lines) if top_lines else "• Sem debitos"
         origem_label = context.user_data.get("fatura_origem_label", "Desconhecido")
 
+        is_parcial = any("_parcial" in str(t.get("origem", "")) for t in transacoes)
+
         resumo_linhas = [
             f"🧾 <b>Resumo da Fatura ({origem_label})</b>",
             "",
@@ -1053,6 +1064,12 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"💸 <b>Total débitos:</b> <code>{_fmt_brl(total_debito)}</code>",
             f"💰 <b>Total créditos:</b> <code>{_fmt_brl(total_credito)}</code>",
         ]
+
+        if is_parcial:
+            resumo_linhas.insert(2, "⚠️ <b>ATENÇÃO:</b> Extração parcial/inconsistente.")
+            resumo_linhas.insert(3, "<i>A soma dos itens não bate com o total do PDF. Revise antes de salvar!</i>")
+            resumo_linhas.insert(4, "")
+
         if isinstance(total_pdf, (int, float)):
             resumo_linhas.append(f"🧮 <b>Total no PDF:</b> <code>{_fmt_brl(total_pdf)}</code>")
         if isinstance(ajuste_pdf_abs, (int, float)) and ajuste_pdf_abs >= 0.01:
