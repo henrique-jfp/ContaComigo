@@ -647,9 +647,10 @@ async def _parse_fatura_pdf_with_gemini(file_bytes: bytes) -> Tuple[List[Dict], 
     mes_ref, ano_ref = _detectar_referencia_fatura(linhas_preview)
     
     # Prioridade para o modelo 1.5 Flash: Mais estável e com maior cota gratuita (1500 RPD)
-    model_candidates = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]
+    # 🔍 Modelos 2026: Prioridade Flash Lite (Economia/Cota) -> Flash 2.0 (Equilíbrio) -> Pro 2.5 (Inteligência)
+    model_candidates = ["gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.5-pro"]
 
-    logger.info("Pipeline de fatura: Gemini Multimodal (Prioridade 1.5 Flash) -> Auditoria Universal")
+    logger.info("Pipeline de fatura: Gemini Multimodal (Prioridade 2.5 Flash Lite) -> Auditoria Universal")
 
     prompt = f"""
     Você é um SISTEMA DE AUDITORIA FINANCEIRA de ALTA PRECISÃO.
@@ -960,9 +961,16 @@ async def fatura_receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE
                 "🔒 Este PDF está protegido por senha.\n"
                 "Remova a senha no app do banco e envie novamente."
             )
+        elif "Não foi possível extrair" in error_str:
+            await process_msg.edit_text(
+                "❌ <b>Não consegui extrair dados deste PDF.</b>\n\n"
+                "O formato parece incompatível ou o arquivo não contém texto legível.\n"
+                "<b>Dica:</b> Tente enviar um print da fatura como foto no /lancamento.",
+                parse_mode="HTML"
+            )
         else:
             await process_msg.edit_text(
-                f"❌ <b>Erro no Processamento IA</b>\n\nOcorreu uma falha ao analisar o PDF. Verifique se o arquivo está legível.",
+                f"❌ <b>Erro no Processamento</b>\n\nOcorreu uma falha técnica ao analisar o arquivo. Verifique se o PDF está correto.",
                 parse_mode="HTML"
             )
         return FATURA_AWAIT_FILE
