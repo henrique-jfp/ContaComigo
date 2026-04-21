@@ -126,9 +126,12 @@ lucide.createIcons();
     const agendamentoStatus = document.getElementById('agendamentoStatus');
     const agendaTabAgendamentos = document.getElementById('agendaTabAgendamentos');
     const agendaTabLembretes = document.getElementById('agendaTabLembretes');
+    const agendaTabLimites = document.getElementById('agendaTabLimites');
     const lembreteHistoryWrap = document.getElementById('lembreteHistoryWrap');
     const lembreteHistoryStatus = document.getElementById('lembreteHistoryStatus');
     const lembreteHistoryList = document.getElementById('lembreteHistoryList');
+    const orcamentoAgendaWrap = document.getElementById('orcamentoAgendaWrap');
+    const orcamentoAgendaStatus = document.getElementById('orcamentoAgendaStatus');
     const agendamentoRefresh = document.getElementById('agendamentoRefresh');
     const agendamentoNew = document.getElementById('agendamentoNew');
     const newAgendamentoModal = document.getElementById('newAgendamentoModal');
@@ -981,6 +984,7 @@ lucide.createIcons();
       if (lembreteHistoryWrap) lembreteHistoryWrap.classList.add('hidden');
       if (lembreteHistoryList) lembreteHistoryList.innerHTML = '';
       if (lembreteHistoryStatus) lembreteHistoryStatus.textContent = '';
+      if (orcamentoAgendaWrap) orcamentoAgendaWrap.classList.add('hidden');
     }
 
     function refreshAgendaTabs() {
@@ -994,10 +998,16 @@ lucide.createIcons();
           ? 'rounded-xl bg-brand px-4 py-2 text-xs font-semibold text-white shadow-soft transition'
           : 'rounded-xl border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-text transition';
       }
+      if (agendaTabLimites) {
+        agendaTabLimites.className = agendaMode === 'limites'
+          ? 'rounded-xl bg-brand px-4 py-2 text-xs font-semibold text-white shadow-soft transition'
+          : 'rounded-xl border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-text transition';
+      }
     }
 
     function updateAgendaModalLabels() {
       const isReminder = agendaMode === 'lembretes';
+      const isLimits = agendaMode === 'limites';
       if (agendaModalTitle) agendaModalTitle.textContent = isReminder ? 'Novo Lembrete' : 'Novo Agendamento';
       if (agendaValorLabel) agendaValorLabel.textContent = isReminder ? 'Valor (opcional)' : 'Valor';
       if (agendaDataLabel) agendaDataLabel.textContent = isReminder ? 'Data do lembrete' : 'Primeira execução';
@@ -1006,10 +1016,14 @@ lucide.createIcons();
       }
       if (newAgendValor) newAgendValor.required = !isReminder;
       if (lembreteHistoryWrap) lembreteHistoryWrap.classList.toggle('hidden', !isReminder);
+      if (orcamentoAgendaWrap) orcamentoAgendaWrap.classList.toggle('hidden', !isLimits);
+      if (agendamentoNew) {
+        agendamentoNew.title = isLimits ? 'Novo limite' : (isReminder ? 'Novo lembrete' : 'Novo agendamento');
+      }
     }
 
     function setAgendaMode(mode) {
-      agendaMode = mode === 'lembretes' ? 'lembretes' : 'agendamentos';
+      agendaMode = mode === 'lembretes' ? 'lembretes' : (mode === 'limites' ? 'limites' : 'agendamentos');
       refreshAgendaTabs();
       updateAgendaModalLabels();
       loadAgendamentos();
@@ -3403,34 +3417,6 @@ lucide.createIcons();
       }
     }
 
-    // --- Lógica de Orçamentos ---
-    const tabToggleMetas = document.getElementById('tabToggleMetas');
-    const tabToggleOrcamentos = document.getElementById('tabToggleOrcamentos');
-    const viewMetas = document.getElementById('viewMetas');
-    const viewOrcamentos = document.getElementById('viewOrcamentos');
-
-    if (tabToggleMetas && tabToggleOrcamentos) {
-      tabToggleMetas.addEventListener('click', () => {
-        tabToggleMetas.classList.add('bg-brand', 'text-white', 'shadow-sm');
-        tabToggleMetas.classList.remove('text-telegram-hint', 'hover:text-telegram-text');
-        tabToggleOrcamentos.classList.remove('bg-brand', 'text-white', 'shadow-sm');
-        tabToggleOrcamentos.classList.add('text-telegram-hint', 'hover:text-telegram-text');
-        viewMetas.classList.remove('hidden');
-        viewOrcamentos.classList.add('hidden');
-        loadMetas();
-      });
-
-      tabToggleOrcamentos.addEventListener('click', () => {
-        tabToggleOrcamentos.classList.add('bg-brand', 'text-white', 'shadow-sm');
-        tabToggleOrcamentos.classList.remove('text-telegram-hint', 'hover:text-telegram-text');
-        tabToggleMetas.classList.remove('bg-brand', 'text-white', 'shadow-sm');
-        tabToggleMetas.classList.add('text-telegram-hint', 'hover:text-telegram-text');
-        viewOrcamentos.classList.remove('hidden');
-        viewMetas.classList.add('hidden');
-        loadOrcamentos();
-      });
-    }
-
     function openOrcamentoModal() {
       orcamentoValor.value = '';
       openModal('orcamentoModal');
@@ -3442,6 +3428,11 @@ lucide.createIcons();
     async function loadOrcamentos() {
       if (!sessionId) return;
       try {
+        if (orcamentoAgendaWrap) orcamentoAgendaWrap.classList.remove('hidden');
+        if (agendamentoList) agendamentoList.innerHTML = '';
+        if (lembreteHistoryWrap) lembreteHistoryWrap.classList.add('hidden');
+        if (agendamentoStatus) agendamentoStatus.textContent = '';
+        if (orcamentoAgendaStatus) orcamentoAgendaStatus.textContent = 'Seus limites ativos.';
         const res = await fetchWithSession('/api/miniapp/orcamentos');
         const data = await res.json();
         if (!data.ok) return;
@@ -3559,6 +3550,11 @@ lucide.createIcons();
 
     async function loadAgendamentos() {
       if (!sessionId) return;
+      if (agendaMode === 'limites') {
+        renderAgendamentoSkeleton(1);
+        await loadOrcamentos();
+        return;
+      }
       renderAgendamentoSkeleton(3);
       try {
         const isReminder = agendaMode === 'lembretes';
@@ -3676,9 +3672,16 @@ lucide.createIcons();
       closeHistoryFilterModal();
     });
     agendamentoRefresh.addEventListener('click', loadAgendamentos);
-    agendamentoNew.addEventListener('click', openNewAgendamentoModal);
+    agendamentoNew.addEventListener('click', () => {
+      if (agendaMode === 'limites') {
+        openOrcamentoModal();
+        return;
+      }
+      openNewAgendamentoModal();
+    });
     if (agendaTabAgendamentos) agendaTabAgendamentos.addEventListener('click', () => setAgendaMode('agendamentos'));
     if (agendaTabLembretes) agendaTabLembretes.addEventListener('click', () => setAgendaMode('lembretes'));
+    if (agendaTabLimites) agendaTabLimites.addEventListener('click', () => setAgendaMode('limites'));
     metaRefresh.addEventListener('click', loadMetas);
     metaNew.addEventListener('click', () => openMetaModal(null));
     metaSave.addEventListener('click', saveMeta);
