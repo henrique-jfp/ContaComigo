@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # Lista global de ferramentas suportadas
 _ALFREDO_TOOLS_NAMES = {
     "registrar_lancamento", "agendar_despesa", "agendar_receita", "criar_meta", 
-    "responder_duvida_financeira", "definir_limite_orcamento", "categorizar_lancamentos_pendentes",
+    "criar_lembrete", "responder_duvida_financeira", "definir_limite_orcamento", "categorizar_lancamentos_pendentes",
     "consultar_saldos_bancarios_reais", "consultar_faturas_cartao_real", "consultar_livro_caixa_analitico"
 }
 

@@ -68,7 +68,7 @@ static_dir = os.path.join(parent_dir, 'static')
 sys.path.insert(0, parent_dir)
 import config
 from database.database import get_db, buscar_lancamentos_usuario
-from models import Usuario, Lancamento, Agendamento, Objetivo, MetaConfirmacao, Categoria, Subcategoria, XpEvent, UserMission, UserAchievement, OrcamentoCategoria, Conta, SaldoConta, FaturaCartao, ParcelamentoItem, Investment, CarteiraFII, HistoricoAlertaFII, PatrimonySnapshot, RegraCategorizacao
+from models import Usuario, Lancamento, Agendamento, Lembrete, Objetivo, MetaConfirmacao, Categoria, Subcategoria, XpEvent, UserMission, UserAchievement, OrcamentoCategoria, Conta, SaldoConta, FaturaCartao, ParcelamentoItem, Investment, CarteiraFII, HistoricoAlertaFII, PatrimonySnapshot, RegraCategorizacao
 from pierre_finance.categorizador import limpar_descricao
 from gerente_financeiro.prompts import PROMPT_ALFREDO_APRIMORADO as PROMPT_ALFREDO
 from gerente_financeiro.services import preparar_contexto_financeiro_completo
@@ -369,6 +369,31 @@ def _parse_date(value: str) -> date | None:
         return datetime.fromisoformat(value).date()
     except ValueError:
         return None
+
+
+def _serialize_agendamento(item: Agendamento) -> dict:
+    return {
+        "id": item.id,
+        "descricao": item.descricao,
+        "valor": float(item.valor),
+        "tipo": item.tipo,
+        "frequencia": item.frequencia,
+        "proxima_data_execucao": item.proxima_data_execucao.isoformat(),
+        "ativo": item.ativo,
+    }
+
+
+def _serialize_lembrete(item: Lembrete) -> dict:
+    return {
+        "id": item.id,
+        "descricao": item.descricao,
+        "valor": float(item.valor) if item.valor is not None else None,
+        "tipo": item.tipo,
+        "frequencia": item.frequencia,
+        "proxima_data_execucao": item.proxima_data_execucao.isoformat(),
+        "ativo": item.ativo,
+        "status": item.status,
+    }
 
 
 def _normalize_forma_pagamento(value: str | None) -> str:
@@ -2331,18 +2356,7 @@ def miniapp_agendamentos():
                 .order_by(Agendamento.proxima_data_execucao.asc())
                 .all()
             )
-            payload = [
-                {
-                    "id": item.id,
-                    "descricao": item.descricao,
-                    "valor": float(item.valor),
-                    "tipo": item.tipo,
-                    "frequencia": item.frequencia,
-                    "proxima_data_execucao": item.proxima_data_execucao.isoformat(),
-                    "ativo": item.ativo,
-                }
-                for item in items
-            ]
+            payload = [_serialize_agendamento(item) for item in items]
             return jsonify({"ok": True, "items": payload})
 
         data = request.get_json(silent=True) or {}
@@ -2409,6 +2423,106 @@ def miniapp_agendamentos_update(agendamento_id: int):
                 agendamento.proxima_data_execucao = parsed
         db.commit()
         _invalidate_financial_cache(session["user_id"])
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/lembretes', methods=['GET', 'POST'])
+def miniapp_lembretes():
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        if request.method == 'GET':
+            ativos = (
+                db.query(Lembrete)
+                .filter(Lembrete.id_usuario == usuario.id, Lembrete.ativo == True)
+                .order_by(Lembrete.proxima_data_execucao.asc(), Lembrete.id.asc())
+                .all()
+            )
+            historico = (
+                db.query(Lembrete)
+                .filter(Lembrete.id_usuario == usuario.id, Lembrete.ativo == False)
+                .order_by(Lembrete.proxima_data_execucao.desc(), Lembrete.id.desc())
+                .limit(50)
+                .all()
+            )
+            return jsonify({
+                "ok": True,
+                "items": [_serialize_lembrete(item) for item in ativos],
+                "history": [_serialize_lembrete(item) for item in historico],
+            })
+
+        data = request.get_json(silent=True) or {}
+        data_primeiro = _parse_date(data.get("data_primeiro_evento") or data.get("proxima_data_execucao"))
+        if not data_primeiro:
+            return jsonify({"ok": False, "error": "invalid_date"}), 400
+
+        valor = data.get("valor")
+        lembrete = Lembrete(
+            id_usuario=usuario.id,
+            descricao=str(data.get("descricao", "")).strip(),
+            valor=float(valor) if valor not in (None, "") else None,
+            tipo=data.get("tipo"),
+            data_primeiro_evento=data_primeiro,
+            frequencia=data.get("frequencia", "unico"),
+            total_parcelas=data.get("total_parcelas"),
+            parcela_atual=data.get("parcela_atual", 0),
+            proxima_data_execucao=data_primeiro,
+            ativo=bool(data.get("ativo", True)),
+            status=data.get("status", "ativo"),
+        )
+        db.add(lembrete)
+        db.commit()
+        db.refresh(lembrete)
+        return jsonify({"ok": True, "id": lembrete.id})
+    finally:
+        db.close()
+
+
+@app.route('/api/miniapp/lembretes/<int:lembrete_id>', methods=['PATCH', 'DELETE'])
+def miniapp_lembretes_update(lembrete_id: int):
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        lembrete = (
+            db.query(Lembrete)
+            .filter(Lembrete.id == lembrete_id, Lembrete.id_usuario == usuario.id)
+            .first()
+        )
+        if not lembrete:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+
+        if request.method == 'DELETE':
+            db.delete(lembrete)
+            db.commit()
+            return jsonify({"ok": True})
+
+        data = request.get_json(silent=True) or {}
+        for key in ["descricao", "tipo", "frequencia", "ativo", "status"]:
+            if key in data:
+                setattr(lembrete, key, data[key])
+        if "valor" in data:
+            lembrete.valor = float(data["valor"]) if data["valor"] not in (None, "") else None
+        if "proxima_data_execucao" in data:
+            parsed = _parse_date(data.get("proxima_data_execucao"))
+            if parsed:
+                lembrete.proxima_data_execucao = parsed
+        db.commit()
         return jsonify({"ok": True})
     finally:
         db.close()

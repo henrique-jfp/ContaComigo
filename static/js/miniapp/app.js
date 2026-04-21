@@ -2817,11 +2817,12 @@ lucide.createIcons();
       newAgendDescricao.value = '';
       newAgendValor.value = '';
       newAgendTipo.value = 'Saída';
-      newAgendFrequencia.value = 'mensal';
+      newAgendFrequencia.value = agendaMode === 'lembretes' ? 'unico' : 'mensal';
       newAgendParcelas.value = '12';
       newAgendInfinito.checked = false;
       const hoje = new Date().toISOString().split('T')[0];
       newAgendData.value = hoje;
+      updateAgendaModalLabels();
       updateParcelasVisibility();
       openModal('newAgendamentoModal');
     }
@@ -2849,8 +2850,9 @@ lucide.createIcons();
       const data = newAgendData.value;
       const recorrenciaInfinita = frequencia !== 'unico' && newAgendInfinito.checked;
       const parcelas = frequencia === 'unico' ? 1 : (recorrenciaInfinita ? null : (parseInt(newAgendParcelas.value, 10) || 1));
+      const isReminder = agendaMode === 'lembretes';
 
-      if (!descricao || !valor || !data) {
+      if (!descricao || (!isReminder && !valor) || !data) {
         showToast('Preencha todos os campos obrigatórios', 'error');
         return;
       }
@@ -2864,29 +2866,30 @@ lucide.createIcons();
       saveBtn.appendChild(spinner);
 
       try {
-        const response = await fetch('/api/miniapp/agendamentos', {
+        const response = await fetch(isReminder ? '/api/miniapp/lembretes' : '/api/miniapp/agendamentos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
           body: JSON.stringify({
             descricao,
-            valor,
+            valor: isReminder && !valor ? null : valor,
             tipo,
             frequencia,
             data_primeiro_evento: data,
             total_parcelas: parcelas,
-            parcela_atual: 0
+            parcela_atual: 0,
+            status: 'ativo',
           }),
         });
         const data_resp = await response.json();
         if (data_resp.ok) {
-          showToast(`✓ ${descricao} agendado com sucesso!`, 'success');
+          showToast(`✓ ${descricao} ${isReminder ? 'lembrado' : 'agendado'} com sucesso!`, 'success');
           await loadAgendamentos();
           closeNewAgendamentoModal();
         } else {
           showToast(`Erro: ${data_resp.message || 'Tente novamente'}`, 'error');
         }
       } catch (e) {
-        showToast('Erro de conexão ao criar agendamento', 'error');
+        showToast(`Erro de conexão ao criar ${isReminder ? 'lembrete' : 'agendamento'}`, 'error');
       } finally {
         spinner.remove();
         saveBtn.querySelector('.save-text').textContent = originalText;
@@ -3085,21 +3088,22 @@ lucide.createIcons();
 
     async function deleteAgendamentoById(id) {
       if (!sessionId) return;
-      if (!confirm('Tem certeza que deseja excluir este agendamento?')) return;
+      const isReminder = agendaMode === 'lembretes';
+      if (!confirm(`Tem certeza que deseja excluir este ${isReminder ? 'lembrete' : 'agendamento'}?`)) return;
       try {
-        const response = await fetch(`/api/miniapp/agendamentos/${id}`, {
+        const response = await fetch(`${isReminder ? '/api/miniapp/lembretes' : '/api/miniapp/agendamentos'}/${id}`, {
           method: 'DELETE',
           headers: { 'X-Session-Id': sessionId },
         });
         const data = await response.json();
         if (data.ok) {
-          showToast('✓ Agendamento excluido com sucesso!', 'success');
+          showToast(`✓ ${isReminder ? 'Lembrete' : 'Agendamento'} excluído com sucesso!`, 'success');
           await loadAgendamentos();
         } else {
-          showToast('Erro ao excluir agendamento', 'error');
+          showToast(`Erro ao excluir ${isReminder ? 'lembrete' : 'agendamento'}`, 'error');
         }
       } catch (e) {
-        showToast('Erro de conexao ao excluir agendamento', 'error');
+        showToast(`Erro de conexão ao excluir ${isReminder ? 'lembrete' : 'agendamento'}`, 'error');
       }
     }
 
@@ -3557,20 +3561,46 @@ lucide.createIcons();
       if (!sessionId) return;
       renderAgendamentoSkeleton(3);
       try {
-        const response = await fetchWithSession('/api/miniapp/agendamentos');
+        const isReminder = agendaMode === 'lembretes';
+        const response = await fetchWithSession(isReminder ? '/api/miniapp/lembretes' : '/api/miniapp/agendamentos');
         const data = await response.json();
-        if (!data.ok || !data.items.length) { agendamentoStatus.textContent = 'Nenhum agendamento.'; agendamentoList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint">Nenhum agendamento futuro.</div>'; return; }
+        const items = data.items || [];
+        const historyItems = data.history || [];
+        if (!data.ok || !items.length) {
+          agendamentoStatus.textContent = isReminder ? 'Nenhum lembrete.' : 'Nenhum agendamento.';
+          agendamentoList.innerHTML = `<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint">Nenhum ${isReminder ? 'lembrete ativo' : 'agendamento futuro'}.</div>`;
+          if (lembreteHistoryWrap) lembreteHistoryWrap.classList.toggle('hidden', !isReminder);
+          if (isReminder && lembreteHistoryList) {
+            lembreteHistoryStatus.textContent = historyItems.length ? 'Histórico recente' : 'Sem histórico de lembretes.';
+            lembreteHistoryList.innerHTML = historyItems.map((item) => `
+              <div class="rounded-2xl border border-telegram-separator bg-telegram-card p-4 shadow-soft opacity-80">
+                <p class="font-semibold text-sm text-telegram-text">${item.descricao}</p>
+                <p class="mt-1 text-[11px] sm:text-xs text-telegram-hint">${new Date(item.proxima_data_execucao).toLocaleDateString('pt-BR')} • ${item.status || 'vencido'}</p>
+              </div>
+            `).join('');
+          }
+          return;
+        }
         agendamentoStatus.textContent = '';
         agendamentoList.innerHTML = '';
-        data.items.forEach(item => {
-          const isReceita = formatMoney(item.valor, item.tipo).startsWith('+');
-          const valueText = formatMoney(item.valor, item.tipo);
+        items.forEach(item => {
+          const valueText = item.valor == null ? 'Sem valor' : formatMoney(item.valor, item.tipo);
           const div = document.createElement('div');
           div.className = 'flex items-center justify-between p-4 rounded-2xl bg-telegram-card border border-telegram-separator mb-2 shadow-soft';
+          const statusHint = isReminder && item.proxima_data_execucao
+            ? (() => {
+                const hoje = new Date();
+                const venc = new Date(item.proxima_data_execucao);
+                const diff = Math.round((new Date(venc.getFullYear(), venc.getMonth(), venc.getDate()) - new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())) / 86400000);
+                if (diff === 0) return ' • vence hoje';
+                if (diff === 1) return ' • vence amanhã';
+                return '';
+              })()
+            : '';
           div.innerHTML = `
             <div class="min-w-0 flex-1 pr-2">
               <p class="font-semibold text-sm text-telegram-text truncate">${item.descricao}</p>
-              <p class="text-[11px] sm:text-xs text-telegram-hint mt-0.5 truncate"><i data-lucide="clock" class="inline w-3 h-3 mr-1"></i>${item.frequencia} • ${new Date(item.proxima_data_execucao).toLocaleDateString('pt-BR')}</p>
+              <p class="text-[11px] sm:text-xs text-telegram-hint mt-0.5 truncate"><i data-lucide="clock" class="inline w-3 h-3 mr-1"></i>${item.frequencia} • ${new Date(item.proxima_data_execucao).toLocaleDateString('pt-BR')}${statusHint}</p>
             </div>
             <div class="flex flex-col items-end gap-1.5 shrink-0">
               <span class="font-bold text-brand text-sm whitespace-nowrap">${valueText}</span>
@@ -3579,6 +3609,21 @@ lucide.createIcons();
           `;
           agendamentoList.appendChild(div);
         });
+        if (lembreteHistoryWrap) lembreteHistoryWrap.classList.toggle('hidden', !isReminder);
+        if (isReminder && lembreteHistoryList) {
+          lembreteHistoryStatus.textContent = historyItems.length ? 'Histórico recente' : 'Sem histórico de lembretes.';
+          lembreteHistoryList.innerHTML = historyItems.map((item) => `
+            <div class="rounded-2xl border border-telegram-separator bg-telegram-card p-4 shadow-soft opacity-80">
+              <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <p class="font-semibold text-sm text-telegram-text truncate">${item.descricao}</p>
+                  <p class="mt-1 text-[11px] sm:text-xs text-telegram-hint">${new Date(item.proxima_data_execucao).toLocaleDateString('pt-BR')} • ${item.status || 'vencido'}</p>
+                </div>
+                <span class="text-xs font-semibold text-telegram-hint">${item.valor == null ? 'Sem valor' : formatMoney(item.valor, item.tipo)}</span>
+              </div>
+            </div>
+          `).join('');
+        }
         lucide.createIcons();
       } catch(e){}
     }
@@ -3632,6 +3677,8 @@ lucide.createIcons();
     });
     agendamentoRefresh.addEventListener('click', loadAgendamentos);
     agendamentoNew.addEventListener('click', openNewAgendamentoModal);
+    if (agendaTabAgendamentos) agendaTabAgendamentos.addEventListener('click', () => setAgendaMode('agendamentos'));
+    if (agendaTabLembretes) agendaTabLembretes.addEventListener('click', () => setAgendaMode('lembretes'));
     metaRefresh.addEventListener('click', loadMetas);
     metaNew.addEventListener('click', () => openMetaModal(null));
     metaSave.addEventListener('click', saveMeta);
@@ -3780,11 +3827,14 @@ lucide.createIcons();
     });
 
     agendamentoList.addEventListener('click', (event) => {
-      const target = event.target;
+      const target = event.target?.closest?.('[data-action="delete"]');
       const id = target?.dataset?.id;
-      if (!id || target.dataset.action !== 'delete') return;
+      if (!id) return;
       deleteAgendamentoById(Number(id));
     });
+
+    refreshAgendaTabs();
+    updateAgendaModalLabels();
 
     bindAdaptiveLayoutListeners();
     setupHomeChartsCarousel();

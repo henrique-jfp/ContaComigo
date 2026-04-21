@@ -45,6 +45,7 @@ class Usuario(Base):
     contas = relationship("Conta", back_populates="usuario", cascade="all, delete-orphan")
     objetivos = relationship("Objetivo", back_populates="usuario", cascade="all, delete-orphan")
     agendamentos = relationship("Agendamento", back_populates="usuario", cascade="all, delete-orphan")
+    lembretes = relationship("Lembrete", back_populates="usuario", cascade="all, delete-orphan")
     conquistas = relationship("ConquistaUsuario", back_populates="usuario", cascade="all, delete-orphan")
     investments = relationship("Investment", back_populates="usuario", cascade="all, delete-orphan")
     investment_goals = relationship("InvestmentGoal", back_populates="usuario", cascade="all, delete-orphan")
@@ -225,6 +226,26 @@ class Agendamento(Base):
     usuario = relationship("Usuario", back_populates="agendamentos")
     categoria = relationship("Categoria")
     subcategoria = relationship("Subcategoria")
+
+
+class Lembrete(Base):
+    __tablename__ = 'lembretes'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_usuario = Column(Integer, ForeignKey('usuarios.id'), nullable=False, index=True)
+    descricao = Column(String, nullable=False)
+    valor = Column(Numeric(12, 2), nullable=True)
+    tipo = Column(String, nullable=True)
+    data_primeiro_evento = Column(Date, nullable=False)
+    frequencia = Column(String, nullable=True, default='unico')
+    total_parcelas = Column(Integer, nullable=True)
+    parcela_atual = Column(Integer, default=0)
+    proxima_data_execucao = Column(Date, nullable=False, index=True)
+    ativo = Column(Boolean, default=True, index=True)
+    status = Column(String, nullable=False, default='ativo', index=True)  # ativo, vencido, cancelado
+    criado_em = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    usuario = relationship("Usuario", back_populates="lembretes")
+
 
 class OrcamentoCategoria(Base):
     __tablename__ = 'orcamentos_categoria'

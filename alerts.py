@@ -6,47 +6,132 @@ from datetime import datetime, time, date, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from dateutil.relativedelta import relativedelta
 from database.database import get_db
-from models import Usuario, Objetivo, Agendamento, Lancamento, MetaConfirmacao
+from models import Usuario, Objetivo, Agendamento, Lembrete, Lancamento, MetaConfirmacao
 from gerente_financeiro.gamification_utils import give_xp_for_action
 
 logger = logging.getLogger(__name__)
 
+def _format_currency(valor: float) -> str:
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _avancar_data_recorrente(data_base: date, frequencia: str | None) -> date | None:
+    freq = str(frequencia or "unico").lower()
+    if freq == "semanal":
+        return data_base + timedelta(days=7)
+    if freq == "mensal":
+        return data_base + relativedelta(months=1)
+    return None
+
+
+def _processar_expiracao_lembretes(db: Session, hoje: date) -> None:
+    lembretes = (
+        db.query(Lembrete)
+        .filter(
+            Lembrete.ativo == True,
+            Lembrete.proxima_data_execucao < hoje,
+        )
+        .all()
+    )
+    houve_alteracao = False
+
+    for lembrete in lembretes:
+        proxima = _avancar_data_recorrente(lembrete.proxima_data_execucao, lembrete.frequencia)
+        if proxima is None:
+            lembrete.ativo = False
+            lembrete.status = "vencido"
+        else:
+            lembrete.parcela_atual = int(lembrete.parcela_atual or 0) + 1
+            if lembrete.total_parcelas and lembrete.parcela_atual >= lembrete.total_parcelas:
+                lembrete.ativo = False
+                lembrete.status = "vencido"
+            else:
+                lembrete.proxima_data_execucao = proxima
+                lembrete.status = "ativo"
+        houve_alteracao = True
+
+    if houve_alteracao:
+        db.commit()
+
+
+def _formatar_bloco_agendamento(ag: Agendamento, contexto: str) -> str:
+    tipo_emoji = "🟢" if ag.tipo == "Entrada" else "🔴"
+    linhas = [f"{tipo_emoji} <b>{ag.descricao}</b>"]
+    if getattr(ag, "valor", None) is not None:
+        linhas.append(f"💰 <code>{_format_currency(float(ag.valor or 0))}</code>")
+    linhas.append(f"📅 {contexto}")
+    return "\n".join(linhas)
+
+
+def _formatar_bloco_lembrete(lembrete: Lembrete, contexto: str) -> str:
+    tipo_emoji = "🟢" if str(lembrete.tipo or "").lower() in {"receita", "entrada"} else "🔔"
+    linhas = [f"{tipo_emoji} <b>{lembrete.descricao}</b>"]
+    if getattr(lembrete, "valor", None) is not None:
+        linhas.append(f"💰 <code>{_format_currency(float(lembrete.valor or 0))}</code>")
+    linhas.append(f"📅 {contexto}")
+    return "\n".join(linhas)
+
+
 async def enviar_lembretes_usuario(context: ContextTypes.DEFAULT_TYPE):
-    """Job disparado no horário específico do usuário para enviar os lembretes de agendamentos."""
+    """Job disparado no horário específico do usuário para enviar lembretes do dia e de amanhã."""
     job = context.job
     user_id = job.data['user_id']
-    agendamentos_ids = job.data['agendamentos_ids']
+    agendamentos_hoje_ids = job.data.get('agendamentos_hoje_ids', [])
+    agendamentos_amanha_ids = job.data.get('agendamentos_amanha_ids', [])
+    lembretes_hoje_ids = job.data.get('lembretes_hoje_ids', [])
+    lembretes_amanha_ids = job.data.get('lembretes_amanha_ids', [])
     
     db = next(get_db())
     try:
         usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id).first()
         if not usuario or not usuario.alerta_gastos_ativo:
             return
-            
-        agendamentos = db.query(Agendamento).filter(Agendamento.id.in_(agendamentos_ids), Agendamento.ativo == True).all()
-        if not agendamentos:
+
+        agendamentos_hoje = db.query(Agendamento).filter(Agendamento.id.in_(agendamentos_hoje_ids), Agendamento.ativo == True).all() if agendamentos_hoje_ids else []
+        agendamentos_amanha = db.query(Agendamento).filter(Agendamento.id.in_(agendamentos_amanha_ids), Agendamento.ativo == True).all() if agendamentos_amanha_ids else []
+        lembretes_hoje = db.query(Lembrete).filter(Lembrete.id.in_(lembretes_hoje_ids), Lembrete.ativo == True).all() if lembretes_hoje_ids else []
+        lembretes_amanha = db.query(Lembrete).filter(Lembrete.id.in_(lembretes_amanha_ids), Lembrete.ativo == True).all() if lembretes_amanha_ids else []
+
+        if not any([agendamentos_hoje, agendamentos_amanha, lembretes_hoje, lembretes_amanha]):
             return
-            
-        texto = "🔔 <b>Lembrete de Agendamentos</b>\n\nVocê tem compromissos programados para hoje:\n\n"
-        
+
+        secoes: list[str] = ["🔔 <b>Agenda do Alfredo</b>"]
         keyboard = []
-        for ag in agendamentos:
-            tipo_emoji = "🟢" if ag.tipo == "Entrada" else "🔴"
-            texto += f"{tipo_emoji} <b>{ag.descricao}</b>\n"
-            texto += f"💰 R$ {ag.valor:.2f}\n\n"
-            
-            # Botão de dar baixa (Registrar)
-            btn_text = f"✅ Dar baixa: {ag.descricao[:15]}"
-            keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"ag_baixa_{ag.id}")])
-            
-        texto += "<i>Toque nos botões abaixo para registrar no seu fluxo de caixa:</i>"
-        
+
+        if agendamentos_amanha or lembretes_amanha:
+            linhas = ["", "⏳ <b>Vence amanhã</b>"]
+            for ag in agendamentos_amanha:
+                linhas.append(_formatar_bloco_agendamento(ag, "Agendamento para amanhã"))
+                linhas.append("")
+            for lembrete in lembretes_amanha:
+                linhas.append(_formatar_bloco_lembrete(lembrete, "Lembrete para amanhã"))
+                linhas.append("")
+            secoes.append("\n".join(linhas).strip())
+
+        if agendamentos_hoje or lembretes_hoje:
+            linhas = ["", "🚨 <b>Vence hoje</b>"]
+            for ag in agendamentos_hoje:
+                linhas.append(_formatar_bloco_agendamento(ag, "Agendamento para hoje"))
+                linhas.append("")
+                btn_text = f"✅ Dar baixa: {ag.descricao[:15]}"
+                keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"ag_baixa_{ag.id}")])
+            for lembrete in lembretes_hoje:
+                linhas.append(_formatar_bloco_lembrete(lembrete, "Lembrete para hoje"))
+                linhas.append("")
+            secoes.append("\n".join(linhas).strip())
+
+        texto = "\n\n".join(secao for secao in secoes if secao).strip()
+        if keyboard:
+            texto += "\n\n<i>Toque nos botões abaixo para registrar os agendamentos de hoje no seu fluxo de caixa.</i>"
+
         await context.bot.send_message(
             chat_id=user_id,
             text=texto,
             parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            reply_markup=InlineKeyboardMarkup(keyboard) if keyboard else None
         )
     except Exception as e:
         logger.error(f"Erro ao enviar lembrete para {user_id}: {e}", exc_info=True)
@@ -60,61 +145,77 @@ async def agendar_notificacoes_diarias(context: ContextTypes.DEFAULT_TYPE):
         
         db = next(get_db())
         hoje = datetime.now().date()
-        
-        # Buscar agendamentos que vencem HOJE ou já passaram e ainda estão ativos
-        # E que o usuário tenha alertas ativados
-        agendamentos_hoje = db.query(Agendamento).join(Usuario).filter(
-            Agendamento.proxima_data_execucao <= hoje,
+        amanha = hoje + timedelta(days=1)
+
+        _processar_expiracao_lembretes(db, hoje)
+
+        agendamentos_relevantes = db.query(Agendamento).join(Usuario).filter(
+            or_(
+                Agendamento.proxima_data_execucao <= hoje,
+                Agendamento.proxima_data_execucao == amanha,
+            ),
             Agendamento.ativo == True,
             Usuario.alerta_gastos_ativo == True,
             Usuario.notif_lembretes == True
         ).all()
-        
-        # Agrupar por usuário
-        agendamentos_por_usuario = {}
-        for ag in agendamentos_hoje:
+
+        lembretes_relevantes = db.query(Lembrete).join(Usuario).filter(
+            Lembrete.proxima_data_execucao.in_([hoje, amanha]),
+            Lembrete.ativo == True,
+            Usuario.alerta_gastos_ativo == True,
+            Usuario.notif_lembretes == True
+        ).all()
+
+        notificacoes_por_usuario = {}
+        for ag in agendamentos_relevantes:
             user = ag.usuario
-            if user.id not in agendamentos_por_usuario:
-                agendamentos_por_usuario[user.id] = {
+            if user.id not in notificacoes_por_usuario:
+                notificacoes_por_usuario[user.id] = {
                     'telegram_id': user.telegram_id,
                     'horario': user.horario_notificacao or time(hour=9, minute=0),
-                    'agendamentos_ids': []
+                    'agendamentos_hoje_ids': [],
+                    'agendamentos_amanha_ids': [],
+                    'lembretes_hoje_ids': [],
+                    'lembretes_amanha_ids': [],
                 }
-            agendamentos_por_usuario[user.id]['agendamentos_ids'].append(ag.id)
-            
-        # Para cada usuário, criar um job rodando no horário específico DELE
+            chave = 'agendamentos_amanha_ids' if ag.proxima_data_execucao == amanha else 'agendamentos_hoje_ids'
+            notificacoes_por_usuario[user.id][chave].append(ag.id)
+
+        for lembrete in lembretes_relevantes:
+            user = lembrete.usuario
+            if user.id not in notificacoes_por_usuario:
+                notificacoes_por_usuario[user.id] = {
+                    'telegram_id': user.telegram_id,
+                    'horario': user.horario_notificacao or time(hour=9, minute=0),
+                    'agendamentos_hoje_ids': [],
+                    'agendamentos_amanha_ids': [],
+                    'lembretes_hoje_ids': [],
+                    'lembretes_amanha_ids': [],
+                }
+            chave = 'lembretes_hoje_ids' if lembrete.proxima_data_execucao == hoje else 'lembretes_amanha_ids'
+            notificacoes_por_usuario[user.id][chave].append(lembrete.id)
+
         agora = datetime.now()
-        for user_data in agendamentos_por_usuario.values():
+        for user_data in notificacoes_por_usuario.values():
             horario = user_data['horario']
-            
-            # Montar o datetime de quando enviar hoje
             target_time = datetime.combine(hoje, horario)
-            
-            # Se o horário já passou, envia daqui a 1 minuto
             if target_time <= agora:
                 target_time = agora + timedelta(minutes=1)
                 
             context.job_queue.run_once(
                 enviar_lembretes_usuario,
                 when=target_time,
-                data={
-                    'user_id': user_data['telegram_id'],
-                    'agendamentos_ids': user_data['agendamentos_ids']
-                },
+                data={'user_id': user_data['telegram_id'], **user_data},
                 name=f"lembrete_{user_data['telegram_id']}_{hoje.strftime('%Y%m%d')}"
             )
             
-        logger.info(f"✅ Agendamento diário concluído: {len(agendamentos_por_usuario)} usuários notificados para hoje.")
+        logger.info(f"✅ Agendamento diário concluído: {len(notificacoes_por_usuario)} usuários notificados para hoje/amanhã.")
         
     except Exception as e:
         logger.error(f"❌ Erro no agendamento diário: {e}", exc_info=True)
     finally:
         if 'db' in locals():
             db.close()
-
-# --- FUNÇÕES DE CHECK-IN DE METAS ---
-def _format_currency(valor: float) -> str:
-    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def _progress_bar(percentual: float) -> str:
     PROGRESS_STEPS = 10

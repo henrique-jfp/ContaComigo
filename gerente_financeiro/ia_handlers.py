@@ -25,7 +25,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppI
 from telegram.ext import ContextTypes, CommandHandler, ConversationHandler
 from sqlalchemy import and_, extract, func, or_, not_
 from database.database import get_db, get_or_create_user
-from models import Lancamento, Usuario, Categoria, Agendamento, Objetivo, ItemLancamento, OrcamentoCategoria, Subcategoria
+from models import Lancamento, Usuario, Categoria, Agendamento, Lembrete, Objetivo, ItemLancamento, OrcamentoCategoria, Subcategoria
 
 def _get_subcats_ignore_ids(db) -> list[int]:
     """Retorna IDs de subcategorias que devem ser ignoradas para evitar duplicidade (Faturas e Transf. Internas)."""
@@ -277,6 +277,44 @@ _ALFREDO_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "criar_lembrete",
+            "description": "Cria um lembrete financeiro ou pessoal para o usuário ser avisado depois, sem registrar lançamento no fluxo de caixa.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "descricao": {
+                        "type": "string",
+                        "description": "Descricao curta do lembrete. Ex.: 'Pagar conta de luz', 'Pagar Michel', 'Pagar agua'.",
+                    },
+                    "valor": {
+                        "type": "number",
+                        "description": "Valor mencionado pelo usuário, se houver.",
+                    },
+                    "tipo": {
+                        "type": "string",
+                        "enum": ["Receita", "Saída", "Despesa", "Entrada"],
+                        "description": "Tipo do lembrete, se ficar claro no pedido.",
+                    },
+                    "data": {
+                        "type": "string",
+                        "description": "Data do lembrete em YYYY-MM-DD. Converta expressões naturais como 'terça que vem' e 'dia 21'.",
+                    },
+                    "frequencia": {
+                        "type": "string",
+                        "description": "Frequencia do lembrete: unico, semanal ou mensal. Se nao informado, usar unico.",
+                    },
+                    "parcelas": {
+                        "type": "number",
+                        "description": "Quantidade de repetições quando o usuário informar explicitamente.",
+                    },
+                },
+                "required": ["descricao", "data"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "criar_meta",
             "description": "Cria uma meta financeira para o usuário.",
             "parameters": {
@@ -342,6 +380,97 @@ def _clear_pending_context(context: ContextTypes.DEFAULT_TYPE) -> None:
     ]
     for key in keys:
         context.user_data.pop(key, None)
+
+
+def _normalizar_tipo_compromisso(valor: str | None, fallback: str = "Saída") -> str:
+    raw = str(valor or "").strip().lower()
+    if raw in {"receita", "entrada"}:
+        return "Receita"
+    if raw in {"despesa", "saida", "saída"}:
+        return "Saída"
+    return fallback
+
+
+def _emoji_compromisso(tipo: str | None) -> str:
+    return "🟢" if str(tipo or "").lower() in {"receita", "entrada"} else "🔔"
+
+
+def _rotulo_tipo_compromisso(acao: str) -> str:
+    return "lembrete" if acao == "criar_lembrete" else "agendamento"
+
+
+def _build_quick_compromisso_preview(dados_quick: dict) -> str:
+    descricao = escape(str(dados_quick.get("descricao") or "Sem descrição"))
+    valor = dados_quick.get("valor")
+    data_str = str(dados_quick.get("data") or "").strip()
+    frequencia = escape(str(dados_quick.get("frequencia") or "unico"))
+    parcelas = dados_quick.get("parcelas")
+    parcelas_texto = "indefinido" if parcelas is None else str(parcelas)
+    acao = dados_quick.get("acao")
+    eh_lembrete = acao == "criar_lembrete"
+    titulo = "Confirme o lembrete" if eh_lembrete else (
+        "Confirme o agendamento de receita" if acao == "agendar_receita" else "Confirme o agendamento"
+    )
+    emoji = _emoji_compromisso(dados_quick.get("tipo"))
+
+    try:
+        data_fmt = datetime.fromisoformat(data_str).strftime("%d/%m/%Y") if data_str else "Sem data"
+    except ValueError:
+        data_fmt = data_str or "Sem data"
+
+    linhas = [
+        f"{emoji} <b>{titulo}</b>",
+        "",
+        f"• <b>Descrição:</b> {descricao}",
+    ]
+    if valor is not None and valor != "":
+        try:
+            linhas.append(f"• <b>Valor:</b> <code>{_formatar_valor_brasileiro(float(valor))}</code>")
+        except (TypeError, ValueError):
+            pass
+    if dados_quick.get("tipo"):
+        linhas.append(f"• <b>Tipo:</b> {escape(str(dados_quick.get('tipo')))}")
+    linhas.append(f"• <b>Data:</b> {escape(data_fmt)}")
+    if dados_quick.get("frequencia"):
+        linhas.append(f"• <b>Frequência:</b> {frequencia}")
+    if not eh_lembrete or parcelas is not None:
+        linhas.append(f"• <b>Parcelas:</b> {escape(parcelas_texto)}")
+    if eh_lembrete:
+        linhas.append("")
+        linhas.append("<i>Esse lembrete não será salvo como lançamento financeiro.</i>")
+    return "\n".join(linhas)
+
+
+def _build_quick_compromisso_keyboard(dados_quick: dict) -> InlineKeyboardMarkup:
+    acao = dados_quick.get("acao")
+    if acao == "criar_lembrete":
+        troca = InlineKeyboardButton("📅 Trocar para agendamento", callback_data="quick_toggle_agendamento")
+    else:
+        troca = InlineKeyboardButton("🔔 Trocar para lembrete", callback_data="quick_toggle_lembrete")
+
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Confirmar", callback_data="quick_confirm")],
+        [InlineKeyboardButton("✏️ Editar", callback_data="quick_edit")],
+        [troca],
+        [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")],
+    ])
+
+
+def _alternar_tipo_compromisso(dados_quick: dict, destino: str) -> dict:
+    novo = dict(dados_quick)
+    if destino == "lembrete":
+        novo["acao"] = "criar_lembrete"
+        novo["tipo"] = _normalizar_tipo_compromisso(novo.get("tipo"))
+        novo["frequencia"] = str(novo.get("frequencia") or "unico").strip().lower()
+        return novo
+
+    tipo = _normalizar_tipo_compromisso(novo.get("tipo"))
+    novo["acao"] = "agendar_receita" if tipo == "Receita" else "agendar_despesa"
+    novo["tipo"] = tipo
+    novo["frequencia"] = str(novo.get("frequencia") or "mensal").strip().lower()
+    if not novo.get("valor"):
+        novo["valor"] = 0.0
+    return novo
 
 
 def _resolve_categoria_id(db, categoria_nome: str) -> int | None:
@@ -792,6 +921,16 @@ def _resumo_contas_local(db, usuario_id: int) -> str:
         .limit(20)
         .all()
     )
+    lembretes = (
+        db.query(Lembrete)
+        .filter(
+            Lembrete.id_usuario == usuario_id,
+            Lembrete.ativo.is_(True),
+        )
+        .order_by(Lembrete.proxima_data_execucao.asc(), Lembrete.id.asc())
+        .limit(20)
+        .all()
+    )
     hoje = datetime.now().date()
     fim_semana = hoje + timedelta(days=(6 - hoje.weekday()))
     vencidas: list[str] = []
@@ -810,7 +949,21 @@ def _resumo_contas_local(db, usuario_id: int) -> str:
         elif hoje < data_ag <= fim_semana:
             semana_itens.append(item)
 
-    if not agendamentos:
+    for lembrete in lembretes:
+        data_ag = getattr(lembrete, "proxima_data_execucao", None)
+        if not data_ag:
+            continue
+        valor_txt = (
+            f" (<code>{_formatar_valor_brasileiro(float(lembrete.valor or 0))}</code>)"
+            if getattr(lembrete, "valor", None) is not None else ""
+        )
+        item = f"{escape(lembrete.descricao)}{valor_txt} em {data_ag.strftime('%d/%m/%Y')}"
+        if data_ag == hoje:
+            hoje_itens.append(item)
+        elif hoje < data_ag <= fim_semana:
+            semana_itens.append(item)
+
+    if not agendamentos and not lembretes:
         return (
             "✅ <b>Tudo em dia!</b>\n\n"
             "Não encontrei compromissos pendentes no momento."
@@ -2253,26 +2406,35 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             await _enviar_resposta_html_segura(update.message, preview, reply_markup=keyboard)
             return ConversationHandler.END
 
-        if fn_name in {"agendar_despesa", "agendar_receita"}:
+        if fn_name in {"agendar_despesa", "agendar_receita", "criar_lembrete"}:
+            eh_lembrete = fn_name == "criar_lembrete"
             eh_receita = fn_name == "agendar_receita"
-            descricao_default = "Receita agendada" if eh_receita else "Despesa agendada"
+            descricao_default = (
+                "Novo lembrete" if eh_lembrete else ("Receita agendada" if eh_receita else "Despesa agendada")
+            )
             descricao = str(args.get("descricao") or descricao_default).strip()
             try:
-                valor = float(str(args.get("valor") or 0).replace(",", "."))
+                valor_raw = args.get("valor")
+                valor = float(str(valor_raw).replace(",", ".")) if valor_raw not in (None, "") else None
             except (ValueError, TypeError):
-                valor = 0.0
+                valor = None
             data_str = str(args.get("data") or "").strip()
-            frequencia = str(args.get("frequencia") or "mensal").strip().lower()
+            frequencia = str(args.get("frequencia") or ("unico" if eh_lembrete else "mensal")).strip().lower()
             parcelas = args.get("parcelas")
             try:
                 parcelas = int(parcelas) if parcelas is not None else None
             except (ValueError, TypeError):
                 parcelas = None
+            tipo_compromisso = _normalizar_tipo_compromisso(args.get("tipo"), "Receita" if eh_receita else "Saída")
 
-            if valor <= 0 or not data_str:
+            if (not eh_lembrete and (valor is None or valor <= 0)) or not data_str:
                 await _enviar_resposta_html_segura(update.message, 
                     "❌ <b>Dados incompletos</b>\n\n"
-                    "Informe descrição, valor (&gt; 0) e data de início em <code>YYYY-MM-DD</code>."
+                    + (
+                        "Informe descrição e data em <code>YYYY-MM-DD</code>."
+                        if eh_lembrete else
+                        "Informe descrição, valor (&gt; 0) e data de início em <code>YYYY-MM-DD</code>."
+                    )
                 )
                 return ConversationHandler.END
 
@@ -2285,8 +2447,9 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 )
                 return ConversationHandler.END
 
-            frequencia_normalizada = frequencia if frequencia in {"unico", "semanal", "mensal"} else "mensal"
-            acao_agendamento = "agendar_receita" if eh_receita else "agendar_despesa"
+            frequencia_default = "unico" if eh_lembrete else "mensal"
+            frequencia_normalizada = frequencia if frequencia in {"unico", "semanal", "mensal"} else frequencia_default
+            acao_agendamento = "criar_lembrete" if eh_lembrete else ("agendar_receita" if eh_receita else "agendar_despesa")
 
             dados_quick = {
                 "acao": acao_agendamento,
@@ -2295,26 +2458,13 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 "data": data_str,
                 "frequencia": frequencia_normalizada,
                 "parcelas": parcelas,
+                "tipo": tipo_compromisso,
                 "origem": "alfredo",
             }
             context.user_data["dados_quick"] = dados_quick
 
-            parcelas_texto = "indefinido" if parcelas is None else str(parcelas)
-            emoji = "💸" if eh_receita else "🗓️"
-            titulo = "Confirme o agendamento de receita" if eh_receita else "Confirme o agendamento"
-            preview = (
-                f"{emoji} <b>{titulo}</b>\n\n"
-                f"• <b>Descrição:</b> {escape(descricao)}\n"
-                f"• <b>Valor:</b> <code>{_formatar_valor_brasileiro(valor)}</code>\n"
-                f"• <b>Início:</b> {data_primeiro.strftime('%d/%m/%Y')}\n"
-                f"• <b>Frequência:</b> {escape(frequencia_normalizada)}\n"
-                f"• <b>Parcelas:</b> {escape(parcelas_texto)}"
-            )
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Confirmar", callback_data="quick_confirm")],
-                [InlineKeyboardButton("✏️ Editar", callback_data="quick_edit")],
-                [InlineKeyboardButton("❌ Cancelar", callback_data="quick_cancel")],
-            ])
+            preview = _build_quick_compromisso_preview(dados_quick)
+            keyboard = _build_quick_compromisso_keyboard(dados_quick)
             await _enviar_resposta_html_segura(update.message, preview, reply_markup=keyboard)
             return ConversationHandler.END
 
@@ -2600,6 +2750,17 @@ async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text("✏️ Para editar, por favor reformule sua mensagem ou abra o MiniApp.")
         return ConversationHandler.END
 
+    if action in {"quick_toggle_lembrete", "quick_toggle_agendamento"}:
+        destino = "lembrete" if action.endswith("lembrete") else "agendamento"
+        dados_quick = _alternar_tipo_compromisso(dados_quick, destino)
+        context.user_data["dados_quick"] = dados_quick
+        await query.edit_message_text(
+            _build_quick_compromisso_preview(dados_quick),
+            parse_mode='HTML',
+            reply_markup=_build_quick_compromisso_keyboard(dados_quick),
+        )
+        return ConversationHandler.END
+
     if action == "quick_confirm":
         tipo_acao = dados_quick.get("acao")
         db = next(get_db())
@@ -2682,6 +2843,31 @@ async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     pass
                     
                 await query.edit_message_text("✅ Agendamento criado com sucesso!")
+
+            elif tipo_acao == "criar_lembrete":
+                data_str = dados_quick.get("data")
+                try:
+                    data_primeiro = datetime.fromisoformat(data_str).date()
+                except Exception:
+                    data_primeiro = datetime.now().date()
+
+                novo_lembrete = Lembrete(
+                    id_usuario=usuario_db.id,
+                    descricao=dados_quick.get("descricao"),
+                    valor=dados_quick.get("valor"),
+                    tipo=_normalizar_tipo_compromisso(dados_quick.get("tipo")),
+                    data_primeiro_evento=data_primeiro,
+                    proxima_data_execucao=data_primeiro,
+                    frequencia=dados_quick.get("frequencia", "unico"),
+                    total_parcelas=dados_quick.get("parcelas"),
+                    parcela_atual=0,
+                    ativo=True,
+                    status="ativo",
+                )
+                db.add(novo_lembrete)
+                db.commit()
+
+                await query.edit_message_text("✅ Lembrete criado com sucesso!")
                 
             elif tipo_acao == "criar_meta":
                 data_meta_str = dados_quick.get("data_meta")
