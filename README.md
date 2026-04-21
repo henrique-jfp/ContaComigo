@@ -9,10 +9,18 @@ ContaComigo é uma plataforma financeira inovadora que combina a conveniência d
     *   Entendimento contextual para transações, faturas, e dúvidas financeiras.
     *   Respostas rápidas e inteligentes para otimizar seu dia a dia.
 
-*   **Integração Pierre API (Open Banking):**
-    *   Sincronização segura e automática de contas bancárias e cartões de crédito.
-    *   Visão consolidada de saldos, transações e faturas em um só lugar.
-    *   Gerenciamento de limites de gastos e lembretes de pagamento.
+*   **Integração Open Finance (Aba "Contas"):**
+    *   Sincronização segura e automática via Pierre API para uma visão consolidada.
+    *   Interface integrada diretamente na navegação principal, eliminando fricção.
+    *   Gestão de saldos, transações e faturas com visual unificado.
+
+*   **MiniApp Premium (Visual Private Banking):**
+    *   Interface sofisticada com tema **Premium Grená & Ouro**.
+    *   Sidebar inteligente no desktop para navegação fluida e side-by-side.
+    *   Gráficos de última geração:
+        *   **Caminho do Dinheiro (Sankey SVG):** Visualização orgânica e dinâmica do fluxo financeiro.
+        *   **Mapa de Calor (Heatmap):** Calendário real de gastos para identificação de padrões diários.
+    *   Experiência "zero-friction" otimizada para dispositivos móveis e desktop.
 
 *   **Gamificação Financeira (XP & Níveis):**
     *   Sistema de XP e níveis para incentivar o bom gerenciamento financeiro.
