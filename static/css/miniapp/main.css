@@ -440,16 +440,6 @@
     transform: none !important;
   }
 
-  .desktop-layout #navContainer {
-    flex-direction: column !important;
-    gap: 10px !important;
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    padding: 0 !important;
-    width: 100% !important;
-  }
-
   /* Reset Fantasma para Sidebar */
   .desktop-layout #bottomNav > div.absolute {
     position: relative !important;
@@ -458,41 +448,64 @@
     transform: none !important;
     display: flex !important;
     justify-content: center !important;
-    margin: 0 auto 1.5rem auto !important;
-    width: auto !important;
+    margin: 0 auto 1rem auto !important;
+    width: 100% !important;
     height: auto !important;
     pointer-events: auto !important;
+    order: -1 !important; /* Força no topo */
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
   .desktop-layout #nav-fantasma {
-    order: -1;
+    position: relative !important;
     margin-bottom: 0 !important;
     align-self: center;
     filter: drop-shadow(0 0 15px rgba(123, 30, 45, 0.3));
     transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    width: 72px !important;
-    height: 72px !important;
+    width: 64px !important;
+    height: 64px !important;
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
-  .desktop-layout #nav-fantasma:hover {
-    transform: scale(1.1) rotate(5deg) !important;
-  }
-
-  /* Botões de Navegação Horizontal -> Vertical */
-  .desktop-layout .nav-btn {
+  .desktop-layout #navContainer {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
     width: 100% !important;
-    height: 54px !important;
-    border-radius: 16px !important;
+    height: auto !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    order: 2 !important; /* Pierre is -1, this is 2 */
+  }
+
+  .desktop-layout .nav-btn {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    height: 52px !important;
+    border-radius: 14px !important;
     justify-content: flex-start !important;
+    align-items: center !important;
     flex-direction: row !important;
-    padding: 0 1.5rem !important;
+    padding: 0 1.25rem !important;
     gap: 14px !important;
     font-size: 1rem !important;
     font-weight: 600 !important;
-    color: rgba(255, 255, 255, 0.5) !important;
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
-    border: 1px solid transparent !important;
+    color: rgba(255, 255, 255, 0.6) !important;
     background: transparent !important;
+    border: 1px solid transparent !important;
+  }
+
+  /* Forçar os ícones e textos a aparecerem */
+  .desktop-layout .nav-btn i,
+  .desktop-layout .nav-btn span {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
   .desktop-layout .nav-btn:hover {
