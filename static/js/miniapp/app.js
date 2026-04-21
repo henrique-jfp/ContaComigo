@@ -1313,19 +1313,25 @@ lucide.createIcons();
 
       container.innerHTML = svgHtml;
     }
+
+    function processChartsData(summary) {
+      // ... logic here ...
+      return {
+        sixMonths,
+        patrimonyMonths,
+        patrimonyValues,
+        fluxoEntradas,
         fluxoSaidas,
+        fluxoSaldo,
         budgetLabels,
-        budgetCap,
-        budgetRealized,
-        budgetRaw: budgetItems,
-        distroLabels,
-        distroValues,
+        budgetPlanned,
+        budgetActual,
+        categories,
         projectionLabels,
-        projectionHistory,
-        projectionFuture,
+        projectionValues,
         villains,
         sankeyData,
-        heatmapData,
+        heatmapData
       };
     }
 
