@@ -1,15 +1,12 @@
 <nav id="bottomNav" class="fixed bottom-5 left-1/2 -translate-x-1/2 w-fit min-w-[280px] max-w-[92%] glass-card rounded-[28px] px-4 py-2 z-[100] shadow-soft border border-telegram-separator bg-telegram-card/95 transition-all">
-    <!-- Fantasma centralizado, sempre atrás do menu -->
-    <div class="absolute left-1/2 -translate-x-1/2 -top-10 z-0 flex flex-col items-center pointer-events-none select-none" style="width:88px;height:88px;">
-      <div id="nav-fantasma" class="transition-all duration-300 ease-out w-16 h-16 rounded-full flex items-center justify-center shadow-lift border-4 border-white/40 bg-gradient-to-tr from-purple-500/80 to-fuchsia-400/80" style="box-shadow:0 8px 32px 0 rgba(120,0,180,0.18); will-change: transform;">
-        <i data-lucide="ghost" class="w-8 h-8 text-white drop-shadow-md"></i>
-      </div>
-    </div>
     <div id="navContainer" class="flex items-center justify-center gap-3 relative z-10">
       <button class="nav-btn tab-active text-brand flex flex-col items-center justify-center gap-1 text-[10px] font-semibold py-2 rounded-2xl w-16" data-tab="inicio" onclick="switchTab(this)"><i data-lucide="sparkles" class="w-5 h-5"></i><span>Início</span></button>
+      
+      <!-- Pierre Integrado como "Contas" -->
+      <button id="btn-pierre" class="nav-btn text-telegram-hint hover:text-brand transition flex flex-col items-center justify-center gap-1 text-[10px] font-semibold py-2 rounded-2xl w-16 hidden" data-tab="modo-deus" onclick="switchTab(this)"><i data-lucide="landmark" class="w-5 h-5"></i><span>Contas</span></button>
+      
       <button class="nav-btn text-telegram-hint hover:text-brand transition flex flex-col items-center justify-center gap-1 text-[10px] font-semibold py-2 rounded-2xl w-16" data-tab="agendamentos" onclick="switchTab(this)"><i data-lucide="calendar" class="w-5 h-5"></i><span>Agenda</span></button>
       <button class="nav-btn text-telegram-hint hover:text-brand transition flex flex-col items-center justify-center gap-1 text-[10px] font-semibold py-2 rounded-2xl w-16" data-tab="historico" onclick="switchTab(this)"><i data-lucide="history" class="w-5 h-5"></i><span>Histórico</span></button>
       <button class="nav-btn text-telegram-hint hover:text-brand transition flex flex-col items-center justify-center gap-1 text-[10px] font-semibold py-2 rounded-2xl w-16" data-tab="perfil-jogo" onclick="switchTab(this)"><i data-lucide="user" class="w-5 h-5"></i><span>Perfil</span></button>
     </div>
-
   </nav>

@@ -443,45 +443,14 @@
     opacity: 1 !important;
   }
 
-  /* Reset Fantasma (Pierre) no topo com brilho ouro */
-  .desktop-layout #bottomNav > div.absolute {
-    position: relative !important;
-    top: auto !important;
-    left: auto !important;
-    transform: none !important;
-    display: flex !important;
-    justify-content: center !important;
-    margin: 0 auto 2rem auto !important;
-    width: 100% !important;
-    height: auto !important;
-    pointer-events: auto !important;
-    order: -1 !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-  }
-
-  .desktop-layout #nav-fantasma {
-    position: relative !important;
-    margin-bottom: 0 !important;
-    align-self: center;
-    filter: drop-shadow(0 0 20px rgba(212, 175, 55, 0.3));
-    transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    width: 80px !important;
-    height: 80px !important;
-    display: flex !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-  }
-
   .desktop-layout #navContainer {
     display: flex !important;
     flex-direction: column !important;
-    gap: 16px !important;
+    gap: 12px !important;
     width: 100% !important;
     height: auto !important;
     visibility: visible !important;
     opacity: 1 !important;
-    order: 2 !important;
   }
 
   .desktop-layout .nav-btn {
@@ -489,14 +458,14 @@
     visibility: visible !important;
     opacity: 1 !important;
     width: 100% !important;
-    height: 56px !important;
+    height: 52px !important;
     border-radius: 16px !important;
     justify-content: flex-start !important;
     align-items: center !important;
     flex-direction: row !important;
-    padding: 0 1.5rem !important;
-    gap: 16px !important;
-    font-size: 1.05rem !important;
+    padding: 0 1.25rem !important;
+    gap: 14px !important;
+    font-size: 1rem !important;
     font-weight: 500 !important;
     /* Texto em Ouro Suave para máximo requinte sobre o Grená */
     color: rgba(212, 175, 55, 0.8) !important;
@@ -538,8 +507,8 @@
   }
 
   .desktop-layout .nav-btn i {
-    width: 22px !important;
-    height: 22px !important;
+    width: 20px !important;
+    height: 20px !important;
     opacity: 0.9;
   }
 

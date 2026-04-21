@@ -55,12 +55,11 @@ lucide.createIcons();
       Chart.defaults.font.family = "'Schibsted Grotesk', sans-serif";
       Chart.defaults.font.weight = '600';
       
-      // Cores dos Tooltips explicitamente contrastadas
-      const isDarkMode = window.Telegram?.WebApp?.colorScheme === 'dark';
-      Chart.defaults.plugins.tooltip.backgroundColor = isDarkMode ? '#1e293b' : '#ffffff';
-      Chart.defaults.plugins.tooltip.titleColor = isDarkMode ? '#f8fafc' : '#0f172a';
-      Chart.defaults.plugins.tooltip.bodyColor = isDarkMode ? '#f8fafc' : '#0f172a';
-      Chart.defaults.plugins.tooltip.borderColor = 'rgba(123, 30, 45, 0.1)';
+      // Estilo Premium Grená para Tooltips
+      Chart.defaults.plugins.tooltip.backgroundColor = '#2d0a10'; // Grená Profundo
+      Chart.defaults.plugins.tooltip.titleColor = '#D4AF37';       // Ouro Premium
+      Chart.defaults.plugins.tooltip.bodyColor = '#ffffff';        // Texto Branco para leitura
+      Chart.defaults.plugins.tooltip.borderColor = 'rgba(212, 175, 55, 0.3)';
       Chart.defaults.plugins.tooltip.borderWidth = 1;
       Chart.defaults.plugins.tooltip.padding = 12;
       Chart.defaults.plugins.tooltip.cornerRadius = 12;
