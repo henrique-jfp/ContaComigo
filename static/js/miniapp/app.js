@@ -1169,115 +1169,93 @@ lucide.createIcons();
 
       const villains = topVillains.map((item) => [item.label || 'Sem nome', Number(item.value || 0)]);
 
-      // Sankey Data (Flow) - Estrutura robusta
+      // Sankey Data
       const sankeyData = [];
-      if (receita > 0 || despesa > 0) {
-        if (receita > 0) {
-          sankeyData.push({ from: 'Receitas', to: 'Caixa', flow: receita });
-        }
-        if (despesa > 0) {
+      if (receita > 0) sankeyData.push({ from: 'Receitas', to: 'Caixa', flow: receita });
+      if (despesa > 0) {
           sankeyData.push({ from: 'Caixa', to: 'Despesas', flow: despesa });
-          // Link despesas para categorias (top 5)
           categories.forEach(cat => {
-            if (cat.value > 0) {
-              sankeyData.push({ from: 'Despesas', to: cat.label, flow: Number(cat.value) });
-            }
+              if (cat.value > 0) sankeyData.push({ from: 'Despesas', to: cat.label, flow: Number(cat.value) });
           });
-        }
-        const saldoLivre = receita - despesa;
-        if (saldoLivre > 0) {
-          sankeyData.push({ from: 'Caixa', to: 'Saldo Livre', flow: saldoLivre });
-        }
       }
 
-      // Heatmap Data (Real Calendar Mapping com Cores Grená/Verde)
+      // Heatmap Data: Calendário Real com Dias Visíveis e Cores de Tipo (Verde/Grená)
       const heatmapData = [];
       const daysShort = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-      
       const now = new Date();
-      const refDate = new Date(now.getFullYear(), now.getMonth(), 1);
-      const startDayOfWeek = refDate.getDay(); 
+      const startDayOfWeek = new Date(now.getFullYear(), now.getMonth(), 1).getDay(); 
       const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-      
       const activityMap = {}; 
-      const recent = summary?.recent || [];
-      recent.forEach(item => {
-        if (!item.data) return;
+
+      (summary?.recent || []).forEach(item => {
         const d = new Date(item.data);
-        if (isNaN(d.getTime())) return;
-        if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) {
+        if (d.getMonth() === now.getMonth()) {
           const date = d.getDate();
           const val = Number(item.valor || 0);
-          if (!activityMap[date]) activityMap[date] = { count: 0, hasIncome: false, hasExpense: false };
+          if (!activityMap[date]) activityMap[date] = { count: 0, hasIncome: false };
           activityMap[date].count++;
           if (val > 0) activityMap[date].hasIncome = true;
-          if (val < 0) activityMap[date].hasExpense = true;
         }
       });
 
-      for (let wIdx = 0; wIdx < 6; wIdx++) {
+      for (let w = 0; w < 6; w++) {
         daysShort.forEach((d, dIdx) => {
-          const dayOfMonth = (wIdx * 7) + dIdx - startDayOfWeek + 1;
-          let value = 0;
-          let dateLabel = "";
-          let type = 'empty';
-          
-          if (dayOfMonth > 0 && dayOfMonth <= daysInMonth) {
-            const act = activityMap[dayOfMonth];
-            value = act ? act.count : 0;
-            dateLabel = dayOfMonth.toString();
+          const dayNum = (w * 7) + dIdx - startDayOfWeek + 1;
+          let value = 0; let label = ""; let type = 'empty';
+          if (dayNum > 0 && dayNum <= daysInMonth) {
+            label = dayNum.toString();
+            const act = activityMap[dayNum];
             if (act) {
-               if (act.hasIncome && !act.hasExpense) type = 'income_only';
-               else if (act.hasIncome && act.hasExpense) type = 'mixed';
-               else if (act.hasExpense) type = 'expense_only';
-            }
+              value = act.count;
+              type = act.hasIncome ? 'income' : 'expense';
+            } else { type = 'day'; }
           }
-
-          heatmapData.push({
-            x: d,
-            y: `Sem ${wIdx + 1}`,
-            v: value,
-            date: dateLabel,
-            type: type
-          });
+          heatmapData.push({ x: d, y: `Sem ${w+1}`, v: value, date: label, type: type });
         });
       }
 
       return {
-        sixMonths,
-        patrimonyMonths,
-        patrimonyValues,
-        fluxoEntradas,
-        fluxoSaidas,
-        fluxoSaldo,
-        budgetLabels,
-        budgetPlanned,
-        budgetActual,
-        categories,
-        distroLabels,
-        distroValues,
-        projectionLabels,
-        projectionHistory,
-        projectionFuture,
-        villains,
-        sankeyData,
-        heatmapData
+        sixMonths, patrimonyMonths, patrimonyValues, fluxoEntradas, fluxoSaidas, fluxoSaldo,
+        budgetLabels, budgetPlanned, budgetActual, categories, distroLabels, distroValues,
+        projectionLabels, projectionHistory, projectionFuture, villains, sankeyData, heatmapData
       };
     }
 
-    // Função para renderizar o Sankey Premium via SVG (ALTA LEGIBILIDADE)
+    // Função para renderizar o Sankey Premium via SVG (VISUAL GRENÁ & COLORIDO)
     function renderSankeyPremium(container, data) {
       if (!container || !data.length) return;
-      
-      const width = 800; 
-      const height = 400;
-      
-      // Agrupar dados
+      const width = 800; const height = 450;
+      const grena = "#7b1e2d"; const verde = "#10b981";
+      const palette = ["#D4AF37", "#818cf8", "#f472b6", "#fbbf24", "#34d399", "#a78bfa"];
+
       const receitaTotal = data.filter(d => d.from === 'Receitas').reduce((a, b) => a + b.flow, 0);
       const despesasNodes = data.filter(d => d.from === 'Despesas');
 
-      // Cores Premium de Alto Contraste
-      const grena = "#7b1e2d";
+      let svgHtml = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="width:100%; height:auto; overflow:visible;">
+        <defs>
+          <linearGradient id="flow-rec" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="${verde}" stop-opacity="0.4"/><stop offset="100%" stop-color="${grena}" stop-opacity="0.4"/></linearGradient>
+        </defs>
+        <text x="80" y="30" text-anchor="middle" font-size="12" font-weight="900" fill="${grena}">ENTRADAS</text>
+        <text x="350" y="30" text-anchor="middle" font-size="12" font-weight="900" fill="${grena}">GESTÃO</text>
+        <text x="620" y="30" text-anchor="middle" font-size="12" font-weight="900" fill="${grena}">CATEGORIAS</text>
+        <path d="M140,70 C240,70 240,70 290,70 L290,370 C240,370 240,370 140,370 Z" fill="url(#flow-rec)" />
+        <rect x="20" y="70" width="120" height="300" rx="14" fill="${verde}" fill-opacity="0.1" stroke="${verde}" stroke-width="2" />
+        <text x="80" y="210" text-anchor="middle" font-size="14" font-weight="900" fill="${grena}">RECEITAS</text>
+        <text x="80" y="235" text-anchor="middle" font-size="12" font-weight="bold" fill="${grena}">${formatCurrencyBR(receitaTotal)}</text>
+        <rect x="290" y="70" width="120" height="300" rx="14" fill="${grena}" fill-opacity="0.1" stroke="${grena}" stroke-width="2" />
+        <text x="350" y="210" text-anchor="middle" font-size="14" font-weight="900" fill="${grena}">CAIXA</text>
+        ${despesasNodes.slice(0, 6).map((cat, i) => {
+          const y = 70 + (i * 65); const h = 55; const color = palette[i % palette.length];
+          return `
+            <path d="M410,${y+(h/2)} C480,${y+(h/2)} 480,${y+(h/2)} 540,${y+(h/2)}" stroke="${color}" stroke-width="${Math.max(3, (cat.flow/receitaTotal)*40)}" fill="none" opacity="0.3" />
+            <rect x="540" y="${y}" width="180" height="${h}" rx="12" fill="${color}" fill-opacity="0.15" stroke="${color}" stroke-width="2" />
+            <text x="630" y="${y+22}" text-anchor="middle" font-size="10" font-weight="900" fill="${grena}">${cat.to.toUpperCase()}</text>
+            <text x="630" y="${y+42}" text-anchor="middle" font-size="12" font-weight="bold" fill="${grena}">${formatCurrencyBR(cat.flow)}</text>
+          `;
+        }).join('')}
+      </svg>`;
+      container.innerHTML = svgHtml;
+    }
       const ouro = "#D4AF37";
       const verde = "#10b981";
 
