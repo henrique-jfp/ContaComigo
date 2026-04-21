@@ -67,7 +67,7 @@
     pointer-events: none;
     transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
     overflow-y: auto;
-    padding-bottom: 8rem;
+    padding-bottom: 11rem;
     z-index: 10;
   }
 
@@ -368,8 +368,47 @@
     pointer-events: none;
   }
 
-  /* --- DESKTOP ULTIMATE RE-DESIGN --- */
-@media (min-width: 1024px) {
+  /* --- SISTEMA DE NOTIFICAÇÕES (TOAST) --- */
+  #toastContainer {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    pointer-events: none;
+    max-width: 320px;
+    width: calc(100% - 48px);
+  }
+
+  .toast {
+    background: color-mix(in srgb, var(--tg-theme-secondary-bg-color, #161618) 95%, white 5%);
+    color: var(--tg-theme-text-color, #ffffff);
+    padding: 14px 20px;
+    border-radius: 18px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    pointer-events: auto;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    animation: slideInToast 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .toast.success { border-left: 4px solid #10b981; }
+  .toast.error { border-left: 4px solid #ef4444; }
+  .toast.warning { border-left: 4px solid #f59e0b; }
+
+  @keyframes slideInToast {
+    from { transform: translateX(100%) scale(0.9); opacity: 0; }
+    to { transform: translateX(0) scale(1); opacity: 1; }
+  }
+
+  /* --- DESKTOP ULTIMATE RE-DESIGN (Activated at 860px) --- */
+@media (min-width: 860px) {
   .desktop-layout body {
     display: grid !important;
     grid-template-columns: 280px 1fr !important;
@@ -383,20 +422,25 @@
     grid-column: 1;
     position: relative !important;
     width: 280px !important;
+    max-width: 280px !important;
     height: 100vh !important;
     background: color-mix(in srgb, var(--tg-theme-bg-color, #0a0a0b) 95%, white 5%) !important;
     border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
     display: flex !important;
     flex-direction: column !important;
-    padding: 2.5rem 1.5rem !important;
-    gap: 2rem;
+    padding: 2.5rem 1.25rem !important;
+    gap: 1.5rem;
     z-index: 100;
     backdrop-filter: blur(20px);
+    border-radius: 0 !important;
+    left: auto !important;
+    bottom: auto !important;
+    transform: none !important;
   }
 
   .desktop-layout #navContainer {
     flex-direction: column !important;
-    gap: 8px !important;
+    gap: 10px !important;
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
@@ -404,49 +448,67 @@
     width: 100% !important;
   }
 
-  /* Avatar/Logo no Topo da Sidebar */
+  /* Reset Fantasma para Sidebar */
+  .desktop-layout #bottomNav > div.absolute {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    transform: none !important;
+    display: flex !important;
+    justify-content: center !important;
+    margin: 0 auto 1.5rem auto !important;
+    width: auto !important;
+    height: auto !important;
+    pointer-events: auto !important;
+  }
+
   .desktop-layout #nav-fantasma {
     order: -1;
-    margin-bottom: 1.5rem;
+    margin-bottom: 0 !important;
     align-self: center;
     filter: drop-shadow(0 0 15px rgba(123, 30, 45, 0.3));
     transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    width: 72px !important;
+    height: 72px !important;
   }
 
   .desktop-layout #nav-fantasma:hover {
     transform: scale(1.1) rotate(5deg) !important;
   }
 
-  /* Botões de Navegação */
+  /* Botões de Navegação Horizontal -> Vertical */
   .desktop-layout .nav-btn {
     width: 100% !important;
-    height: 50px !important;
-    border-radius: 14px !important;
+    height: 54px !important;
+    border-radius: 16px !important;
     justify-content: flex-start !important;
-    padding: 0 1.25rem !important;
-    gap: 12px !important;
-    font-size: 0.95rem !important;
-    font-weight: 500 !important;
-    color: rgba(255, 255, 255, 0.6) !important;
-    transition: all 0.3s ease !important;
+    flex-direction: row !important;
+    padding: 0 1.5rem !important;
+    gap: 14px !important;
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+    color: rgba(255, 255, 255, 0.5) !important;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
     border: 1px solid transparent !important;
+    background: transparent !important;
   }
 
   .desktop-layout .nav-btn:hover {
-    background: rgba(255, 255, 255, 0.05) !important;
+    background: rgba(255, 255, 255, 0.04) !important;
     color: #fff !important;
-    transform: translateX(5px);
+    transform: translateX(4px);
   }
 
   .desktop-layout .nav-btn.tab-active {
     background: linear-gradient(135deg, var(--cc-brand, #7b1e2d), #a3293d) !important;
     color: white !important;
-    box-shadow: 0 8px 20px rgba(123, 30, 45, 0.3) !important;
+    box-shadow: 0 8px 25px rgba(123, 30, 45, 0.3) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
   }
 
   .desktop-layout .nav-btn i {
-    font-size: 1.2rem !important;
+    width: 20px !important;
+    height: 20px !important;
     opacity: 0.9;
   }
 
@@ -454,91 +516,74 @@
   .desktop-layout main#app-content {
     grid-column: 2;
     height: 100vh !important;
-    overflow-y: overlay !important; /* Scroll suave */
-    padding: 2.5rem 3.5rem !important;
+    overflow: hidden !important;
+    padding: 0 !important;
     background: radial-gradient(circle at top right, rgba(123, 30, 45, 0.05), transparent 400px), 
                 var(--tg-theme-bg-color, #0a0a0b) !important;
-    margin-left: 0 !important; /* Reset do margin antigo */
+    margin-left: 0 !important;
     width: 100% !important;
   }
 
-  /* Dashboard Grid - Layout de 2 Colunas */
+  .desktop-layout .panel {
+    position: relative !important;
+    height: 100% !important;
+    width: 100% !important;
+    padding: 2.5rem 2rem !important;
+    padding-bottom: 3rem !important;
+    opacity: 0;
+    visibility: hidden;
+    display: none;
+  }
+
+  .desktop-layout .panel.active {
+    opacity: 1;
+    visibility: visible;
+    display: block;
+    transform: none !important;
+  }
+
+  /* Dashboard Grid Responsivo */
   .desktop-layout #inicio > div {
     display: grid !important;
-    grid-template-columns: 1fr 360px !important;
-    gap: 2.5rem !important;
+    grid-template-columns: 1fr !important;
+    gap: 2rem !important;
     max-width: 1400px;
     margin: 0 auto;
+  }
+
+  @media (min-width: 1240px) {
+    .desktop-layout #inicio > div {
+      grid-template-columns: 1fr 380px !important;
+    }
   }
 
   /* Cards de Gráficos */
   .desktop-layout #homeChartCarousel {
     display: grid !important;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)) !important;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)) !important;
     gap: 1.5rem !important;
     overflow: visible !important;
     padding: 0 !important;
   }
 
   .desktop-layout article[data-home-chart-card] {
-    background: rgba(255, 255, 255, 0.03) !important;
+    background: rgba(255, 255, 255, 0.02) !important;
     border: 1px solid rgba(255, 255, 255, 0.06) !important;
-    border-radius: 24px !important;
-    padding: 1.5rem !important;
-    transition: transform 0.3s ease, box-shadow 0.3s ease !important;
+    border-radius: 28px !important;
+    padding: 1.75rem !important;
+    min-width: 0 !important;
   }
 
-  .desktop-layout article[data-home-chart-card]:hover {
-    transform: translateY(-5px) !important;
-    box-shadow: 0 12px 30px rgba(0,0,0,0.4) !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
-  }
-
-  /* Coluna Direita (Sticky) */
-  .desktop-layout .space-y-4:last-child {
-    position: sticky !important;
-    top: 2.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-  }
-
-  /* Ajuste de Cards de Status (AQ-Cards) */
-  .desktop-layout .aq-card {
-    background: linear-gradient(145deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01)) !important;
-    border-radius: 20px !important;
-    border: 1px solid rgba(255,255,255,0.05) !important;
-    backdrop-filter: blur(10px);
-  }
-
-  /* Scrollbar Customizada (Estilo Mac/Moderno) */
-  .desktop-layout ::-webkit-scrollbar {
-    width: 8px;
-  }
-
-  .desktop-layout ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
+  /* Scrollbar Customizada */
+  .desktop-layout ::-webkit-scrollbar { width: 6px; }
+  .desktop-layout ::-webkit-scrollbar-track { background: transparent; }
   .desktop-layout ::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.1);
     border-radius: 20px;
-    border: 2px solid var(--tg-theme-bg-color, #0a0a0b);
   }
 
-  .desktop-layout ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
-  }
-
-  /* Esconder elementos mobile inúteis no PC */
   .desktop-layout header, 
   .desktop-layout #homeChartsPills {
     display: none !important;
-  }
-
-  /* Ajuste de Títulos */
-  .desktop-layout h1, .desktop-layout h2 {
-    letter-spacing: -0.02em;
-    font-weight: 700;
   }
 }
