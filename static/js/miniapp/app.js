@@ -1419,6 +1419,8 @@ lucide.createIcons();
         budgetPlanned,
         budgetActual,
         categories,
+        distroLabels,
+        distroValues,
         projectionLabels,
         projectionHistory,
         projectionFuture,
