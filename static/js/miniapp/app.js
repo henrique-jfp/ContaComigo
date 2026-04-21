@@ -124,9 +124,17 @@ lucide.createIcons();
     
     const agendamentoList = document.getElementById('agendamentoList');
     const agendamentoStatus = document.getElementById('agendamentoStatus');
+    const agendaTabAgendamentos = document.getElementById('agendaTabAgendamentos');
+    const agendaTabLembretes = document.getElementById('agendaTabLembretes');
+    const lembreteHistoryWrap = document.getElementById('lembreteHistoryWrap');
+    const lembreteHistoryStatus = document.getElementById('lembreteHistoryStatus');
+    const lembreteHistoryList = document.getElementById('lembreteHistoryList');
     const agendamentoRefresh = document.getElementById('agendamentoRefresh');
     const agendamentoNew = document.getElementById('agendamentoNew');
     const newAgendamentoModal = document.getElementById('newAgendamentoModal');
+    const agendaModalTitle = document.getElementById('agendaModalTitle');
+    const agendaValorLabel = document.getElementById('agendaValorLabel');
+    const agendaDataLabel = document.getElementById('agendaDataLabel');
     const newAgendDescricao = document.getElementById('newAgendDescricao');
     const newAgendValor = document.getElementById('newAgendValor');
     const newAgendTipo = document.getElementById('newAgendTipo');
@@ -228,6 +236,7 @@ lucide.createIcons();
     let historyCache = [];
     let metasCache = [];
     let selectedLancamento = null;
+    let agendaMode = 'agendamentos';
     let selectedMeta = null;
     let selectedLancamentoIsDraft = false;
     let pendingDraftLaunch = null;
@@ -969,6 +978,41 @@ lucide.createIcons();
           <div class="h-8 w-20 rounded-xl skeleton-block"></div>
         </div>
       `).join('');
+      if (lembreteHistoryWrap) lembreteHistoryWrap.classList.add('hidden');
+      if (lembreteHistoryList) lembreteHistoryList.innerHTML = '';
+      if (lembreteHistoryStatus) lembreteHistoryStatus.textContent = '';
+    }
+
+    function refreshAgendaTabs() {
+      if (agendaTabAgendamentos) {
+        agendaTabAgendamentos.className = agendaMode === 'agendamentos'
+          ? 'rounded-xl bg-brand px-4 py-2 text-xs font-semibold text-white shadow-soft transition'
+          : 'rounded-xl border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-text transition';
+      }
+      if (agendaTabLembretes) {
+        agendaTabLembretes.className = agendaMode === 'lembretes'
+          ? 'rounded-xl bg-brand px-4 py-2 text-xs font-semibold text-white shadow-soft transition'
+          : 'rounded-xl border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-text transition';
+      }
+    }
+
+    function updateAgendaModalLabels() {
+      const isReminder = agendaMode === 'lembretes';
+      if (agendaModalTitle) agendaModalTitle.textContent = isReminder ? 'Novo Lembrete' : 'Novo Agendamento';
+      if (agendaValorLabel) agendaValorLabel.textContent = isReminder ? 'Valor (opcional)' : 'Valor';
+      if (agendaDataLabel) agendaDataLabel.textContent = isReminder ? 'Data do lembrete' : 'Primeira execução';
+      if (newAgendSave?.querySelector('.save-text')) {
+        newAgendSave.querySelector('.save-text').textContent = isReminder ? 'Criar lembrete' : 'Criar agendamento';
+      }
+      if (newAgendValor) newAgendValor.required = !isReminder;
+      if (lembreteHistoryWrap) lembreteHistoryWrap.classList.toggle('hidden', !isReminder);
+    }
+
+    function setAgendaMode(mode) {
+      agendaMode = mode === 'lembretes' ? 'lembretes' : 'agendamentos';
+      refreshAgendaTabs();
+      updateAgendaModalLabels();
+      loadAgendamentos();
     }
 
     function canUseChartMotion() {
@@ -1131,10 +1175,14 @@ lucide.createIcons();
         }
       }
 
-      // Heatmap Data (Activity by Day of Week vs Week of Month)
+      // Heatmap Data (Real Calendar Mapping)
       const heatmapData = [];
-      const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-      const weeks = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4', 'Sem 5'];
+      const daysShort = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+      
+      const now = new Date();
+      const refDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startDayOfWeek = refDate.getDay(); 
+      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
       
       const activityMap = {}; 
       const recent = summary?.recent || [];
@@ -1142,27 +1190,115 @@ lucide.createIcons();
         if (!item.data) return;
         const d = new Date(item.data);
         if (isNaN(d.getTime())) return;
-        const dayIdx = d.getDay();
-        const weekIdx = Math.floor((d.getDate() - 1) / 7);
-        const key = `${dayIdx}-${weekIdx}`;
-        activityMap[key] = (activityMap[key] || 0) + 1;
+        if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) {
+          const date = d.getDate();
+          activityMap[date] = (activityMap[date] || 0) + 1;
+        }
       });
 
-      weeks.forEach((w, wIdx) => {
-        days.forEach((d, dIdx) => {
+      for (let wIdx = 0; wIdx < 6; wIdx++) {
+        daysShort.forEach((d, dIdx) => {
+          const dayOfMonth = (wIdx * 7) + dIdx - startDayOfWeek + 1;
+          let value = 0;
+          let dateLabel = "";
+          
+          if (dayOfMonth > 0 && dayOfMonth <= daysInMonth) {
+            value = activityMap[dayOfMonth] || 0;
+            dateLabel = dayOfMonth.toString();
+          }
+
           heatmapData.push({
             x: d,
-            y: w,
-            v: activityMap[`${dIdx}-${wIdx}`] || 0
+            y: `Sem ${wIdx + 1}`,
+            v: value,
+            date: dateLabel 
           });
         });
-      });
+      }
 
       return {
         sixMonths,
         patrimonyMonths,
         patrimonyValues,
         fluxoEntradas,
+        fluxoSaidas,
+        fluxoSaldo,
+        budgetLabels,
+        budgetPlanned,
+        budgetActual,
+        categories,
+        projectionLabels,
+        projectionValues,
+        villains,
+        sankeyData,
+        heatmapData
+      };
+    }
+
+    // Função para renderizar o Sankey Premium via SVG (Substituindo o feio do Chart.js)
+    function renderSankeyPremium(container, data) {
+      if (!container || !data.length) return;
+      
+      const width = 700;
+      const height = 400;
+      
+      // Agrupar dados
+      const receitaTotal = data.filter(d => d.from === 'Receitas').reduce((a, b) => a + b.flow, 0);
+      const despesasNodes = data.filter(d => d.from === 'Despesas');
+      const despesaTotal = data.filter(d => d.from === 'Caixa' && d.to === 'Despesas').reduce((a, b) => a + b.flow, 0);
+
+      // Cores Premium
+      const grena = "#7b1e2d";
+      const ouro = "#D4AF37";
+      const verde = "#10b981";
+
+      let svgHtml = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="width:100%; height:100%; overflow:visible;">
+        <defs>
+          <linearGradient id="flow-receita" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="${verde}" stop-opacity="0.2"/>
+            <stop offset="100%" stop-color="${grena}" stop-opacity="0.4"/>
+          </linearGradient>
+          <linearGradient id="flow-categoria" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="${grena}" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="${ouro}" stop-opacity="0.5"/>
+          </linearGradient>
+        </defs>
+
+        <text x="75" y="25" text-anchor="middle" font-size="10" font-weight="bold" fill="rgba(255,255,255,0.4)" style="text-transform:uppercase; letter-spacing:1px">Entrada</text>
+        <text x="350" y="25" text-anchor="middle" font-size="10" font-weight="bold" fill="rgba(255,255,255,0.4)" style="text-transform:uppercase; letter-spacing:1px">Distribuição</text>
+        <text x="610" y="25" text-anchor="middle" font-size="10" font-weight="bold" fill="rgba(255,255,255,0.4)" style="text-transform:uppercase; letter-spacing:1px">Saídas</text>
+
+        <!-- Fluxo Principal -->
+        <path d="M140,60 C240,60 240,60 290,60 L290,360 C240,360 240,360 140,360 Z" fill="url(#flow-receita)" opacity="0.15" />
+        
+        <!-- Nó Receitas -->
+        <rect x="20" y="60" width="120" height="300" rx="12" fill="${verde}" fill-opacity="0.05" stroke="${verde}" stroke-opacity="0.3" />
+        <rect x="20" y="60" width="4" height="300" rx="2" fill="${verde}" />
+        <text x="80" y="200" text-anchor="middle" font-size="13" font-weight="bold" fill="#fff">Receitas</text>
+        <text x="80" y="218" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.5)">${formatCurrencyBR(receitaTotal)}</text>
+
+        <!-- Nó Caixa -->
+        <rect x="290" y="60" width="120" height="300" rx="12" fill="${grena}" fill-opacity="0.05" stroke="${grena}" stroke-opacity="0.3" />
+        <rect x="290" y="60" width="4" height="300" rx="2" fill="${grena}" />
+        <text x="350" y="200" text-anchor="middle" font-size="13" font-weight="bold" fill="#fff">Caixa</text>
+        <text x="350" y="218" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.5)">Gestão</text>
+
+        <!-- Categorias Dinâmicas -->
+        ${despesasNodes.slice(0, 5).map((cat, i) => {
+          const yPos = 65 + (i * 65);
+          const h = 55;
+          return `
+            <path d="M410,${yPos} C480,${yPos} 480,${yPos} 540,${yPos} L540,${yPos + h} C480,${yPos + h} 480,${yPos + h} 410,${yPos + h} Z" fill="url(#flow-categoria)" opacity="0.6" />
+            <rect x="540" y="${yPos}" width="150" height="${h}" rx="10" fill="${ouro}" fill-opacity="0.05" stroke="${ouro}" stroke-opacity="0.2" />
+            <rect x="540" y="${yPos}" width="3" height="${h}" rx="1.5" fill="${ouro}" />
+            <text x="615" y="${yPos + 22}" text-anchor="middle" font-size="10" font-weight="bold" fill="#fff">${cat.to}</text>
+            <text x="615" y="${yPos + 40}" text-anchor="middle" font-size="9" fill="${ouro}" font-family="monospace">${formatCurrencyBR(cat.flow)}</text>
+          `;
+        }).join('')}
+      </svg>`;
+
+      container.innerHTML = svgHtml;
+    }
         fluxoSaidas,
         budgetLabels,
         budgetCap,
@@ -1771,49 +1907,10 @@ lucide.createIcons();
         });
       }
 
-      if (homeSankeyChartEl && chartData.sankeyData.length) {
-        homeCharts.sankey = safeChart(homeSankeyChartEl, {
-          type: 'sankey',
-          data: {
-            datasets: [{
-              label: 'Fluxo Financeiro',
-              data: chartData.sankeyData,
-              colorFrom: (c) => palette[c.index % palette.length],
-              colorTo: (c) => palette[(c.index + 1) % palette.length],
-              colorMode: 'gradient',
-              alpha: 0.6,
-              fontFamily: "'Schibsted Grotesk', sans-serif",
-              fontWeight: 'bold',
-              size: 11,
-              node: {
-                width: 15,
-                padding: 12,
-              }
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: commonAnimation,
-            layout: {
-              padding: { top: 10, bottom: 10, left: 5, right: 5 }
-            },
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                titleFont: { size: 13, weight: 'bold' },
-                bodyFont: { size: 12 },
-                padding: 12,
-                cornerRadius: 10,
-                displayColors: false,
-                callbacks: {
-                  label: (ctx) => `Fluxo: ${formatCurrencyBR(ctx.raw.flow)}`
-                }
-              }
-            }
-          }
-        });
+      if (homeSankeyChartEl) {
+        // O Sankey agora é renderizado via SVG customizado (Premium)
+        renderSankeyPremium(homeSankeyChartEl.parentElement, chartData.sankeyData);
+        homeSankeyChartEl.style.display = 'none'; // Esconde o canvas original
       }
 
       if (homeHeatmapChartEl) {
@@ -1826,13 +1923,14 @@ lucide.createIcons();
               backgroundColor(ctx) {
                 if (!ctx.dataset || !ctx.dataset.data[ctx.dataIndex]) return 'rgba(0,0,0,0)';
                 const value = ctx.dataset.data[ctx.dataIndex].v;
-                const alpha = Math.min(0.9, 0.1 + (value * 0.25));
-                return `rgba(251, 113, 133, ${alpha})`;
+                if (value === 0) return 'rgba(255, 255, 255, 0.03)';
+                const alpha = Math.min(0.9, 0.2 + (value * 0.25));
+                return `rgba(212, 175, 55, ${alpha})`; // Ouro para atividade
               },
-              borderColor: 'rgba(251, 113, 133, 0.15)',
+              borderColor: 'rgba(212, 175, 55, 0.1)',
               borderWidth: 1,
               width: ({chart}) => (chart.chartArea || {}).width / 7 - 4,
-              height: ({chart}) => (chart.chartArea || {}).height / 5 - 4,
+              height: ({chart}) => (chart.chartArea || {}).height / 6 - 4,
             }]
           },
           options: {
@@ -1842,15 +1940,17 @@ lucide.createIcons();
             plugins: {
               legend: { display: false },
               tooltip: {
+                backgroundColor: '#2d0a10',
+                titleColor: '#D4AF37',
                 callbacks: {
-                  title: () => 'Densidade de Gastos',
-                  label: (ctx) => `${ctx.raw.v} lançamento(s) na ${ctx.raw.y} (${ctx.raw.x})`
+                  title: (ctx) => `Dia ${ctx[0].raw.date || ctx[0].raw.x}`,
+                  label: (ctx) => `${ctx.raw.v} lançamento(s)`
                 }
               }
             },
             scales: {
-              x: { type: 'category', labels: ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'], grid: { display: false } },
-              y: { type: 'category', labels: ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4', 'Sem 5'], grid: { display: false }, offset: true }
+              x: { type: 'category', labels: ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'], grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 } } },
+              y: { type: 'category', labels: ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4', 'Sem 5', 'Sem 6'], grid: { display: false }, offset: true, ticks: { display: false } }
             }
           }
         });
