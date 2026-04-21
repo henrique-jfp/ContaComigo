@@ -1208,7 +1208,7 @@ lucide.createIcons();
       };
     }
 
-    function renderSankeyPremium(container, data) {
+        function renderSankeyPremium(container, data) {
       if (!container || !data.length) return;
       const width = 800; const height = 450;
       const vProfundo = '#064E3B'; const gProfundo = '#4a1019';
@@ -1218,21 +1218,23 @@ lucide.createIcons();
       const despesas = data.filter(d => d.from === 'Despesas');
       const maxHeight = 300;
       const scale = maxHeight / Math.max(totalRec, totalExp, 1);
-      let svgHtml = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="width:100%; height:auto; overflow:visible;">
+      let svgHtml = `<svg viewBox=\"0 0 ${width} ${height}\" xmlns=\"http://www.w3.org/2000/svg\" style=\"width:100%; height:auto; overflow:visible;\">
         <defs>
-          ${despesas.map((c, i) => `<linearGradient id="g-cat-${i}" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="${gProfundo}" stop-opacity="0.4"/><stop offset="100%" stop-color="${palette[i % palette.length]}" stop-opacity="0.5"/></linearGradient>`).join('')}
+          <linearGradient id=\"g-main-flow\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"0%\"><stop offset=\"0%\" stop-color=\"#10b981\" stop-opacity=\"0.4\"/><stop offset=\"100%\" stop-color=\"#7b1e2d\" stop-opacity=\"0.4\"/></linearGradient>
+          ${despesas.map((c, i) => `<linearGradient id=\"g-cat-flow-${i}\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"0%\"><stop offset=\"0%\" stop-color=\"${gProfundo}\" stop-opacity=\"0.4\"/><stop offset=\"100%\" stop-color=\"${palette[i % palette.length]}\" stop-opacity=\"0.5\"/></linearGradient>`).join('')}
         </defs>
-        <text x="85" y="40" text-anchor="middle" font-size="11" font-weight="900" fill="${vProfundo}">ENTRADA</text>
-        <text x="300" y="40" text-anchor="middle" font-size="11" font-weight="900" fill="${gProfundo}">GEST�O</text>
-        <text x="610" y="40" text-anchor="middle" font-size="11" font-weight="900" fill="#64748b">SA�DAS</text>
-        <rect x="25" y="${70 + (maxHeight - Math.max(40, totalRec * scale))/2}" width="120" height="${Math.max(40, totalRec * scale)}" rx="12" fill="rgba(16, 185, 129, 0.05)" stroke="#10b981" stroke-width="2" />
-        <text x="85" y="210" text-anchor="middle" font-size="13" font-weight="900" fill="${vProfundo}">RECEITAS</text>
-        <text x="85" y="235" text-anchor="middle" font-size="12" font-weight="bold" fill="${vProfundo}">${formatCurrencyBR(totalRec)}</text>
-        <rect x="240" y="${70 + (maxHeight - Math.max(40, totalExp * scale))/2}" width="120" height="${Math.max(40, totalExp * scale)}" rx="12" fill="rgba(123, 30, 45, 0.05)" stroke="#7b1e2d" stroke-width="2" />
-        <text x="300" y="210" text-anchor="middle" font-size="13" font-weight="900" fill="${gProfundo}">CAIXA</text>
+        <text x=\"85\" y=\"40\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"900\" fill=\"${vProfundo}\">ENTRADA</text>
+        <text x=\"300\" y=\"40\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"900\" fill=\"${gProfundo}\">GEST�O</text>
+        <text x=\"610\" y=\"40\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"900\" fill=\"#64748b\">SA�DAS</text>
+        <path d=\"M145,210 C200,210 200,210 240,210\" stroke=\"url(#g-main-flow)\" stroke-width=\"${Math.max(20, totalRec * scale)}\" fill=\"none\" opacity=\"0.6\" />
+        <rect x=\"25\" y=\"${70 + (maxHeight - Math.max(40, totalRec * scale))/2}\" width=\"120\" height=\"${Math.max(40, totalRec * scale)}\" rx=\"12\" fill=\"rgba(16, 185, 129, 0.05)\" stroke=\"#10b981\" stroke-width=\"2\" />
+        <text x=\"85\" y=\"210\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"900\" fill=\"${vProfundo}\">RECEITAS</text>
+        <text x=\"85\" y=\"235\" text-anchor=\"middle\" font-size=\"12\" font-weight=\"bold\" fill=\"${vProfundo}\">${formatCurrencyBR(totalRec)}</text>
+        <rect x=\"240\" y=\"${70 + (maxHeight - Math.max(40, totalExp * scale))/2}\" width=\"120\" height=\"${Math.max(40, totalExp * scale)}\" rx=\"12\" fill=\"rgba(123, 30, 45, 0.05)\" stroke=\"#7b1e2d\" stroke-width=\"2\" />
+        <text x=\"300\" y=\"210\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"900\" fill=\"${gProfundo}\">CAIXA</text>
         ${despesas.slice(0, 5).map((cat, i) => {
           const h = Math.max(45, cat.flow * scale); const y = 70 + (i * 65); const color = palette[i % palette.length];
-          return `<path d="M360,210 C460,210 460,${y + h/2} 510,${y + h/2}" stroke="url(#g-cat-${i})" stroke-width="${Math.max(2, cat.flow * scale)}" fill="none" opacity="0.6" /><rect x="510" y="${y}" width="200" height="${h}" rx="12" fill="rgba(255,255,255,0.03)" stroke="${color}" stroke-opacity="0.5" stroke-width="2" /><rect x="510" y="${y}" width="4" height="${h}" rx="2" fill="${color}" /><text x="610" y="${y + h/2 - 5}" text-anchor="middle" font-size="10" font-weight="900" fill="${color}">${cat.to.toUpperCase()}</text><text x="610" y="${y + h/2 + 12}" text-anchor="middle" font-size="11" font-weight="bold" fill="${color}">${formatCurrencyBR(cat.flow)}</text>`;
+          return `<path d=\"M360,210 C460,210 460,${y + h/2} 510,${y + h/2}\" stroke=\"url(#g-cat-flow-${i})\" stroke-width=\"${Math.max(2, cat.flow * scale)}\" fill=\"none\" opacity=\"0.6\" /><rect x=\"510\" y=\"${y}\" width=\"200\" height=\"${h}\" rx=\"12\" fill=\"rgba(255,255,255,0.03)\" stroke=\"${color}\" stroke-opacity=\"0.5\" stroke-width=\"2\" /><rect x=\"510\" y=\"${y}\" width=\"4\" height=\"${h}\" rx=\"2\" fill=\"${color}\" /><text x=\"610\" y=\"${y + h/2 - 5}\" text-anchor=\"middle\" font-size=\"10\" font-weight=\"900\" fill=\"${color}\">${cat.to.toUpperCase()}</text><text x=\"610\" y=\"${y + h/2 + 12}\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"bold\" fill=\"${color}\">${formatCurrencyBR(cat.flow)}</text>`;
         }).join('')}
       </svg>`;
       container.innerHTML = svgHtml;
@@ -1264,18 +1266,16 @@ lucide.createIcons();
           points.push({ x, y: Math.round(y) });
         }
         const last = points.length - 1;
-        const forwardPts = points.map(p => `${p.x} ${p.y}`).join(' ');
-        const reversePts = points.slice().reverse().map(p => `${p.x} ${p.y}`).join(' ');
-        const greenD = `M 0 ${vbH} L 0 0 L ${points[last].x} ${points[last].y} L ${reversePts} Z`;
-        const redD = `M ${vbW} ${vbH} L ${vbW} 0 L ${points[last].x} ${points[last].y} L ${forwardPts} Z`;
+        const forwardPts = points.map(p => p.x + ' ' + p.y).join(' ');
+        const reversePts = points.slice().reverse().map(p => p.x + ' ' + p.y).join(' ');
+        const greenD = 'M 0 ' + vbH + ' L 0 0 L ' + points[last].x + ' ' + points[last].y + ' L ' + reversePts + ' Z';
+        const redD = 'M ' + vbW + ' ' + vbH + ' L ' + vbW + ' 0 L ' + points[last].x + ' ' + points[last].y + ' L ' + forwardPts + ' Z';
         const g = svg.querySelector('#aqGreen');
         const r = svg.querySelector('#aqRed');
         if (g) g.setAttribute('d', greenD);
         if (r) r.setAttribute('d', redD);
       } catch (err) { console.warn('updateAquariumVisual error:', err); }
-    }
-
-    function renderHomeOverview(summary) {
+    }function renderHomeOverview(summary) {
       const balance = Number(summary?.balance || 0);
       const receita = Number(summary?.receita || 0);
       const despesa = Number(summary?.despesa || 0);
@@ -1807,7 +1807,7 @@ lucide.createIcons();
         });
       }
 
-            if (homeSankeyChartEl) {
+      if (homeSankeyChartEl) {
         renderSankeyPremium(homeSankeyChartEl.parentElement, chartData.sankeyData);
         homeSankeyChartEl.style.display = 'none';
       }
@@ -1821,9 +1821,9 @@ lucide.createIcons();
               backgroundColor(ctx) {
                 const item = ctx.dataset.data[ctx.dataIndex];
                 if (!item || item.type === 'empty') return 'rgba(0,0,0,0)';
-                if (item.type === 'income_win') return 'rgba(16, 185, 129, 0.85)';
-                if (item.type === 'expense_win') return 'rgba(123, 30, 45, 0.85)';
-                return 'rgba(255, 255, 255, 0.05)';
+                if (item.type === 'income_win') return '#10b981'; // Verde Sólido
+                if (item.type === 'expense_win') return '#7b1e2d'; // Grená Sólido
+                return 'rgba(255, 255, 255, 0.08)'; 
               },
               borderColor: 'rgba(255, 255, 255, 0.1)',
               borderWidth: 1,
@@ -1837,6 +1837,7 @@ lucide.createIcons();
               legend: { display: false },
               tooltip: {
                 backgroundColor: '#0a0a0a',
+                titleColor: '#D4AF37',
                 callbacks: {
                   title: (ctx) => `Dia ${ctx[0].raw.date}`,
                   label: (ctx) => [`Receitas: ${ctx.raw.stats.inc}x`, `Despesas: ${ctx.raw.stats.exp}x`]
@@ -1844,7 +1845,7 @@ lucide.createIcons();
               }
             },
             scales: {
-              x: { type: 'category', labels: ['Dom','Seg','Ter','Qua','Qui','Sex','S�b'], grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 } } },
+              x: { type: 'category', labels: ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'], grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 } } },
               y: { type: 'category', labels: ['Sem 1','Sem 2','Sem 3','Sem 4','Sem 5','Sem 6'], grid: { display: false }, offset: true, ticks: { display: false } }
             }
           },
@@ -1860,7 +1861,7 @@ lucide.createIcons();
                 if (item.date) {
                   const meta = chart.getDatasetMeta(0).data[i];
                   if (meta) {
-                    ctx.fillStyle = (item.type === 'income_win' || item.type === 'expense_win') ? '#ffffff' : 'rgba(255,255,255,0.2)';
+                    ctx.fillStyle = (item.type === 'income_win' || item.type === 'expense_win') ? '#ffffff' : 'rgba(255,255,255,0.3)';
                     ctx.fillText(item.date, meta.x, meta.y);
                   }
                 }
@@ -1873,5 +1874,2348 @@ lucide.createIcons();
 
       renderHomeRecent(summary?.recent || []);
       renderHomeRadar(summary);
+      lucide.createIcons();
+    }
+
+    function renderHomeRadar(summary) {
+      const homeRadarSection = document.getElementById('homeRadarSection');
+      const homeCardsGrid = document.getElementById('homeCardsGrid');
+      const homeInstallmentsBlock = document.getElementById('homeInstallmentsBlock');
+      const homeInstallmentsList = document.getElementById('homeInstallmentsList');
+      const homeInstallmentsCount = document.getElementById('homeInstallmentsCount');
+
+      if (!homeRadarSection) return;
+
+      const cards = summary?.cards || [];
+      const installments = summary?.installments || [];
+
+      if (cards.length === 0 && installments.length === 0) {
+        homeRadarSection.classList.add('hidden');
+        return;
+      }
+
+      homeRadarSection.classList.remove('hidden');
+
+      // 1. Renderizar Cartões
+      if (homeCardsGrid) {
+        homeCardsGrid.innerHTML = '';
+        if (cards.length > 0) {
+          cards.forEach(card => {
+            const fatura = card.fatura || 0;
+            const limite = card.limite || 0;
+            const pct = limite > 0 ? Math.min(100, Math.round((fatura / limite) * 100)) : null;
+            
+            // Lógica de Vencimento
+            const hoje = new Date();
+            hoje.setHours(0,0,0,0);
+            const dataVenc = card.vence ? new Date(card.vence) : null;
+            if (dataVenc) dataVenc.setHours(12,0,0,0); // Ajuste de timezone
+            const isVencido = dataVenc && dataVenc < hoje;
+            const venceStr = dataVenc ? dataVenc.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) : 'S/D';
+            
+            let statusColor = 'text-emerald-500';
+            let bgAccent = 'bg-emerald-500/10';
+            let iconColor = 'text-emerald-500';
+            let badge = '';
+
+            if (isVencido) {
+              statusColor = 'text-red-500';
+              bgAccent = 'bg-red-500/10';
+              iconColor = 'text-red-500';
+              badge = '<span class="text-[7px] font-black uppercase bg-red-500 text-white px-1 rounded ml-auto">VENCIDO</span>';
+            } else if (pct !== null) {
+              if (pct > 85) { statusColor = 'text-red-500'; iconColor = 'text-red-500'; }
+              else if (pct > 50) { statusColor = 'text-yellow-500'; iconColor = 'text-yellow-500'; }
+            }
+            
+            homeCardsGrid.innerHTML += `
+              <div class="min-w-[170px] glass-card rounded-2xl p-3 border border-white/5 shrink-0 snap-center shadow-lg">
+                <div class="flex items-center gap-2 mb-3">
+                  <div class="w-7 h-7 rounded-full ${bgAccent} flex items-center justify-center">
+                    <i data-lucide="credit-card" class="w-3.5 h-3.5 ${iconColor}"></i>
+                  </div>
+                  <span class="text-[10px] font-bold text-telegram-text truncate">${card.nome}</span>
+                  ${badge}
+                </div>
+                <div class="space-y-0.5">
+                  <p class="text-[9px] font-bold uppercase tracking-tight text-telegram-hint">Fatura Atual</p>
+                  <p class="text-base font-black text-telegram-text">${formatCurrencyBR(fatura)}</p>
+                  <div class="flex items-end justify-between mt-3">
+                    <div class="flex flex-col">
+                      <span class="text-[8px] font-bold text-telegram-hint uppercase">Vence</span>
+                      <span class="text-[10px] font-extrabold text-telegram-text">${venceStr}</span>
+                    </div>
+                    <div class="text-right">
+                      ${pct !== null ? `
+                        <span class="text-[9px] font-black ${statusColor}">${pct}%</span>
+                        <div class="w-12 h-1 bg-white/5 rounded-full mt-0.5 overflow-hidden">
+                          <div class="h-full ${statusColor.replace('text', 'bg')}" style="width: ${pct}%"></div>
+                        </div>
+                      ` : `
+                        <span class="text-[8px] font-bold text-telegram-hint italic">S/ Limite</span>
+                      `}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `;
+          });
+          if (window.lucide) lucide.createIcons();
+        }
+      }
+
+      // 2. Renderizar Parcelas
+      if (homeInstallmentsBlock && homeInstallmentsList) {
+        if (installments.length > 0) {
+          homeInstallmentsBlock.classList.remove('hidden');
+          homeInstallmentsCount.textContent = installments.length;
+          homeInstallmentsList.innerHTML = installments.map(p => {
+            const vence = p.vence ? new Date(p.vence).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) : '--/--';
+            return `
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2 min-w-0">
+                  <div class="w-1.5 h-1.5 rounded-full bg-brand/40"></div>
+                  <div class="truncate">
+                    <p class="text-[11px] font-bold text-telegram-text truncate">${p.desc}</p>
+                    <p class="text-[9px] font-semibold text-telegram-hint">Parcela ${p.parcela}</p>
+                  </div>
+                </div>
+                <div class="text-right shrink-0">
+                  <p class="text-[11px] font-extrabold text-telegram-text">${formatCurrencyBR(p.valor)}</p>
+                  <p class="text-[9px] font-bold text-brand-soft">${vence}</p>
+                </div>
+              </div>
+            `;
+          }).join('');
+        } else {
+          homeInstallmentsBlock.classList.add('hidden');
+        }
+      }
+    }
+
+    async function loadHomeOverview() {
+      if (isRefreshingHome) {
+        console.log('loadHomeOverview: atualização já em andamento, ignorando nova chamada.');
+        return;
+      }
+      isRefreshingHome = true;
+      try {
+        if (!sessionId) {
+        console.warn('loadHomeOverview: sem sessionId. Tentando recuperar...');
+        await tryRecoverSessionFromStorage();
+        if (!sessionId) {
+          console.warn('loadHomeOverview: recovery falhou, tentando autenticar...');
+          try { await authTelegram(); } catch (e) { console.warn('authTelegram falhou:', e); }
+        }
+      }
+        console.log('loadHomeOverview: sessionId=', sessionId);
+        try {
+          console.log("🚀 Carregando visão geral...");
+          const response = await fetchWithSession('/api/miniapp/overview');
+          console.log('loadHomeOverview: response status', response.status);
+          const data = await response.json();
+          if (!data.ok) {
+            console.error("❌ Erro na API de visão geral:", data.error);
+            throw new Error(data.error || 'overview_error');
+          }
+          // Backend pode retornar { summary: {...} } ou { data: {...} }
+          const summary = data.summary || data.data || data;
+          console.log("✅ Dados recebidos (overview):", summary);
+          renderHomeOverview(summary || {});
+        } catch (error) {
+          console.error("🔥 Falha crítica ao carregar home:", error);
+          if (homeBalance) homeBalance.textContent = 'R$ 0,00';
+          if (homeBalanceHint) homeBalanceHint.textContent = 'Não foi possível carregar o resumo agora.';
+          if (homeInsight) homeInsight.textContent = 'O Alfredo não conseguiu montar o resumo agora. Tente atualizar em instantes.';
+          if (homeRecentList) homeRecentList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint">Resumo indisponível no momento.</div>';
+        }
+      } finally {
+        isRefreshingHome = false;
+      }
+    }
+
+    function renderGameTopFeatures(features = []) {
+      if (!features.length) {
+        gameTopFeatures.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-3 text-xs text-telegram-hint">Ainda sem interações suficientes para ranking de features.</div>';
+        return;
+      }
+
+      gameTopFeatures.innerHTML = features.map((item, idx) => {
+        const total = Number(item.interactions || 0);
+        const bar = Math.max(12, Math.min(100, 100 - idx * 14));
+        return `
+          <div class="rounded-2xl border border-telegram-separator bg-telegram-card p-3">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-bold text-telegram-text truncate">${item.feature}</span>
+              <span class="text-xs font-semibold text-brand">${total}x</span>
+            </div>
+            <div class="mt-2 h-1.5 w-full rounded-full bg-slate-200/70 overflow-hidden">
+              <div class="h-full rounded-full" style="width:${bar}%; background: linear-gradient(90deg, #7b1e2d, #b85d6e);"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderGameRanking(items = []) {
+      if (!items.length) {
+        gameRankingList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-3 text-xs text-telegram-hint">Sem dados no ranking deste mês ainda.</div>';
+        return;
+      }
+
+      gameRankingList.innerHTML = items.slice(0, 20).map((item) => {
+        const isMe = Boolean(item.is_current_user);
+        const medal = item.position === 1 ? '🥇' : item.position === 2 ? '🥈' : item.position === 3 ? '🥉' : '•';
+        return `
+          <div class="rounded-2xl border p-3 ${isMe ? 'border-brand/40 bg-brand/5' : 'border-telegram-separator bg-telegram-card'}">
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-bold ${isMe ? 'text-brand' : 'text-telegram-text'}">${medal} #${item.position} ${item.name}</p>
+                <p class="text-[11px] text-telegram-hint">Nível ${item.level} • ${item.interactions} interações</p>
+              </div>
+              <span class="text-sm font-extrabold ${isMe ? 'text-brand' : 'text-telegram-text'}">${item.monthly_xp} XP</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderGameProfile(profile) {
+      if (!profile) return;
+      const xp = profile.xp || {};
+      const progress = Math.max(0, Math.min(100, Number(xp.progress_pct || 0)));
+
+      gameProfileName.textContent = profile.name || 'Jogador';
+      gameProfileTitle.textContent = profile.title || 'Iniciante';
+      if (profile.badge_svg) {
+        gameProfileBadge.innerHTML = `<span class="w-[50px] h-[50px] inline-flex items-center justify-center shrink-0">${profile.badge_svg}</span><span>${profile.title || 'Em evolução'}</span>`;
+        const svgEl = gameProfileBadge.querySelector('svg');
+        if (svgEl) {
+          svgEl.setAttribute('width', '50');
+          svgEl.setAttribute('height', '50');
+          svgEl.style.width = '50px';
+          svgEl.style.height = '50px';
+          svgEl.style.maxWidth = '50px';
+          svgEl.style.maxHeight = '50px';
+          svgEl.style.display = 'block';
+        }
+      } else {
+        gameProfileBadge.textContent = profile.badge || '🌱 Em evolução';
+      }
+      gameProfileLevelLine.textContent = `Nível ${profile.level || 1}`;
+      gameProfileXpLine.textContent = `${xp.xp_in_level || 0} / ${xp.xp_needed || 1} XP`;
+      gameProfileProgressBar.style.width = `${progress}%`;
+      gameProfileNextHint.textContent = `Faltam ${xp.xp_to_next || 0} XP para o nível ${xp.next_level || ((profile.level || 1) + 1)}`;
+      if (gameInteractionsTotal) gameInteractionsTotal.textContent = String(profile.interactions_total || 0);
+      if (gameInteractionsWeek) gameInteractionsWeek.textContent = String(profile.interactions_week || 0);
+      if (gameAlfredoNote) gameAlfredoNote.textContent = profile.alfredo_note || 'Mantenha consistência para subir no ranking.';
+      renderGameTopFeatures(Array.isArray(profile.top_features) ? profile.top_features : []);
+    }
+
+    async function loadGameProfile() {
+      if (!sessionId) return;
+      try {
+        const response = await fetchWithSession('/api/miniapp/game-profile');
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error || 'profile_error');
+        gameProfileCache = data.profile || null;
+        renderGameProfile(gameProfileCache);
+      } catch (_) {
+        gameAlfredoNote.textContent = 'Nao foi possivel carregar o perfil gamer agora.';
+      }
+    }
+
+    async function loadMonthlyRanking() {
+      if (!sessionId) return;
+      try {
+        const response = await fetchWithSession('/api/miniapp/ranking-monthly');
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error || 'ranking_error');
+        gameRankingCache = Array.isArray(data.ranking) ? data.ranking : [];
+        renderGameRanking(gameRankingCache);
+
+        const updatedAt = new Date(data.updated_at || Date.now());
+        gameRankingUpdatedAt.textContent = `Atualizado ${updatedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+      } catch (_) {
+        gameRankingUpdatedAt.textContent = 'Falha ao atualizar';
+      }
+    }
+
+    async function loadPierreParcelamentos() {
+      if (!sessionId) return;
+      showToast('Buscando parcelamentos...', 'warning');
+      try {
+        const response = await fetchWithSession('/api/miniapp/pierre/parcelamentos');
+        const data = await response.json();
+        if (data.ok) {
+          // O backend já envia o texto formatado em data.data
+          window.Telegram.WebApp.showPopup({
+            title: 'Radar de Parcelamentos',
+            message: data.data,
+            buttons: [{type: 'close'}]
+          });
+        } else {
+          showToast('Falha ao buscar dados do Pierre', 'error');
+        }
+      } catch(e) {
+        showToast('Erro de conexão', 'error');
+      }
+    }
+
+    async function downloadPierreLivroCaixa() {
+      if (!sessionId) return;
+      showToast('Gerando livro caixa analítico...', 'warning');
+      try {
+        const response = await fetchWithSession('/api/miniapp/pierre/livro-caixa');
+        const data = await response.json();
+        if (data.ok) {
+          window.Telegram.WebApp.showPopup({
+            title: 'Livro Caixa Analítico',
+            message: 'Dados processados com sucesso. O Alfredo enviará o PDF detalhado no seu chat em instantes.',
+            buttons: [{type: 'close'}]
+          });
+        } else {
+          showToast('Falha ao gerar livro caixa', 'error');
+        }
+      } catch(e) {
+        showToast('Erro ao processar', 'error');
+      }
+    }
+
+    async function loadPierreDashboard() {
+      if (!sessionId) return;
+      try {
+        const response = await fetchWithSession('/api/miniapp/pierre/dashboard');
+        const data = await response.json();
+        if (data.ok) {
+          renderPierreDashboard(data.data);
+        } else {
+          showToast('Pierre temporariamente fora do ar', 'error');
+        }
+      } catch(e) {
+        showToast('Erro ao conectar com Pierre', 'error');
+      }
+    }
+
+    function renderPierreDashboard(data) {
+      // 1. Patrimônio e Saúde (Utiliza valor exato do backend ou parsing robusto)
+      const balanceValue = typeof data.balance === 'number' ? data.balance : Number(data.balance || 0);
+      pierreTotalBalance.textContent = formatCurrencyBR(isNaN(balanceValue) ? 0 : balanceValue);
+      
+      const health = data.health || { score: '--', label: '---' };
+      pierreHealthScore.textContent = health.score;
+      pierreHealthLabel.textContent = health.label;
+      
+      // Cores dinâmicas para o score
+      if (health.score >= 80) pierreHealthLabel.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/10 text-green-400';
+      else if (health.score >= 60) pierreHealthLabel.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400';
+      else pierreHealthLabel.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-400';
+
+      // 2. Lista de Contas
+      renderPierreAccounts(data.accounts);
+
+      // 3. Gráfico de Categorias (Vilões)
+      renderPierreCategories(data.categories);
+
+      // 4. Radar de Parcelas
+      renderPierreInstallments(data.installments);
+    }
+
+    function renderPierreAccounts(accounts) {
+      if (!pierreAccountsList) return;
+      
+      let items = accounts;
+      if (typeof accounts === 'string') {
+        try { items = JSON.parse(accounts); } catch(e) { items = []; }
+      }
+      if (items?.data && Array.isArray(items.data)) items = items.data;
+
+      if (!Array.isArray(items) || !items.length) {
+        pierreAccountsList.innerHTML = '<p class="text-xs text-telegram-hint text-center py-2">Nenhuma conta mapeada.</p>';
+        return;
+      }
+
+      pierreAccountsList.innerHTML = items.map(acc => {
+        const type = acc.type === 'CREDIT' ? 'Cartão' : 'Conta';
+        // Priorizar display_info enviado pelo backend (com limite disponível)
+        const displayBalance = acc.display_info || formatCurrencyBR(Number(acc.balance || acc.amount || 0));
+        
+        return `
+          <div class="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-400">
+                <i data-lucide="${acc.type === 'CREDIT' ? 'credit-card' : 'landmark'}" class="w-5 h-5"></i>
+              </div>
+              <div class="min-w-0">
+                <p class="text-xs font-bold text-telegram-text truncate">${acc.name || 'Banco'}</p>
+                <p class="text-[10px] text-telegram-hint">${type}</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <p class="text-xs font-black text-telegram-text">${displayBalance}</p>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
       if (window.lucide) lucide.createIcons();
     }
+
+    async function forcePierreSync() {
+      const btn = document.getElementById('pierreSyncBtn');
+      if (!btn || btn.disabled) return;
+      
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="w-3 h-3 animate-spin" data-lucide="refresh-cw"></i> Sincronizando...';
+      if (window.lucide) lucide.createIcons();
+
+      try {
+        const response = await fetchWithSession('/api/miniapp/pierre/sync', { method: 'POST' });
+        const data = await response.json();
+        if (data.ok) {
+          showToast('Bancos sincronizados!', 'success');
+          await loadPierreDashboard();
+        } else {
+          showToast('Falha na sincronia', 'error');
+        }
+      } catch(e) {
+        showToast('Erro de conexão', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        if (window.lucide) lucide.createIcons();
+      }
+    }
+
+    window.forcePierreSync = forcePierreSync;
+
+    function renderPierreCategories(categoriesData) {
+      if (pierreChartInstance) pierreChartInstance.destroy();
+      if (!pierreCategoriesChartEl) return;
+
+      const labels = [];
+      const values = [];
+      
+      let rawData = categoriesData;
+      if (typeof categoriesData === 'string') {
+        try { rawData = JSON.parse(categoriesData); } catch(e) {}
+      }
+      if (rawData?.data) rawData = rawData.data;
+
+      if (rawData && typeof rawData === 'object' && !Array.isArray(rawData)) {
+        const entries = Object.entries(rawData)
+          .sort((a, b) => Number(b[1]) - Number(a[1]))
+          .slice(0, 5);
+        
+        entries.forEach(([label, value]) => {
+          labels.push(label);
+          values.push(Number(value));
+        });
+      }
+
+      if (labels.length === 0) {
+        pierreCategoriesEmpty?.classList.remove('hidden');
+        return;
+      } else {
+        pierreCategoriesEmpty?.classList.add('hidden');
+      }
+
+      pierreChartInstance = new Chart(pierreCategoriesChartEl, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: values,
+            backgroundColor: ['#a855f7', '#d946ef', '#ec4899', '#f43f5e', '#f97316'],
+            borderWidth: 0,
+            hoverOffset: 10
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: {
+                color: '#94a3b8',
+                font: { size: 10, weight: 'bold' },
+                padding: 15,
+                usePointStyle: true
+              }
+            }
+          },
+          cutout: '70%'
+        }
+      });
+    }
+
+    function renderPierreInstallments(data) {
+      if (!pierreInstallmentsList) return;
+      
+      let rawData = data;
+      if (typeof data === 'string') {
+        try { rawData = JSON.parse(data); } catch(e) {}
+      }
+      if (rawData?.data) rawData = rawData.data;
+
+      const purchases = rawData?.purchases || rawData?.installments || (Array.isArray(rawData) ? rawData : []);
+      
+      if (!Array.isArray(purchases) || !purchases.length) {
+        pierreInstallmentsList.innerHTML = '<div class="text-center py-4 text-xs text-telegram-hint">Nenhum compromisso futuro mapeado no Pierre.</div>';
+        return;
+      }
+
+      const now = new Date();
+      const sorted = [...purchases]
+        .filter(p => p && (p.description || p.name || p.merchant))
+        .sort((a, b) => {
+          const dA = new Date(a.dueDate || a.date || a.vencimento || 8640000000000000);
+          const dB = new Date(b.dueDate || b.date || b.vencimento || 8640000000000000);
+          return dA - dB;
+        })
+        .slice(0, 8);
+
+      pierreInstallmentsList.innerHTML = sorted.map(p => {
+        // Busca agressiva por campos
+        const dateRaw = p.dueDate || p.date || p.vencimento || p.data;
+        const amountRaw = p.amount || p.value || p.valor || p.totalAmount || 0;
+        const instNum = p.installmentNumber || p.currentInstallment || p.parcela || '?';
+        const instTot = p.totalInstallments || p.totalParcelas || '?';
+
+        const dueDate = dateRaw ? new Date(dateRaw) : null;
+        const isValidDate = dueDate && !isNaN(dueDate.getTime());
+        const isPast = isValidDate && dueDate < now && dueDate.toDateString() !== now.toDateString();
+        const diffDays = isValidDate ? Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24)) : 999;
+        
+        let badgeClass = 'bg-blue-500/10 text-blue-400';
+        let badgeText = 'Próxima';
+        
+        if (isPast) {
+          badgeClass = 'bg-red-500/10 text-red-400';
+          badgeText = 'Vencida';
+        } else if (diffDays <= 2) {
+          badgeClass = 'bg-orange-500/10 text-orange-400';
+          badgeText = 'Urgente';
+        }
+
+        return `
+          <div class="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5 transition active:scale-95">
+            <div class="min-w-0 flex-1">
+              <p class="text-xs font-bold text-telegram-text truncate">${p.description || p.name || p.merchant || 'Parcela'}</p>
+              <p class="text-[10px] text-telegram-hint">${instNum}/${instTot} • ${isValidDate ? dueDate.toLocaleDateString('pt-BR') : 'Sem data'}</p>
+            </div>
+            <div class="text-right ml-3">
+              <p class="text-xs font-black text-telegram-text">${formatCurrencyBR(Number(amountRaw))}</p>
+              <span class="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-md ${badgeClass}">${badgeText}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderGameRankingFull(items = []) {
+      if (!items.length) {
+        rankingFullList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-center text-xs text-telegram-hint mt-8">Sem dados no ranking deste mês ainda. Comece a usar o app!</div>';
+        return;
+      }
+
+      rankingFullList.innerHTML = items.map((item, idx) => {
+        const isMe = Boolean(item.is_current_user);
+        const medal = item.position === 1 ? '🥇' : item.position === 2 ? '🥈' : item.position === 3 ? '🥉' : '•';
+        return `
+          <div class="rounded-2xl border p-4 ${isMe ? 'border-brand/40 bg-brand/8 shadow-lg' : 'border-telegram-separator bg-telegram-card'} transition">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-3 flex-1 min-w-0">
+                <div class="text-2xl font-bold">${medal}</div>
+                <div class="min-w-0">
+                  <p class="text-sm font-bold truncate ${isMe ? 'text-brand' : 'text-telegram-text'}">#${item.position} ${item.name}</p>
+                  <p class="text-xs text-telegram-hint">Nível ${item.level} • ${item.interactions} interações • ${item.monthly_xp} XP</p>
+                </div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <p class="text-lg font-extrabold ${isMe ? 'text-brand' : 'text-telegram-text'}">${item.monthly_xp}</p>
+                <p class="text-[10px] text-telegram-hint">XP</p>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function loadMonthlyRankingFull() {
+      if (!sessionId) return;
+      try {
+        rankingFullList.innerHTML = '<div class="text-center text-xs text-telegram-hint mt-4"><div class="spinner mx-auto"></div> Carregando ranking...</div>';
+        const response = await fetchWithSession('/api/miniapp/ranking-monthly');
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error || 'ranking_error');
+        gameRankingCache = Array.isArray(data.ranking) ? data.ranking : [];
+        renderGameRankingFull(gameRankingCache);
+      } catch (_) {
+        rankingFullList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-center text-xs text-telegram-hint">Falha ao carregar ranking. Tente novamente.</div>';
+      }
+    }
+
+    async function loadFaturaEditor() {
+      if (!sessionId) return;
+      if (!currentFaturaToken) {
+        faturaHeaderInfo.innerHTML = '<p class="text-red-500 text-xs">Token da fatura não encontrado. Reabra pelo botão Editar da fatura.</p>';
+        faturaEditList.innerHTML = '';
+        return;
+      }
+      try {
+        faturaHeaderInfo.innerHTML = '<div class="text-xs text-telegram-hint"><div class="spinner inline mr-2"></div> Carregando lançamentos...</div>';
+        const response = await fetchWithSession(`/api/miniapp/fatura-editor?token=${encodeURIComponent(currentFaturaToken)}`);
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error || 'fatura_error');
+        
+        const transacoes = Array.isArray(data.transacoes) ? data.transacoes : [];
+        const conta = data.conta || 'Cartão de Crédito';
+        const total = transacoes.length;
+        const totalDebito = transacoes.reduce((sum, t) => sum + (t.valor < 0 ? Math.abs(t.valor) : 0), 0);
+        
+        faturaHeaderInfo.innerHTML = `<p class="font-semibold">📌 ${conta}</p><p class="text-[11px]">${total} lançamentos • Débito: R$ ${totalDebito.toFixed(2)}</p>`;
+        renderFaturaEditor(transacoes);
+      } catch (err) {
+        faturaHeaderInfo.innerHTML = '<p class="text-red-500 text-xs">Falha ao carregar. Tente novamente.</p>';
+        faturaEditList.innerHTML = '';
+      }
+    }
+
+    async function tryOpenPendingFaturaEditor() {
+      if (!sessionId || currentFaturaToken) return;
+      try {
+        const response = await fetchWithSession('/api/miniapp/fatura-editor-pending');
+        const data = await response.json();
+        if (!data.ok || !data.has_pending || !data.token) return;
+
+        currentFaturaToken = data.token;
+        openPanel('fatura-editor-panel', true);
+        await loadFaturaEditor();
+      } catch (_) {
+        // Silencioso: abertura pendente é opcional.
+      }
+    }
+
+    function renderFaturaEditor(transacoes = []) {
+      if (!transacoes.length) {
+        faturaEditList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-center text-xs text-telegram-hint">Nenhum lançamento para editar.</div>';
+        return;
+      }
+
+      faturaEditList.innerHTML = transacoes.map((t, idx) => {
+        const data = new Date(t.data_transacao).toLocaleDateString('pt-BR');
+        return `
+          <div class="rounded-2xl border border-telegram-separator bg-telegram-card p-3" data-fatura-id="${idx}">
+            <div class="flex flex-col gap-2">
+              <input type="text" class="fatura-desc floating-input text-sm" value="${(t.descricao || '').replace(/"/g, '&quot;')}" placeholder="Descrição">
+              <div class="grid grid-cols-2 gap-2">
+                <input type="number" class="fatura-valor floating-input text-sm" value="${t.valor}" step="0.01" placeholder="Valor">
+                <input type="date" class="fatura-data floating-input text-sm" value="${new Date(t.data_transacao).toISOString().split('T')[0]}">
+              </div>
+              <button class="fatura-delete text-xs font-semibold text-red-500 hover:text-red-600 transition flex items-center justify-end w-full gap-1 mt-1" onclick="this.closest('[data-fatura-id]').remove()">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Excluir
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      lucide.createIcons();
+    }
+
+    async function saveFaturaEdits() {
+      if (!sessionId) return;
+      
+      const items = Array.from(document.querySelectorAll('[data-fatura-id]')).map((el, idx) => ({
+        index: idx,
+        descricao: el.querySelector('.fatura-desc').value || '',
+        valor: parseFloat(el.querySelector('.fatura-valor').value) || 0,
+        data_transacao: el.querySelector('.fatura-data').value,
+      }));
+      try {
+        faturaEditorSave.disabled = true;
+        faturaEditorSave.textContent = '⏳ Salvando...';
+
+        const response = await fetchWithSession('/api/miniapp/fatura-editor-save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: currentFaturaToken, transacoes: items }),
+        });
+
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error || 'save_error');
+
+        showToast('✅ Lançamentos salvos com sucesso!', 'success');
+        setTimeout(() => switchTabByName('inicio'), 1500);
+      } catch (err) {
+        showToast('❌ Erro ao salvar: ' + (err.message || 'Tente novamente'), 'error');
+      } finally {
+        faturaEditorSave.disabled = false;
+        faturaEditorSave.textContent = '💾 Confirmar';
+      }
+    }
+
+    function cancelFaturaEditor() {
+      if (confirm('⚠️ Descartar todas as edições?')) {
+        switchTabByName('inicio');
+      }
+    }
+
+    function getMissionTypeIcon(type) {
+      const icons = { daily: '📅', weekly: '📆', special: '⭐' };
+      return icons[type] || '🎯';
+    }
+
+    function getMissionTypeLabel(type) {
+      const labels = { daily: 'Diária', weekly: 'Semanal', special: 'Especial' };
+      return labels[type] || 'Missão';
+    }
+
+    function renderMissions(missions = []) {
+      if (!missions || missions.length === 0) {
+        missoesList.innerHTML = `
+          <div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-6 text-center">
+            <p class="text-2xl mb-2">🎯</p>
+            <p class="text-sm font-semibold text-telegram-text">Nenhuma missão encontrada</p>
+            <p class="text-xs text-telegram-hint mt-1">Explore novas funcionalidades para destravar missões</p>
+          </div>
+        `;
+        missionsCountActive.textContent = '0';
+        missionsCountCompleted.textContent = '0';
+        missionsXpReward.textContent = '0';
+        return;
+      }
+
+      const filtered = missionsCurrentFilter === 'all' ? missions : missions.filter((m) => m.type === missionsCurrentFilter);
+
+      if (filtered.length === 0) {
+        missoesList.innerHTML = `
+          <div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-6 text-center">
+            <p class="text-sm font-semibold text-telegram-text">Nenhuma missão ${getMissionTypeLabel(missionsCurrentFilter).toLowerCase()}</p>
+            <p class="text-xs text-telegram-hint mt-1">Tente outro filtro</p>
+          </div>
+        `;
+        return;
+      }
+
+      missoesList.innerHTML = filtered.map((mission) => {
+        const progress = Math.max(0, Math.min(100, Number(mission.progress || 0)));
+        const isCompleted = mission.status === 'completed' || mission.status === 'claimed';
+        const isClaimed = mission.status === 'claimed';
+
+        return `
+          <div class="glass-card rounded-2xl p-4 border ${isCompleted ? 'border-green-500/30 bg-green-500/5' : 'border-telegram-separator'} transition">
+            <div class="flex items-start justify-between gap-3 mb-3">
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-lg">${getMissionTypeIcon(mission.type)}</span>
+                  <span class="text-xs font-semibold uppercase tracking-[0.1em] text-telegram-hint">${getMissionTypeLabel(mission.type)}</span>
+                  ${isCompleted ? '<span class="ml-auto text-xs font-bold text-green-500">✓ Concluída</span>' : ''}
+                </div>
+                <h3 class="text-sm font-bold text-telegram-text">${mission.name}</h3>
+                <p class="text-xs text-telegram-hint mt-1">${mission.description}</p>
+              </div>
+              <div class="text-right">
+                <div class="text-lg font-extrabold text-brand">${mission.xp_reward}</div>
+                <div class="text-[10px] text-telegram-hint font-semibold">XP</div>
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-telegram-hint font-semibold">Progresso</span>
+                <span class="font-bold text-telegram-text">${mission.current_value || 0} / ${mission.target_value || 1}</span>
+              </div>
+              <div class="h-2 w-full rounded-full bg-telegram-separator overflow-hidden">
+                <div class="h-full rounded-full transition-all duration-500 ease-out" style="width: ${progress}%; background: linear-gradient(90deg, #7b1e2d, #b85d6e);"></div>
+              </div>
+            </div>
+
+            ${isCompleted ? `
+              <button class="mt-3 w-full py-2 text-xs font-semibold rounded-lg transition ${isClaimed ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-green-500 text-white hover:bg-green-600 active:scale-95'}" ${isClaimed ? 'disabled' : 'onclick="claimMissionReward(' + mission.id + ')"'}>
+                ${isClaimed ? '✓ Já resgatado' : '🎁 Resgatar ' + mission.xp_reward + ' XP'}
+              </button>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+
+      const active = missions.filter((m) => m.status === 'active').length;
+      const completed = missions.filter((m) => m.status === 'completed' || m.status === 'claimed').length;
+      const totalXp = missions.filter((m) => m.status === 'claimed' || m.status === 'completed').reduce((sum, m) => sum + (m.xp_reward || 0), 0);
+
+      missionsCountActive.textContent = String(active);
+      missionsCountCompleted.textContent = String(completed);
+      missionsXpReward.textContent = String(totalXp);
+
+      const gameMissionsCount = document.getElementById('gameMissionsCount');
+      if (gameMissionsCount) {
+        gameMissionsCount.textContent = String(active);
+      }
+    }
+
+    async function loadMissions() {
+      if (!sessionId) return;
+      try {
+        const response = await fetchWithSession('/api/miniapp/missions');
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error || 'missions_error');
+
+        missionsCache = Array.isArray(data.missions) ? data.missions : [];
+        renderMissions(missionsCache);
+      } catch (error) {
+        missoesList.innerHTML = `
+          <div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-6 text-center">
+            <p class="text-sm font-semibold text-red-500">Erro ao carregar missões</p>
+            <p class="text-xs text-telegram-hint mt-1">${error.message || 'Tente novamente'}</p>
+          </div>
+        `;
+      }
+    }
+
+    async function claimMissionReward(missionId) {
+      if (!sessionId) return;
+      try {
+        const response = await fetchWithSession('/api/miniapp/mission-claim', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mission_id: missionId }),
+        });
+
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error || 'claim_error');
+
+        showToast('🎉 Recompensa resgatada com sucesso!', 'success');
+        loadMissions();
+        loadGameProfile();
+      } catch (error) {
+        showToast('❌ Erro ao resgatar: ' + (error.message || 'Tente novamente'), 'error');
+      }
+    }
+
+    missoesRefresh.addEventListener('click', loadMissions);
+
+    missionFilterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const filter = btn.dataset.missionFilter;
+        missionsCurrentFilter = filter;
+        
+        missionFilterBtns.forEach(b => {
+          b.classList.remove('tab-active', 'border-brand/25', 'bg-brand/10', 'text-brand');
+          b.classList.add('border-telegram-separator', 'bg-telegram-card', 'text-telegram-text');
+        });
+        
+        btn.classList.add('tab-active', 'border-brand/25', 'bg-brand/10', 'text-brand');
+        btn.classList.remove('border-telegram-separator', 'bg-telegram-card', 'text-telegram-text');
+        
+        renderMissions(missionsCache);
+      });
+    });
+
+    function openGameProfilePanel() {
+      openPanel('perfil-jogo', true);
+      loadGameProfile();
+      loadMonthlyRanking();
+
+      if (gameRankingRefreshTimer) {
+        clearInterval(gameRankingRefreshTimer);
+      }
+      gameRankingRefreshTimer = setInterval(() => {
+        if (document.hidden || !sessionId || !document.getElementById('perfil-jogo')?.classList.contains('active')) return;
+        loadMonthlyRanking();
+      }, 15000);
+    }
+
+    function openNewAgendamentoModal() {
+      newAgendDescricao.value = '';
+      newAgendValor.value = '';
+      newAgendTipo.value = 'Saída';
+      newAgendFrequencia.value = agendaMode === 'lembretes' ? 'unico' : 'mensal';
+      newAgendParcelas.value = '12';
+      newAgendInfinito.checked = false;
+      const hoje = new Date().toISOString().split('T')[0];
+      newAgendData.value = hoje;
+      updateAgendaModalLabels();
+      updateParcelasVisibility();
+      openModal('newAgendamentoModal');
+    }
+
+    function closeNewAgendamentoModal() {
+      closeModal('newAgendamentoModal');
+    }
+
+    function updateParcelasVisibility() {
+      const unico = newAgendFrequencia.value === 'unico';
+      if (unico) {
+        newAgendInfinito.checked = false;
+      }
+      newAgendInfinito.disabled = unico;
+      parcelasGroup.classList.toggle('hidden', unico || newAgendInfinito.checked);
+    }
+
+    async function createAgendamento() {
+      if (!sessionId) return;
+      
+      const descricao = newAgendDescricao.value.trim();
+      const valor = parseMoneyInput(newAgendValor.value);
+      const tipo = newAgendTipo.value;
+      const frequencia = newAgendFrequencia.value;
+      const data = newAgendData.value;
+      const recorrenciaInfinita = frequencia !== 'unico' && newAgendInfinito.checked;
+      const parcelas = frequencia === 'unico' ? 1 : (recorrenciaInfinita ? null : (parseInt(newAgendParcelas.value, 10) || 1));
+      const isReminder = agendaMode === 'lembretes';
+
+      if (!descricao || (!isReminder && !valor) || !data) {
+        showToast('Preencha todos os campos obrigatórios', 'error');
+        return;
+      }
+
+      const saveBtn = newAgendSave;
+      const originalText = saveBtn.querySelector('.save-text').textContent;
+      saveBtn.disabled = true;
+      saveBtn.querySelector('.save-text').textContent = '';
+      const spinner = document.createElement('div');
+      spinner.className = 'spinner';
+      saveBtn.appendChild(spinner);
+
+      try {
+        const response = await fetch(isReminder ? '/api/miniapp/lembretes' : '/api/miniapp/agendamentos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
+          body: JSON.stringify({
+            descricao,
+            valor: isReminder && !valor ? null : valor,
+            tipo,
+            frequencia,
+            data_primeiro_evento: data,
+            total_parcelas: parcelas,
+            parcela_atual: 0,
+            status: 'ativo',
+          }),
+        });
+        const data_resp = await response.json();
+        if (data_resp.ok) {
+          showToast(`✓ ${descricao} ${isReminder ? 'lembrado' : 'agendado'} com sucesso!`, 'success');
+          await loadAgendamentos();
+          closeNewAgendamentoModal();
+        } else {
+          showToast(`Erro: ${data_resp.message || 'Tente novamente'}`, 'error');
+        }
+      } catch (e) {
+        showToast(`Erro de conexão ao criar ${isReminder ? 'lembrete' : 'agendamento'}`, 'error');
+      } finally {
+        spinner.remove();
+        saveBtn.querySelector('.save-text').textContent = originalText;
+        saveBtn.disabled = false;
+      }
+    }
+
+    async function loadConfiguracoes() {
+      if (!sessionId) return;
+      try {
+        const response = await fetchWithSession('/api/miniapp/configuracoes');
+        const data = await response.json();
+        if (!data.ok) return;
+        if (perfilInvestidor) perfilInvestidor.value = data.usuario?.perfil_investidor || '';
+        if (horarioNotificacao) horarioNotificacao.value = data.usuario?.horario_notificacao || '09:00';
+        if (alertaGastosAtivoToggle) alertaGastosAtivoToggle.checked = Boolean(data.usuario?.alerta_gastos_ativo);
+        
+        // Notificações do Alfredo
+        const tgLembretes = document.getElementById('toggle_notif_lembretes');
+        if (tgLembretes) tgLembretes.checked = Boolean(data.usuario?.notif_lembretes ?? true);
+        
+        const tgRisco = document.getElementById('toggle_notif_alertas_risco');
+        if (tgRisco) tgRisco.checked = Boolean(data.usuario?.notif_alertas_risco ?? true);
+        
+        const tgInsights = document.getElementById('toggle_notif_insights');
+        if (tgInsights) tgInsights.checked = Boolean(data.usuario?.notif_insights ?? true);
+        
+        const tgGamificacao = document.getElementById('toggle_notif_gamificacao');
+        if (tgGamificacao) tgGamificacao.checked = Boolean(data.usuario?.notif_gamificacao ?? true);
+
+      } catch (e) {}
+    }
+
+    // Expor funções para abrir/fechar modal de notificações
+    window.openNotificacoesModal = function() {
+      const modalsOverlay = document.getElementById('modalsOverlay');
+      const notificacoesModal = document.getElementById('notificacoesModal');
+      if (modalsOverlay) {
+        modalsOverlay.classList.remove('hidden');
+        modalsOverlay.classList.add('pointer-events-auto');
+      }
+      if (notificacoesModal) {
+        notificacoesModal.classList.remove('hidden');
+        notificacoesModal.classList.add('active');
+      }
+      document.body.style.overflow = 'hidden';
+    };
+
+    window.closeNotificacoesModal = function() {
+      const modalsOverlay = document.getElementById('modalsOverlay');
+      const notificacoesModal = document.getElementById('notificacoesModal');
+      if (notificacoesModal) {
+        notificacoesModal.classList.remove('active');
+        setTimeout(() => {
+            notificacoesModal.classList.add('hidden');
+            // Verificação extra para limpar o overlay global
+            const activeModals = document.querySelectorAll('.modal-overlay.active, #notificacoesModal.active');
+            if (activeModals.length === 0 && modalsOverlay) {
+                modalsOverlay.classList.add('hidden');
+                modalsOverlay.classList.remove('pointer-events-auto');
+                document.body.style.overflow = '';
+            }
+        }, 300);
+      }
+    };
+    // Expor função para salvar configurações de notificação ao trocar o toggle
+    window.saveNotificationPreferences = async function() {
+      const sId = localStorage.getItem(MINIAPP_SESSION_STORAGE_KEY) || telegramInitData;
+      if (!sId) return;
+      const payload = {
+        notif_lembretes: document.getElementById('toggle_notif_lembretes')?.checked ?? true,
+        notif_alertas_risco: document.getElementById('toggle_notif_alertas_risco')?.checked ?? true,
+        notif_insights: document.getElementById('toggle_notif_insights')?.checked ?? true,
+        notif_gamificacao: document.getElementById('toggle_notif_gamificacao')?.checked ?? true,
+      };
+
+      try {
+        const response = await fetch('/api/miniapp/configuracoes', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Session-Id': sId },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (data.ok) {
+          showToast('Preferências salvas!', 'success');
+        } else {
+          showToast('Erro ao salvar preferências.', 'error');
+        }
+      } catch (e) {
+        showToast('Erro de conexão.', 'error');
+      }
+    };
+
+    async function saveConfiguracoes() {
+      if (!sessionId || !perfilInvestidor || !horarioNotificacao) return;
+      try {
+        const response = await fetch('/api/miniapp/configuracoes', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
+          body: JSON.stringify({
+            perfil_investidor: perfilInvestidor.value,
+            horario_notificacao: horarioNotificacao.value,
+          }),
+        });
+        const data = await response.json();
+        if (data.ok) {
+          mainStatus.textContent = 'Configurações salvas';
+          mainStatus.className = 'font-bold text-transparent bg-clip-text bg-gradient-to-r from-brand to-brand-soft';
+          await loadConfiguracoes();
+        }
+      } catch (e) {}
+    }
+
+    async function saveLancamentoEdit() {
+      if (!sessionId || !selectedLancamento) return;
+      
+      const saveBtn = editSave;
+      const originalText = saveBtn.querySelector('.save-text').textContent;
+      saveBtn.disabled = true;
+      saveBtn.querySelector('.save-text').textContent = '';
+      const spinner = document.createElement('div');
+      spinner.className = 'spinner';
+      saveBtn.appendChild(spinner);
+      
+      const payload = {
+        descricao: editDescricao.value.trim(),
+        valor: parseMoneyInput(editValor.value),
+        tipo: editTipo.value,
+        data_transacao: editData.value,
+        forma_pagamento: editForma.value.trim(),
+        id_categoria: editCategoria.value || null,
+        id_subcategoria: editSubcategoria.value || null,
+        learn_rule: editLearnRule.checked,
+      };
+      try {
+        const isDraft = !selectedLancamento.id;
+        const requestPayload = isDraft
+          ? {
+              ...payload,
+              categoria_sugerida: selectedLancamento.categoria_sugerida || null,
+              subcategoria_sugerida: selectedLancamento.subcategoria_sugerida || null,
+            }
+          : payload;
+        const response = await fetch(
+          isDraft ? '/api/miniapp/lancamentos' : `/api/miniapp/lancamentos/${selectedLancamento.id}`,
+          {
+            method: isDraft ? 'POST' : 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
+            body: JSON.stringify(requestPayload),
+          }
+        );
+        const data = await response.json();
+        if (data.ok) {
+          showToast(
+            isDraft ? `✓ ${selectedLancamento.descricao} salvo com sucesso!` : `✓ ${selectedLancamento.descricao} atualizado com sucesso!`,
+            'success'
+          );
+          await loadHomeOverview();
+          await loadHistory(true);
+          closeEditModal();
+        } else {
+          showToast(`Erro ao ${isDraft ? 'salvar' : 'atualizar'}: ${data.message || data.error || 'Tente novamente'}`, 'error');
+        }
+      } catch (e) {
+        showToast('Erro de conexão ao salvar', 'error');
+      } finally {
+        spinner.remove();
+        saveBtn.querySelector('.save-text').textContent = originalText;
+        saveBtn.disabled = false;
+      }
+    }
+
+    async function deleteLancamentoById(id) {
+      if (!sessionId) return;
+      if (!confirm('Tem certeza que deseja excluir este lançamento?')) return;
+      try {
+        const response = await fetch(`/api/miniapp/lancamentos/${id}`, {
+          method: 'DELETE',
+          headers: { 'X-Session-Id': sessionId },
+        });
+        const data = await response.json();
+        if (data.ok) {
+          showToast('✓ Lançamento excluído com sucesso!', 'success');
+          await loadHomeOverview();
+          await loadHistory(true);
+          if (selectedLancamento && selectedLancamento.id === id) {
+            closeEditModal();
+          }
+        } else {
+          showToast('Erro ao excluir lançamento', 'error');
+        }
+      } catch (e) {
+        showToast('Erro de conexão ao excluir', 'error');
+      }
+    }
+
+    async function deleteAgendamentoById(id) {
+      if (!sessionId) return;
+      const isReminder = agendaMode === 'lembretes';
+      if (!confirm(`Tem certeza que deseja excluir este ${isReminder ? 'lembrete' : 'agendamento'}?`)) return;
+      try {
+        const response = await fetch(`${isReminder ? '/api/miniapp/lembretes' : '/api/miniapp/agendamentos'}/${id}`, {
+          method: 'DELETE',
+          headers: { 'X-Session-Id': sessionId },
+        });
+        const data = await response.json();
+        if (data.ok) {
+          showToast(`✓ ${isReminder ? 'Lembrete' : 'Agendamento'} excluído com sucesso!`, 'success');
+          await loadAgendamentos();
+        } else {
+          showToast(`Erro ao excluir ${isReminder ? 'lembrete' : 'agendamento'}`, 'error');
+        }
+      } catch (e) {
+        showToast(`Erro de conexão ao excluir ${isReminder ? 'lembrete' : 'agendamento'}`, 'error');
+      }
+    }
+
+    // Logic
+    async function authTelegram() {
+      if (!window.Telegram || !Telegram.WebApp) {
+        mainStatus.textContent = 'Erro TG';
+        mainStatus.className = "text-carmine font-bold";
+        return;
+      }
+      Telegram.WebApp.ready();
+      Telegram.WebApp.expand();
+      if (Telegram.WebApp.requestFullscreen) {
+        try { Telegram.WebApp.requestFullscreen(); } catch (e) {}
+      }
+
+      const initData = await resolveTelegramInitData();
+      if (!initData) {
+        const recovered = await tryRecoverSessionFromStorage();
+        if (!recovered) {
+          mainStatus.textContent = 'Erro de Sessão';
+          mainStatus.className = 'text-amber-500 font-bold';
+          homeBalanceHint.textContent = 'A sessão do seu teclado expirou ou está desatualizada.';
+          homeInsight.textContent = '⚠️ Para corrigir isso permanentemente: feche o MiniApp, digite /start no chat do bot para atualizar seus atalhos e clique no botão "🚀 Abrir o App" novamente.';
+          switchTabByName('inicio');
+          return;
+        }
+
+        mainStatus.textContent = 'Sincronizado';
+        switchTabByName(pendingDraftLaunch ? 'inicio' : (initialTabFromUrl || 'inicio'));
+        loadHomeOverview();
+        loadHistory(true);
+        loadConfiguracoes();
+        setTimeout(() => {
+          loadAgendamentos();
+          loadMetas();
+          loadOrcamentos();
+          loadMissions();
+          loadGameProfile();
+          loadMonthlyRanking();
+          tryOpenPendingFaturaEditor();
+        }, 80);
+        return;
+      }
+
+      telegramInitData = initData;
+
+      try {
+        const response = await fetch('/api/telegram/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ init_data: initData })
+        });
+        const data = await response.json();
+        if (!data.ok) {
+          mainStatus.textContent = 'Falha de sessao';
+          mainStatus.className = "text-carmine font-bold";
+          homeBalanceHint.textContent = 'Sua sessao do Telegram expirou.';
+          homeInsight.textContent = 'Feche este MiniApp e abra novamente pelo bot para sincronizar os dados.';
+          switchTabByName('inicio');
+          return;
+        }
+        sessionId = data.session_id;
+        storeSessionId(sessionId);
+
+        // Check if the user has Open Finance integration active (Modo Deus)
+        if (data.user && data.user.has_pierre_access) {
+            const ghostTab = document.getElementById('nav-fantasma');
+            if (ghostTab) ghostTab.classList.remove('hidden');
+        }
+        mainStatus.textContent = 'Sincronizado';
+
+        // Abre a interface imediatamente e carrega dados em segundo plano.
+        switchTabByName(pendingDraftLaunch ? 'inicio' : (initialTabFromUrl || 'inicio'));
+        if (pendingDraftLaunch) {
+          const draft = normalizeDraftLancamento(pendingDraftLaunch);
+          if (draft) {
+            setSelectedLancamento(draft);
+            editModal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+          }
+        }
+
+        // Carrega o essencial em paralelo sem bloquear a abertura do miniapp.
+        loadHomeOverview();
+        loadHistory(true);
+        loadConfiguracoes();
+
+        // Carregamentos não críticos ficam assíncronos após a primeira pintura.
+        setTimeout(() => {
+          loadAgendamentos();
+          loadMetas();
+          loadOrcamentos();
+          loadMissions();
+          loadGameProfile();
+          loadMonthlyRanking();
+          tryOpenPendingFaturaEditor();
+          
+          // Verifica se há fatura pendente de edição
+          if (initialPageFromUrl === 'fatura_editor') {
+            openPanel('fatura-editor-panel', true);
+            loadFaturaEditor();
+          }
+        }, 80);
+
+        setInterval(() => {
+          if (document.hidden || !sessionId) return;
+          // Evita iniciar nova carga se a anterior ainda estiver em andamento
+          if (isRefreshingHome) {
+            // ainda carregando, pula este ciclo
+            return;
+          }
+          loadHistory(true);
+          loadHomeOverview();
+          if (document.getElementById('metas')?.classList.contains('active')) {
+              loadMetas();
+              loadOrcamentos();
+          }
+        }, 20000);
+      } catch(e) {
+        mainStatus.textContent = 'Erro Conexão';
+        mainStatus.className = 'text-carmine font-bold';
+        homeBalanceHint.textContent = 'Nao foi possivel autenticar o MiniApp agora.';
+        homeInsight.textContent = 'Verifique a conexao e tente abrir novamente pelo bot.';
+      }
+    }
+
+    async function loadHistory(reset = false) {
+      if (!sessionId) return;
+      if (reset) { historyOffset = 0; renderHistorySkeleton(6); }
+      const params = new URLSearchParams({
+        limit: historyLimit,
+        offset: historyOffset,
+        query: historyQuery.value || '',
+        tipo: historyTipo.value || '',
+        order: historyOrder.value || 'date_desc'
+      });
+      if (historyDate?.value) {
+        params.set('start_date', historyDate.value);
+        params.set('end_date', historyDate.value);
+      }
+      try {
+        const response = await fetchWithSession(`/api/miniapp/history?${params.toString()}`);
+        const data = await response.json();
+        if (!data.ok) return;
+        historyStatus.textContent = '';
+        if (reset) historyCache = [];
+        if (reset) historyList.innerHTML = '';
+        data.items.forEach(item => {
+          historyCache.push(item);
+          const numericValue = Number(item.valor) || 0;
+          const isReceita = isEntradaTipo(item.tipo, numericValue);
+          const valueText = formatMoney(item.valor, item.tipo);
+          const style = getCategoryStyle(item.descricao, item.categoria_nome, item.subcategoria_nome, item.tipo);
+
+          const iconHtml = style.logoUrl 
+            ? `<div class="w-10 h-10 rounded-full overflow-hidden bg-white flex items-center justify-center border border-white/10 shadow-sm shrink-0">
+                 <img src="${style.logoUrl}" class="w-full h-full object-contain" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                 <div class="hidden w-full h-full items-center justify-center bg-brand/5 text-brand"><i data-lucide="${style.icon}" class="w-5 h-5"></i></div>
+               </div>`
+            : `<div class="cat-icon ${style.class} shrink-0 w-10 h-10"><i data-lucide="${style.icon}" class="w-5 h-5"></i></div>`;
+
+          const div = document.createElement('div');
+          div.className = 'flex items-center justify-between gap-3 p-3 sm:p-4 rounded-3xl hover:bg-brand/5 transition border border-white/5 bg-telegram-card shadow-sm mb-3';
+          div.innerHTML = `
+            <div class="flex items-center gap-3 min-w-0 flex-1">
+              ${iconHtml}
+              <div class="min-w-0 flex-1">
+                <p class="font-bold text-sm truncate text-telegram-text">${item.descricao || 'Lançamento'}</p>
+                <p class="text-[10px] font-bold text-telegram-hint uppercase tracking-wider mt-0.5">${item.categoria_nome || 'Uncategorized'} • ${new Date(item.data).toLocaleDateString('pt-BR')}</p>
+              </div>
+            </div>
+            <div class="flex flex-col items-end gap-1.5 shrink-0 ml-2">
+              <span class="font-financial text-base font-black ${isReceita ? 'text-emerald-500' : 'text-rose-500'} whitespace-nowrap">${valueText}</span>
+              <div class="flex items-center gap-1.5">
+                <button class="history-edit-btn rounded-lg border border-white/5 bg-black/20 p-1.5 text-telegram-hint hover:text-brand transition" data-action="edit" data-id="${item.id}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                <button class="history-delete-btn rounded-lg border border-white/5 bg-black/20 p-1.5 text-telegram-hint hover:text-red-500 transition" data-action="delete" data-id="${item.id}"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+              </div>
+            </div>
+          `;
+          historyList.appendChild(div);
+        });
+
+        historyOffset = reset ? data.items.length : historyOffset + data.items.length;
+        lucide.createIcons();
+      } catch(e){}
+    }
+
+    function openMetaModal(meta = null) {
+      selectedMeta = meta;
+      metaModalTitle.textContent = meta ? 'Editar Meta' : 'Nova Meta';
+      metaDescricao.value = meta?.descricao || '';
+      metaValorMeta.value = meta?.valor_meta != null ? String(meta.valor_meta).replace('.', ',') : '';
+      metaValorAtual.value = meta?.valor_atual != null ? String(meta.valor_atual).replace('.', ',') : '';
+      metaData.value = formatDateForInput(meta?.data_meta || '');
+      openModal('metaModal');
+    }
+
+    function closeMetaModal() {
+      closeModal('metaModal');
+      selectedMeta = null;
+      metaDescricao.value = '';
+      metaValorMeta.value = '';
+      metaValorAtual.value = '';
+      metaData.value = '';
+    }
+
+    async function saveMeta() {
+      if (!sessionId) return;
+      const descricao = metaDescricao.value.trim();
+      const valor_meta = parseMoneyInput(metaValorMeta.value);
+      const valor_atual = parseMoneyInput(metaValorAtual.value);
+      const data_meta = metaData.value;
+
+      if (!descricao || !valor_meta || !data_meta) {
+        showToast('Preencha descrição, valor da meta e data alvo', 'error');
+        return;
+      }
+
+      const saveBtn = metaSave;
+      const saveText = saveBtn.querySelector('.save-text');
+      const originalText = saveText.textContent;
+      saveBtn.disabled = true;
+      saveText.textContent = '';
+      const spinner = document.createElement('div');
+      spinner.className = 'spinner';
+      saveBtn.appendChild(spinner);
+
+      try {
+        const payload = { descricao, valor_meta, valor_atual, data_meta };
+        const response = await fetch(
+          selectedMeta ? `/api/miniapp/metas/${selectedMeta.id}` : '/api/miniapp/metas',
+          {
+            method: selectedMeta ? 'PATCH' : 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
+            body: JSON.stringify(payload),
+          }
+        );
+        const data = await response.json();
+        if (data.ok) {
+          showToast(selectedMeta ? '✓ Meta atualizada com sucesso!' : '✓ Meta criada com sucesso!', 'success');
+          await loadMetas();
+          closeMetaModal();
+        } else {
+          showToast(`Erro ao salvar meta: ${data.message || data.error || 'Tente novamente'}`, 'error');
+        }
+      } catch (e) {
+        showToast('Erro de conexão ao salvar meta', 'error');
+      } finally {
+        spinner.remove();
+        saveText.textContent = originalText;
+        saveBtn.disabled = false;
+      }
+    }
+
+    async function deleteMetaById(id) {
+      if (!sessionId) return;
+      if (!confirm('Tem certeza que deseja excluir esta meta?')) return;
+      try {
+        const response = await fetch(`/api/miniapp/metas/${id}`, {
+          method: 'DELETE',
+          headers: { 'X-Session-Id': sessionId },
+        });
+        const data = await response.json();
+        if (data.ok) {
+          showToast('✓ Meta excluída com sucesso!', 'success');
+          await loadMetas();
+        } else {
+          showToast('Erro ao excluir meta', 'error');
+        }
+      } catch (e) {
+        showToast('Erro de conexão ao excluir meta', 'error');
+      }
+    }
+
+    async function confirmMetaMesById(id) {
+      if (!sessionId) return;
+      const valorInformado = prompt('Valor que você confirmou para este mês (deixe vazio para usar o valor da meta):', '');
+      if (valorInformado === null) return;
+      const valorConfirmado = valorInformado.trim() ? parseMoneyInput(valorInformado) : null;
+
+      try {
+        const response = await fetch(`/api/miniapp/metas/${id}/confirmar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
+          body: JSON.stringify(valorConfirmado != null ? { valor_confirmado: valorConfirmado } : {}),
+        });
+        const data = await response.json();
+        if (data.ok) {
+          showToast('✓ Mês confirmado para essa meta!', 'success');
+          await loadMetas();
+        } else {
+          showToast('Erro ao confirmar mês da meta', 'error');
+        }
+      } catch (e) {
+        showToast('Erro de conexão ao confirmar meta', 'error');
+      }
+    }
+
+    function openOrcamentoModal() {
+      orcamentoValor.value = '';
+      openModal('orcamentoModal');
+    }
+    function closeOrcamentoModal() {
+      closeModal('orcamentoModal');
+    }
+
+    async function loadOrcamentos() {
+      if (!sessionId) return;
+      try {
+        if (orcamentoAgendaWrap) orcamentoAgendaWrap.classList.remove('hidden');
+        if (agendamentoList) agendamentoList.innerHTML = '';
+        if (lembreteHistoryWrap) lembreteHistoryWrap.classList.add('hidden');
+        if (agendamentoStatus) agendamentoStatus.textContent = '';
+        if (orcamentoAgendaStatus) orcamentoAgendaStatus.textContent = 'Seus limites ativos.';
+        const res = await fetchWithSession('/api/miniapp/orcamentos');
+        const data = await res.json();
+        if (!data.ok) return;
+
+        if (orcamentoCategoria.options.length === 0) {
+            orcamentoCategoria.innerHTML = data.categorias.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+        }
+        if (data.items.length === 0) {
+            orcamentoList.innerHTML = '<div class="text-xs text-telegram-hint text-center p-4 border border-dashed rounded-xl border-telegram-separator bg-telegram-card">Nenhum limite definido.</div>';
+            return;
+        }
+
+        orcamentoList.innerHTML = data.items.map(o => {
+            const pct = Math.min(100, Math.max(0, (o.valor_gasto / o.valor_limite) * 100));
+            const color = pct >= 100 ? 'linear-gradient(90deg, #ef4444, #b91c1c)' : (pct >= 80 ? 'linear-gradient(90deg, #f59e0b, #d97706)' : 'linear-gradient(90deg, #10b981, #059669)');
+            const periodoLabel = o.periodo === 'daily' ? 'diário' : (o.periodo === 'weekly' ? 'semanal' : 'mensal');
+            return `
+            <div class="mb-3 group cursor-pointer" onclick="abrirEdicaoOrcamento('${o.id_categoria}', ${o.valor_limite}, '${o.categoria_nome}', '${o.periodo}')">
+                <div class="flex justify-between text-[10px] font-bold uppercase tracking-wider mb-1 text-telegram-hint group-hover:text-brand transition">
+                    <span class="flex items-center gap-1">${o.categoria_nome} <span class="opacity-60">• ${periodoLabel}</span> <i data-lucide="pencil" class="w-2.5 h-2.5 opacity-40"></i></span>
+                    <span class="text-telegram-text">R$ ${o.valor_gasto.toFixed(2).replace('.', ',')} / R$ ${o.valor_limite.toFixed(2).replace('.', ',')}</span>
+                </div>
+                <div class="h-2 w-full rounded-full bg-telegram-separator overflow-hidden shadow-inner">
+                    <div class="h-full rounded-full transition-all duration-700" style="width: ${pct}%; background: ${color};"></div>
+                </div>
+            </div>`;
+        }).join('');
+        lucide.createIcons();
+      } catch(e) {}
+    }
+
+    if (orcamentoNew) orcamentoNew.addEventListener('click', openOrcamentoModal);
+    if (orcamentoSave) orcamentoSave.addEventListener('click', async () => {
+      const id_categoria = orcamentoCategoria.value;
+      const valor = parseMoneyInput(orcamentoValor.value);
+      const periodo = document.getElementById('orcamentoPeriodo')?.value || 'monthly';
+      try {
+          const res = await fetchWithSession('/api/miniapp/orcamentos', { 
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'}, 
+            body: JSON.stringify({id_categoria, valor_limite: valor, periodo: periodo}) 
+          });
+          if ((await res.json()).ok) {
+              showToast('✅ Limite salvo com sucesso!', 'success');
+              closeOrcamentoModal();
+              loadOrcamentos();
+              loadHomeOverview();
+          }
+      } catch(e) { showToast('Erro ao salvar', 'error'); }
+    });
+
+    async function loadMetas() {
+      if (!sessionId) return;
+      renderMetaSkeleton(3);
+      try {
+        const response = await fetchWithSession('/api/miniapp/metas');
+        const data = await response.json();
+        if (!data.ok || !data.items.length) { metasCache = []; metaStatus.textContent = 'Nenhuma meta.'; metaList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint">Nenhuma meta em andamento.</div>'; return; }
+        metaStatus.textContent = '';
+        metasCache = data.items || [];
+        metaList.innerHTML = '';
+        metasCache.forEach(item => {
+          const valorMeta = Number(item.valor_meta) || 0;
+          const valorAtual = Number(item.valor_atual) || 0;
+          const faltante = Math.max(0, valorMeta - valorAtual);
+          const progress = valorMeta > 0 ? Math.round((valorAtual / valorMeta) * 100) : 0;
+          const progNorm = Math.min(progress, 100);
+          const confirmado = Boolean(item.confirmado_mes_atual);
+          const prazo = item.data_meta ? new Date(item.data_meta) : null;
+          const prazoValido = prazo && !Number.isNaN(prazo.getTime());
+          const hoje = new Date();
+          const diffMs = prazoValido ? (prazo.getTime() - hoje.getTime()) : 0;
+          const diasRestantes = prazoValido ? Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24))) : 0;
+          const mesesRestantes = prazoValido ? Math.max(1, Math.ceil(diasRestantes / 30)) : 1;
+          const aporteMensal = faltante > 0 ? (faltante / mesesRestantes) : 0;
+          const statusPrazo = !prazoValido
+            ? 'Sem data alvo'
+            : diasRestantes === 0
+              ? 'Prazo final chegou'
+              : `${diasRestantes} dias restantes`;
+
+          const div = document.createElement('div');
+          div.className = 'flex-1 bg-telegram-card rounded-3xl p-5 border border-telegram-separator relative overflow-hidden group mb-2 shadow-soft';
+          div.innerHTML = `
+            <div class="relative z-10 flex justify-between items-start gap-3">
+              <div class="min-w-0 flex-1 pr-2">
+                <p class="text-sm font-semibold text-telegram-text truncate">${item.descricao}</p>
+                <p class="text-lg font-bold mt-1 text-telegram-text">${progNorm}% <span class="text-xs text-telegram-hint font-normal ml-1">de ${formatCurrency(valorMeta)}</span></p>
+                <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200/80">
+                  <div
+                    class="h-full rounded-full transition-[width] duration-700 ease-out"
+                    data-meta-progress="${progNorm}"
+                    style="width: 0%; background: linear-gradient(90deg, #7b1e2d 0%, #b85d6e 100%);"
+                  ></div>
+                </div>
+                <p class="text-xs mt-1 text-telegram-hint">Faltam <b>${formatCurrency(faltante)}</b> para concluir</p>
+                <p class="text-xs mt-1 text-brand">Aporte mensal sugerido: <b>${formatCurrency(aporteMensal)}</b></p>
+                <p class="text-xs mt-1 text-telegram-hint">Prazo: ${prazoValido ? prazo.toLocaleDateString('pt-BR') : '-'} • ${statusPrazo}</p>
+                <p class="text-xs mt-1 ${confirmado ? 'text-emerald-600' : 'text-telegram-hint'}">${confirmado ? '✓ Mês confirmado' : 'Mês ainda não confirmado'}</p>
+              </div>
+              <span class="text-sm font-semibold text-brand shrink-0 whitespace-nowrap">${formatCurrency(valorAtual)}</span>
+            </div>
+            <div class="relative z-10 mt-4 flex flex-wrap gap-2">
+              <button class="rounded-lg border border-telegram-separator px-3 py-1.5 text-xs font-semibold text-telegram-text bg-telegram-card hover:bg-brand/5 transition flex items-center" data-meta-action="edit" data-id="${item.id}"><i data-lucide="pencil" class="w-3 h-3 mr-1"></i> Editar</button>
+              <button class="rounded-lg border border-telegram-separator px-3 py-1.5 text-xs font-semibold text-red-500 bg-telegram-card hover:bg-red-50 transition flex items-center" data-meta-action="delete" data-id="${item.id}"><i data-lucide="trash-2" class="w-3 h-3 mr-1"></i> Excluir</button>
+              <button class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition flex items-center" data-meta-action="confirm" data-id="${item.id}"><i data-lucide="check-circle" class="w-3 h-3 mr-1"></i> ${confirmado ? 'Atualizar' : 'Confirmar mês'}</button>
+            </div>
+          `;
+          metaList.appendChild(div);
+        });
+        animateMetaProgressBars();
+        lucide.createIcons();
+      } catch(e){}
+    }
+
+    async function loadAgendamentos() {
+      if (!sessionId) return;
+      if (agendaMode === 'limites') {
+        renderAgendamentoSkeleton(1);
+        await loadOrcamentos();
+        return;
+      }
+      renderAgendamentoSkeleton(3);
+      try {
+        const isReminder = agendaMode === 'lembretes';
+        const response = await fetchWithSession(isReminder ? '/api/miniapp/lembretes' : '/api/miniapp/agendamentos');
+        const data = await response.json();
+        const items = data.items || [];
+        const historyItems = data.history || [];
+        if (!data.ok || !items.length) {
+          agendamentoStatus.textContent = isReminder ? 'Nenhum lembrete.' : 'Nenhum agendamento.';
+          agendamentoList.innerHTML = `<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint">Nenhum ${isReminder ? 'lembrete ativo' : 'agendamento futuro'}.</div>`;
+          if (lembreteHistoryWrap) lembreteHistoryWrap.classList.toggle('hidden', !isReminder);
+          if (isReminder && lembreteHistoryList) {
+            lembreteHistoryStatus.textContent = historyItems.length ? 'Histórico recente' : 'Sem histórico de lembretes.';
+            lembreteHistoryList.innerHTML = historyItems.map((item) => `
+              <div class="rounded-2xl border border-telegram-separator bg-telegram-card p-4 shadow-soft opacity-80">
+                <p class="font-semibold text-sm text-telegram-text">${item.descricao}</p>
+                <p class="mt-1 text-[11px] sm:text-xs text-telegram-hint">${new Date(item.proxima_data_execucao).toLocaleDateString('pt-BR')} • ${item.status || 'vencido'}</p>
+              </div>
+            `).join('');
+          }
+          return;
+        }
+        agendamentoStatus.textContent = '';
+        agendamentoList.innerHTML = '';
+        items.forEach(item => {
+          const valueText = item.valor == null ? 'Sem valor' : formatMoney(item.valor, item.tipo);
+          const div = document.createElement('div');
+          div.className = 'flex items-center justify-between p-4 rounded-2xl bg-telegram-card border border-telegram-separator mb-2 shadow-soft';
+          const statusHint = isReminder && item.proxima_data_execucao
+            ? (() => {
+                const hoje = new Date();
+                const venc = new Date(item.proxima_data_execucao);
+                const diff = Math.round((new Date(venc.getFullYear(), venc.getMonth(), venc.getDate()) - new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())) / 86400000);
+                if (diff === 0) return ' • vence hoje';
+                if (diff === 1) return ' • vence amanhã';
+                return '';
+              })()
+            : '';
+          div.innerHTML = `
+            <div class="min-w-0 flex-1 pr-2">
+              <p class="font-semibold text-sm text-telegram-text truncate">${item.descricao}</p>
+              <p class="text-[11px] sm:text-xs text-telegram-hint mt-0.5 truncate"><i data-lucide="clock" class="inline w-3 h-3 mr-1"></i>${item.frequencia} • ${new Date(item.proxima_data_execucao).toLocaleDateString('pt-BR')}${statusHint}</p>
+            </div>
+            <div class="flex flex-col items-end gap-1.5 shrink-0">
+              <span class="font-bold text-brand text-sm whitespace-nowrap">${valueText}</span>
+              <button class="agendamento-delete-btn rounded-md border border-telegram-separator bg-telegram-card p-1.5 text-telegram-hint hover:text-red-500 transition" data-action="delete" data-id="${item.id}"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+            </div>
+          `;
+          agendamentoList.appendChild(div);
+        });
+        if (lembreteHistoryWrap) lembreteHistoryWrap.classList.toggle('hidden', !isReminder);
+        if (isReminder && lembreteHistoryList) {
+          lembreteHistoryStatus.textContent = historyItems.length ? 'Histórico recente' : 'Sem histórico de lembretes.';
+          lembreteHistoryList.innerHTML = historyItems.map((item) => `
+            <div class="rounded-2xl border border-telegram-separator bg-telegram-card p-4 shadow-soft opacity-80">
+              <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <p class="font-semibold text-sm text-telegram-text truncate">${item.descricao}</p>
+                  <p class="mt-1 text-[11px] sm:text-xs text-telegram-hint">${new Date(item.proxima_data_execucao).toLocaleDateString('pt-BR')} • ${item.status || 'vencido'}</p>
+                </div>
+                <span class="text-xs font-semibold text-telegram-hint">${item.valor == null ? 'Sem valor' : formatMoney(item.valor, item.tipo)}</span>
+              </div>
+            </div>
+          `).join('');
+        }
+        lucide.createIcons();
+      } catch(e){}
+    }
+
+    // Refresh and Modal binds
+    historyRefresh.addEventListener('click', () => loadHistory(true));
+    historyLoadMore.addEventListener('click', () => loadHistory(false));
+    
+    // Novo Modal de Filtros
+    const historyOpenFilters = document.getElementById('historyOpenFilters');
+    const historyFilterModal = document.getElementById('historyFilterModal');
+    const historyApplyFilters = document.getElementById('historyApplyFilters');
+    const historySearchInput = document.getElementById('historySearchInput');
+
+    if (historyOpenFilters) {
+      historyOpenFilters.addEventListener('click', () => {
+        openModal('historyFilterModal');
+      });
+    }
+
+    window.closeHistoryFilterModal = () => {
+      closeModal('historyFilterModal');
+    };
+
+    if (historyApplyFilters) {
+      historyApplyFilters.addEventListener('click', () => {
+        loadHistory(true);
+        closeHistoryFilterModal();
+      });
+    }
+
+    if (historySearchInput) {
+      let searchTimer;
+      historySearchInput.addEventListener('input', (e) => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          historyQuery.value = e.target.value;
+          loadHistory(true);
+        }, 400);
+      });
+    }
+
+    historyClearFilters.addEventListener('click', () => {
+      historyTipo.value = '';
+      historyOrder.value = 'date_desc';
+      historyDate.value = '';
+      if(historySearchInput) historySearchInput.value = '';
+      historyQuery.value = '';
+      loadHistory(true);
+      closeHistoryFilterModal();
+    });
+    agendamentoRefresh.addEventListener('click', loadAgendamentos);
+    agendamentoNew.addEventListener('click', () => {
+      if (agendaMode === 'limites') {
+        openOrcamentoModal();
+        return;
+      }
+      openNewAgendamentoModal();
+    });
+    if (agendaTabAgendamentos) agendaTabAgendamentos.addEventListener('click', () => setAgendaMode('agendamentos'));
+    if (agendaTabLembretes) agendaTabLembretes.addEventListener('click', () => setAgendaMode('lembretes'));
+    if (agendaTabLimites) agendaTabLimites.addEventListener('click', () => setAgendaMode('limites'));
+    metaRefresh.addEventListener('click', loadMetas);
+    metaNew.addEventListener('click', () => openMetaModal(null));
+    metaSave.addEventListener('click', saveMeta);
+    if (configRefresh) configRefresh.addEventListener('click', loadConfiguracoes);
+    editSave.addEventListener('click', saveLancamentoEdit);
+    newAgendSave.addEventListener('click', createAgendamento);
+    newAgendFrequencia.addEventListener('change', updateParcelasVisibility);
+    newAgendInfinito.addEventListener('change', updateParcelasVisibility);
+    
+    // Novo evento de salvar o toggle de notificações em tempo real
+    if (alertaGastosAtivoToggle) {
+      alertaGastosAtivoToggle.addEventListener('change', async (e) => {
+        if (!sessionId) return;
+        const ativo = e.target.checked;
+        try {
+          const response = await fetch('/api/miniapp/toggle-notificacoes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
+            body: JSON.stringify({
+              telegram_id: window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 0,
+              ativo: ativo
+            }),
+          });
+          const data = await response.json();
+          if (data.sucesso) {
+            showToast('✓ ' + data.mensagem, 'success');
+            if (window.Telegram?.WebApp?.HapticFeedback) {
+              window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+            }
+          } else {
+            showToast('Erro ao atualizar lembretes', 'error');
+            e.target.checked = !ativo;
+          }
+        } catch (error) {
+          showToast('Erro de conexão ao atualizar lembretes', 'error');
+          e.target.checked = !ativo;
+        }
+      });
+    }
+
+    if (configSave) configSave.addEventListener('click', saveConfiguracoes);
+    if (configFinish) configFinish.addEventListener('click', saveConfiguracoes);
+    editModal.addEventListener('click', (e) => {
+      if (e.target === editModal) closeEditModal();
+    });
+    newAgendamentoModal.addEventListener('click', (e) => {
+      if (e.target === newAgendamentoModal) closeNewAgendamentoModal();
+    });
+    metaModal.addEventListener('click', (e) => {
+      if (e.target === metaModal) closeMetaModal();
+    });
+    orcamentoModal.addEventListener('click', (e) => {
+      if (e.target === orcamentoModal) closeOrcamentoModal();
+    });
+
+    // Boot
+    historyList.addEventListener('click', (event) => {
+      const target = event.target;
+      const id = target?.dataset?.id;
+      if (!id || !target.dataset.action) return;
+      const item = historyCache.find((lanc) => String(lanc.id) === String(id));
+      if (target.dataset.action === 'edit' && item) {
+        openEditModal(item);
+      }
+      if (target.dataset.action === 'delete') {
+        deleteLancamentoById(Number(id));
+      }
+    });
+
+    homeRecentList.addEventListener('click', (event) => {
+      const target = event.target.closest('[data-action="edit"]');
+      if (!target?.dataset?.id) return;
+      const item = homeRecentCache.find((lanc) => String(lanc.id) === String(target.dataset.id)) || historyCache.find((lanc) => String(lanc.id) === String(target.dataset.id));
+      if (item) {
+        openEditModal(item);
+      }
+    });
+
+    homeRecentRefresh.addEventListener('click', loadHomeOverview);
+    
+    if (homeUpgradeBtn) {
+      homeUpgradeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (window.Telegram?.WebApp) {
+          const botUsername = window.botUsername || 'ContaComigoBot';
+          window.Telegram.WebApp.openTelegramLink(`https://t.me/${botUsername}?start=premium`);
+          setTimeout(() => window.Telegram.WebApp.close(), 100);
+        }
+      });
+    }
+
+    // Ghost (Pierre) interactions: reveal on hover / touch and ensure accessible click
+    const ghostBtn = document.getElementById('nav-fantasma');
+    if (ghostBtn) {
+      ghostBtn.addEventListener('pointerenter', () => {
+        ghostBtn.dataset.visible = 'true';
+      });
+      ghostBtn.addEventListener('pointerleave', () => {
+        ghostBtn.dataset.visible = 'false';
+      });
+      ghostBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // open modo-deus panel
+        switchTabByName('modo-deus');
+      });
+    }
+
+    homeLevelCard.addEventListener('click', openGameProfilePanel);
+    gameProfileRefresh.addEventListener('click', async () => {
+      await loadGameProfile();
+      await loadMonthlyRanking();
+    });
+    gameSeeRanking.addEventListener('click', () => {
+      openPanel('ranking-panel', true);
+      loadMonthlyRankingFull();
+      if (gameRankingRefreshTimer) clearInterval(gameRankingRefreshTimer);
+      gameRankingRefreshTimer = setInterval(() => {
+        if (document.hidden || !sessionId || !document.getElementById('ranking-panel')?.classList.contains('active')) return;
+        loadMonthlyRankingFull();
+      }, 15000);
+    });
+    rankingBackBtn.addEventListener('click', () => switchTabByName('inicio'));
+    gameBackHome.addEventListener('click', () => switchTabByName('inicio'));
+
+    faturaBkBtn.addEventListener('click', () => switchTabByName('inicio'));
+    faturaEditorSave.addEventListener('click', saveFaturaEdits);
+    faturaEditorCancel.addEventListener('click', cancelFaturaEditor);
+
+    metaList.addEventListener('click', (event) => {
+      const target = event.target.closest('[data-meta-action]');
+      if (!target?.dataset?.id) return;
+      const action = target.dataset.metaAction;
+      const item = metasCache.find((meta) => String(meta.id) === String(target.dataset.id));
+
+      if (action === 'edit' && item) {
+        openMetaModal(item);
+        return;
+      }
+      if (action === 'delete') {
+        deleteMetaById(Number(target.dataset.id));
+        return;
+      }
+      if (action === 'confirm') {
+        confirmMetaMesById(Number(target.dataset.id));
+      }
+    });
+
+    agendamentoList.addEventListener('click', (event) => {
+      const target = event.target?.closest?.('[data-action="delete"]');
+      const id = target?.dataset?.id;
+      if (!id) return;
+      deleteAgendamentoById(Number(id));
+    });
+
+    refreshAgendaTabs();
+    updateAgendaModalLabels();
+
+    bindAdaptiveLayoutListeners();
+    setupHomeChartsCarousel();
+    authTelegram();
+
+    // --- MODO DEUS ---
+    async function loadModoDeus(force = false) {
+      const skeleton = document.getElementById('modoDeusSkeleton');
+      const content = document.getElementById('modoDeusContent');
+
+      // Se não for forçado e já estiver visível, não recarrega (opcional)
+      if (!force && content && !content.classList.contains('hidden')) return;
+
+      if (skeleton) skeleton.classList.remove('hidden');
+      if (content) content.classList.add('hidden');
+
+      try {
+        const response = await fetchWithSession('/api/miniapp/modo_deus');
+        const data = await response.json();
+
+        if (data.ok === false) {
+          showToast('Erro ao carregar Modo Deus', 'error');
+          return;
+        }
+
+        renderModoDeus(data);
+
+        if (skeleton) skeleton.classList.add('hidden');
+        if (content) content.classList.remove('hidden');
+        if (window.lucide) lucide.createIcons();
+      } catch (err) {
+        console.error('Erro Modo Deus:', err);
+        showToast('Falha na conexão do Modo Deus', 'error');
+      }
+    }
+
+    window.loadModoDeus = loadModoDeus;
+
+    function getBrandLogoHtml(name) {
+      const normalized = String(name).toLowerCase();
+      const brands = {
+        'netflix': 'netflix.com',
+        'spotify': 'spotify.com',
+        'amazon': 'amazon.com',
+        'prime': 'amazon.com',
+        'apple': 'apple.com',
+        'google': 'google.com',
+        'youtube': 'youtube.com',
+        'gympass': 'gympass.com',
+        'wellhub': 'wellhub.com',
+        'openai': 'openai.com',
+        'chatgpt': 'openai.com',
+        'disney': 'disneyplus.com',
+        'hbo': 'max.com',
+        'max': 'max.com',
+        'claro': 'claro.com.br',
+        'vivo': 'vivo.com.br',
+        'tim': 'tim.com.br',
+        'ifood': 'ifood.com.br',
+        'uber': 'uber.com',
+        ' 99': '99app.com',
+        '99app': '99app.com',
+        'nubank': 'nubank.com.br',
+        'inter': 'bancointer.com.br',
+        'itau': 'itau.com.br',
+        'bradesco': 'bradesco.com.br',
+        'santander': 'santander.com.br',
+        'petrobras': 'petrobras.com.br',
+        'flamengo': 'flamengo.com.br',
+        'corinthians': 'corinthians.com.br',
+        'palmeiras': 'palmeiras.com.br',
+        'sao paulo': 'saopaulofc.net',
+        'fluminense': 'fluminense.com.br',
+        'vasco': 'vasco.com.br',
+        'botafogo': 'botafogo.com.br',
+        'gremio': 'gremio.net',
+        'internacional': 'internacional.com.br',
+        'inter ': 'internacional.com.br',
+        'atletico-mg': 'atletico.com.br',
+        'atletico mg': 'atletico.com.br',
+        'athletico': 'athletico.com.br',
+        'cruzeiro': 'cruzeiro.com.br',
+        'santos fc': 'santosfc.com.br',
+        'bahia': 'esporteclubebahia.com.br',
+        'vitoria': 'ecvitoria.com.br',
+        'bragantino': 'redbullbragantino.com.br',
+        'coritiba': 'coritiba.com.br',
+        'chapecoense': 'chapecoense.com',
+        'remo': 'clubedoremo.com.br',
+        'mirassol': 'mirassolfc.com.br',
+        'extra': 'extra.com.br',
+        'carrefour': 'carrefour.com.br',
+        'pao de acucar': 'paodeacucar.com.br',
+        'magalu': 'magazineluiza.com.br',
+        'americanas': 'americanas.com.br',
+        'drogasil': 'drogasil.com.br',
+        'renner': 'lojasrenner.com.br',
+        'outback': 'outback.com.br',
+        'mcdonald': 'mcdonalds.com.br',
+        'burger king': 'burgerking.com.br',
+        'shell': 'shell.com.br',
+        'ipiranga': 'postossipiranga.com.br'
+      };
+
+      for (const [key, domain] of Object.entries(brands)) {
+        if (normalized.includes(key)) {
+          return `<div class="w-6 h-6 shrink-0 rounded-full overflow-hidden bg-white flex items-center justify-center shadow-sm border border-telegram-separator"><img src="https://www.google.com/s2/favicons?domain=${domain}&sz=64" class="w-full h-full object-contain" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"><i data-lucide="tag" class="w-3 h-3 text-telegram-hint hidden"></i></div>`;
+        }
+      }
+      return `<div class="w-6 h-6 shrink-0 rounded-full overflow-hidden bg-brand/10 flex items-center justify-center shadow-sm border border-brand/20"><i data-lucide="tag" class="w-3 h-3 text-brand"></i></div>`;
+    }
+
+    function renderModoDeus(data) {
+      const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+      const dtFmt = (d) => d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '--';
+      const vg = data.visao_geral || {};
+
+      const mdMonthYear = document.getElementById('modoDeusMonthYear');
+      if (mdMonthYear) {
+        mdMonthYear.textContent = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
+      }
+
+      // Saúde Financeira (Score e Label vindos do Backend)
+      const health = data.health || { score: 0, label: 'Erro' };
+      const score = health.score;
+      const label = health.label;
+
+      const sEl = document.getElementById('modoDeusScore');
+      if (sEl) {
+        sEl.textContent = score;
+        sEl.style.color = score >= 80 ? '#3B6D11' : (score >= 60 ? '#854F0B' : '#A32D2D');
+      }
+
+      const lEl = document.getElementById('modoDeusScoreLabel');
+      if (lEl) {
+        lEl.textContent = label;
+        lEl.className = `text-[10px] font-bold px-2 py-0.5 rounded-full ${score >= 80 ? 'bg-green-100 text-green-700' : (score >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700')}`;
+      }
+
+      const mdPatrimonio = document.getElementById('mdPatrimonio');
+      if (mdPatrimonio) mdPatrimonio.textContent = fmt.format(vg.patrimonio_liquido || 0);
+
+      const vpcEl = document.getElementById('mdPatrimonioVar');
+      if (vpcEl) {
+        vpcEl.textContent = 'LUCRO/PREJUÍZO ACUMULADO';
+        vpcEl.className = 'text-[10px] mt-1 font-semibold text-brand/70';
+      }
+
+      const mdDisponivel = document.getElementById('mdDisponivel');
+      const mdLimiteDiario = document.getElementById('mdLimiteDiario');
+      if (mdDisponivel && mdLimiteDiario) {
+        if (vg.resultado_mes <= 0) {
+          // Se estiver negativo ou zero, o foco é o bloqueio total
+          mdDisponivel.textContent = "🛑 BLOQUEIO";
+          mdDisponivel.className = 'text-xl font-black text-red-500 truncate font-financial animate-pulse';
+
+          mdLimiteDiario.textContent = 'GASTOS CONGELADOS';
+          mdLimiteDiario.className = 'text-[9px] mt-1 text-red-500/80 font-black font-mono';
+        } else {
+          // Se estiver positivo, o valor principal é quanto ele pode gastar por dia
+          mdDisponivel.textContent = fmt.format(vg.limite_diario_seguro || 0);
+          mdDisponivel.className = 'text-xl font-black text-telegram-text truncate font-financial';
+
+          mdLimiteDiario.textContent = 'LIMITE DIÁRIO SEGURO';
+          mdLimiteDiario.className = 'text-[9px] mt-1 text-emerald-500 font-black font-mono';
+        }
+      }
+      const rMes = vg.resultado_mes || 0;
+      const rEl = document.getElementById('mdResultado');
+      if (rEl) {
+        rEl.textContent = fmt.format(rMes);
+        rEl.className = `text-lg font-bold truncate ${rMes >= 0 ? 'text-green-600' : 'text-red-600'}`;
+      }
+
+      const mdEntradas = document.getElementById('mdEntradas');
+      if (mdEntradas) mdEntradas.textContent = `Entradas ${fmt.format(vg.entradas_mes || 0)}`;
+
+      const mdSaidas = document.getElementById('mdSaidas');
+      if (mdSaidas) mdSaidas.textContent = `Saídas ${fmt.format(vg.saidas_mes || 0)}`;
+
+      const tFlow = (vg.entradas_mes || 0) + (vg.saidas_mes || 0);
+      const pEnt = tFlow > 0 ? ((vg.entradas_mes || 0) / tFlow * 100) : 50;
+      const mdBarEntrada = document.getElementById('mdBarEntrada');
+      const mdBarSaida = document.getElementById('mdBarSaida');
+      if (mdBarEntrada) mdBarEntrada.style.width = `${pEnt}%`;
+      if (mdBarSaida) mdBarSaida.style.width = `${100 - pEnt}%`;
+
+      const mdNetResult = document.getElementById('mdNetResult');
+      if (mdNetResult) mdNetResult.textContent = rMes >= 0 ? `Sobra de ${fmt.format(rMes)}` : `Déficit de ${fmt.format(Math.abs(rMes))}`;
+
+      const mdDiasRestantes = document.getElementById('mdDiasRestantes');
+      if (mdDiasRestantes) mdDiasRestantes.textContent = `${vg.dias_restantes_mes || 0} dias restantes`;
+
+      const catsL = document.getElementById('mdTopCategories');
+      const catsBlock = catsL?.closest('.glass-card');
+      if (catsL) {
+        const topCats = data.top_categorias || [];
+        if (topCats.length > 0) {
+          if (catsBlock) catsBlock.classList.remove('hidden');
+          catsL.innerHTML = '';
+          const maxT = topCats[0].total;
+          
+          topCats.forEach((c, idx) => {
+            const hasSub = c.subcategorias && c.subcategorias.length > 0;
+            const catId = `md-cat-${idx}`;
+            
+            let subsHtml = '';
+            if (hasSub) {
+              subsHtml = `<div id="${catId}-subs" class="hidden mt-3 pl-4 border-l-2 border-slate-200 dark:border-slate-700 space-y-2">`;
+              c.subcategorias.forEach(s => {
+                const subPerc = (s.total / c.total * 100).toFixed(0);
+                subsHtml += `
+                  <div class="flex justify-between items-center text-[10px]">
+                    <span class="text-telegram-hint font-medium">${s.nome}</span>
+                    <div class="flex items-center gap-2">
+                      <span class="text-telegram-hint font-bold">${fmt.format(s.total)}</span>
+                      <span class="text-[8px] px-1 rounded bg-slate-100 dark:bg-slate-800 text-telegram-hint">${subPerc}%</span>
+                    </div>
+                  </div>
+                `;
+              });
+              subsHtml += `</div>`;
+            }
+
+            const itemHtml = `
+              <div class="category-item">
+                <button onclick="toggleCategorySubs('${catId}')" class="w-full text-left focus:outline-none active:opacity-70 transition-opacity">
+                  <div class="flex justify-between text-[11px] mb-1.5">
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-telegram-text font-bold">${c.nome}</span>
+                      ${hasSub ? `<i data-lucide="chevron-down" id="${catId}-icon" class="w-3 h-3 text-telegram-hint transition-transform duration-300"></i>` : ''}
+                    </div>
+                    <span class="text-telegram-text font-black">${fmt.format(c.total)}</span>
+                  </div>
+                  <div class="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div class="h-full rounded-full transition-all duration-1000" style="width: ${(c.total / maxT * 100)}%; background-color: ${c.cor_hex}"></div>
+                  </div>
+                </button>
+                ${subsHtml}
+              </div>
+            `;
+            catsL.innerHTML += itemHtml;
+          });
+        } else if (catsBlock) {
+          catsBlock.classList.add('hidden');
+        }
+      }
+
+      // Função global para o toggle
+      window.toggleCategorySubs = function(id) {
+        const subs = document.getElementById(`${id}-subs`);
+        const icon = document.getElementById(`${id}-icon`);
+        if (subs) {
+          const isHidden = subs.classList.contains('hidden');
+          // Fecha outros? (opcional, vamos deixar abrir múltiplos por enquanto)
+          subs.classList.toggle('hidden');
+          if (icon) {
+            icon.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+          }
+        }
+      };
+
+      const mdTotalAssinaturas = document.getElementById('mdTotalAssinaturas');
+      const assL = document.getElementById('mdAssinaturasList');
+      const assBlock = assL?.closest('.glass-card');
+      if (assL) {
+        const assObj = data.assinaturas || { lista: [], total_mensal: 0 };
+        if (assObj.lista.length > 0) {
+          if (assBlock) assBlock.classList.remove('hidden');
+          assL.innerHTML = '';
+          if (mdTotalAssinaturas) mdTotalAssinaturas.textContent = fmt.format(assObj.total_mensal);
+          assObj.lista.slice(0, 10).forEach(a => {
+            const logo = getBrandLogoHtml(a.descricao);
+            assL.innerHTML += `<div class="flex items-center justify-between gap-3"><div class="flex items-center gap-3 min-w-0">${logo}<span class="text-[12px] font-bold text-telegram-text truncate">${a.descricao}</span></div><span class="text-[12px] text-telegram-text font-black whitespace-nowrap">${fmt.format(a.valor)}</span></div>`;
+          });
+        } else if (assBlock) {
+          assBlock.classList.add('hidden');
+        }
+      }
+
+      const mdTotalParcelas = document.getElementById('mdTotalParcelas');
+      const parcL = document.getElementById('mdParcelasList');
+      const parcBlock = parcL?.closest('.glass-card');
+      if (parcL) {
+        const parcObj = data.parcelamentos || { lista: [], total_mensal_parcelas: 0 };
+        if (parcObj.lista.length > 0) {
+          if (parcBlock) parcBlock.classList.remove('hidden');
+          parcL.innerHTML = '';
+          if (mdTotalParcelas) mdTotalParcelas.textContent = fmt.format(parcObj.total_mensal_parcelas);
+          parcObj.lista.slice(0, 10).forEach(p => {
+            parcL.innerHTML += `<div><div class="flex justify-between text-[11px] mb-1"><span class="text-telegram-text truncate mr-2">${p.descricao}</span><span class="text-telegram-hint">${p.parcela_atual}/${p.total_parcelas}</span></div><div class="h-1 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-amber-500" style="width: ${p.percentual_concluido}%"></div></div></div>`;
+          });
+        } else if (parcBlock) {
+          parcBlock.classList.add('hidden');
+        }
+      }
+
+      const cartL = document.getElementById('mdCartoesList');
+      const cartBlock = cartL?.closest('.glass-card');
+       if (cartL) {
+        const cards = data.cartoes || [];
+        const pastBills = data.faturas_historico || [];
+        
+        if (cards.length > 0 || pastBills.length > 0) {
+          if (cartBlock) cartBlock.classList.remove('hidden');
+          cartL.innerHTML = '';
+          
+          // 1. Faturas em Aberto
+          if (cards.length > 0) {
+            cards.forEach(c => {
+              const v = c.dias_para_vencer;
+              const b = v !== null && v <= 7 ? `<span class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[8px] font-bold">VENCE EM ${v}D</span>` : (v !== null && v <= 14 ? `<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[8px] font-bold">VENCE EM ${v}D</span>` : '');
+              cartL.innerHTML += `
+                <div class="flex items-center gap-3">
+                  <div class="w-2 h-2 rounded-full" style="background-color: ${c.cor_hex}"></div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span class="text-[11px] font-bold text-telegram-text truncate">${c.nome_conta}</span>${b}
+                    </div>
+                    <p class="text-[9px] text-telegram-hint">Vence ${dtFmt(c.data_vencimento)}</p>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-[11px] font-bold text-telegram-text">${fmt.format(c.valor_total)}</div>
+                    <p class="text-[9px] text-telegram-hint">de ${fmt.format(c.limite_cartao)}</p>
+                  </div>
+                </div>`;
+            });
+          }
+
+          // 2. Histórico de Faturas (Pagas)
+          if (pastBills.length > 0) {
+            cartL.innerHTML += `
+              <div class="mt-4 pt-3 border-t border-telegram-separator">
+                <h4 class="text-[9px] font-bold text-telegram-hint uppercase tracking-wider mb-3">Faturas Pagas Recentemente</h4>
+                <div class="space-y-3">
+                  ${pastBills.map(f => `
+                    <div class="flex items-center justify-between opacity-70">
+                      <div class="min-w-0">
+                        <p class="text-[10px] font-bold text-telegram-text truncate">${f.nome_conta}</p>
+                        <p class="text-[8px] text-telegram-hint">Paga em ${dtFmt(f.data_vencimento)}</p>
+                      </div>
+                      <div class="text-right">
+                        <p class="text-[10px] font-black text-emerald-600">${fmt.format(f.valor_total)}</p>
+                        <span class="text-[7px] font-bold px-1 rounded bg-emerald-100 text-emerald-700">PAGA</span>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>`;
+          }
+        } else if (cartBlock) {
+          cartBlock.classList.add('hidden');
+        }
+      }
+
+      const mL = document.getElementById('mdMetasList');
+      const mBlock = mL?.closest('.glass-card');
+      if (mL) {
+        const metas = data.metas || [];
+        if (metas.length > 0) {
+          if (mBlock) mBlock.classList.remove('hidden');
+          mL.innerHTML = '';
+          metas.forEach(m => {
+            mL.innerHTML += `<div><div class="flex justify-between text-[11px] mb-1"><span class="text-telegram-text truncate mr-2">${m.descricao}</span><span class="text-telegram-text font-bold">${m.percentual.toFixed(0)}%</span></div><div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-green-500" style="width: ${m.percentual}%"></div></div></div>`;
+          });
+        } else if (mBlock) {
+          mBlock.classList.add('hidden');
+        }
+      }
+
+      const oL = document.getElementById('mdOrcamentosList');
+      const oBlock = oL?.closest('.glass-card');
+      if (oL) {
+        const orcs = data.orcamentos || [];
+        if (orcs.length > 0) {
+          if (oBlock) oBlock.classList.remove('hidden');
+          oL.innerHTML = '';
+          orcs.forEach(o => {
+            const cC = o.status === 'estourado' ? 'bg-red-100 text-red-700' : (o.status === 'atencao' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700');
+            oL.innerHTML += `<div class="flex items-center justify-between"><span class="text-[11px] text-telegram-text font-medium">${o.categoria}</span><span class="px-2 py-0.5 rounded-full ${cC} text-[9px] font-bold">${o.percentual_usado.toFixed(0)}% usado</span></div>`;
+          });
+        } else if (oBlock) {
+          oBlock.classList.add('hidden');
+        }
+      }
+      const fBlock = document.getElementById('mdFiisBlock');
+      if (data.fiis && data.fiis.lista && data.fiis.lista.length > 0) {
+        if (fBlock) fBlock.classList.remove('hidden');
+        const mdRendaFII = document.getElementById('mdRendaFII');
+        if (mdRendaFII) mdRendaFII.textContent = data.fiis.renda_mensal_estimada ? fmt.format(data.fiis.renda_mensal_estimada) + '/mês' : '—';
+        const fL = document.getElementById('mdFiisList');
+        if (fL) {
+          fL.innerHTML = '';
+          data.fiis.lista.forEach(f => {
+            fL.innerHTML += `<div class="flex justify-between items-center text-[11px]"><div><span class="font-bold text-telegram-text">${f.ticker}</span><p class="text-[9px] text-telegram-hint">${f.quantidade_cotas} cotas</p></div><div class="text-right"><span class="text-telegram-text font-bold">${fmt.format(f.valor_posicao)}</span><p class="text-[9px] text-telegram-hint">PM: ${fmt.format(f.preco_medio)}</p></div></div>`;
+          });
+        }
+      } else if (fBlock) {
+        fBlock.classList.add('hidden');
+      }
+
+      const aBlock = document.getElementById('mdAlertasBlock');
+      if (data.alertas && data.alertas.length > 0) {
+        if (aBlock) aBlock.classList.remove('hidden');
+        const aI = document.getElementById('mdAlertasList');
+        if (aI) {
+          aI.innerHTML = '';
+          data.alertas.forEach(a => {
+            const dC = a.tipo === 'critico' ? 'bg-red-500' : (a.tipo === 'aviso' ? 'bg-amber-500' : 'bg-blue-500');
+            aI.innerHTML += `<div class="flex items-start gap-3"><div class="w-2 h-2 rounded-full mt-1.5 ${dC}"></div><div><p class="text-[11px] font-bold text-telegram-text">${a.titulo}</p><p class="text-[10px] text-telegram-hint">${a.detalhe}</p></div></div>`;
+          });
+        }
+      } else if (aBlock) {
+        aBlock.classList.add('hidden');
+      }
+
+      const vL = document.getElementById('mdVencimentosList');
+      if (vL) {
+        vL.innerHTML = '';
+        (data.proximos_vencimentos || []).forEach(v => {
+          vL.innerHTML += `<div class="flex items-center justify-between text-[11px]"><div class="flex items-center gap-2"><div class="w-1.5 h-1.5 rounded-full" style="background-color: ${v.cor_hex}"></div><span class="text-telegram-text truncate max-w-[120px]">${v.descricao}</span><span class="text-[9px] text-telegram-hint">${dtFmt(v.data)}</span></div><span class="font-bold text-telegram-text">${fmt.format(v.valor)}</span></div>`;
+        });
+      }
+
+      const iL = document.getElementById('mdInsightsList');
+      if (iL) {
+        iL.innerHTML = '';
+        (data.insights_rapidos || []).forEach(i => {
+          iL.innerHTML += `<p>— ${i}</p>`;
+        });
+      }
+    }
+
+    // --- SISTEMA DE AJUDA DOS GRÁFICOS ---
+    window.showChartHelp = function(chartId) {
+      const helpData = {
+        'gauge': {
+          title: 'Saúde do Orçamento',
+          msg: 'Mede o quanto você já gastou em relação aos limites (teto) definidos por categoria. Se estiver abaixo de 100%, você está cumprindo seu planejamento.'
+        },
+        'patrimonio': {
+          title: 'Evolução Patrimonial',
+          msg: 'Mostra o acúmulo total do seu dinheiro (contas + investimentos) ao longo do tempo. Serve para ver se sua riqueza líquida está crescendo.'
+        },
+        'fluxo': {
+          title: 'Fluxo de Caixa',
+          msg: 'Comparativo direto entre o que entrou (verde) e o que saiu (vermelho) mês a mês. O ideal é a barra verde ser sempre maior.'
+        },
+        'distribuicao': {
+          title: 'Distribuição de Despesas',
+          msg: 'Quais categorias estão "roubando" mais o seu dinheiro. Útil para identificar para onde seu dinheiro está indo realmente.'
+        },
+        'projecao': {
+          title: 'Projeção de Saldo',
+          msg: 'Uma estimativa baseada no seu comportamento atual de como seu dinheiro estará nos próximos meses se você mantiver o ritmo.'
+        },
+        'viloes': {
+          title: 'Top 5 Vilões',
+          msg: 'Identifica os 5 estabelecimentos ou descrições específicas onde você mais gastou nos últimos 90 dias.'
+        },
+        'sankey': {
+          title: 'Caminho do Dinheiro',
+          msg: 'Visualiza o fluxo completo: desde a sua Renda, passando pelas contas, até o destino final em cada categoria de gasto.'
+        },
+        'heatmap': {
+          title: 'Mapa de Calor',
+          msg: 'Mostra sua rotina de lançamentos por dia da semana. Ajuda a entender em quais dias você é mais ativo financeiramente.'
+        }
+      };
+
+      const info = helpData[chartId];
+      if (info && window.Telegram?.WebApp) {
+        // Vibração tátil suave para indicar interação
+        if (window.Telegram.WebApp.HapticFeedback) {
+          window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+        }
+        window.Telegram.WebApp.showAlert(`${info.title}\n\n${info.msg}`);
+      }
+    };
