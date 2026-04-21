@@ -1138,232 +1138,141 @@ lucide.createIcons();
       setActiveHomeChartPill(homeChartCards[0].id);
     }
 
-    function buildChartDataFromSummary(summary) {
+        function buildChartDataFromSummary(summary) {
+      const now = new Date();
+      const startDay = new Date(now.getFullYear(), now.getMonth(), 1).getDay();
+      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      
+      const activity = {};
+      (summary?.recent || []).forEach(item => {
+        const d = new Date(item.data);
+        if (d.getMonth() === now.getMonth()) {
+          const day = d.getDate();
+          const val = Number(item.valor || 0);
+          if (!activity[day]) activity[day] = { incT: 0, expT: 0, incC: 0, expC: 0 };
+          if (val > 0) { activity[day].incT += val; activity[day].incC++; }
+          else { activity[day].expT += Math.abs(val); activity[day].expC++; }
+        }
+      });
+
+      const heatmapData = [];
+      const daysShort = ['Dom','Seg','Ter','Qua','Qui','Sex','S�b'];
+      for (let w = 0; w < 6; w++) {
+        daysShort.forEach((d, i) => {
+          const dayNum = (w * 7) + i - startDay + 1;
+          let type = 'empty'; let label = ""; let stats = { inc: 0, exp: 0 };
+          if (dayNum > 0 && dayNum <= daysInMonth) {
+            label = dayNum.toString();
+            const act = activity[dayNum];
+            if (act) {
+              stats.inc = act.incC; stats.exp = act.expC;
+              type = (act.incT > act.expT) ? 'income_win' : 'expense_win';
+            } else { type = 'day'; }
+          }
+          heatmapData.push({ x: d, y: `Sem ${w+1}`, date: label, type: type, stats: stats });
+        });
+      }
+
       const receita = Number(summary?.receita || 0);
       const despesa = Number(summary?.despesa || 0);
-      const categories = (Array.isArray(summary?.categories) ? summary.categories : []).slice(0, 5);
+      const categories = (Array.isArray(summary?.categories) ? summary.categories : []).slice(0, 6);
       const monthlyCashflow = Array.isArray(summary?.cashflow_monthly) ? summary.cashflow_monthly : [];
       const patrimonySeries = Array.isArray(summary?.patrimony_series) ? summary.patrimony_series : [];
       const budgetItems = Array.isArray(summary?.budget_vs_realizado) ? summary.budget_vs_realizado : [];
       const projectionSeries = Array.isArray(summary?.projection_series) ? summary.projection_series : [];
       const topVillains = Array.isArray(summary?.top_villains) ? summary.top_villains : [];
 
-      const sixMonths = monthlyCashflow.length ? monthlyCashflow.map((item) => item.label || '') : [];
-      const fluxoEntradas = monthlyCashflow.map((item) => Number(item.entrada || 0));
-      const fluxoSaidas = monthlyCashflow.map((item) => Number(item.saida || 0));
-      const fluxoSaldo = monthlyCashflow.map((item) => Number(item.saldo || 0));
-
-      const patrimonyMonths = patrimonySeries.map((item) => item.label || '');
-      const patrimonyValues = patrimonySeries.map((item) => Number(item.value || 0));
-
-      const budgetLabels = budgetItems.map((item) => item.label || 'Categoria');
-      const budgetPlanned = budgetItems.map((item) => Number(item.orcamento || 0));
-      const budgetActual = budgetItems.map((item) => Number(item.realizado || 0));
-
-      const distroLabels = categories.map((item) => item.label || 'Categoria');
-      const distroValues = categories.map((item) => Math.max(0, Number(item.value || 0)));
-
-      const projectionLabels = projectionSeries.map((item) => item.label || '');
-      const projectionHistory = projectionSeries.map((item) => item.historico == null ? null : Number(item.historico || 0));
-      const projectionFuture = projectionSeries.map((item) => item.futuro == null ? null : Number(item.futuro || 0));
-
-      const villains = topVillains.map((item) => [item.label || 'Sem nome', Number(item.value || 0)]);
-
-      // Sankey Data
       const sankeyData = [];
       if (receita > 0) sankeyData.push({ from: 'Receitas', to: 'Caixa', flow: receita });
       if (despesa > 0) {
-          sankeyData.push({ from: 'Caixa', to: 'Despesas', flow: despesa });
-          categories.forEach(cat => {
-              if (cat.value > 0) sankeyData.push({ from: 'Despesas', to: cat.label, flow: Number(cat.value) });
-          });
-      }
-
-      // Heatmap Data: Calendário Real com Dias Visíveis e Cores de Tipo (Verde/Grená)
-      const heatmapData = [];
-      const daysShort = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-      const now = new Date();
-      const startDayOfWeek = new Date(now.getFullYear(), now.getMonth(), 1).getDay(); 
-      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-      const activityMap = {}; 
-
-      (summary?.recent || []).forEach(item => {
-        const d = new Date(item.data);
-        if (d.getMonth() === now.getMonth()) {
-          const date = d.getDate();
-          const val = Number(item.valor || 0);
-          if (!activityMap[date]) activityMap[date] = { count: 0, hasIncome: false };
-          activityMap[date].count++;
-          if (val > 0) activityMap[date].hasIncome = true;
-        }
-      });
-
-      for (let w = 0; w < 6; w++) {
-        daysShort.forEach((d, dIdx) => {
-          const dayNum = (w * 7) + dIdx - startDayOfWeek + 1;
-          let value = 0; let label = ""; let type = 'empty';
-          if (dayNum > 0 && dayNum <= daysInMonth) {
-            label = dayNum.toString();
-            const act = activityMap[dayNum];
-            if (act) {
-              value = act.count;
-              type = act.hasIncome ? 'income' : 'expense';
-            } else { type = 'day'; }
-          }
-          heatmapData.push({ x: d, y: `Sem ${w+1}`, v: value, date: label, type: type });
-        });
+        sankeyData.push({ from: 'Caixa', to: 'Despesas', flow: despesa });
+        categories.forEach(c => { if(c.value > 0) sankeyData.push({ from: 'Despesas', to: c.label, flow: Number(c.value) }); });
       }
 
       return {
-        sixMonths, patrimonyMonths, patrimonyValues, fluxoEntradas, fluxoSaidas, fluxoSaldo,
-        budgetLabels, budgetPlanned, budgetActual, categories, distroLabels, distroValues,
-        projectionLabels, projectionHistory, projectionFuture, villains, sankeyData, heatmapData
+        sixMonths: monthlyCashflow.map(i => i.label || ''),
+        patrimonyMonths: patrimonySeries.map(i => i.label || ''),
+        patrimonyValues: patrimonySeries.map(i => Number(i.value || 0)),
+        fluxoEntradas: monthlyCashflow.map(i => Number(i.entrada || 0)),
+        fluxoSaidas: monthlyCashflow.map(i => Number(i.saida || 0)),
+        fluxoSaldo: monthlyCashflow.map(i => Number(i.saldo || 0)),
+        budgetLabels: budgetItems.map(i => i.label || ''),
+        budgetPlanned: budgetItems.map(i => Number(i.orcamento || 0)),
+        budgetActual: budgetItems.map(i => Number(i.realizado || 0)),
+        categories, distroLabels: categories.map(i => i.label || ''), distroValues: categories.map(i => Number(i.value || 0)),
+        projectionLabels: projectionSeries.map(i => i.label || ''),
+        projectionHistory: projectionSeries.map(i => i.historico == null ? null : Number(i.historico)),
+        projectionFuture: projectionSeries.map(i => i.futuro == null ? null : Number(i.futuro)),
+        villains: topVillains.map(i => [i.label, Number(i.value)]),
+        sankeyData, heatmapData
       };
     }
 
-    // Função para renderizar o Sankey Premium via SVG (VISUAL GRENÁ & COLORIDO)
     function renderSankeyPremium(container, data) {
       if (!container || !data.length) return;
       const width = 800; const height = 450;
-      const grena = "#7b1e2d"; const verde = "#10b981";
-      const palette = ["#D4AF37", "#818cf8", "#f472b6", "#fbbf24", "#34d399", "#a78bfa"];
-
-      const receitaTotal = data.filter(d => d.from === 'Receitas').reduce((a, b) => a + b.flow, 0);
-      const despesasNodes = data.filter(d => d.from === 'Despesas');
-
+      const vProfundo = '#064E3B'; const gProfundo = '#4a1019';
+      const palette = ['#D4AF37', '#818cf8', '#f472b6', '#fbbf24', '#34d399', '#a78bfa'];
+      const totalRec = data.filter(d => d.from === 'Receitas').reduce((a, b) => a + b.flow, 0);
+      const totalExp = data.filter(d => d.from === 'Caixa' && d.to === 'Despesas').reduce((a, b) => a + b.flow, 0);
+      const despesas = data.filter(d => d.from === 'Despesas');
+      const maxHeight = 300;
+      const scale = maxHeight / Math.max(totalRec, totalExp, 1);
       let svgHtml = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="width:100%; height:auto; overflow:visible;">
         <defs>
-          <linearGradient id="flow-rec" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="${verde}" stop-opacity="0.4"/><stop offset="100%" stop-color="${grena}" stop-opacity="0.4"/></linearGradient>
+          ${despesas.map((c, i) => `<linearGradient id="g-cat-${i}" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="${gProfundo}" stop-opacity="0.4"/><stop offset="100%" stop-color="${palette[i % palette.length]}" stop-opacity="0.5"/></linearGradient>`).join('')}
         </defs>
-        <text x="80" y="30" text-anchor="middle" font-size="12" font-weight="900" fill="${grena}">ENTRADAS</text>
-        <text x="350" y="30" text-anchor="middle" font-size="12" font-weight="900" fill="${grena}">GESTÃO</text>
-        <text x="620" y="30" text-anchor="middle" font-size="12" font-weight="900" fill="${grena}">CATEGORIAS</text>
-        <path d="M140,70 C240,70 240,70 290,70 L290,370 C240,370 240,370 140,370 Z" fill="url(#flow-rec)" />
-        <rect x="20" y="70" width="120" height="300" rx="14" fill="${verde}" fill-opacity="0.1" stroke="${verde}" stroke-width="2" />
-        <text x="80" y="210" text-anchor="middle" font-size="14" font-weight="900" fill="${grena}">RECEITAS</text>
-        <text x="80" y="235" text-anchor="middle" font-size="12" font-weight="bold" fill="${grena}">${formatCurrencyBR(receitaTotal)}</text>
-        <rect x="290" y="70" width="120" height="300" rx="14" fill="${grena}" fill-opacity="0.1" stroke="${grena}" stroke-width="2" />
-        <text x="350" y="210" text-anchor="middle" font-size="14" font-weight="900" fill="${grena}">CAIXA</text>
-        ${despesasNodes.slice(0, 6).map((cat, i) => {
-          const y = 70 + (i * 65); const h = 55; const color = palette[i % palette.length];
-          return `
-            <path d="M410,${y+(h/2)} C480,${y+(h/2)} 480,${y+(h/2)} 540,${y+(h/2)}" stroke="${color}" stroke-width="${Math.max(3, (cat.flow/receitaTotal)*40)}" fill="none" opacity="0.3" />
-            <rect x="540" y="${y}" width="180" height="${h}" rx="12" fill="${color}" fill-opacity="0.15" stroke="${color}" stroke-width="2" />
-            <text x="630" y="${y+22}" text-anchor="middle" font-size="10" font-weight="900" fill="${grena}">${cat.to.toUpperCase()}</text>
-            <text x="630" y="${y+42}" text-anchor="middle" font-size="12" font-weight="bold" fill="${grena}">${formatCurrencyBR(cat.flow)}</text>
-          `;
+        <text x="85" y="40" text-anchor="middle" font-size="11" font-weight="900" fill="${vProfundo}">ENTRADA</text>
+        <text x="300" y="40" text-anchor="middle" font-size="11" font-weight="900" fill="${gProfundo}">GEST�O</text>
+        <text x="610" y="40" text-anchor="middle" font-size="11" font-weight="900" fill="#64748b">SA�DAS</text>
+        <rect x="25" y="${70 + (maxHeight - Math.max(40, totalRec * scale))/2}" width="120" height="${Math.max(40, totalRec * scale)}" rx="12" fill="rgba(16, 185, 129, 0.05)" stroke="#10b981" stroke-width="2" />
+        <text x="85" y="210" text-anchor="middle" font-size="13" font-weight="900" fill="${vProfundo}">RECEITAS</text>
+        <text x="85" y="235" text-anchor="middle" font-size="12" font-weight="bold" fill="${vProfundo}">${formatCurrencyBR(totalRec)}</text>
+        <rect x="240" y="${70 + (maxHeight - Math.max(40, totalExp * scale))/2}" width="120" height="${Math.max(40, totalExp * scale)}" rx="12" fill="rgba(123, 30, 45, 0.05)" stroke="#7b1e2d" stroke-width="2" />
+        <text x="300" y="210" text-anchor="middle" font-size="13" font-weight="900" fill="${gProfundo}">CAIXA</text>
+        ${despesas.slice(0, 5).map((cat, i) => {
+          const h = Math.max(45, cat.flow * scale); const y = 70 + (i * 65); const color = palette[i % palette.length];
+          return `<path d="M360,210 C460,210 460,${y + h/2} 510,${y + h/2}" stroke="url(#g-cat-${i})" stroke-width="${Math.max(2, cat.flow * scale)}" fill="none" opacity="0.6" /><rect x="510" y="${y}" width="200" height="${h}" rx="12" fill="rgba(255,255,255,0.03)" stroke="${color}" stroke-opacity="0.5" stroke-width="2" /><rect x="510" y="${y}" width="4" height="${h}" rx="2" fill="${color}" /><text x="610" y="${y + h/2 - 5}" text-anchor="middle" font-size="10" font-weight="900" fill="${color}">${cat.to.toUpperCase()}</text><text x="610" y="${y + h/2 + 12}" text-anchor="middle" font-size="11" font-weight="bold" fill="${color}">${formatCurrencyBR(cat.flow)}</text>`;
         }).join('')}
       </svg>`;
-      container.innerHTML = svgHtml;
-    }
-      const ouro = "#D4AF37";
-      const verde = "#10b981";
-
-      let svgHtml = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="width:100%; height:100%; overflow:visible; font-family: 'Schibsted Grotesk', sans-serif;">
-        <defs>
-          <linearGradient id="flow-receita" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="${verde}" stop-opacity="0.4"/>
-            <stop offset="100%" stop-color="${grena}" stop-opacity="0.6"/>
-          </linearGradient>
-          <linearGradient id="flow-categoria" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="${grena}" stop-opacity="0.5"/>
-            <stop offset="100%" stop-color="${ouro}" stop-opacity="0.6"/>
-          </linearGradient>
-        </defs>
-
-        <!-- Cabeçalhos -->
-        <text x="80" y="30" text-anchor="middle" font-size="12" font-weight="900" fill="${verde}" style="text-transform:uppercase; letter-spacing:2px">Entrada</text>
-        <text x="350" y="30" text-anchor="middle" font-size="12" font-weight="900" fill="${grena}" style="text-transform:uppercase; letter-spacing:2px">Gestão</text>
-        <text x="620" y="30" text-anchor="middle" font-size="12" font-weight="900" fill="${ouro}" style="text-transform:uppercase; letter-spacing:2px">Saídas</text>
-
-        <!-- Fluxo Principal -->
-        <path d="M140,60 C240,60 240,60 290,60 L290,360 C240,360 240,360 140,360 Z" fill="url(#flow-receita)" />
-        
-        <!-- Nó Receitas -->
-        <rect x="20" y="60" width="120" height="300" rx="14" fill="${verde}" fill-opacity="0.15" stroke="${verde}" stroke-width="2" />
-        <text x="80" y="195" text-anchor="middle" font-size="16" font-weight="900" fill="#ffffff">RECEITAS</text>
-        <text x="80" y="220" text-anchor="middle" font-size="14" font-weight="700" fill="${verde}">${formatCurrencyBR(receitaTotal)}</text>
-
-        <!-- Nó Caixa -->
-        <rect x="290" y="60" width="120" height="300" rx="14" fill="${grena}" fill-opacity="0.25" stroke="${grena}" stroke-width="2" />
-        <text x="350" y="195" text-anchor="middle" font-size="16" font-weight="900" fill="#ffffff">CAIXA</text>
-        <text x="350" y="220" text-anchor="middle" font-size="12" font-weight="600" fill="rgba(255,255,255,0.8)">GESTÃO</text>
-
-        <!-- Categorias Dinâmicas (Máximo 5) -->
-        ${despesasNodes.slice(0, 5).map((cat, i) => {
-          const yPos = 65 + (i * 65);
-          const h = 55;
-          return `
-            <path d="M410,${yPos} C480,${yPos} 480,${yPos} 540,${yPos} L540,${yPos + h} C480,${yPos + h} 480,${yPos + h} 410,${yPos + h} Z" fill="url(#flow-categoria)" />
-            <rect x="540" y="${yPos}" width="160" height="${h}" rx="12" fill="rgba(0,0,0,0.4)" stroke="${ouro}" stroke-opacity="0.5" stroke-width="2" />
-            <rect x="540" y="${yPos}" width="4" height="${h}" rx="2" fill="${ouro}" />
-            <text x="620" y="${yPos + 22}" text-anchor="middle" font-size="11" font-weight="900" fill="#ffffff">${cat.to.toUpperCase()}</text>
-            <text x="620" y="${yPos + 42}" text-anchor="middle" font-size="12" font-weight="bold" fill="${ouro}">${formatCurrencyBR(cat.flow)}</text>
-          `;
-        }).join('')}
-      </svg>`;
-
       container.innerHTML = svgHtml;
     }
 
     function destroyHomeCharts() {
-      // Destrói todas as instâncias registradas no mapa e no objeto homeCharts
       try {
-        Object.values(homeCharts).forEach((chart) => {
-          if (chart && typeof chart.destroy === 'function') chart.destroy();
-        });
-      } catch (e) { console.warn('destroyHomeCharts: erro destruindo homeCharts:', e); }
-      // Também destrói qualquer instância remanescente no mapa global
-      try {
-        for (const [key, chart] of CHART_INSTANCES.entries()) {
-          try { if (chart && typeof chart.destroy === 'function') chart.destroy(); } catch (dErr) { /* ignore */ }
-        }
-        CHART_INSTANCES.clear();
-      } catch (e) { console.warn('destroyHomeCharts: erro destruindo CHART_INSTANCES:', e); }
+        Object.values(homeCharts).forEach((chart) => { if (chart && typeof chart.destroy === 'function') chart.destroy(); });
+      } catch (e) { console.warn('destroyHomeCharts error:', e); }
       homeCharts = {};
     }
 
-    // Atualiza a forma orgânica do aquário (SVG) baseada em receitas vs despesas
     function updateAquariumVisual(receita, despesa) {
       try {
         const svg = document.getElementById('homeAquariumSVG');
         if (!svg) return;
-        const vbW = 1200;
-        const vbH = 200;
+        const vbW = 1200; const vbH = 200;
         const total = Math.max(0.0001, Number(receita || 0) + Number(despesa || 0));
         const ratio = Number(receita || 0) / total;
-
-        const xStart = vbW * 0.08;
-        const xEnd = vbW * 0.92;
-        const steps = 10;
-        const points = [];
+        const xStart = vbW * 0.08; const xEnd = vbW * 0.92;
+        const steps = 10; const points = [];
         for (let i = 0; i <= steps; i += 1) {
           const t = i / steps;
-          const y = vbH - t * (vbH * 0.78) - vbH * 0.06; // leave top/bottom margin
+          const y = vbH - t * (vbH * 0.78) - vbH * 0.06;
           const base = xStart * (1 - t) + xEnd * t;
-          const globalOffset = (ratio - 0.5) * vbW * 0.42; // shift curve horizontally by ratio
+          const globalOffset = (ratio - 0.5) * vbW * 0.42;
           const waviness = Math.sin(t * Math.PI * 3 + (ratio * Math.PI)) * (vbW * 0.04) * (1 - Math.abs(t - 0.5));
           const x = Math.max(0, Math.min(vbW, Math.round(base + globalOffset + waviness)));
           points.push({ x, y: Math.round(y) });
         }
-
-        // Construir path simples conectando os pontos (a blur filter suaviza a borda)
         const last = points.length - 1;
         const forwardPts = points.map(p => `${p.x} ${p.y}`).join(' ');
         const reversePts = points.slice().reverse().map(p => `${p.x} ${p.y}`).join(' ');
-
         const greenD = `M 0 ${vbH} L 0 0 L ${points[last].x} ${points[last].y} L ${reversePts} Z`;
         const redD = `M ${vbW} ${vbH} L ${vbW} 0 L ${points[last].x} ${points[last].y} L ${forwardPts} Z`;
-
         const g = svg.querySelector('#aqGreen');
         const r = svg.querySelector('#aqRed');
-        const b = svg.querySelector('#aqBlend');
         if (g) g.setAttribute('d', greenD);
         if (r) r.setAttribute('d', redD);
-        if (b) b.setAttribute('d', redD);
-      } catch (err) {
-        console.warn('updateAquariumVisual erro:', err);
-      }
+      } catch (err) { console.warn('updateAquariumVisual error:', err); }
     }
 
     function renderHomeOverview(summary) {
