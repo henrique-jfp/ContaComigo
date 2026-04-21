@@ -1190,7 +1190,7 @@ lucide.createIcons();
         }
       }
 
-      // Heatmap Data (Real Calendar Mapping)
+      // Heatmap Data (Real Calendar Mapping com Cores Grená/Verde)
       const heatmapData = [];
       const daysShort = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
       
@@ -1207,7 +1207,11 @@ lucide.createIcons();
         if (isNaN(d.getTime())) return;
         if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) {
           const date = d.getDate();
-          activityMap[date] = (activityMap[date] || 0) + 1;
+          const val = Number(item.valor || 0);
+          if (!activityMap[date]) activityMap[date] = { count: 0, hasIncome: false, hasExpense: false };
+          activityMap[date].count++;
+          if (val > 0) activityMap[date].hasIncome = true;
+          if (val < 0) activityMap[date].hasExpense = true;
         }
       });
 
@@ -1216,17 +1220,25 @@ lucide.createIcons();
           const dayOfMonth = (wIdx * 7) + dIdx - startDayOfWeek + 1;
           let value = 0;
           let dateLabel = "";
+          let type = 'empty';
           
           if (dayOfMonth > 0 && dayOfMonth <= daysInMonth) {
-            value = activityMap[dayOfMonth] || 0;
+            const act = activityMap[dayOfMonth];
+            value = act ? act.count : 0;
             dateLabel = dayOfMonth.toString();
+            if (act) {
+               if (act.hasIncome && !act.hasExpense) type = 'income_only';
+               else if (act.hasIncome && act.hasExpense) type = 'mixed';
+               else if (act.hasExpense) type = 'expense_only';
+            }
           }
 
           heatmapData.push({
             x: d,
             y: `Sem ${wIdx + 1}`,
             v: value,
-            date: dateLabel 
+            date: dateLabel,
+            type: type
           });
         });
       }
@@ -1242,61 +1254,79 @@ lucide.createIcons();
         budgetPlanned,
         budgetActual,
         categories,
+        distroLabels,
+        distroValues,
         projectionLabels,
-        projectionValues,
+        projectionHistory,
+        projectionFuture,
         villains,
         sankeyData,
         heatmapData
       };
     }
 
-    // Função para renderizar o Sankey Premium via SVG (Substituindo o feio do Chart.js)
+    // Função para renderizar o Sankey Premium via SVG (ALTA LEGIBILIDADE)
     function renderSankeyPremium(container, data) {
       if (!container || !data.length) return;
       
-      const width = 700;
+      const width = 800; 
       const height = 400;
       
       // Agrupar dados
       const receitaTotal = data.filter(d => d.from === 'Receitas').reduce((a, b) => a + b.flow, 0);
       const despesasNodes = data.filter(d => d.from === 'Despesas');
-      const despesaTotal = data.filter(d => d.from === 'Caixa' && d.to === 'Despesas').reduce((a, b) => a + b.flow, 0);
 
-      // Cores Premium
+      // Cores Premium de Alto Contraste
       const grena = "#7b1e2d";
       const ouro = "#D4AF37";
       const verde = "#10b981";
 
-      let svgHtml = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="width:100%; height:100%; overflow:visible;">
+      let svgHtml = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="width:100%; height:100%; overflow:visible; font-family: 'Schibsted Grotesk', sans-serif;">
         <defs>
           <linearGradient id="flow-receita" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="${verde}" stop-opacity="0.2"/>
-            <stop offset="100%" stop-color="${grena}" stop-opacity="0.4"/>
+            <stop offset="0%" stop-color="${verde}" stop-opacity="0.4"/>
+            <stop offset="100%" stop-color="${grena}" stop-opacity="0.6"/>
           </linearGradient>
           <linearGradient id="flow-categoria" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="${grena}" stop-opacity="0.3"/>
-            <stop offset="100%" stop-color="${ouro}" stop-opacity="0.5"/>
+            <stop offset="0%" stop-color="${grena}" stop-opacity="0.5"/>
+            <stop offset="100%" stop-color="${ouro}" stop-opacity="0.6"/>
           </linearGradient>
         </defs>
 
-        <text x="75" y="25" text-anchor="middle" font-size="10" font-weight="bold" fill="rgba(255,255,255,0.4)" style="text-transform:uppercase; letter-spacing:1px">Entrada</text>
-        <text x="350" y="25" text-anchor="middle" font-size="10" font-weight="bold" fill="rgba(255,255,255,0.4)" style="text-transform:uppercase; letter-spacing:1px">Distribuição</text>
-        <text x="610" y="25" text-anchor="middle" font-size="10" font-weight="bold" fill="rgba(255,255,255,0.4)" style="text-transform:uppercase; letter-spacing:1px">Saídas</text>
+        <!-- Cabeçalhos -->
+        <text x="80" y="30" text-anchor="middle" font-size="12" font-weight="900" fill="${verde}" style="text-transform:uppercase; letter-spacing:2px">Entrada</text>
+        <text x="350" y="30" text-anchor="middle" font-size="12" font-weight="900" fill="${grena}" style="text-transform:uppercase; letter-spacing:2px">Gestão</text>
+        <text x="620" y="30" text-anchor="middle" font-size="12" font-weight="900" fill="${ouro}" style="text-transform:uppercase; letter-spacing:2px">Saídas</text>
 
         <!-- Fluxo Principal -->
-        <path d="M140,60 C240,60 240,60 290,60 L290,360 C240,360 240,360 140,360 Z" fill="url(#flow-receita)" opacity="0.15" />
+        <path d="M140,60 C240,60 240,60 290,60 L290,360 C240,360 240,360 140,360 Z" fill="url(#flow-receita)" />
         
         <!-- Nó Receitas -->
-        <rect x="20" y="60" width="120" height="300" rx="12" fill="${verde}" fill-opacity="0.05" stroke="${verde}" stroke-opacity="0.3" />
-        <rect x="20" y="60" width="4" height="300" rx="2" fill="${verde}" />
-        <text x="80" y="200" text-anchor="middle" font-size="13" font-weight="bold" fill="#fff">Receitas</text>
-        <text x="80" y="218" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.5)">${formatCurrencyBR(receitaTotal)}</text>
+        <rect x="20" y="60" width="120" height="300" rx="14" fill="${verde}" fill-opacity="0.15" stroke="${verde}" stroke-width="2" />
+        <text x="80" y="195" text-anchor="middle" font-size="16" font-weight="900" fill="#ffffff">RECEITAS</text>
+        <text x="80" y="220" text-anchor="middle" font-size="14" font-weight="700" fill="${verde}">${formatCurrencyBR(receitaTotal)}</text>
 
         <!-- Nó Caixa -->
-        <rect x="290" y="60" width="120" height="300" rx="12" fill="${grena}" fill-opacity="0.05" stroke="${grena}" stroke-opacity="0.3" />
-        <rect x="290" y="60" width="4" height="300" rx="2" fill="${grena}" />
-        <text x="350" y="200" text-anchor="middle" font-size="13" font-weight="bold" fill="#fff">Caixa</text>
-        <text x="350" y="218" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.5)">Gestão</text>
+        <rect x="290" y="60" width="120" height="300" rx="14" fill="${grena}" fill-opacity="0.25" stroke="${grena}" stroke-width="2" />
+        <text x="350" y="195" text-anchor="middle" font-size="16" font-weight="900" fill="#ffffff">CAIXA</text>
+        <text x="350" y="220" text-anchor="middle" font-size="12" font-weight="600" fill="rgba(255,255,255,0.8)">GESTÃO</text>
+
+        <!-- Categorias Dinâmicas (Máximo 5) -->
+        ${despesasNodes.slice(0, 5).map((cat, i) => {
+          const yPos = 65 + (i * 65);
+          const h = 55;
+          return `
+            <path d="M410,${yPos} C480,${yPos} 480,${yPos} 540,${yPos} L540,${yPos + h} C480,${yPos + h} 480,${yPos + h} 410,${yPos + h} Z" fill="url(#flow-categoria)" />
+            <rect x="540" y="${yPos}" width="160" height="${h}" rx="12" fill="rgba(0,0,0,0.4)" stroke="${ouro}" stroke-opacity="0.5" stroke-width="2" />
+            <rect x="540" y="${yPos}" width="4" height="${h}" rx="2" fill="${ouro}" />
+            <text x="620" y="${yPos + 22}" text-anchor="middle" font-size="11" font-weight="900" fill="#ffffff">${cat.to.toUpperCase()}</text>
+            <text x="620" y="${yPos + 42}" text-anchor="middle" font-size="12" font-weight="bold" fill="${ouro}">${formatCurrencyBR(cat.flow)}</text>
+          `;
+        }).join('')}
+      </svg>`;
+
+      container.innerHTML = svgHtml;
+    }
 
         <!-- Categorias Dinâmicas -->
         ${despesasNodes.slice(0, 5).map((cat, i) => {
