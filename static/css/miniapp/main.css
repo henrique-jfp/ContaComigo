@@ -426,9 +426,9 @@
     width: 280px !important;
     max-width: 280px !important;
     height: 100vh !important;
-    /* Fundo escuro profundo para contraste premium */
-    background: linear-gradient(180deg, #0f0f11 0%, #050506 100%) !important;
-    border-right: 1px solid rgba(212, 175, 55, 0.1) !important;
+    /* Fundo Grená Profundo para harmonia com o sistema */
+    background: linear-gradient(180deg, #4a1019 0%, #2d0a10 100%) !important;
+    border-right: 1px solid rgba(212, 175, 55, 0.15) !important;
     display: flex !important;
     flex-direction: column !important;
     padding: 3rem 1.5rem !important;
@@ -443,7 +443,7 @@
     opacity: 1 !important;
   }
 
-  /* Reset Fantasma (Pierre) no topo com brilho */
+  /* Reset Fantasma (Pierre) no topo com brilho ouro */
   .desktop-layout #bottomNav > div.absolute {
     position: relative !important;
     top: auto !important;
@@ -464,7 +464,7 @@
     position: relative !important;
     margin-bottom: 0 !important;
     align-self: center;
-    filter: drop-shadow(0 0 20px rgba(123, 30, 45, 0.5));
+    filter: drop-shadow(0 0 20px rgba(212, 175, 55, 0.3));
     transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     width: 80px !important;
     height: 80px !important;
@@ -498,10 +498,10 @@
     gap: 16px !important;
     font-size: 1.05rem !important;
     font-weight: 500 !important;
-    /* Texto em ouro suave quando inativo para elegância */
-    color: rgba(212, 175, 55, 0.6) !important;
-    background: rgba(255, 255, 255, 0.02) !important;
-    border: 1px solid rgba(255, 255, 255, 0.03) !important;
+    /* Texto em Ouro Suave para máximo requinte sobre o Grená */
+    color: rgba(212, 175, 55, 0.8) !important;
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(212, 175, 55, 0.1) !important;
     transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
     cursor: pointer !important;
   }
@@ -515,32 +515,32 @@
   }
 
   .desktop-layout .nav-btn:hover {
-    background: rgba(123, 30, 45, 0.1) !important;
-    color: #D4AF37 !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: #ffffff !important;
     transform: translateX(8px);
-    border-color: rgba(212, 175, 55, 0.2) !important;
+    border-color: rgba(212, 175, 55, 0.3) !important;
   }
 
-  /* ESTADO ATIVO: Grená com Brilho (Glow) */
+  /* ESTADO ATIVO: Ouro com Brilho (Glow) sobre o fundo Grená */
   .desktop-layout .nav-btn.tab-active {
-    background: linear-gradient(135deg, #7b1e2d 0%, #b0263d 100%) !important;
-    color: #ffffff !important;
-    font-weight: 700 !important;
+    background: linear-gradient(135deg, #D4AF37 0%, #B8860B 100%) !important;
+    color: #2d0a10 !important; /* Texto escuro para contraste no fundo ouro */
+    font-weight: 800 !important;
     box-shadow: 
-      0 0 20px rgba(123, 30, 45, 0.4),
+      0 0 25px rgba(212, 175, 55, 0.4),
       0 10px 30px rgba(0, 0, 0, 0.3) !important;
-    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
     transform: translateX(4px) scale(1.02);
   }
 
   .desktop-layout .nav-btn.tab-active i {
-    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.2));
   }
 
   .desktop-layout .nav-btn i {
     width: 22px !important;
     height: 22px !important;
-    opacity: 0.8;
+    opacity: 0.9;
   }
 
   /* Área de Conteúdo Principal */
