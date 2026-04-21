@@ -608,6 +608,165 @@ async def enviar_alerta_metas(bot, usuario: Usuario, alerta: Dict):
 
 
 # ============================================================================
+# RESUMO SEMANAL - NOVO JOB
+# ============================================================================
+
+async def _gerar_dica_ia_semanal(dados_semana: dict) -> str:
+    """Gera uma dica personalizada usando a IA baseada no resumo da semana"""
+    import google.generativeai as genai
+    import config
+    
+    if not config.GEMINI_API_KEY:
+        return "Continue organizando suas finanças e mantendo tudo no controle!"
+        
+    try:
+        genai.configure(api_key=config.GEMINI_API_KEY)
+        model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
+        
+        prompt = f"""Você é o Alfredo, o assistente financeiro do app ContaComigo.
+O usuário recebeu este resumo semanal:
+- Receitas: R$ {dados_semana['receitas']:.2f}
+- Despesas: R$ {dados_semana['despesas']:.2f}
+- Saldo: R$ {dados_semana['saldo']:.2f}
+- Top Categorias: {', '.join([f"{c['nome']} (R$ {c['valor']:.2f})" for c in dados_semana['categorias'][:2]])}
+
+Baseado nisso, dê UMA dica curta (máximo 2 frases) de amigo/consultor para a próxima semana.
+Seja direto, encorajador, use um emoji e assine como 'Alfredo'.
+"""
+        response = await model.generate_content_async(prompt)
+        if response and response.text:
+            return response.text.strip()
+    except Exception as e:
+        logger.error(f"Erro ao gerar dica semanal da IA: {e}")
+        
+    return "Lembre-se: o controle financeiro de hoje é a paz de espírito de amanhã!"
+
+async def enviar_resumo_semanal_usuario(bot, usuario: Usuario):
+    """Gera e envia o resumo semanal em HTML para o usuário"""
+    db = next(get_db())
+    try:
+        hoje = datetime.now()
+        data_inicio = hoje - timedelta(days=7)
+        
+        lancamentos = db.query(Lancamento).filter(
+            and_(
+                Lancamento.id_usuario == usuario.id,
+                Lancamento.data_transacao >= data_inicio,
+                Lancamento.data_transacao <= hoje,
+                Lancamento.status != "ignorado"
+            )
+        ).all()
+        
+        if not lancamentos:
+            return False
+            
+        receitas = sum(float(l.valor) for l in lancamentos if getattr(l, 'tipo', '') in ("Entrada", "Receita") or float(l.valor) > 0)
+        despesas = sum(abs(float(l.valor)) for l in lancamentos if getattr(l, 'tipo', '') in ("Saída", "Despesa") or float(l.valor) < 0)
+        saldo_semana = receitas - despesas
+        
+        if receitas == 0 and despesas == 0:
+            return False
+
+        # Top gastos
+        gastos = [l for l in lancamentos if (getattr(l, 'tipo', '') in ("Saída", "Despesa") or float(l.valor) < 0)]
+        gastos_ordenados = sorted(gastos, key=lambda x: abs(float(x.valor)), reverse=True)[:3]
+        
+        # Categorias
+        cats = {}
+        for g in gastos:
+            cat_nome = g.categoria.nome if g.categoria else "Outros"
+            cats[cat_nome] = cats.get(cat_nome, 0) + abs(float(g.valor))
+            
+        cats_ordenadas = [{"nome": k, "valor": v} for k, v in sorted(cats.items(), key=lambda item: item[1], reverse=True)]
+        
+        # Formas de pagamento
+        formas = {}
+        for g in gastos:
+            fp = g.forma_pagamento or "Outros"
+            formas[fp] = formas.get(fp, 0) + 1
+        total_formas = sum(formas.values()) or 1
+        formas_percent = [{"nome": k, "pct": (v/total_formas)*100} for k, v in sorted(formas.items(), key=lambda item: item[1], reverse=True)[:2]]
+
+        dados_ia = {
+            'receitas': receitas,
+            'despesas': despesas,
+            'saldo': saldo_semana,
+            'categorias': cats_ordenadas
+        }
+        
+        dica_alfredo = await _gerar_dica_ia_semanal(dados_ia)
+        
+        def fbrl(v):
+            return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            
+        data_ini_str = data_inicio.strftime("%d/%m")
+        data_fim_str = hoje.strftime("%d/%m")
+        
+        msg = f"📊 <b>Seu Resumo Semanal Chegou!</b> 🗓️ <i>({data_ini_str} a {data_fim_str})</i>\n\n"
+        msg += f"Olá, {usuario.nome or 'Amigo'}! Aqui está o raio-x da sua semana financeira. Vamos ver como você se saiu?\n\n"
+        msg += f"💰 <b>Movimentação Geral</b>\n"
+        msg += f"🟢 <b>Recebeu:</b> <code>{fbrl(receitas)}</code>\n"
+        msg += f"🔴 <b>Gastou:</b> <code>{fbrl(despesas)}</code>\n"
+        
+        sinal = "+" if saldo_semana >= 0 else "-"
+        emoji_saldo = "✅" if saldo_semana >= 0 else "⚠️"
+        msg += f"💳 <b>Saldo da Semana:</b> <code>{sinal} {fbrl(abs(saldo_semana))}</code> {emoji_saldo}\n\n"
+        
+        if gastos_ordenados:
+            msg += f"🏆 <b>Top Maiores Gastos</b>\n"
+            icones = ["1️⃣", "2️⃣", "3️⃣"]
+            for i, g in enumerate(gastos_ordenados):
+                desc = (g.descricao[:25] + "..") if len(g.descricao) > 25 else g.descricao
+                msg += f"{icones[i]} {desc} - <code>{fbrl(abs(float(g.valor)))}</code>\n"
+            msg += "\n"
+            
+        if cats_ordenadas:
+            msg += f"🍕 <b>Onde seu dinheiro mais foi?</b>\n"
+            for c in cats_ordenadas[:3]:
+                pct = (c['valor'] / despesas * 100) if despesas > 0 else 0
+                msg += f"• {c['nome']}: {pct:.0f}% (<code>{fbrl(c['valor'])}</code>)\n"
+            msg += "\n"
+            
+        if formas_percent:
+            msg += f"💳 <b>Como você mais pagou?</b>\n"
+            for fp in formas_percent:
+                msg += f"• {fp['nome'].replace('_', ' ').title()} ({fp['pct']:.0f}%)\n"
+            msg += "\n"
+            
+        msg += f"🤖 <b>Dica do Alfredo:</b>\n<i>\"{dica_alfredo}\"</i>\n\n"
+        msg += "Boa semana e conte comigo! 🚀"
+        
+        await bot.send_message(
+            chat_id=usuario.telegram_id,
+            text=msg,
+            parse_mode='HTML'
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Erro ao processar resumo semanal do usuário {usuario.id}: {e}")
+        return False
+    finally:
+        db.close()
+
+async def job_resumo_semanal(context):
+    """Job que roda aos Domingos às 19h para enviar o resumo da semana"""
+    try:
+        logger.info("📊 Iniciando Job de Resumo Semanal...")
+        db = next(get_db())
+        # Notifica usuários ativos ou que pediram insights
+        usuarios = db.query(Usuario).filter(Usuario.telegram_id.isnot(None)).all()
+        
+        enviados = 0
+        for usuario in usuarios:
+            if getattr(usuario, 'notif_insights', True):
+                if await enviar_resumo_semanal_usuario(context.bot, usuario):
+                    enviados += 1
+                    
+        logger.info(f"✅ Resumo Semanal concluído: {enviados} usuários notificados.")
+    except Exception as e:
+        logger.error(f"Erro no job de resumo semanal: {e}")
+
+# ============================================================================
 # JOB PRINCIPAL - EXECUTADO DIARIAMENTE
 # ============================================================================
 

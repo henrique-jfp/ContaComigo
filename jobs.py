@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, time
 from telegram.ext import ContextTypes
 from alerts import agendar_notificacoes_diarias
-from gerente_financeiro.assistente_proativo import job_assistente_proativo
+from gerente_financeiro.assistente_proativo import job_assistente_proativo, job_resumo_semanal
 from gerente_financeiro.wrapped_anual import job_wrapped_anual
 from gerente_financeiro.ai_memory_service import job_atualizar_perfis_ia
 from alerts import job_metas_mensal
@@ -105,11 +105,12 @@ def configurar_jobs(job_queue):
         
 
         
-        # Job diário às 20:00 - Assistente Proativo (alertas inteligentes)
+        # Job semanal aos Domingos às 19:00 - Resumo Financeiro da Semana
         job_queue.run_daily(
-            job_assistente_proativo,
-            time=time(hour=20, minute=0),
-            name="assistente_proativo_diario"
+            job_resumo_semanal,
+            time=time(hour=19, minute=0),
+            days=(6,), # 6 = Domingo
+            name="resumo_semanal_domingo"
         )
         
         # Job diário que verifica se é 31/Dez para enviar o Wrapped
