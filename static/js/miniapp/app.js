@@ -1008,11 +1008,11 @@ lucide.createIcons();
     function updateAgendaModalLabels() {
       const isReminder = agendaMode === 'lembretes';
       const isLimits = agendaMode === 'limites';
-      if (agendaModalTitle) agendaModalTitle.textContent = isReminder ? 'Novo Lembrete' : 'Novo Agendamento';
-      if (agendaValorLabel) agendaValorLabel.textContent = isReminder ? 'Valor (opcional)' : 'Valor';
-      if (agendaDataLabel) agendaDataLabel.textContent = isReminder ? 'Data do lembrete' : 'Primeira execução';
+      if (agendaModalTitle) agendaModalTitle.textContent = isReminder ? 'Novo Lembrete' : (isLimits ? 'Novo Limite' : 'Novo Agendamento');
+      if (agendaValorLabel) agendaValorLabel.textContent = isReminder ? 'Valor (opcional)' : (isLimits ? 'Valor do Limite' : 'Valor');
+      if (agendaDataLabel) agendaDataLabel.textContent = isReminder ? 'Data do lembrete' : (isLimits ? 'Vence em' : 'Primeira execução');
       if (newAgendSave?.querySelector('.save-text')) {
-        newAgendSave.querySelector('.save-text').textContent = isReminder ? 'Criar lembrete' : 'Criar agendamento';
+        newAgendSave.querySelector('.save-text').textContent = isReminder ? 'Criar lembrete' : (isLimits ? 'Criar limite' : 'Criar agendamento');
       }
       if (newAgendValor) newAgendValor.required = !isReminder;
       if (lembreteHistoryWrap) lembreteHistoryWrap.classList.toggle('hidden', !isReminder);
@@ -1221,6 +1221,12 @@ lucide.createIcons();
       const despesas = data.filter(d => d.from === 'Despesas');
       const maxHeight = 300;
       const scale = maxHeight / Math.max(totalRec, totalExp, 1);
+      
+      const rY = 70 + (maxHeight - Math.max(40, totalRec * scale)) / 2;
+      const hR = Math.max(40, totalRec * scale);
+      const cY = 70 + (maxHeight - Math.max(40, totalExp * scale)) / 2;
+      const hC = Math.max(40, totalExp * scale);
+
       let svgHtml = `<svg viewBox=\"0 0 ${width} ${height}\" xmlns=\"http://www.w3.org/2000/svg\" style=\"width:100%; height:auto; overflow:visible;\">
         <defs>
           <linearGradient id=\"g-main-flow\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"0%\"><stop offset=\"0%\" stop-color=\"#10b981\" stop-opacity=\"0.4\"/><stop offset=\"100%\" stop-color=\"#7b1e2d\" stop-opacity=\"0.4\"/></linearGradient>
