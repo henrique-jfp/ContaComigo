@@ -14,6 +14,16 @@ ContaComigo é uma plataforma financeira inovadora que combina a conveniência d
     *   Interface integrada diretamente na navegação principal, eliminando fricção.
     *   Gestão de saldos, transações e faturas com visual unificado.
 
+*   **Planning Hub & Gestão de Agenda:**
+    *   Centralização de orçamentos, limites de gastos e compromissos financeiros na aba **"Agenda"**.
+    *   Interface unificada para planejamento de metas e controle de pagamentos recorrentes.
+    *   Visualização clara de orçamentos versus realizado para cada categoria.
+
+*   **Lembretes Proativos do Alfredo:**
+    *   Sistema inteligente de notificações para vencimentos e alertas de orçamento.
+    *   Criação e gerenciamento de lembretes diretamente pelo MiniApp ou via chat no Telegram.
+    *   Fluxo de IA que entende e agenda compromissos financeiros automaticamente.
+
 *   **MiniApp Premium (Visual Private Banking):**
     *   Interface sofisticada com tema **Premium Grená & Ouro**.
     *   Sidebar inteligente no desktop para navegação fluida e side-by-side.
