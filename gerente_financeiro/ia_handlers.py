@@ -627,8 +627,53 @@ async def _enviar_mensagem_fatiada(message, texto: str, is_html: bool = True, **
                     pass
 
 
+def _is_intencao_de_criacao(texto: str) -> bool:
+    """Detecta se o texto indica uma intenção de criar, agendar ou lembrar algo."""
+    t = (texto or "").lower()
+    # Verbos e substantivos que indicam criação/ação futura
+    gatilhos = [
+        "criar", "crie", "nova", "novo", "adicionar", "definir", "registra", "registre", 
+        "anota", "anote", "coloca", "coloque", "agendar", "agende", "me lembre", "lembra", 
+        "meta", "lembrete", "agendamento", "programar", "programe"
+    ]
+    # Se tem verbo de ação e não é uma pergunta de consulta
+    tem_verbo = any(v in t for v in gatilhos)
+    eh_consulta = any(c in t for c in ["quais", "como", "onde", "quando", "tenho", "tem", "qual o", "qual a"])
+    
+    return tem_verbo and not eh_consulta
+
+
+def _parse_br_money(val_str: str) -> float | None:
+    """Converte string de valor monetário brasileiro para float de forma robusta."""
+    if not val_str:
+        return None
+    v = val_str.replace("R$", "").replace("$", "").replace(" ", "").strip()
+    
+    # Se tem vírgula e ponto, o ponto é milhar e vírgula é decimal (ex: 1.234,56)
+    if "," in v and "." in v:
+        v = v.replace(".", "").replace(",", ".")
+    # Se tem vírgula, trocamos por ponto
+    elif "," in v:
+        v = v.replace(",", ".")
+    # Se só tem ponto, precisamos decidir se é milhar ou decimal
+    elif "." in v:
+        partes = v.split(".")
+        # Se a última parte tem 3 dígitos, é muito provável que seja milhar (ex: 7.500)
+        if len(partes[-1]) == 3:
+            v = v.replace(".", "")
+    
+    try:
+        return float(v)
+    except ValueError:
+        return None
+
+
 def _intencao_busca_compra(texto: str) -> bool:
     texto = (texto or "").lower()
+    
+    # Se for intenção de criar algo, não é busca simples
+    if _is_intencao_de_criacao(texto):
+        return False
     
     # Se a pergunta pede agregação, análise ou envolve juros, ignorar busca simples para deixar para a IA
     if any(ex in texto for ex in ["quanto", "total", "juros", "taxa", "rendimento", "score"]):
@@ -710,13 +755,10 @@ def _formatar_busca_compras(lancamentos: list[Lancamento], termo: str) -> str:
 def _extrair_valor_regex(texto: str) -> float | None:
     """Extrai o primeiro valor numérico que parece monetário."""
     texto = texto.replace("reais", "").replace("real", "").strip()
-    match = re.search(r'(\d+(?:[.,]\d{1,2})?)\b', texto)
+    # Pega qualquer sequência de dígitos, pontos e vírgulas que pareça um número
+    match = re.search(r'(\d[\d.,]*)', texto)
     if match:
-        val_str = match.group(1).replace(',', '.')
-        try:
-            return float(val_str)
-        except ValueError:
-            return None
+        return _parse_br_money(match.group(1))
     return None
 
 
@@ -735,23 +777,31 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
     
     # 1. LANÇAMENTO (Gastei, Paguei, Recebi, Lança, Comprei, Registra)
     # Suporta: "Gastei 50 no mercado", "Comprei uma calça de 300 reais", "Quero registrar uma compra de 300 na oakley"
-    # Verbos e variações COM \b (word boundary) para não capturar partes de palavras (ex: "lança" em "lançamento")
+    # Verbos e variações COM \b (word boundary) para não capturar partes de palavras
     verbos = r'\b(?:gastei|paguei|recebi|lanç[ao]r?|registra?r?|coloque?i?|comprei|compras?|adiciona?r?|anota?r?)\b'
     # Artigos e conectivos opcionais
     fillers = r'(?:\s+(?:um|uma|o|a|os|as|do|da|no|na|em|com|de|valor|compra|gasto|despesa|receita|para|pra))*'
     
+    # Captura valor flexível (suporta 7.500 ou 7500,00)
+    valor_re = r'(?:r\$?\s*)?([\d.,]+)'
+
     # Padrao A: Verbo + (Fillers) + Valor + (reais/real opcional) + (Fillers preposicionais) + Descrição
-    p_lanc_a = verbos + fillers + r'\s+(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)?\s*(?:no|na|em|com|de|para|pra)?\s*(.+)'
+    p_lanc_a = verbos + fillers + r'\s+' + valor_re + r'\s*(?:reais|real)?\s*(?:no|na|em|com|de|para|pra)?\s*(.+)'
     # Padrao B: Verbo + (Fillers) + Descrição + (Fillers) + Valor no final
-    p_lanc_b = verbos + fillers + r'\s+(.+?)\s+(?:por|de|foi|valor de|custou|r\$?\s*)?\s*(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)?$'
+    p_lanc_b = verbos + fillers + r'\s+(.+?)\s+(?:por|de|foi|valor de|custou|r\$?\s*)?\s*' + valor_re + r'\s*(?:reais|real)?$'
     
+    # Lista de palavras que sugerem recorrência (devemos deixar para a IA lidar com Agendamentos)
+    recorrencia_keywords = ["recorrente", "mensal", "semanal", "todo mês", "todo mes", "fixo", "todo dia", "diário", "diario"]
+    if any(w in t for w in recorrencia_keywords):
+        return None
+
     # Lista de palavras que caracterizam uma entrada
     palavras_entrada = ["recebi", "ganhei", "vendi", "salário", "salario", "reembolso", "receita", "entrada"]
 
     m_a = re.search(p_lanc_a, t)
     if m_a:
-        try:
-            valor = float(m_a.group(1).replace(',', '.'))
+        valor = _parse_br_money(m_a.group(1))
+        if valor is not None:
             desc = m_a.group(2).strip()
             tipo = "Entrada" if any(x in t for x in palavras_entrada) else "Saída"
             return "registrar_lancamento", {
@@ -761,14 +811,12 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
                 "forma_pagamento": "Nao_informado",
                 "tipo": tipo
             }
-        except (ValueError, IndexError):
-            pass
         
     m_b = re.search(p_lanc_b, t)
     if m_b:
-        try:
-            desc = m_b.group(1).strip()
-            valor = float(m_b.group(2).replace(',', '.'))
+        desc = m_b.group(1).strip()
+        valor = _parse_br_money(m_b.group(2))
+        if valor is not None:
             tipo = "Entrada" if any(x in t for x in palavras_entrada) else "Saída"
             return "registrar_lancamento", {
                 "valor": valor,
@@ -777,40 +825,33 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
                 "forma_pagamento": "Nao_informado",
                 "tipo": tipo
             }
-        except (ValueError, IndexError):
-            pass
 
     # 2. META (Meta de X para Y)
-    p_meta = r'\b(?:criar?|nova|definir?|adiciona?r?)\b\s+meta\s+(?:de\s+)?(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)?\s*(?:para|pra|de)?\s*(.+)'
+    p_meta = r'\b(?:criar?|nova|definir?|adiciona?r?)\b\s+meta\s+(?:de\s+)?' + valor_re + r'\s*(?:reais|real)?\s*(?:para|pra|de)?\s*(.+)'
     m_meta = re.search(p_meta, t)
     if m_meta:
-        try:
-            valor = float(m_meta.group(1).replace(',', '.'))
+        valor = _parse_br_money(m_meta.group(1))
+        if valor is not None:
             desc = m_meta.group(2).strip()
             return "criar_meta", {"valor_alvo": valor, "descricao": desc.capitalize()}
-        except (ValueError, IndexError):
-            pass
 
     # 3. LIMITE (Limite de X em Y OU Limite em Y de X)
-    # Suporta: "limite de 300 em lazer", "limite para lazer de 300", "limita alimentação em 500"
-    p_limite_a = r'\b(?:definir?|criar?|novo?|limita?r?)\b\s+limite\s+(?:de\s+)?(?:r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)?\s*(?:para|pra|em|na|categoria)?\s*(.+)'
-    p_limite_b = r'\b(?:definir?|criar?|novo?|limita?r?)\b\s+limite\s+(?:para|pra|em|na|categoria)?\s*(.+?)\s+(?:de|valor de|em|no valor de|r\$?\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real)?$'
+    p_limite_a = r'\b(?:definir?|criar?|novo?|limita?r?)\b\s+limite\s+(?:de\s+)?' + valor_re + r'\s*(?:reais|real)?\s*(?:para|pra|em|na|categoria)?\s*(.+)'
+    p_limite_b = r'\b(?:definir?|criar?|novo?|limita?r?)\b\s+limite\s+(?:para|pra|em|na|categoria)?\s*(.+?)\s+(?:de|valor de|em|no valor de|r\$?\s*)?' + valor_re + r'\s*(?:reais|real)?$'
     
     m_lim_a = re.search(p_limite_a, t)
     if m_lim_a:
-        try:
-            valor = float(m_lim_a.group(1).replace(',', '.'))
+        valor = _parse_br_money(m_lim_a.group(1))
+        if valor is not None:
             cat = m_lim_a.group(2).strip()
             return "definir_limite_orcamento", {"valor": valor, "categoria": cat.capitalize()}
-        except (ValueError, IndexError): pass
 
     m_lim_b = re.search(p_limite_b, t)
     if m_lim_b:
-        try:
-            cat = m_lim_b.group(1).strip()
-            valor = float(m_lim_b.group(2).replace(',', '.'))
+        cat = m_lim_b.group(1).strip()
+        valor = _parse_br_money(m_lim_b.group(2))
+        if valor is not None:
             return "definir_limite_orcamento", {"valor": valor, "categoria": cat.capitalize()}
-        except (ValueError, IndexError): pass
 
     return None
 
@@ -1283,7 +1324,7 @@ def _formatar_lancamento_card(lanc: Lancamento) -> str:
 
 def _intencao_ultimo_lancamento(texto: str) -> bool:
     texto = (texto or "").lower()
-    if any(v in texto for v in ["criar", "nova", "novo", "adicionar", "definir", "registra", "coloca"]):
+    if _is_intencao_de_criacao(texto):
         return False
     return any(
         frase in texto
@@ -1309,6 +1350,8 @@ def _intencao_ultimo_lancamento(texto: str) -> bool:
 
 def _intencao_saldo(texto: str) -> bool:
     texto = (texto or "").lower()
+    if _is_intencao_de_criacao(texto):
+        return False
     return any(
         p in texto
         for p in [
@@ -1337,7 +1380,7 @@ def _intencao_saldo(texto: str) -> bool:
 def _intencao_metas(texto: str) -> bool:
     texto = (texto or "").lower()
     # Se contém verbos de ação para criação, deixa passar para a IA processar
-    if any(v in texto for v in ["criar", "nova", "novo", "adicionar", "definir", "registra", "coloca", "montar"]):
+    if _is_intencao_de_criacao(texto):
         return False
 
     return any(
@@ -1371,6 +1414,8 @@ def _intencao_metas(texto: str) -> bool:
 
 def _intencao_contas(texto: str) -> bool:
     texto = (texto or "").lower()
+    if _is_intencao_de_criacao(texto):
+        return False
     sinais = [
         "conta",
         "contas",
@@ -1395,6 +1440,8 @@ def _intencao_contas(texto: str) -> bool:
 
 def _intencao_comparacao_financeira(texto: str) -> bool:
     texto = (texto or "").lower()
+    if _is_intencao_de_criacao(texto):
+        return False
     sinais = [
         "compar",
         "se compara",
@@ -1417,6 +1464,8 @@ def _intencao_comparacao_financeira(texto: str) -> bool:
 
 def _intencao_alerta_financeiro(texto: str) -> bool:
     texto = (texto or "").lower()
+    if _is_intencao_de_criacao(texto):
+        return False
     sinais = [
         "alerta",
         "risco",
@@ -1450,6 +1499,8 @@ def _intencao_alerta_financeiro(texto: str) -> bool:
 
 def _intencao_previsao_financeira(texto: str) -> bool:
     texto = (texto or "").lower()
+    if _is_intencao_de_criacao(texto):
+        return False
     sinais = [
         "se eu continuar",
         "quanto posso gastar",
@@ -1482,6 +1533,8 @@ def _intencao_previsao_financeira(texto: str) -> bool:
 
 def _intencao_analise_gastos(texto: str) -> bool:
     texto = (texto or "").lower()
+    if _is_intencao_de_criacao(texto):
+        return False
     sinais = [
         "onde eu mais estou gastando",
         "categoria mais pesa",
@@ -1527,6 +1580,8 @@ def _intencao_analise_gastos(texto: str) -> bool:
 
 def _intencao_consultoria_financeira(texto: str) -> bool:
     texto = (texto or "").lower()
+    if _is_intencao_de_criacao(texto):
+        return False
     sinais = [
         "se você fosse meu gerente",
         "se voce fosse meu gerente",
@@ -1585,6 +1640,8 @@ def _intencao_categorizar_sem_categoria(texto: str) -> bool:
 
 def _intencao_categoria_mais_gasto(texto: str) -> bool:
     texto = (texto or "").lower()
+    if _is_intencao_de_criacao(texto):
+        return False
     return (
         ("categoria" in texto and "gasto" in texto and "mais" in texto)
         or "categoria eu mais" in texto
@@ -1594,6 +1651,8 @@ def _intencao_categoria_mais_gasto(texto: str) -> bool:
 
 def _intencao_forma_pagamento_mais_usada(texto: str) -> bool:
     texto = (texto or "").lower()
+    if _is_intencao_de_criacao(texto):
+        return False
     sinais_pagamento = ["forma de pagamento", "pagamento", "crédito", "credito", "pix", "débito", "debito"]
     sinais_uso = ["mais", "utilizo", "uso", "utilizada", "utilizo"]
     return any(s in texto for s in sinais_pagamento) and any(s in texto for s in sinais_uso)
@@ -1601,6 +1660,8 @@ def _intencao_forma_pagamento_mais_usada(texto: str) -> bool:
 
 def _intencao_resumo_mes(texto: str) -> bool:
     texto = (texto or "").lower()
+    if _is_intencao_de_criacao(texto):
+        return False
     return any(
         s in texto
         for s in [
@@ -1623,6 +1684,8 @@ def _intencao_resumo_mes(texto: str) -> bool:
 
 def _intencao_resumo_semana(texto: str) -> bool:
     texto = (texto or "").lower()
+    if _is_intencao_de_criacao(texto):
+        return False
     return any(
         s in texto
         for s in [
@@ -1637,18 +1700,22 @@ def _intencao_resumo_semana(texto: str) -> bool:
 
 def _intencao_agendamentos(texto: str) -> bool:
     texto = (texto or "").lower()
-    if any(v in texto for v in ["criar", "nova", "novo", "adicionar", "definir", "registra", "coloca"]):
+    if _is_intencao_de_criacao(texto):
         return False
     return any(s in texto for s in ["agendamentos", "lancamentos programados", "lançamentos programados", "recorrente", "recorrentes", "para pagar de forma recorrente"])
 
 
 def _intencao_score_financeiro(texto: str) -> bool:
     texto = (texto or "").lower()
+    if _is_intencao_de_criacao(texto):
+        return False
     return "score" in texto and any(s in texto for s in ["financeir", "saúde financeira", "saude financeira"])
 
 
 def _intencao_cotacao_externa(texto: str) -> bool:
     texto = (texto or "").lower()
+    if _is_intencao_de_criacao(texto):
+        return False
     return any(s in texto for s in ["valor do dolar", "valor do dólar", "cotação", "cotacao", "crypto", "criptomoeda", "bitcoin", "ethereum"])
 
 

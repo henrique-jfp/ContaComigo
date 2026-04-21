@@ -1166,7 +1166,10 @@ lucide.createIcons();
             const act = activity[dayNum];
             if (act) {
               stats.inc = act.incC; stats.exp = act.expC;
-              type = (act.incT > act.expT) ? 'income_win' : 'expense_win';
+              stats.incT = act.incT; stats.expT = act.expT;
+              if (act.incT > act.expT) type = 'income_win';
+              else if (act.expT > act.incT) type = 'expense_win';
+              else type = 'day';
             } else { type = 'day'; }
           }
           heatmapData.push({ x: d, y: `Sem ${w+1}`, date: label, type: type, stats: stats });
@@ -1226,12 +1229,16 @@ lucide.createIcons();
         <text x=\"85\" y=\"40\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"900\" fill=\"${vProfundo}\">ENTRADA</text>
         <text x=\"300\" y=\"40\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"900\" fill=\"${gProfundo}\">GEST�O</text>
         <text x=\"610\" y=\"40\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"900\" fill=\"#64748b\">SA�DAS</text>
-        <path d=\"M145,210 C200,210 200,210 240,210\" stroke=\"url(#g-main-flow)\" stroke-width=\"${Math.max(20, totalRec * scale)}\" fill=\"none\" opacity=\"0.6\" />
-        <rect x=\"25\" y=\"${70 + (maxHeight - Math.max(40, totalRec * scale))/2}\" width=\"120\" height=\"${Math.max(40, totalRec * scale)}\" rx=\"12\" fill=\"rgba(16, 185, 129, 0.05)\" stroke=\"#10b981\" stroke-width=\"2\" />
-        <text x=\"85\" y=\"210\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"900\" fill=\"${vProfundo}\">RECEITAS</text>
-        <text x=\"85\" y=\"235\" text-anchor=\"middle\" font-size=\"12\" font-weight=\"bold\" fill=\"${vProfundo}\">${formatCurrencyBR(totalRec)}</text>
-        <rect x=\"240\" y=\"${70 + (maxHeight - Math.max(40, totalExp * scale))/2}\" width=\"120\" height=\"${Math.max(40, totalExp * scale)}\" rx=\"12\" fill=\"rgba(123, 30, 45, 0.05)\" stroke=\"#7b1e2d\" stroke-width=\"2\" />
-        <text x=\"300\" y=\"210\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"900\" fill=\"${gProfundo}\">CAIXA</text>
+        <path d=\"M145,${rY} C195,${rY} 195,${cY} 240,${cY} L240,${cY + hC} C195,${cY + hC} 195,${rY + hR} 145,${rY + hR} Z\" fill=\"url(#g-main-flow)\" opacity=\"0.7\" />
+
+        <!-- Nós -->
+        <rect x=\"25\" y=\"${rY}\" width=\"120\" height=\"${hR}\" rx=\"12\" fill=\"rgba(16, 185, 129, 0.05)\" stroke=\"#10b981\" stroke-width=\"2\" />
+        <text x=\"85\" y=\"${rY + hR / 2 - 5}\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"900\" fill=\"${vProfundo}\">RECEITAS</text>
+        <text x=\"85\" y=\"${rY + hR / 2 + 12}\" text-anchor=\"middle\" font-size=\"12\" font-weight=\"bold\" fill=\"${vProfundo}\">${formatCurrencyBR(totalRec)}</text>
+
+        <rect x=\"240\" y=\"${cY}\" width=\"120\" height=\"${hC}\" rx=\"12\" fill=\"rgba(123, 30, 45, 0.05)\" stroke=\"#7b1e2d\" stroke-width=\"2\" />
+        <text x=\"300\" y=\"${cY + hC / 2 - 5}\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"900\" fill=\"${gProfundo}\">CAIXA</text>
+        <text x=\"300\" y=\"${cY + hC / 2 + 10}\" text-anchor=\"middle\" font-size=\"10\" font-weight=\"bold\" fill=\"${gProfundo}\">GESTÃO</text>
         ${despesas.slice(0, 5).map((cat, i) => {
           const h = Math.max(45, cat.flow * scale); const y = 70 + (i * 65); const color = palette[i % palette.length];
           return `<path d=\"M360,210 C460,210 460,${y + h/2} 510,${y + h/2}\" stroke=\"url(#g-cat-flow-${i})\" stroke-width=\"${Math.max(2, cat.flow * scale)}\" fill=\"none\" opacity=\"0.6\" /><rect x=\"510\" y=\"${y}\" width=\"200\" height=\"${h}\" rx=\"12\" fill=\"rgba(255,255,255,0.03)\" stroke=\"${color}\" stroke-opacity=\"0.5\" stroke-width=\"2\" /><rect x=\"510\" y=\"${y}\" width=\"4\" height=\"${h}\" rx=\"2\" fill=\"${color}\" /><text x=\"610\" y=\"${y + h/2 - 5}\" text-anchor=\"middle\" font-size=\"10\" font-weight=\"900\" fill=\"${color}\">${cat.to.toUpperCase()}</text><text x=\"610\" y=\"${y + h/2 + 12}\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"bold\" fill=\"${color}\">${formatCurrencyBR(cat.flow)}</text>`;
@@ -1840,7 +1847,15 @@ lucide.createIcons();
                 titleColor: '#D4AF37',
                 callbacks: {
                   title: (ctx) => `Dia ${ctx[0].raw.date}`,
-                  label: (ctx) => [`Receitas: ${ctx.raw.stats.inc}x`, `Despesas: ${ctx.raw.stats.exp}x`]
+                  label: (ctx) => {
+                    const s = ctx.raw.stats;
+                    return [
+                      `Lançamentos: ${s.inc + s.exp}`,
+                      `Receitas: ${formatCurrencyBR(s.incT)}`,
+                      `Despesas: ${formatCurrencyBR(s.expT)}`,
+                      `Saldo: ${formatCurrencyBR(s.incT - s.expT)}`
+                    ];
+                  }
                 }
               }
             },
@@ -1854,15 +1869,16 @@ lucide.createIcons();
             afterDatasetsDraw(chart) {
               const {ctx, data} = chart;
               ctx.save();
-              ctx.font = '900 12px monospace';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
+              ctx.font = 'bold 11px monospace';
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'top';
               data.datasets[0].data.forEach((item, i) => {
                 if (item.date) {
                   const meta = chart.getDatasetMeta(0).data[i];
                   if (meta) {
-                    ctx.fillStyle = (item.type === 'income_win' || item.type === 'expense_win') ? '#ffffff' : 'rgba(255,255,255,0.3)';
-                    ctx.fillText(item.date, meta.x, meta.y);
+                    ctx.fillStyle = (item.type === 'income_win' || item.type === 'expense_win') ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.4)';
+                    // Posicionamento no canto superior esquerdo do box
+                    ctx.fillText(item.date, meta.x - meta.width / 2 + 5, meta.y - meta.height / 2 + 5);
                   }
                 }
               });
