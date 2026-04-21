@@ -418,29 +418,32 @@
     overflow: hidden !important;
   }
 
-  /* Sidebar Lateral Estilo Premium */
+  /* Sidebar Lateral Estilo Premium Grená */
   .desktop-layout #bottomNav {
     grid-column: 1 !important;
-    grid-row: 1 !important; /* Força na primeira linha */
+    grid-row: 1 !important;
     position: relative !important;
     width: 280px !important;
     max-width: 280px !important;
     height: 100vh !important;
-    background: color-mix(in srgb, var(--tg-theme-bg-color, #0a0a0b) 95%, white 5%) !important;
-    border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+    /* Fundo escuro profundo para contraste premium */
+    background: linear-gradient(180deg, #0f0f11 0%, #050506 100%) !important;
+    border-right: 1px solid rgba(212, 175, 55, 0.1) !important;
     display: flex !important;
     flex-direction: column !important;
-    padding: 2.5rem 1.25rem !important;
-    gap: 1.5rem;
+    padding: 3rem 1.5rem !important;
+    gap: 2rem;
     z-index: 100;
-    backdrop-filter: blur(20px);
+    backdrop-filter: blur(30px);
     border-radius: 0 !important;
     left: auto !important;
     bottom: auto !important;
     transform: none !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
-  /* Reset Fantasma para Sidebar */
+  /* Reset Fantasma (Pierre) no topo com brilho */
   .desktop-layout #bottomNav > div.absolute {
     position: relative !important;
     top: auto !important;
@@ -448,11 +451,11 @@
     transform: none !important;
     display: flex !important;
     justify-content: center !important;
-    margin: 0 auto 1rem auto !important;
+    margin: 0 auto 2rem auto !important;
     width: 100% !important;
     height: auto !important;
     pointer-events: auto !important;
-    order: -1 !important; /* Força no topo */
+    order: -1 !important;
     visibility: visible !important;
     opacity: 1 !important;
   }
@@ -461,10 +464,10 @@
     position: relative !important;
     margin-bottom: 0 !important;
     align-self: center;
-    filter: drop-shadow(0 0 15px rgba(123, 30, 45, 0.3));
-    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    width: 64px !important;
-    height: 64px !important;
+    filter: drop-shadow(0 0 20px rgba(123, 30, 45, 0.5));
+    transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    width: 80px !important;
+    height: 80px !important;
     display: flex !important;
     visibility: visible !important;
     opacity: 1 !important;
@@ -473,12 +476,12 @@
   .desktop-layout #navContainer {
     display: flex !important;
     flex-direction: column !important;
-    gap: 12px !important;
+    gap: 16px !important;
     width: 100% !important;
     height: auto !important;
     visibility: visible !important;
     opacity: 1 !important;
-    order: 2 !important; /* Pierre is -1, this is 2 */
+    order: 2 !important;
   }
 
   .desktop-layout .nav-btn {
@@ -486,21 +489,24 @@
     visibility: visible !important;
     opacity: 1 !important;
     width: 100% !important;
-    height: 52px !important;
-    border-radius: 14px !important;
+    height: 56px !important;
+    border-radius: 16px !important;
     justify-content: flex-start !important;
     align-items: center !important;
     flex-direction: row !important;
-    padding: 0 1.25rem !important;
-    gap: 14px !important;
-    font-size: 1rem !important;
-    font-weight: 600 !important;
-    color: rgba(255, 255, 255, 0.6) !important;
-    background: transparent !important;
-    border: 1px solid transparent !important;
+    padding: 0 1.5rem !important;
+    gap: 16px !important;
+    font-size: 1.05rem !important;
+    font-weight: 500 !important;
+    /* Texto em ouro suave quando inativo para elegância */
+    color: rgba(212, 175, 55, 0.6) !important;
+    background: rgba(255, 255, 255, 0.02) !important;
+    border: 1px solid rgba(255, 255, 255, 0.03) !important;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    cursor: pointer !important;
   }
 
-  /* Forçar os ícones e textos a aparecerem */
+  /* Forçar os ícones e textos a aparecerem com cor clara */
   .desktop-layout .nav-btn i,
   .desktop-layout .nav-btn span {
     display: block !important;
@@ -509,22 +515,32 @@
   }
 
   .desktop-layout .nav-btn:hover {
-    background: rgba(255, 255, 255, 0.04) !important;
-    color: #fff !important;
-    transform: translateX(4px);
+    background: rgba(123, 30, 45, 0.1) !important;
+    color: #D4AF37 !important;
+    transform: translateX(8px);
+    border-color: rgba(212, 175, 55, 0.2) !important;
   }
 
+  /* ESTADO ATIVO: Grená com Brilho (Glow) */
   .desktop-layout .nav-btn.tab-active {
-    background: linear-gradient(135deg, var(--cc-brand, #7b1e2d), #a3293d) !important;
-    color: white !important;
-    box-shadow: 0 8px 25px rgba(123, 30, 45, 0.3) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    background: linear-gradient(135deg, #7b1e2d 0%, #b0263d 100%) !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    box-shadow: 
+      0 0 20px rgba(123, 30, 45, 0.4),
+      0 10px 30px rgba(0, 0, 0, 0.3) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    transform: translateX(4px) scale(1.02);
+  }
+
+  .desktop-layout .nav-btn.tab-active i {
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
   }
 
   .desktop-layout .nav-btn i {
-    width: 20px !important;
-    height: 20px !important;
-    opacity: 0.9;
+    width: 22px !important;
+    height: 22px !important;
+    opacity: 0.8;
   }
 
   /* Área de Conteúdo Principal */
