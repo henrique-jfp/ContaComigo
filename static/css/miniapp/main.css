@@ -413,13 +413,15 @@
     display: grid !important;
     grid-template-columns: 280px 1fr !important;
     grid-template-rows: 100vh !important;
+    flex-direction: row !important; /* Sobrescreve flex-col do mobile */
     background: var(--tg-theme-bg-color, #0a0a0b) !important;
     overflow: hidden !important;
   }
 
   /* Sidebar Lateral Estilo Premium */
   .desktop-layout #bottomNav {
-    grid-column: 1;
+    grid-column: 1 !important;
+    grid-row: 1 !important; /* Força na primeira linha */
     position: relative !important;
     width: 280px !important;
     max-width: 280px !important;
@@ -514,7 +516,8 @@
 
   /* Área de Conteúdo Principal */
   .desktop-layout main#app-content {
-    grid-column: 2;
+    grid-column: 2 !important;
+    grid-row: 1 !important; /* Força na primeira linha */
     height: 100vh !important;
     overflow: hidden !important;
     padding: 0 !important;

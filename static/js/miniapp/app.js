@@ -1648,7 +1648,7 @@ lucide.createIcons();
 
       if (homeCategoryChartEl) {
         const hasCategories = categories.length > 0;
-        const privatePalette = ["#D4AF37", "#444444", "#064E3B", "#881337", "#1E3A8A", "#451A03"];
+        const privatePalette = ["#D4AF37", "#ebe2e2", "#064E3B", "#881337", "#1E3A8A", "#451A03"];
         
         if (!hasCategories) {
           homeCategoryChartEl.parentElement.innerHTML = '<div class="empty-state"><h3>Sem dados de despesas</h3><p>Alfredo está aguardando seus primeiros lançamentos.</p></div>';
