@@ -18,6 +18,7 @@ class PromptConfig:
     intent: str = "general_analysis" 
     # Lista de skills relevantes para a intenção "general_analysis"
     relevant_skills: Optional[List[str]] = None
+    data_hora_atual: str = ""
     # Parâmetros específicos para relatórios mensais
     mes_nome: Optional[str] = None
     ano: Optional[int] = None
@@ -134,7 +135,8 @@ class PromptManager:
                 user_name=config.user_name,
                 user_query=config.user_query,
                 financial_context=config.financial_context,
-                conversation_history=config.conversation_history
+                conversation_history=config.conversation_history,
+                data_hora_atual=config.data_hora_atual
             )
         else:
             raise ValueError(f"Intenção '{config.intent}' não reconhecida pelo PromptManager.")

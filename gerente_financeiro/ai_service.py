@@ -159,10 +159,13 @@ async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | N
     def _truncar_mensagens(msgs):
         new_msgs = [m.copy() for m in msgs]
         for m in new_msgs:
-            if m.get("role") == "system" and len(m.get("content", "")) > 10000:
-                m["content"] = m["content"][:10000] + "... [Contexto truncado]"
-            if m.get("role") == "tool" and len(m.get("content", "")) > 15000:
-                m["content"] = m["content"][:15000] + "... [Dados truncados]"
+            # Cerebras/Groq têm limites entre 6k-8k. Truncamos agressivamente se falhar.
+            if m.get("role") == "system" and len(m.get("content", "")) > 5000:
+                m["content"] = m["content"][:5000] + "... [Contexto truncado]"
+            if m.get("role") == "tool" and len(m.get("content", "")) > 8000:
+                m["content"] = m["content"][:8000] + "... [Dados truncados]"
+            if m.get("role") == "user" and len(m.get("content", "")) > 2000:
+                m["content"] = m["content"][:2000] + "... [Msg truncada]"
         return new_msgs
 
     providers = []
@@ -285,6 +288,11 @@ def _contem_tool_call_json(texto: str) -> bool:
         '"name": "registrar_lancamento"', 
         '"name": "responder_duvida_financeira"',
         '"name": "consultar_faturas_cartao_real"',
-        '"name": "consultar_livro_caixa_analitico"'
+        '"name": "consultar_livro_caixa_analitico"',
+        '"name": "agendar_receita"',
+        '"name": "agendar_despesa"',
+        '"name": "criar_lembrete"',
+        '"name": "criar_meta"',
+        '"name": "definir_limite_orcamento"'
     ]
     return any(ind in texto for ind in indicadores)

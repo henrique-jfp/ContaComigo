@@ -1686,7 +1686,7 @@ lucide.createIcons();
               datasets: [
                 {
                   label: 'Orçamento',
-                  data: chartData.budgetCap,
+                  data: chartData.budgetPlanned,
                   borderRadius: 12,
                   borderSkipped: false,
                   backgroundColor: 'rgba(212, 175, 55, 0.1)',
@@ -1695,10 +1695,10 @@ lucide.createIcons();
                 },
                 {
                   label: 'Realizado',
-                  data: chartData.budgetRealized,
+                  data: chartData.budgetActual,
                   borderRadius: 12,
                   borderSkipped: false,
-                  backgroundColor: chartData.budgetRealized.map((value, idx) => value > chartData.budgetCap[idx] ? '#881337' : '#D4AF37'),
+                  backgroundColor: (chartData.budgetActual || []).map((value, idx) => value > (chartData.budgetPlanned[idx] || 0) ? '#881337' : '#D4AF37'),
                   barPercentage: 0.5,
                   categoryPercentage: 0.6,
                 },

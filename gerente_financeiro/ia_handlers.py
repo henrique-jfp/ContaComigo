@@ -212,7 +212,7 @@ _ALFREDO_TOOLS = [
         "type": "function",
         "function": {
             "name": "agendar_despesa",
-            "description": "Prepara um agendamento de despesa recorrente com validação explícita de valor, data de início e frequência.",
+            "description": "Prepara um agendamento de despesa recorrente. A DATA DE HOJE deve ser usada como referência para extrair a data correta (ex: 'quarta que vem').",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -226,7 +226,7 @@ _ALFREDO_TOOLS = [
                     },
                     "data": {
                         "type": "string",
-                        "description": "Data do primeiro evento em YYYY-MM-DD. Converta datas brasileiras (DD/MM/AAAA) para YYYY-MM-DD.",
+                        "description": "Data do primeiro evento em YYYY-MM-DD. Calcule com base em 'Hoje'.",
                     },
                     "frequencia": {
                         "type": "string",
@@ -245,7 +245,7 @@ _ALFREDO_TOOLS = [
         "type": "function",
         "function": {
             "name": "agendar_receita",
-            "description": "Prepara um agendamento de receita recorrente com validação explícita de valor, data de início e frequência.",
+            "description": "Prepara um agendamento de receita recorrente. A DATA DE HOJE deve ser usada como referência para extrair a data correta.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -259,7 +259,7 @@ _ALFREDO_TOOLS = [
                     },
                     "data": {
                         "type": "string",
-                        "description": "Data do primeiro recebimento em YYYY-MM-DD.",
+                        "description": "Data do primeiro recebimento em YYYY-MM-DD. Calcule com base em 'Hoje'.",
                     },
                     "frequencia": {
                         "type": "string",
@@ -278,7 +278,7 @@ _ALFREDO_TOOLS = [
         "type": "function",
         "function": {
             "name": "criar_lembrete",
-            "description": "Cria um lembrete financeiro ou pessoal para o usuário ser avisado depois, sem registrar lançamento no fluxo de caixa.",
+            "description": "Cria um lembrete financeiro ou pessoal. A DATA DE HOJE deve ser usada como referência para calcular datas relativas como 'quarta que vem'.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -297,7 +297,7 @@ _ALFREDO_TOOLS = [
                     },
                     "data": {
                         "type": "string",
-                        "description": "Data do lembrete em YYYY-MM-DD. Converta expressões naturais como 'terça que vem' e 'dia 21'.",
+                        "description": "Data do lembrete em YYYY-MM-DD. Calcule com base em 'Hoje'.",
                     },
                     "frequencia": {
                         "type": "string",
@@ -786,9 +786,7 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
         valor = _parse_br_money(m_lemb.group(2))
         desc = m_lemb.group(1).strip()
         data_raw = (m_lemb.group(3) or "").strip()
-        # Se detectou "lembre", forçamos para a IA se não tivermos uma data clara em YYYY-MM-DD
-        # Mas se tivermos o essencial, podemos tentar o quick action.
-        # Por segurança, se a data for complexa (ex: "terça que vem"), deixamos a IA resolver para extrair a data correta.
+        # Se detectou "lembre", mas não tem data YYYY-MM-DD, deixamos para a IA resolver (ela entende "quarta que vem")
         if data_raw and re.search(r'\d{4}-\d{2}-\d{2}', data_raw):
             return "criar_lembrete", {
                 "descricao": desc.capitalize(),
@@ -796,6 +794,9 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
                 "data": data_raw,
                 "tipo": "Saída" if "paga" in t else "Receita"
             }
+        # Se for um lembrete sem data clara, não interceptamos para que a IA possa processar "quarta que vem"
+        if "lembre" in t or "lembrar" in t:
+            return None
 
     # 2. LANÇAMENTO (Gastei, Paguei, Recebi, Lança, Comprei, Registra)
     verbos = r'\b(?:gastei|paguei|recebi|lanç[ao]r?|registra?r?|coloque?i?|comprei|compras?|adiciona?r?|anota?r?)\b'
@@ -815,16 +816,17 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
         m_ag = re.search(p_agend, t)
         if m_ag:
             valor = _parse_br_money(m_ag.group(2))
-            tipo_raw = m_ag.group(1) or ""
-            periodo = m_ag.group(3).lower()
+            tipo_raw = (m_ag.group(1) or "").lower()
+            periodo = (m_ag.group(3) or "").lower()
             freq = "semanal" if "seman" in periodo else "mensal"
-            fn = "agendar_receita" if "recei" in tipo_raw.lower() or "recei" in t else "agendar_despesa"
+            fn = "agendar_receita" if "recei" in tipo_raw or "recei" in t else "agendar_despesa"
             if valor:
                 return fn, {
                     "valor": valor,
                     "frequencia": freq,
                     "descricao": "Agendamento via Alfredo",
-                    "data": datetime.now().strftime("%Y-%m-%d")
+                    "data": datetime.now().strftime("%Y-%m-%d"),
+                    "_origem": "regex"
                 }
         return None
 
@@ -2175,7 +2177,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                     "proactive_insights",
                     "simple_predictive_analysis",
                     "strategic_questions"
-                ]
+                ],
+                data_hora_atual=hoje_str
             )
             system_prompt = pm.build_prompt(p_config)
         except Exception as pm_err:
@@ -2184,13 +2187,14 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 user_name=(usuario_db.nome_completo or update.effective_user.first_name or "usuário"),
                 pergunta_usuario=texto_usuario,
                 contexto_financeiro_completo=contexto_financeiro_str,
+                data_hora_atual=hoje_str
             )
 
         completion = None
         # Só chamamos a IA se o interceptor de Regex não capturou uma ação direta
         if not tool_calls:
-            # Carrega histórico recente (memória de curto prazo)
-            chat_history_messages = _carregar_historico_recente_ia(db, usuario_db.id, limite=6)
+            # Carrega histórico recente (memória de curto prazo) - Reduzido para economizar tokens
+            chat_history_messages = _carregar_historico_recente_ia(db, usuario_db.id, limite=3)
             
             messages = [
                 {"role": "system", "content": system_prompt},
@@ -2461,16 +2465,38 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         if fn_name in {"agendar_despesa", "agendar_receita", "criar_lembrete"}:
             eh_lembrete = fn_name == "criar_lembrete"
             eh_receita = fn_name == "agendar_receita"
+            logger.info(f"🛠️ [ALFREDO] Processando {fn_name} com args: {args}")
+            
             descricao_default = (
                 "Novo lembrete" if eh_lembrete else ("Receita agendada" if eh_receita else "Despesa agendada")
             )
             descricao = str(args.get("descricao") or descricao_default).strip()
+            
+            # Limpeza de descrição para agendamentos via Regex
+            if descricao == "Agendamento via Alfredo" and args.get("_origem") == "regex":
+                 # Tenta melhorar a descrição se veio do regex
+                 if eh_receita: descricao = "Receita Recorrente"
+                 else: descricao = "Despesa Recorrente"
+
             try:
                 valor_raw = args.get("valor")
-                valor = float(str(valor_raw).replace(",", ".")) if valor_raw not in (None, "") else None
+                if valor_raw is not None and valor_raw != "":
+                    # Se já for float/int, usa direto
+                    if isinstance(valor_raw, (int, float)):
+                        valor = float(valor_raw)
+                    else:
+                        valor = _parse_br_money(str(valor_raw))
+                else:
+                    valor = None
             except (ValueError, TypeError):
                 valor = None
+            
             data_str = str(args.get("data") or "").strip()
+            # Fallback para hoje se a IA ou Regex não enviaram data mas temos o resto
+            if not data_str and (eh_lembrete or (valor and valor > 0)):
+                data_str = datetime.now().strftime("%Y-%m-%d")
+                logger.info(f"📅 [ALFREDO] Data não informada, assumindo HOJE: {data_str}")
+
             frequencia = str(args.get("frequencia") or ("unico" if eh_lembrete else "mensal")).strip().lower()
             parcelas = args.get("parcelas")
             try:
@@ -2480,6 +2506,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             tipo_compromisso = _normalizar_tipo_compromisso(args.get("tipo"), "Receita" if eh_receita else "Saída")
 
             if (not eh_lembrete and (valor is None or valor <= 0)) or not data_str:
+                logger.warning(f"⚠️ [ALFREDO] Dados insuficientes para {fn_name}: valor={valor}, data={data_str}")
                 await _enviar_resposta_html_segura(update.message, 
                     "❌ <b>Dados incompletos</b>\n\n"
                     + (
