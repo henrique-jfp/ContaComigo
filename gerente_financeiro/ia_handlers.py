@@ -775,16 +775,32 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
     if "último" in t or "ultimo" in t or "histórico" in t or "historico" in t:
         return None
     
-    # 1. LANÇAMENTO (Gastei, Paguei, Recebi, Lança, Comprei, Registra)
-    # Suporta: "Gastei 50 no mercado", "Comprei uma calça de 300 reais", "Quero registrar uma compra de 300 na oakley"
-    # Verbos e variações COM \b (word boundary) para não capturar partes de palavras
-    verbos = r'\b(?:gastei|paguei|recebi|lanç[ao]r?|registra?r?|coloque?i?|comprei|compras?|adiciona?r?|anota?r?)\b'
-    # Artigos e conectivos opcionais
-    fillers = r'(?:\s+(?:um|uma|o|a|os|as|do|da|no|na|em|com|de|valor|compra|gasto|despesa|receita|para|pra))*'
-    
     # Captura valor flexível (suporta 7.500 ou 7500,00)
     valor_re = r'(?:r\$?\s*)?([\d.,]+)'
+    
+    # 1. LEMBRETE (Prioridade para evitar confusão com agendamentos)
+    # "Me lembre de pagar o Michel 500 reais na quarta-feira que vem."
+    p_lembrete = r'\b(?:me\s+)?(?:lembre?|lembrar?|avisa?r?)\b\s+(?:de\s+)?(?:pagar\s+|receber\s+)?(.+?)\s+(?:de\s+|valor\s+)?' + valor_re + r'\s*(?:reais|real)?(?:\s+(?:na|em|dia|pra|para|no)\s+(.+))?'
+    m_lemb = re.search(p_lembrete, t)
+    if m_lemb:
+        valor = _parse_br_money(m_lemb.group(2))
+        desc = m_lemb.group(1).strip()
+        data_raw = (m_lemb.group(3) or "").strip()
+        # Se detectou "lembre", forçamos para a IA se não tivermos uma data clara em YYYY-MM-DD
+        # Mas se tivermos o essencial, podemos tentar o quick action.
+        # Por segurança, se a data for complexa (ex: "terça que vem"), deixamos a IA resolver para extrair a data correta.
+        if data_raw and re.search(r'\d{4}-\d{2}-\d{2}', data_raw):
+            return "criar_lembrete", {
+                "descricao": desc.capitalize(),
+                "valor": valor,
+                "data": data_raw,
+                "tipo": "Saída" if "paga" in t else "Receita"
+            }
 
+    # 2. LANÇAMENTO (Gastei, Paguei, Recebi, Lança, Comprei, Registra)
+    verbos = r'\b(?:gastei|paguei|recebi|lanç[ao]r?|registra?r?|coloque?i?|comprei|compras?|adiciona?r?|anota?r?)\b'
+    fillers = r'(?:\s+(?:um|uma|o|a|os|as|do|da|no|na|em|com|de|valor|compra|gasto|despesa|receita|para|pra))*'
+    
     # Padrao A: Verbo + (Fillers) + Valor + (reais/real opcional) + (Fillers preposicionais) + Descrição
     p_lanc_a = verbos + fillers + r'\s+' + valor_re + r'\s*(?:reais|real)?\s*(?:no|na|em|com|de|para|pra)?\s*(.+)'
     # Padrao B: Verbo + (Fillers) + Descrição + (Fillers) + Valor no final
@@ -793,6 +809,22 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
     # Lista de palavras que sugerem recorrência (devemos deixar para a IA lidar com Agendamentos)
     recorrencia_keywords = ["recorrente", "mensal", "semanal", "todo mês", "todo mes", "fixo", "todo dia", "diário", "diario"]
     if any(w in t for w in recorrencia_keywords):
+        # Mas podemos tentar capturar agendamentos simples aqui também
+        p_agend = r'\b(?:agendamento|agendar?|recorrente)\b\s+(?:de\s+)?(?:uma\s+)?(receita|despesa|gasto)?\s*(?:de\s+)?' + valor_re + r'\s*(?:reais|real)?\s*(?:por|cada|todo|a cada)?\s*(.+)'
+        m_ag = re.search(p_agend, t)
+        if m_ag:
+            valor = _parse_br_money(m_ag.group(2))
+            tipo_raw = m_ag.group(1) or ""
+            periodo = m_ag.group(3).lower()
+            freq = "semanal" if "seman" in periodo else "mensal"
+            fn = "agendar_receita" if "recei" in tipo_raw.lower() or "recei" in t else "agendar_despesa"
+            if valor:
+                return fn, {
+                    "valor": valor,
+                    "frequencia": freq,
+                    "descricao": "Agendamento via Alfredo",
+                    "data": datetime.now().strftime("%Y-%m-%d")
+                }
         return None
 
     # Lista de palavras que caracterizam uma entrada
@@ -826,16 +858,34 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
                 "tipo": tipo
             }
 
-    # 2. META (Meta de X para Y)
-    p_meta = r'\b(?:criar?|nova|definir?|adiciona?r?)\b\s+meta\s+(?:de\s+)?' + valor_re + r'\s*(?:reais|real)?\s*(?:para|pra|de)?\s*(.+)'
+    # 3. META (Meta de X para Y)
+    # "Quero criar uma nova meta para comprar uma bicicleta elétrica. São 7.500 reais"
+    p_meta = r'\b(?:criar?|nova|novo?|definir?|adiciona?r?)\b\s+meta\s+(?:para\s+)?(.+?)\s+(?:de\s+|são\s+|valor\s+)?' + valor_re
     m_meta = re.search(p_meta, t)
     if m_meta:
-        valor = _parse_br_money(m_meta.group(1))
+        valor = _parse_br_money(m_meta.group(2))
         if valor is not None:
-            desc = m_meta.group(2).strip()
+            desc = m_meta.group(1).strip()
             return "criar_meta", {"valor_alvo": valor, "descricao": desc.capitalize()}
 
-    # 3. LIMITE (Limite de X em Y OU Limite em Y de X)
+    # 4. LIMITE (Limite de X em Y OU Limite em Y de X)
+    # "Crie um limite semanal de 300 reais para alimentação"
+    periodos_re = r'(diário|semanal|mensal|mensais|diária|semanais|anual)'
+    p_limite_c = r'\blimite\s+' + periodos_re + r'\s+(?:de\s+)?' + valor_re + r'\s*(?:reais|real)?\s*(?:para|pra|em|na|de)?\s*(.+)'
+    
+    m_lim_c = re.search(p_limite_c, t)
+    if m_lim_c:
+        periodo = m_lim_c.group(1).lower()
+        if "seman" in periodo: periodo = "semanal"
+        elif "diár" in periodo or "diar" in periodo: periodo = "diário"
+        else: periodo = "mensal"
+        
+        valor = _parse_br_money(m_lim_c.group(2))
+        if valor is not None:
+            cat = m_lim_c.group(3).strip()
+            return "definir_limite_orcamento", {"valor": valor, "categoria": cat.capitalize(), "periodo": periodo}
+
+    # Fallback para os limites simples existentes
     p_limite_a = r'\b(?:definir?|criar?|novo?|limita?r?)\b\s+limite\s+(?:de\s+)?' + valor_re + r'\s*(?:reais|real)?\s*(?:para|pra|em|na|categoria)?\s*(.+)'
     p_limite_b = r'\b(?:definir?|criar?|novo?|limita?r?)\b\s+limite\s+(?:para|pra|em|na|categoria)?\s*(.+?)\s+(?:de|valor de|em|no valor de|r\$?\s*)?' + valor_re + r'\s*(?:reais|real)?$'
     

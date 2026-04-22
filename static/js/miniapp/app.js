@@ -129,6 +129,10 @@ lucide.createIcons();
     const agendaTabLimites = document.getElementById('agendaTabLimites');
     const agendaTabMetas = document.getElementById('agendaTabMetas');
     const metasAgendaWrap = document.getElementById('metasAgendaWrap');
+    const metasAgendaList = document.getElementById('metasAgendaList');
+    const metasAgendaStatus = document.getElementById('metasAgendaStatus');
+    const metaAgendaRefresh = document.getElementById('metaAgendaRefresh');
+    const metaAgendaNew = document.getElementById('metaAgendaNew');
     const metaList = document.getElementById('metaList');
     const metaStatus = document.getElementById('metaStatus');
     const metaRefresh = document.getElementById('metaRefresh');
@@ -1840,7 +1844,9 @@ lucide.createIcons();
       if (homeHeatmapChartEl) {
         renderPremiumHeatmap(homeHeatmapChartEl.parentElement, chartData.heatmapData, summary);
         homeHeatmapChartEl.style.display = 'none';
-        renderHomeRecent(summary?.recent || []);
+      }
+
+      renderHomeRecent(summary?.recent || []);
       renderHomeRadar(summary);
       lucide.createIcons();
     }
@@ -3440,13 +3446,32 @@ lucide.createIcons();
     async function loadMetas() {
       if (!sessionId) return;
       renderMetaSkeleton(3);
+      // Também limpa e mostra skeleton na agenda se estiver visível
+      if (metasAgendaList) {
+          metasAgendaList.innerHTML = metaList.innerHTML;
+          if (metasAgendaStatus) metasAgendaStatus.textContent = 'Carregando metas...';
+      }
+
       try {
         const response = await fetchWithSession('/api/miniapp/metas');
         const data = await response.json();
-        if (!data.ok || !data.items.length) { metasCache = []; metaStatus.textContent = 'Nenhuma meta.'; metaList.innerHTML = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint">Nenhuma meta em andamento.</div>'; return; }
+        const noMetasHtml = '<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint">Nenhuma meta em andamento.</div>';
+
+        if (!data.ok || !data.items.length) { 
+            metasCache = []; 
+            metaStatus.textContent = 'Nenhuma meta.'; 
+            metaList.innerHTML = noMetasHtml; 
+            if (metasAgendaList) metasAgendaList.innerHTML = noMetasHtml;
+            if (metasAgendaStatus) metasAgendaStatus.textContent = 'Nenhuma meta.';
+            return; 
+        }
+        
         metaStatus.textContent = '';
+        if (metasAgendaStatus) metasAgendaStatus.textContent = 'Seus objetivos financeiros.';
         metasCache = data.items || [];
         metaList.innerHTML = '';
+        if (metasAgendaList) metasAgendaList.innerHTML = '';
+
         metasCache.forEach(item => {
           const valorMeta = Number(item.valor_meta) || 0;
           const valorAtual = Number(item.valor_atual) || 0;
@@ -3494,7 +3519,12 @@ lucide.createIcons();
               <button class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition flex items-center" data-meta-action="confirm" data-id="${item.id}"><i data-lucide="check-circle" class="w-3 h-3 mr-1"></i> ${confirmado ? 'Atualizar' : 'Confirmar mês'}</button>
             </div>
           `;
+          
           metaList.appendChild(div);
+          if (metasAgendaList) {
+              const clone = div.cloneNode(true);
+              metasAgendaList.appendChild(clone);
+          }
         });
         animateMetaProgressBars();
         lucide.createIcons();
@@ -3781,6 +3811,30 @@ lucide.createIcons();
         confirmMetaMesById(Number(target.dataset.id));
       }
     });
+
+    if (metasAgendaList) {
+      metasAgendaList.addEventListener('click', (event) => {
+        const target = event.target.closest('[data-meta-action]');
+        if (!target?.dataset?.id) return;
+        const action = target.dataset.metaAction;
+        const item = metasCache.find((meta) => String(meta.id) === String(target.dataset.id));
+
+        if (action === 'edit' && item) {
+          openMetaModal(item);
+          return;
+        }
+        if (action === 'delete') {
+          deleteMetaById(Number(target.dataset.id));
+          return;
+        }
+        if (action === 'confirm') {
+          confirmMetaMesById(Number(target.dataset.id));
+        }
+      });
+    }
+
+    if (metaAgendaRefresh) metaAgendaRefresh.addEventListener('click', loadMetas);
+    if (metaAgendaNew) metaAgendaNew.addEventListener('click', () => openMetaModal());
 
     agendamentoList.addEventListener('click', (event) => {
       const target = event.target?.closest?.('[data-action="delete"]');
