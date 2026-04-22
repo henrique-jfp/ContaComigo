@@ -806,10 +806,11 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
     # Padrao B: Verbo + (Fillers) + Descrição + (Fillers) + Valor no final
     p_lanc_b = verbos + fillers + r'\s+(.+?)\s+(?:por|de|foi|valor de|custou|r\$?\s*)?\s*' + valor_re + r'\s*(?:reais|real)?$'
     
-    # Lista de palavras que sugerem recorrência (devemos deixar para a IA lidar com Agendamentos)
-    recorrencia_keywords = ["recorrente", "mensal", "semanal", "todo mês", "todo mes", "fixo", "todo dia", "diário", "diario"]
-    if any(w in t for w in recorrencia_keywords):
-        # Mas podemos tentar capturar agendamentos simples aqui também
+    # Lista de palavras que sugerem recorrência (devemos deixar para a IA lidar com Agendamentos de receitas/despesas)
+    # Mas NÃO deve bloquear limites de orçamento (que também usam semanal/mensal)
+    recorrencia_keywords = ["recorrente", "todo mês", "todo mes", "fixo", "todo dia"]
+    if any(w in t for w in recorrencia_keywords) and "limite" not in t:
+        # Tenta capturar agendamentos simples...
         p_agend = r'\b(?:agendamento|agendar?|recorrente)\b\s+(?:de\s+)?(?:uma\s+)?(receita|despesa|gasto)?\s*(?:de\s+)?' + valor_re + r'\s*(?:reais|real)?\s*(?:por|cada|todo|a cada)?\s*(.+)'
         m_ag = re.search(p_agend, t)
         if m_ag:
@@ -2124,104 +2125,38 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         lanc_semana = [l for l in lanc_mes if l.data_transacao >= inicio_semana]
         saidas_semana = sum(abs(float(l.valor or 0)) for l in _filtrar_saidas(lanc_semana))
 
-        # --- BREAKDOWN POR CATEGORIA (MÊS ATUAL) ---
-        cats_mes: dict[str, float] = {}
-        for l in saidas_mes_list:
-            c_nome = l.categoria.nome if l.categoria else "Sem categoria"
-            cats_mes[c_nome] = cats_mes.get(c_nome, 0.0) + abs(float(l.valor or 0))
-        breakdown_mes = sorted(cats_mes.items(), key=lambda x: x[1], reverse=True)
-
-        # --- ÚLTIMOS LANÇAMENTOS (DETALHADOS PARA PRECISÃO) ---
-        limit_lanc = 15 if (hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key) else 25
-        base_lanc = db.query(Lancamento).filter(
-            Lancamento.id_usuario == usuario_db.id
-        ).order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc()).limit(limit_lanc * 3).all()
+        # --- ÚLTIMOS LANÇAMENTOS (SUPER TRUNCADOS) ---
+        limit_lanc = 5
+        base_lanc = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id).order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc()).limit(limit_lanc * 3).all()
         
-        # Filtros para o JSON de contexto
         def _fmt_l(l):
-            return {
-                "data": l.data_transacao.strftime('%Y-%m-%d'),
-                "descricao": l.descricao,
-                "valor": float(l.valor or 0),
-                "tipo": l.tipo,
-                "categoria": l.categoria.nome if l.categoria else "Sem categoria"
-            }
+            return {"d": l.data_transacao.strftime('%Y-%m-%d'), "desc": (l.descricao[:20] + '...') if l.descricao and len(l.descricao) > 20 else l.descricao, "v": float(l.valor or 0), "t": "Entrada" if str(l.tipo).lower().startswith(('entr', 'recei')) else "Saída", "cat": (l.categoria.nome[:15]) if l.categoria else "Outros"}
 
-        ultimas_receitas = [_fmt_l(l) for l in base_lanc if str(l.tipo).lower().startswith(('entr', 'recei'))][:10]
-        ultimas_despesas = [_fmt_l(l) for l in base_lanc if not str(l.tipo).lower().startswith(('entr', 'recei')) and l.id_subcategoria not in ignore_ids][:15]
+        ultimas_receitas = [_fmt_l(l) for l in base_lanc if str(l.tipo).lower().startswith(('entr', 'recei'))][:3]
+        ultimas_despesas = [_fmt_l(l) for l in base_lanc if not str(l.tipo).lower().startswith(('entr', 'recei')) and l.id_subcategoria not in ignore_ids][:5]
 
-        # --- MEMÓRIA HISTÓRICA PARA COMPARAÇÃO ---
+        # --- MEMÓRIA HISTÓRICA (MÊS ANTERIOR) ---
         mes_anterior_inicio = (inicio_mes - timedelta(days=1)).replace(day=1)
         mes_anterior_fim = inicio_mes - timedelta(microseconds=1)
-        
-        lanc_anterior = db.query(Lancamento).filter(
-            Lancamento.id_usuario == usuario_db.id,
-            Lancamento.data_transacao >= mes_anterior_inicio,
-            Lancamento.data_transacao <= mes_anterior_fim
-        ).all()
-        
+        lanc_anterior = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id, Lancamento.data_transacao >= mes_anterior_inicio, Lancamento.data_transacao <= mes_anterior_fim).all()
         saidas_anterior = _calcular_saidas_reais(lanc_anterior, ignore_ids)
         entradas_anterior = sum(float(l.valor or 0) for l in lanc_anterior if str(l.tipo).lower().startswith(("entr", "recei")))
-        
-        # Breakdown por categoria (Mês Anterior)
-        cats_anterior: dict[str, float] = {}
-        for l in _filtrar_saidas_reais(lanc_anterior, ignore_ids):
-            c_nome = l.categoria.nome if l.categoria else "Sem categoria"
-            cats_anterior[c_nome] = cats_anterior.get(c_nome, 0.0) + abs(float(l.valor or 0))
-        breakdown_anterior = sorted(cats_anterior.items(), key=lambda x: x[1], reverse=True)[:5]
-
-        # Estatísticas Globais
-        total_vida_saidas = saidas
-        total_vida_entradas = entradas
-        
-        # Detalhamento por Tipo de Transação (Mês Atual)
-        tipos_movimentacao = {
-            "Pix": sum(abs(float(l.valor)) for l in saidas_mes_list if "pix" in (l.descricao or "").lower() or (l.forma_pagamento == "Pix")),
-            "Cartao_Credito": sum(abs(float(l.valor)) for l in saidas_mes_list if (l.forma_pagamento == "Crédito")),
-            "Juros_e_Taxas": sum(abs(float(l.valor)) for l in saidas_mes_list if any(x in (l.descricao or "").lower() for x in ["juros", "mora", "multa", "iof", "taxa"]))
-        }
 
         # --- METAS ---
-        metas_ativas = db.query(Objetivo).filter(
-            Objetivo.id_usuario == usuario_db.id,
-            func.coalesce(Objetivo.valor_atual, 0) < func.coalesce(Objetivo.valor_meta, 0)
-        ).all()
-        resumo_metas = [
-            f"{m.descricao[:15]}: {int((float(m.valor_atual or 0)/float(m.valor_meta or 0.01))*100)}%"
-            for m in metas_ativas if m.valor_meta and m.valor_meta > 0
-        ]
+        metas_ativas = db.query(Objetivo).filter(Objetivo.id_usuario == usuario_db.id, func.coalesce(Objetivo.valor_atual, 0) < func.coalesce(Objetivo.valor_meta, 0)).all()
+        resumo_metas = [f"{m.descricao[:15]}: {int((float(m.valor_atual or 0)/float(m.valor_meta or 0.01))*100)}%" for m in metas_ativas if m.valor_meta and m.valor_meta > 0]
 
         contexto_financeiro_str = json.dumps(
             {
-                "data_hora_atual": hoje_str,
-                "calendario": {
-                    "mes_atual_nome": hoje.strftime("%B"),
-                    "mes_anterior_nome": mes_anterior_inicio.strftime("%B"),
-                    "dias_restantes_no_mes": monthrange(hoje.year, hoje.month)[1] - hoje.day
-                },
-                "saldo_atual_real": round(float(saldo or 0), 2),
-                "mes_atual": {
-                    "total_gastos": round(saidas_mes, 2),
-                    "total_receitas": round(entradas_mes, 2),
-                    "breakdown_por_tipo": tipos_movimentacao,
-                    "principais_categorias": [{"nome": n, "valor": round(v, 2)} for n, v in breakdown_mes[:5]]
-                },
-                "mes_anterior": {
-                    "total_gastos": round(saidas_anterior, 2),
-                    "total_receitas": round(entradas_anterior, 2),
-                    "principais_categorias": [{"nome": n, "valor": round(v, 2)} for n, v in breakdown_anterior]
-                },
-                "historico_acumulado_vida": {
-                    "total_entradas": round(total_vida_entradas, 2),
-                    "total_saidas": round(total_vida_saidas, 2)
-                },
-                "gastos_hoje": round(saidas_hoje, 2),
-                "gastos_ontem": round(saidas_ontem, 2),
-                "ultimas_receitas_detalhadas": ultimas_receitas,
-                "ultimas_despesas_detalhadas": ultimas_despesas,
-                "metas_ativas": resumo_metas,
+                "data_hoje": hoje.strftime("%Y-%m-%d"),
+                "mes_atual": {"nome": hoje.strftime("%B"), "entradas": entradas_mes, "saidas": saidas_mes, "hoje": saidas_hoje, "ontem": saidas_ontem, "semana": saidas_semana},
+                "mes_anterior": {"nome": mes_anterior_inicio.strftime("%B"), "entradas": entradas_anterior, "saidas": saidas_anterior},
+                "ultimas_receitas": ultimas_receitas,
+                "ultimas_despesas": ultimas_despesas,
+                "metas": resumo_metas,
+                "saldo_disponivel": saldo
             },
-            ensure_ascii=False,
+            ensure_ascii=False
         )
 
         try:

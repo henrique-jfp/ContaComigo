@@ -63,7 +63,7 @@ async def _groq_chat_completion_async(messages: list[dict], tools: list[dict] | 
                 continue
             raise
 
-async def _gemini_chat_completion_async(messages: list[dict]) -> str | None:
+async def _gemini_chat_completion_async(messages: list[dict], tools: list[dict] | None = None) -> str | None:
     """Fallback para análise usando Gemini se o Groq/Cerebras falharem."""
     if not config.GEMINI_API_KEY:
         return None
@@ -73,12 +73,16 @@ async def _gemini_chat_completion_async(messages: list[dict]) -> str | None:
     max_retries = 1
     for attempt in range(max_retries + 1):
         try:
-            # 🛠️ USAR MODELO 2.5 FLASH LITE PARA MAIOR COTA
-            model_name = config.GEMINI_MODEL_NAME or "gemini-2.5-flash-lite"
+            model_name = config.GEMINI_MODEL_NAME or "gemini-1.5-flash"
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel(model_name)
             
             prompt_parts = []
+            
+            # Se houver tools, injeta a definição no início do prompt para o Gemini saber o que chamar
+            if tools:
+                tools_desc = "\n".join([f"- {t['function']['name']}: {t['function']['description']}" for t in tools])
+                prompt_parts.append(f"SYSTEM: Você tem acesso às seguintes FERRAMENTAS financeiras. Se precisar realizar uma ação (como criar meta, lembrete ou agendamento), você DEVE retornar um JSON no formato: {{\"function\": {{\"name\": \"nome_da_funcao\", \"arguments\": {{\"param1\": \"valor1\"}}}}}}. \n\nFERRAMENTAS DISPONÍVEIS:\n{tools_desc}")
             for m in messages:
                 role_raw = m.get("role", "system")
                 content = m.get("content") or ""
@@ -174,7 +178,7 @@ async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | N
         try:
             logger.info(f"⚡ [AI] Tentando {name} (tentativa {attempt+1})...")
             if name == "GEMINI":
-                return await fn(messages)
+                return await fn(messages, tools=tools)
             else:
                 return await fn(messages, tools, tool_choice)
         except Exception as e:

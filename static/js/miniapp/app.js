@@ -1225,43 +1225,60 @@ lucide.createIcons();
       };
     }
 
-        function renderSankeyPremium(container, data) {
+    function renderSankeyPremium(container, data) {
       if (!container || !data.length) return;
-      const width = 800; const height = 450;
+      const width = 800; const height = 520; // Aumentada a altura do canvas
       const vProfundo = '#064E3B'; const gProfundo = '#4a1019';
       const palette = ['#D4AF37', '#818cf8', '#f472b6', '#fbbf24', '#34d399', '#a78bfa'];
+      
       const totalRec = data.filter(d => d.from === 'Receitas').reduce((a, b) => a + b.flow, 0);
       const totalExp = data.filter(d => d.from === 'Caixa' && d.to === 'Despesas').reduce((a, b) => a + b.flow, 0);
       const despesas = data.filter(d => d.from === 'Despesas');
-      const maxHeight = 300;
+      
+      const maxHeight = 400; // Aumentada a altura máxima útil (era 300)
       const scale = maxHeight / Math.max(totalRec, totalExp, 1);
       
-      const rY = 70 + (maxHeight - Math.max(40, totalRec * scale)) / 2;
-      const hR = Math.max(40, totalRec * scale);
-      const cY = 70 + (maxHeight - Math.max(40, totalExp * scale)) / 2;
-      const hC = Math.max(40, totalExp * scale);
+      const rY = 60 + (maxHeight - Math.max(80, totalRec * scale)) / 2; // Altura mínima maior (80)
+      const hR = Math.max(80, totalRec * scale);
+      const cY = 60 + (maxHeight - Math.max(80, totalExp * scale)) / 2;
+      const hC = Math.max(80, totalExp * scale);
 
-      let svgHtml = `<svg viewBox=\"0 0 ${width} ${height}\" xmlns=\"http://www.w3.org/2000/svg\" style=\"width:100%; height:auto; overflow:visible;\">
+      let svgHtml = `<svg viewBox=\"0 0 ${width} ${height}\" xmlns=\"http://www.w3.org/2000/svg\" style=\"width:100%; height:auto; max-height:380px; overflow:visible;\">
         <defs>
-          <linearGradient id=\"g-main-flow\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"0%\"><stop offset=\"0%\" stop-color=\"#10b981\" stop-opacity=\"0.4\"/><stop offset=\"100%\" stop-color=\"#7b1e2d\" stop-opacity=\"0.4\"/></linearGradient>
+          <linearGradient id=\"g-main-flow\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"0%\">
+            <stop offset=\"0%\" stop-color=\"#10b981\" stop-opacity=\"0.5\"/>
+            <stop offset=\"100%\" stop-color=\"#7b1e2d\" stop-opacity=\"0.5\"/>
+          </linearGradient>
           ${despesas.map((c, i) => `<linearGradient id=\"g-cat-flow-${i}\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"0%\"><stop offset=\"0%\" stop-color=\"${gProfundo}\" stop-opacity=\"0.4\"/><stop offset=\"100%\" stop-color=\"${palette[i % palette.length]}\" stop-opacity=\"0.5\"/></linearGradient>`).join('')}
         </defs>
-        <text x=\"85\" y=\"40\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"900\" fill=\"${vProfundo}\">ENTRADA</text>
-        <text x=\"300\" y=\"40\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"900\" fill=\"${gProfundo}\">GESTAO</text>
-        <text x=\"610\" y=\"40\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"900\" fill=\"#64748b\">SAIDAS</text>
-        <path d=\"M145,${rY} C195,${rY} 195,${cY} 240,${cY} L240,${cY + hC} C195,${cY + hC} 195,${rY + hR} 145,${rY + hR} Z\" fill=\"url(#g-main-flow)\" opacity=\"0.7\" />
+        
+        <text x=\"85\" y=\"35\" text-anchor=\"middle\" font-size=\"12\" font-weight=\"900\" fill=\"${vProfundo}\" style=\"text-transform:uppercase; letter-spacing:1px\">Entrada</text>
+        <text x=\"300\" y=\"35\" text-anchor=\"middle\" font-size=\"12\" font-weight=\"900\" fill=\"${gProfundo}\" style=\"text-transform:uppercase; letter-spacing:1px\">Gestão</text>
+        <text x=\"610\" y=\"35\" text-anchor=\"middle\" font-size=\"12\" font-weight=\"900\" fill=\"#64748b\" style=\"text-transform:uppercase; letter-spacing:1px\">Saídas</text>
+
+        <!-- Fluxo Principal: Receitas -> Caixa -->
+        <path d=\"M145,${rY} C200,${rY} 200,${cY} 240,${cY} L240,${cY + hC} C200,${cY + hC} 200,${rY + hR} 145,${rY + hR} Z\" fill=\"url(#g-main-flow)\" />
 
         <!-- Nós -->
-        <rect x=\"25\" y=\"${rY}\" width=\"120\" height=\"${hR}\" rx=\"12\" fill=\"rgba(16, 185, 129, 0.05)\" stroke=\"#10b981\" stroke-width=\"2\" />
-        <text x=\"85\" y=\"${rY + hR / 2 - 5}\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"900\" fill=\"${vProfundo}\">RECEITAS</text>
-        <text x=\"85\" y=\"${rY + hR / 2 + 12}\" text-anchor=\"middle\" font-size=\"12\" font-weight=\"bold\" fill=\"${vProfundo}\">${formatCurrencyBR(totalRec)}</text>
+        <rect x=\"25\" y=\"${rY}\" width=\"120\" height=\"${hR}\" rx=\"16\" fill=\"rgba(16, 185, 129, 0.08)\" stroke=\"#10b981\" stroke-width=\"2.5\" />
+        <text x=\"85\" y=\"${rY + hR / 2 - 6}\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"900\" fill=\"${vProfundo}\">RECEITAS</text>
+        <text x=\"85\" y=\"${rY + hR / 2 + 14}\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"bold\" fill=\"#10b981\">${formatCurrencyBR(totalRec)}</text>
 
-        <rect x=\"240\" y=\"${cY}\" width=\"120\" height=\"${hC}\" rx=\"12\" fill=\"rgba(123, 30, 45, 0.05)\" stroke=\"#7b1e2d\" stroke-width=\"2\" />
-        <text x=\"300\" y=\"${cY + hC / 2 - 5}\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"900\" fill=\"${gProfundo}\">CAIXA</text>
-        <text x=\"300\" y=\"${cY + hC / 2 + 10}\" text-anchor=\"middle\" font-size=\"10\" font-weight=\"bold\" fill=\"${gProfundo}\">GESTÃO</text>
+        <rect x=\"240\" y=\"${cY}\" width=\"120\" height=\"${hC}\" rx=\"16\" fill=\"rgba(123, 30, 45, 0.08)\" stroke=\"#7b1e2d\" stroke-width=\"2.5\" />
+        <text x=\"300\" y=\"${cY + hC / 2 - 6}\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"900\" fill=\"${gProfundo}\">CAIXA</text>
+        <text x=\"300\" y=\"${cY + hC / 2 + 12}\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"bold\" fill=\"${gProfundo}\">GESTÃO</text>
+        
         ${despesas.slice(0, 5).map((cat, i) => {
-          const h = Math.max(45, cat.flow * scale); const y = 70 + (i * 65); const color = palette[i % palette.length];
-          return `<path d=\"M360,210 C460,210 460,${y + h/2} 510,${y + h/2}\" stroke=\"url(#g-cat-flow-${i})\" stroke-width=\"${Math.max(2, cat.flow * scale)}\" fill=\"none\" opacity=\"0.6\" /><rect x=\"510\" y=\"${y}\" width=\"200\" height=\"${h}\" rx=\"12\" fill=\"rgba(255,255,255,0.03)\" stroke=\"${color}\" stroke-opacity=\"0.5\" stroke-width=\"2\" /><rect x=\"510\" y=\"${y}\" width=\"4\" height=\"${h}\" rx=\"2\" fill=\"${color}\" /><text x=\"610\" y=\"${y + h/2 - 5}\" text-anchor=\"middle\" font-size=\"10\" font-weight=\"900\" fill=\"${color}\">${cat.to.toUpperCase()}</text><text x=\"610\" y=\"${y + h/2 + 12}\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"bold\" fill=\"${color}\">${formatCurrencyBR(cat.flow)}</text>`;
+          const h = Math.max(60, cat.flow * scale); // Aumentada altura das sub-despesas
+          const y = 60 + (i * 75); 
+          const color = palette[i % palette.length];
+          return `
+            <path d=\"M360,${cY + (hC/5)*i + 10} C440,${cY + (hC/5)*i + 10} 440,${y + h/2} 510,${y + h/2}\" stroke=\"url(#g-cat-flow-${i})\" stroke-width=\"${Math.max(4, cat.flow * scale)}\" fill=\"none\" opacity=\"0.7\" />
+            <rect x=\"510\" y=\"${y}\" width=\"210\" height=\"${h}\" rx=\"16\" fill=\"rgba(255,255,255,0.04)\" stroke=\"${color}\" stroke-opacity=\"0.6\" stroke-width=\"2\" />
+            <rect x=\"510\" y=\"${y}\" width=\"5\" height=\"${h}\" rx=\"2.5\" fill=\"${color}\" />
+            <text x=\"615\" y=\"${y + h/2 - 6}\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"900\" fill=\"${gProfundo}\">${cat.to.toUpperCase()}</text>
+            <text x=\"615\" y=\"${y + h/2 + 14}\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"bold\" fill=\"${color}\">${formatCurrencyBR(cat.flow)}</text>
+          `;
         }).join('')}
       </svg>`;
       container.innerHTML = svgHtml;
@@ -1953,7 +1970,6 @@ lucide.createIcons();
 
       homeRadarSection.classList.remove('hidden');
 
-      // 1. Renderizar Cartões
       if (homeCardsGrid) {
         homeCardsGrid.innerHTML = '';
         if (cards.length > 0) {
@@ -1961,12 +1977,10 @@ lucide.createIcons();
             const fatura = card.fatura || 0;
             const limite = card.limite || 0;
             const pct = limite > 0 ? Math.min(100, Math.round((fatura / limite) * 100)) : null;
-            
-            // Lógica de Vencimento
             const hoje = new Date();
             hoje.setHours(0,0,0,0);
             const dataVenc = card.vence ? new Date(card.vence) : null;
-            if (dataVenc) dataVenc.setHours(12,0,0,0); // Ajuste de timezone
+            if (dataVenc) dataVenc.setHours(12,0,0,0);
             const isVencido = dataVenc && dataVenc < hoje;
             const venceStr = dataVenc ? dataVenc.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) : 'S/D';
             
@@ -2021,7 +2035,6 @@ lucide.createIcons();
         }
       }
 
-      // 2. Renderizar Parcelas
       if (homeInstallmentsBlock && homeInstallmentsList) {
         if (installments.length > 0) {
           homeInstallmentsBlock.classList.remove('hidden');
@@ -3665,6 +3678,7 @@ lucide.createIcons();
     if (agendaTabAgendamentos) agendaTabAgendamentos.addEventListener('click', () => setAgendaMode('agendamentos'));
     if (agendaTabLembretes) agendaTabLembretes.addEventListener('click', () => setAgendaMode('lembretes'));
     if (agendaTabLimites) agendaTabLimites.addEventListener('click', () => setAgendaMode('limites'));
+    if (agendaTabMetas) agendaTabMetas.addEventListener('click', () => setAgendaMode('metas'));
     metaRefresh.addEventListener('click', loadMetas);
     metaNew.addEventListener('click', () => openMetaModal(null));
     metaSave.addEventListener('click', saveMeta);
