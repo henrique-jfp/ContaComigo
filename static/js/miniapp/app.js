@@ -155,18 +155,6 @@ lucide.createIcons();
     const newAgendSave = document.getElementById('newAgendSave');
     const parcelasGroup = document.getElementById('parcelasGroup');
     
-    const metaList = document.getElementById('metaList');
-    const metaStatus = document.getElementById('metaStatus');
-    const metaRefresh = document.getElementById('metaRefresh');
-    const metaNew = document.getElementById('metaNew');
-    const metaModal = document.getElementById('metaModal');
-    const metaModalTitle = document.getElementById('metaModalTitle');
-    const metaDescricao = document.getElementById('metaDescricao');
-    const metaValorMeta = document.getElementById('metaValorMeta');
-    const metaValorAtual = document.getElementById('metaValorAtual');
-    const metaData = document.getElementById('metaData');
-    const metaSave = document.getElementById('metaSave');
-
     const orcamentoList = document.getElementById('orcamentoList');
     const orcamentoNew = document.getElementById('orcamentoNew');
     const orcamentoModal = document.getElementById('orcamentoModal');
@@ -1859,146 +1847,97 @@ lucide.createIcons();
       }
 
       if (homeHeatmapChartEl) {
-  const WEEK_DAYS  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
-  const WEEK_LABELS = ['Sem 1','Sem 2','Sem 3','Sem 4','Sem 5','Sem 6'];
-
-  homeCharts.heatmap = safeChart(homeHeatmapChartEl, {
-    type: 'matrix',
-    data: {
-      datasets: [{
-        data: chartData.heatmapData,
-        backgroundColor(ctx) {
-          const item = ctx.dataset.data[ctx.dataIndex];
-          if (!item || item.type === 'empty') return 'rgba(255,255,255,0.03)';
-          if (item.type === 'income_win')  return '#10b981';   // verde: saldo positivo
-          if (item.type === 'expense_win') return '#e11d48';   // vermelho vivo (era #7b1e2d — escuro demais)
-          // dia com movimentação mas sem "vencedor"
-          const s = item.stats;
-          if (s && (s.inc + s.exp) > 0) return 'rgba(99,102,241,0.45)'; // roxo suave
-          return 'rgba(255,255,255,0.06)';
-        },
-        borderColor(ctx) {
-          const item = ctx.dataset.data[ctx.dataIndex];
-          if (!item || item.type === 'empty') return 'rgba(255,255,255,0.07)';
-          return 'rgba(255,255,255,0.20)';
-        },
-        borderRadius: 4,   // ← cantos arredondados nas células
-        borderWidth: 1,
-        width:  ({ chart }) => {
-          const a = chart.chartArea;
-          return a ? Math.floor(a.width  / 7) - 4 : 28;
-        },
-        height: ({ chart }) => {
-          const a = chart.chartArea;
-          return a ? Math.floor(a.height / 6) - 4 : 22;
-        },
-      }]
-    },
-
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      layout: { padding: { top: 4, right: 4, bottom: 4, left: 4 } },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: '#18181b',
-          titleColor: '#D4AF37',
-          bodyColor: 'rgba(255,255,255,0.75)',
-          borderColor: 'rgba(255,255,255,0.1)',
-          borderWidth: 1,
-          padding: 12,
-          cornerRadius: 8,
-          callbacks: {
-            title: (ctx) => {
-              const item = ctx[0].raw;
-              return item.date ? `📅 ${item.fullDate || 'Dia ' + item.date}` : '';
-            },
-            label: (ctx) => {
-              const s = ctx.raw.stats;
-              if (!s) return 'Sem movimentação';
-              const saldo = s.incT - s.expT;
-              return [
-                `Lançamentos : ${s.inc + s.exp}`,
-                `Receitas    : ${formatCurrencyBR(s.incT)}`,
-                `Despesas    : ${formatCurrencyBR(s.expT)}`,
-                `─────────────────`,
-                `Saldo       : ${saldo >= 0 ? '+' : ''}${formatCurrencyBR(saldo)}`,
-              ];
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          type: 'category',
-          labels: WEEK_DAYS,
-          position: 'top',   // ← labels ACIMA das células
-          offset: true,
-          grid: { display: false },
-          border: { display: false },
-          ticks: {
-            color: 'rgba(255,255,255,0.55)',
-            font: { size: 11, weight: '600' },
-            padding: 6,
-          },
-        },
-        y: {
-          type: 'category',
-          labels: WEEK_LABELS,
-          offset: true,
-          reverse: false,
-          grid: { display: false },
-          border: { display: false },
-          ticks: {
-            color: 'rgba(255,255,255,0.35)',
-            font: { size: 10 },
-            padding: 8,
-          },
-        }
+        renderPremiumHeatmap(homeHeatmapChartEl.parentElement, chartData.heatmapData, summary);
+        homeHeatmapChartEl.style.display = 'none';
       }
-    },
 
-    plugins: [{
-      id: 'calendarLabels',
-      afterDatasetsDraw(chart) {
-        const { ctx, data } = chart;
-        ctx.save();
+      renderHomeRecent(summary?.recent || []);
+      renderHomeRadar(summary);
+      lucide.createIcons();
+    }
 
-        data.datasets[0].data.forEach((item, i) => {
-          if (!item?.date) return;
-          const meta = chart.getDatasetMeta(0).data[i];
-          if (!meta) return;
+    function renderPremiumHeatmap(container, heatmapData, summary) {
+      if (!container) return;
+      
+      const now = new Date();
+      const monthNames = ['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
+      const monthLabel = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+      
+      const recT = Number(summary?.receita || 0);
+      const desT = Number(summary?.despesa || 0);
+      const salT = recT - desT;
 
-          const { x, y, width, height } = meta.getProps(['x','y','width','height'], true);
-          const hasActivity = item.stats && (item.stats.inc + item.stats.exp) > 0;
-          const isHighlight = item.type === 'income_win' || item.type === 'expense_win';
+      container.innerHTML = `
+        <div class="premium-heatmap-wrap bg-[#0d0d10] p-5 rounded-[20px] border border-white/5 shadow-2xl">
+          <div class="flex justify-between items-center mb-6">
+            <div>
+              <div class="text-[11px] font-bold text-[#D4AF37] font-mono tracking-widest uppercase">${monthLabel}</div>
+              <div class="text-base font-extrabold text-[#e8e8f0]">Mapa de Calor</div>
+            </div>
+            <div class="flex gap-3">
+               <div class="flex items-center gap-1.5 text-[9px] text-white/40 font-mono"><div class="w-2 h-2 rounded-sm bg-[#10b981]"></div> REC</div>
+               <div class="flex items-center gap-1.5 text-[9px] text-white/40 font-mono"><div class="w-2 h-2 rounded-sm bg-[#f43f5e]"></div> DES</div>
+            </div>
+          </div>
 
-          // Número do dia — canto superior esquerdo
-          ctx.font = `${isHighlight ? '700' : '500'} 11px monospace`;
-          ctx.fillStyle = isHighlight
-            ? 'rgba(255,255,255,0.95)'
-            : hasActivity
-              ? 'rgba(255,255,255,0.70)'
-              : 'rgba(255,255,255,0.25)';
-          ctx.textAlign    = 'left';
-          ctx.textBaseline = 'top';
-          ctx.fillText(item.date, x - width / 2 + 5, y - height / 2 + 5);
+          <div class="grid grid-cols-[40px_repeat(7,1fr)] gap-1 mb-2">
+            <div></div>
+            ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d => `<div class="text-center text-[9px] font-bold text-white/20 uppercase tracking-tighter">${d}</div>`).join('')}
+          </div>
 
-          // Ponto indicador de atividade — canto inferior direito
-          if (hasActivity && !isHighlight) {
-            ctx.beginPath();
-            ctx.arc(x + width / 2 - 6, y + height / 2 - 6, 2.5, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(99,102,241,0.8)';
-            ctx.fill();
-          }
-        });
+          <div class="flex flex-col gap-1">
+            ${Array.from({length: 6}).map((_, w) => `
+              <div class="grid grid-cols-[40px_repeat(7,1fr)] gap-1 items-center">
+                <div class="text-[8px] text-white/10 text-right pr-2 font-mono">S${w+1}</div>
+                ${heatmapData.slice(w*7, (w+1)*7).map(d => {
+                  if (!d.date) return `<div class="aspect-[1/0.8] rounded-md bg-white/[0.02] border border-white/[0.03] opacity-20"></div>`;
+                  
+                  const s = d.stats || {incT:0, expT:0, inc:0, exp:0};
+                  const type = d.type;
+                  const total = s.incT + s.expT;
+                  const incP = total > 0 ? (s.incT / total * 100) : 0;
+                  const expP = 100 - incP;
+                  const isToday = parseInt(d.date) === now.getDate();
 
-        ctx.restore();
-      }
-    }]
-  });
-}
+                  let cellClass = "bg-white/[0.04] border-white/[0.07]";
+                  if (type === 'income_win') cellClass = "bg-gradient-to-br from-[#10b981] to-[#059669] border-[#10b981]/50 shadow-[0_2px_10px_rgba(16,185,129,0.2)]";
+                  if (type === 'expense_win') cellClass = "bg-gradient-to-br from-[#f43f5e] to-[#e11d48] border-[#f43f5e]/50 shadow-[0_2px_10px_rgba(244,63,94,0.2)]";
+                  if (isToday) cellClass += " ring-1 ring-[#D4AF37]";
+
+                  return `
+                    <div class="ph-cell aspect-[1/0.8] rounded-md border ${cellClass} relative overflow-hidden transition-transform active:scale-95" 
+                         onclick="window.Telegram.WebApp.showAlert('📅 Dia ${d.date} de ${monthNames[now.getMonth()]}\\n\\nLançamentos: ${s.inc + s.exp}\\nReceitas: ${formatCurrencyBR(s.incT)}\\nDespesas: ${formatCurrencyBR(s.expT)}\\nSaldo: ${formatCurrencyBR(s.incT - s.expT)}')">
+                      <span class="absolute top-1 left-1.5 text-[10px] font-bold ${ (type.includes('win')) ? 'text-white' : 'text-white/30' }">${d.date}</span>
+                      ${total > 0 ? `
+                        <div class="absolute bottom-0 left-0 right-0 h-[3px] flex">
+                          <div class="bg-[#10b981]/80" style="width:${incP}%"></div>
+                          <div class="bg-white/30" style="width:${expP}%"></div>
+                        </div>
+                      ` : ''}
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 mt-6 pt-5 border-t border-white/5">
+            <div class="bg-white/[0.03] p-3 rounded-xl border border-white/5">
+              <div class="text-[8px] font-bold text-white/40 mb-1">RECEITAS</div>
+              <div class="text-xs font-black text-[#10b981] font-mono">${formatCurrencyBR(recT)}</div>
+            </div>
+            <div class="bg-white/[0.03] p-3 rounded-xl border border-white/5">
+              <div class="text-[8px] font-bold text-white/40 mb-1">DESPESAS</div>
+              <div class="text-xs font-black text-[#f43f5e] font-mono">${formatCurrencyBR(desT)}</div>
+            </div>
+            <div class="bg-white/[0.03] p-3 rounded-xl border border-white/5">
+              <div class="text-[8px] font-bold text-white/40 mb-1">SALDO</div>
+              <div class="text-xs font-black text-[#D4AF37] font-mono">${formatCurrencyBR(salT)}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
 
       renderHomeRecent(summary?.recent || []);
       renderHomeRadar(summary);
