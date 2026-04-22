@@ -1824,6 +1824,22 @@ def miniapp_overview():
         categories = _category_distribution(lancamentos_mes)
         insight = _build_miniapp_insight(usuario, balance, receita, despesa, categories, cashflow)
 
+        # Agrupamento diário para o Mapa de Calor Real
+        heatmap_daily = {}
+        for l in lancamentos_mes:
+            dia = l.data_transacao.day
+            if dia not in heatmap_daily:
+                heatmap_daily[dia] = {"incT": 0.0, "expT": 0.0, "incC": 0, "expC": 0}
+            
+            valor = float(l.valor or 0)
+            tipo_l = (l.tipo or "").lower()
+            if tipo_l.startswith(("recei", "entrada")):
+                heatmap_daily[dia]["incT"] += valor
+                heatmap_daily[dia]["incC"] += 1
+            else:
+                heatmap_daily[dia]["expT"] += abs(valor)
+                heatmap_daily[dia]["expC"] += 1
+
         recent_items = (
             base_query
             .order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc())
@@ -2131,6 +2147,7 @@ def miniapp_overview():
                 "projection_series": projection_series or [],
                 "top_villains": top_villains,
                 "recent": [_serialize_miniapp_lancamento(lanc) for lanc in (recent_items or [])],
+                "heatmap_daily": heatmap_daily,
                 "plan": user_plan,
                 "plan_label": user_plan_label,
                 "cards": cards_summary or [],

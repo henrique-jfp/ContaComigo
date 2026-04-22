@@ -1162,20 +1162,11 @@ lucide.createIcons();
       const startDay = new Date(now.getFullYear(), now.getMonth(), 1).getDay();
       const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
       
-      const activity = {};
-      (summary?.recent || []).forEach(item => {
-        const d = new Date(item.data);
-        if (d.getMonth() === now.getMonth()) {
-          const day = d.getDate();
-          const val = Number(item.valor || 0);
-          if (!activity[day]) activity[day] = { incT: 0, expT: 0, incC: 0, expC: 0 };
-          if (val > 0) { activity[day].incT += val; activity[day].incC++; }
-          else { activity[day].expT += Math.abs(val); activity[day].expC++; }
-        }
-      });
+      // Lê dados do heatmap_daily (todos os dias do mês) em vez de apenas recentes
+      const activity = summary?.heatmap_daily || {};
 
       const heatmapData = [];
-      const daysShort = ['Dom','Seg','Ter','Qua','Qui','Sex','S�b'];
+      const daysShort = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'];
       for (let w = 0; w < 6; w++) {
         daysShort.forEach((d, i) => {
           const dayNum = (w * 7) + i - startDay + 1;
@@ -1866,7 +1857,7 @@ lucide.createIcons();
       const salT = recT - desT;
 
       container.innerHTML = `
-        <div class="premium-heatmap-wrap bg-[#0d0d10] p-5 rounded-[20px] border border-white/5 shadow-2xl">
+        <div class="premium-heatmap-wrap bg-[#1a0508] p-5 rounded-[20px] border border-[#7b1e2d]/20 shadow-2xl">
           <div class="flex justify-between items-center mb-6">
             <div>
               <div class="text-[11px] font-bold text-[#D4AF37] font-mono tracking-widest uppercase">${monthLabel}</div>
@@ -1888,7 +1879,7 @@ lucide.createIcons();
               <div class="grid grid-cols-[40px_repeat(7,1fr)] gap-1 items-center">
                 <div class="text-[8px] text-white/10 text-right pr-2 font-mono">S${w+1}</div>
                 ${heatmapData.slice(w*7, (w+1)*7).map(d => {
-                  if (!d.date) return `<div class="aspect-[1/0.8] rounded-md bg-white/[0.02] border border-white/[0.03] opacity-20"></div>`;
+                  if (!d.date) return `<div class="aspect-[1/0.8] rounded-md bg-[#2d0a10] border border-[#7b1e2d]/20 opacity-20"></div>`;
                   
                   const s = d.stats || {incT:0, expT:0, inc:0, exp:0};
                   const type = d.type;
@@ -1897,7 +1888,7 @@ lucide.createIcons();
                   const expP = 100 - incP;
                   const isToday = parseInt(d.date) === now.getDate();
 
-                  let cellClass = "bg-white/[0.04] border-white/[0.07]";
+                  let cellClass = "bg-[#2d0a10] border-[#7b1e2d]/20";
                   if (type === 'income_win') cellClass = "bg-gradient-to-br from-[#10b981] to-[#059669] border-[#10b981]/50 shadow-[0_2px_10px_rgba(16,185,129,0.2)]";
                   if (type === 'expense_win') cellClass = "bg-gradient-to-br from-[#f43f5e] to-[#e11d48] border-[#f43f5e]/50 shadow-[0_2px_10px_rgba(244,63,94,0.2)]";
                   if (isToday) cellClass += " ring-1 ring-[#D4AF37]";
@@ -1905,7 +1896,7 @@ lucide.createIcons();
                   return `
                     <div class="ph-cell aspect-[1/0.8] rounded-md border ${cellClass} relative overflow-hidden transition-transform active:scale-95" 
                          onclick="window.Telegram.WebApp.showAlert('📅 Dia ${d.date} de ${monthNames[now.getMonth()]}\\n\\nLançamentos: ${s.inc + s.exp}\\nReceitas: ${formatCurrencyBR(s.incT)}\\nDespesas: ${formatCurrencyBR(s.expT)}\\nSaldo: ${formatCurrencyBR(s.incT - s.expT)}')">
-                      <span class="absolute top-1 left-1.5 text-[10px] font-bold ${ (type.includes('win')) ? 'text-white' : 'text-white/30' }">${d.date}</span>
+                      <span class="absolute top-1 left-1.5 text-[10px] font-bold ${ (type.includes('win')) ? 'text-white' : 'text-white/50' }">${d.date}</span>
                       ${total > 0 ? `
                         <div class="absolute bottom-0 left-0 right-0 h-[3px] flex">
                           <div class="bg-[#10b981]/80" style="width:${incP}%"></div>
