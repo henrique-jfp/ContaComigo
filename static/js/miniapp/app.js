@@ -1022,6 +1022,7 @@ lucide.createIcons();
     }
 
     function setAgendaMode(mode) {
+      console.log('setAgendaMode:', mode);
       agendaMode = mode;
       const btns = {
         'agendamentos': agendaTabAgendamentos,
@@ -1046,10 +1047,14 @@ lucide.createIcons();
       if (agendamentoList) agendamentoList.classList.toggle('hidden', mode !== 'agendamentos' && mode !== 'lembretes');
       
       updateAgendaModalLabels();
-      if (mode === 'agendamentos') loadAgendamentos();
-      else if (mode === 'lembretes') loadAgendamentos();
-      else if (mode === 'limites') loadOrcamentos();
-      else if (mode === 'metas') loadMetas();
+      try {
+          if (mode === 'agendamentos') loadAgendamentos();
+          else if (mode === 'lembretes') loadAgendamentos();
+          else if (mode === 'limites') loadOrcamentos();
+          else if (mode === 'metas') loadMetas();
+      } catch (err) {
+          console.error('Erro ao carregar aba da agenda:', err);
+      }
     }
 
     function canUseChartMotion() {
@@ -3457,6 +3462,7 @@ lucide.createIcons();
 
     async function loadMetas() {
       if (!sessionId) return;
+      console.log('loadMetas: Iniciando carregamento...');
       renderMetaSkeleton(3);
       // Também limpa e mostra skeleton na agenda se estiver visível
       if (metasAgendaList) {
@@ -3666,10 +3672,10 @@ lucide.createIcons();
       }
       openNewAgendamentoModal();
     });
-    if (agendaTabAgendamentos) agendaTabAgendamentos.addEventListener('click', () => setAgendaMode('agendamentos'));
-    if (agendaTabLembretes) agendaTabLembretes.addEventListener('click', () => setAgendaMode('lembretes'));
-    if (agendaTabLimites) agendaTabLimites.addEventListener('click', () => setAgendaMode('limites'));
-    if (agendaTabMetas) agendaTabMetas.addEventListener('click', () => setAgendaMode('metas'));
+    if (agendaTabAgendamentos) agendaTabAgendamentos.addEventListener('click', () => { console.log('Click Agendamentos'); setAgendaMode('agendamentos'); });
+    if (agendaTabLembretes) agendaTabLembretes.addEventListener('click', () => { console.log('Click Lembretes'); setAgendaMode('lembretes'); });
+    if (agendaTabLimites) agendaTabLimites.addEventListener('click', () => { console.log('Click Limites'); setAgendaMode('limites'); });
+    if (agendaTabMetas) agendaTabMetas.addEventListener('click', () => { console.log('Click Metas'); setAgendaMode('metas'); });
     metaRefresh.addEventListener('click', loadMetas);
     metaNew.addEventListener('click', () => openMetaModal(null));
     metaSave.addEventListener('click', saveMeta);
