@@ -1828,73 +1828,146 @@ lucide.createIcons();
       }
 
       if (homeHeatmapChartEl) {
-        homeCharts.heatmap = safeChart(homeHeatmapChartEl, {
-          type: 'matrix',
-          data: {
-            datasets: [{
-              data: chartData.heatmapData,
-              backgroundColor(ctx) {
-                const item = ctx.dataset.data[ctx.dataIndex];
-                if (!item || item.type === 'empty') return 'transparent';
-                if (item.type === 'income_win') return '#10b981';
-                if (item.type === 'expense_win') return '#7b1e2d';
-                return 'rgba(0, 0, 0, 0.05)'; 
-              },
-              borderColor: 'rgba(0, 0, 0, 0.1)',
-              borderWidth: 1,
-              width: ({chart}) => (chart.chartArea || {}).width / 7 - 4,
-              height: ({chart}) => (chart.chartArea || {}).height / 6 - 4,
-            }]
-          },
-          options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                backgroundColor: '#0a0a0a',
-                titleColor: '#D4AF37',
-                callbacks: {
-                  title: (ctx) => `Dia ${ctx[0].raw.date}`,
-                  label: (ctx) => {
-                    const s = ctx.raw.stats;
-                    return [
-                      `Lançamentos: ${s.inc + s.exp}`,
-                      `Receitas: ${formatCurrencyBR(s.incT)}`,
-                      `Despesas: ${formatCurrencyBR(s.expT)}`,
-                      `Saldo: ${formatCurrencyBR(s.incT - s.expT)}`
-                    ];
-                  }
-                }
-              }
+  const WEEK_DAYS  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const WEEK_LABELS = ['Sem 1','Sem 2','Sem 3','Sem 4','Sem 5','Sem 6'];
+
+  homeCharts.heatmap = safeChart(homeHeatmapChartEl, {
+    type: 'matrix',
+    data: {
+      datasets: [{
+        data: chartData.heatmapData,
+        backgroundColor(ctx) {
+          const item = ctx.dataset.data[ctx.dataIndex];
+          if (!item || item.type === 'empty') return 'rgba(255,255,255,0.03)';
+          if (item.type === 'income_win')  return '#10b981';   // verde: saldo positivo
+          if (item.type === 'expense_win') return '#e11d48';   // vermelho vivo (era #7b1e2d — escuro demais)
+          // dia com movimentação mas sem "vencedor"
+          const s = item.stats;
+          if (s && (s.inc + s.exp) > 0) return 'rgba(99,102,241,0.45)'; // roxo suave
+          return 'rgba(255,255,255,0.06)';
+        },
+        borderColor(ctx) {
+          const item = ctx.dataset.data[ctx.dataIndex];
+          if (!item || item.type === 'empty') return 'rgba(255,255,255,0.07)';
+          return 'rgba(255,255,255,0.20)';
+        },
+        borderRadius: 4,   // ← cantos arredondados nas células
+        borderWidth: 1,
+        width:  ({ chart }) => {
+          const a = chart.chartArea;
+          return a ? Math.floor(a.width  / 7) - 4 : 28;
+        },
+        height: ({ chart }) => {
+          const a = chart.chartArea;
+          return a ? Math.floor(a.height / 6) - 4 : 22;
+        },
+      }]
+    },
+
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top: 4, right: 4, bottom: 4, left: 4 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#18181b',
+          titleColor: '#D4AF37',
+          bodyColor: 'rgba(255,255,255,0.75)',
+          borderColor: 'rgba(255,255,255,0.1)',
+          borderWidth: 1,
+          padding: 12,
+          cornerRadius: 8,
+          callbacks: {
+            title: (ctx) => {
+              const item = ctx[0].raw;
+              return item.date ? `📅 ${item.fullDate || 'Dia ' + item.date}` : '';
             },
-            scales: {
-              x: { type: 'category', labels: ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'], grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 } } },
-              y: { type: 'category', labels: ['Sem 1','Sem 2','Sem 3','Sem 4','Sem 5','Sem 6'], grid: { display: false }, offset: true, ticks: { display: false } }
+            label: (ctx) => {
+              const s = ctx.raw.stats;
+              if (!s) return 'Sem movimentação';
+              const saldo = s.incT - s.expT;
+              return [
+                `Lançamentos : ${s.inc + s.exp}`,
+                `Receitas    : ${formatCurrencyBR(s.incT)}`,
+                `Despesas    : ${formatCurrencyBR(s.expT)}`,
+                `─────────────────`,
+                `Saldo       : ${saldo >= 0 ? '+' : ''}${formatCurrencyBR(saldo)}`,
+              ];
             }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'category',
+          labels: WEEK_DAYS,
+          position: 'top',   // ← labels ACIMA das células
+          offset: true,
+          grid: { display: false },
+          border: { display: false },
+          ticks: {
+            color: 'rgba(255,255,255,0.55)',
+            font: { size: 11, weight: '600' },
+            padding: 6,
           },
-          plugins: [{
-            id: 'calendarLabels',
-            afterDatasetsDraw(chart) {
-              const {ctx, data} = chart;
-              ctx.save();
-              ctx.font = 'bold 11px monospace';
-              ctx.textAlign = 'left';
-              ctx.textBaseline = 'top';
-              data.datasets[0].data.forEach((item, i) => {
-                if (item.date) {
-                  const meta = chart.getDatasetMeta(0).data[i];
-                  if (meta) {
-                    ctx.fillStyle = (item.type === 'income_win' || item.type === 'expense_win') ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.4)';
-                    // Posicionamento no canto superior esquerdo do box
-                    ctx.fillText(item.date, meta.x - meta.width / 2 + 5, meta.y - meta.height / 2 + 5);
-                  }
-                }
-              });
-              ctx.restore();
-            }
-          }]
-        });
+        },
+        y: {
+          type: 'category',
+          labels: WEEK_LABELS,
+          offset: true,
+          reverse: false,
+          grid: { display: false },
+          border: { display: false },
+          ticks: {
+            color: 'rgba(255,255,255,0.35)',
+            font: { size: 10 },
+            padding: 8,
+          },
+        }
       }
+    },
+
+    plugins: [{
+      id: 'calendarLabels',
+      afterDatasetsDraw(chart) {
+        const { ctx, data } = chart;
+        ctx.save();
+
+        data.datasets[0].data.forEach((item, i) => {
+          if (!item?.date) return;
+          const meta = chart.getDatasetMeta(0).data[i];
+          if (!meta) return;
+
+          const { x, y, width, height } = meta.getProps(['x','y','width','height'], true);
+          const hasActivity = item.stats && (item.stats.inc + item.stats.exp) > 0;
+          const isHighlight = item.type === 'income_win' || item.type === 'expense_win';
+
+          // Número do dia — canto superior esquerdo
+          ctx.font = `${isHighlight ? '700' : '500'} 11px monospace`;
+          ctx.fillStyle = isHighlight
+            ? 'rgba(255,255,255,0.95)'
+            : hasActivity
+              ? 'rgba(255,255,255,0.70)'
+              : 'rgba(255,255,255,0.25)';
+          ctx.textAlign    = 'left';
+          ctx.textBaseline = 'top';
+          ctx.fillText(item.date, x - width / 2 + 5, y - height / 2 + 5);
+
+          // Ponto indicador de atividade — canto inferior direito
+          if (hasActivity && !isHighlight) {
+            ctx.beginPath();
+            ctx.arc(x + width / 2 - 6, y + height / 2 - 6, 2.5, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(99,102,241,0.8)';
+            ctx.fill();
+          }
+        });
+
+        ctx.restore();
+      }
+    }]
+  });
+}
 
       renderHomeRecent(summary?.recent || []);
       renderHomeRadar(summary);
