@@ -3099,8 +3099,19 @@ lucide.createIcons();
 
     // Logic
     async function authTelegram() {
-      if (!window.Telegram || !Telegram.WebApp) {
+      // Retry mechanism to wait for Telegram WebApp SDK to be available (especially on mobile)
+      let telegramAvailable = false;
+      for (let i = 0; i < 15; i++) {
+        if (window.Telegram && window.Telegram.WebApp) {
+          telegramAvailable = true;
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      if (!telegramAvailable) {
         mainStatus.textContent = 'Erro TG';
+        mainStatus.classList.remove('hidden');
         mainStatus.className = "text-carmine font-bold";
         return;
       }
@@ -3859,7 +3870,6 @@ lucide.createIcons();
 
     bindAdaptiveLayoutListeners();
     setupHomeChartsCarousel();
-    authTelegram();
 
     // --- MODO DEUS ---
     async function loadModoDeus(force = false) {

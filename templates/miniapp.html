@@ -12,25 +12,47 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-sankey@0.12.0/dist/chartjs-chart-sankey.min.js"></script>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
-  (function syncTelegramTheme() {
+  function syncTelegramTheme() {
     const tg = window.Telegram?.WebApp;
     const root = document.documentElement;
     const theme = tg?.themeParams || {};
-    const bgColor = theme.bg_color || '#0a0a0b';
-    const textColor = theme.text_color || '#f8fafc';
-    const hintColor = theme.hint_color || '#94a3b8';
-    const cardColor = theme.secondary_bg_color || '#161618';
-    const accentColor = tg?.colorScheme === 'dark' ? '#fb7185' : '#7b1e2d';
-    const accentSoft = tg?.colorScheme === 'dark' ? '#fda4af' : '#a33a51';
+    
+    // Default values if SDK is not ready or no themeParams
+    const isDark = tg?.colorScheme === 'dark' || (!tg?.colorScheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    
+    const bgColor = theme.bg_color || (isDark ? '#0a0a0b' : '#ffffff');
+    const textColor = theme.text_color || (isDark ? '#f8fafc' : '#0f172a');
+    const hintColor = theme.hint_color || (isDark ? '#94a3b8' : '#64748b');
+    const cardColor = theme.secondary_bg_color || (isDark ? '#161618' : '#f1f5f9');
+    const accentColor = isDark ? '#fb7185' : '#7b1e2d';
+    const accentSoft = isDark ? '#fda4af' : '#a33a51';
+    
     root.style.setProperty('--tg-theme-bg-color', bgColor);
     root.style.setProperty('--tg-theme-text-color', textColor);
     root.style.setProperty('--tg-theme-hint-color', hintColor);
     root.style.setProperty('--tg-theme-secondary-bg-color', cardColor);
     root.style.setProperty('--cc-brand', accentColor);
     root.style.setProperty('--cc-brand-soft', accentSoft);
-    root.classList.toggle('dark', tg?.colorScheme === 'dark');
-    window.botUsername = '{{ bot_username }}'; // Passado pelo Flask
-  })();
+    root.classList.toggle('dark', isDark);
+    
+    if (tg) {
+        tg.onEvent('themeChanged', syncTelegramTheme);
+    }
+    window.botUsername = '{{ bot_username }}';
+  }
+
+  // Initial call
+  syncTelegramTheme();
+  
+  // If SDK not ready, try again when it loads
+  window.addEventListener('load', syncTelegramTheme);
+  // Also wait for the specific Telegram event if available
+  document.addEventListener('DOMContentLoaded', () => {
+    if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.ready();
+        syncTelegramTheme();
+    }
+  });
 
   if (window.tailwind) {
     tailwind.config = {

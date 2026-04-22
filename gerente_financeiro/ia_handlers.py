@@ -2466,12 +2466,20 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
 
         if fn_name == "registrar_lancamento":
             descricao = str(args.get("descricao") or "Lançamento").strip()
+            categoria_original = str(args.get("categoria") or "Outros").strip()
+            
+            # Tenta categorização inteligente se a categoria for genérica
+            categoria = categoria_original
+            if categoria_original.lower() in {"outros", "sem categoria", "despesa", "gasto"}:
+                # Note: _categorizar_com_mapa_inteligente retorna (cat_id, subcat_id)
+                temp_tipo = _inferir_tipo_lancamento(texto_usuario, "", args.get("tipo"))
+                cat_id, subcat_id = _categorizar_com_mapa_inteligente(descricao, temp_tipo, db)
+                if cat_id:
+                    cat_obj = db.query(Categoria).get(cat_id)
+                    if cat_obj:
+                        categoria = cat_obj.nome
+            
             # Evita descrições genéricas se a IA puder extrair algo melhor do texto_usuario
-            if descricao.lower() in {"lançamento", "gasto", "receita", "despesa", "outros"} and len(texto_usuario) > 3:
-                # Tenta extrair a parte principal da frase do usuário como descrição se a IA falhou
-                # (Apenas se a IA não retornou algo específico)
-                pass
-            categoria = str(args.get("categoria") or "Outros").strip()
             forma_pagamento = _normalizar_forma_pagamento(args.get("forma_pagamento"))
             tipo_transacao = _inferir_tipo_lancamento(texto_usuario, categoria, args.get("tipo"))
             data_lancamento = _normalizar_data_lancamento(args.get("data"))
