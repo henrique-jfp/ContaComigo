@@ -1849,9 +1849,7 @@ lucide.createIcons();
       if (homeHeatmapChartEl) {
         renderPremiumHeatmap(homeHeatmapChartEl.parentElement, chartData.heatmapData, summary);
         homeHeatmapChartEl.style.display = 'none';
-      }
-
-      renderHomeRecent(summary?.recent || []);
+        renderHomeRecent(summary?.recent || []);
       renderHomeRadar(summary);
       lucide.createIcons();
     }
