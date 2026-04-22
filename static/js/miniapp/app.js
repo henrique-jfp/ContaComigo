@@ -127,8 +127,15 @@ lucide.createIcons();
     const agendaTabAgendamentos = document.getElementById('agendaTabAgendamentos');
     const agendaTabLembretes = document.getElementById('agendaTabLembretes');
     const agendaTabLimites = document.getElementById('agendaTabLimites');
-    const lembreteHistoryWrap = document.getElementById('lembreteHistoryWrap');
-    const lembreteHistoryStatus = document.getElementById('lembreteHistoryStatus');
+    const agendaTabMetas = document.getElementById('agendaTabMetas');
+    const metasAgendaWrap = document.getElementById('metasAgendaWrap');
+    const metaList = document.getElementById('metaList');
+    const metaStatus = document.getElementById('metaStatus');
+    const metaRefresh = document.getElementById('metaRefresh');
+    const metaNew = document.getElementById('metaNew');
+    const metaModal = document.getElementById('metaModal');
+    const metaSave = document.getElementById('metaSave');
+    const lembreteHistoryWrap = document.getElementById('lembreteHistoryWrap');    const lembreteHistoryStatus = document.getElementById('lembreteHistoryStatus');
     const lembreteHistoryList = document.getElementById('lembreteHistoryList');
     const orcamentoAgendaWrap = document.getElementById('orcamentoAgendaWrap');
     const orcamentoAgendaStatus = document.getElementById('orcamentoAgendaStatus');
@@ -1023,10 +1030,34 @@ lucide.createIcons();
     }
 
     function setAgendaMode(mode) {
-      agendaMode = mode === 'lembretes' ? 'lembretes' : (mode === 'limites' ? 'limites' : 'agendamentos');
-      refreshAgendaTabs();
+      agendaMode = mode;
+      const btns = {
+        'agendamentos': agendaTabAgendamentos,
+        'lembretes': agendaTabLembretes,
+        'limites': agendaTabLimites,
+        'metas': agendaTabMetas
+      };
+      
+      Object.keys(btns).forEach(k => {
+        const btn = btns[k];
+        if (!btn) return;
+        const active = k === mode;
+        btn.classList.toggle('bg-brand', active);
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('bg-telegram-card', !active);
+        btn.classList.toggle('text-telegram-text', !active);
+      });
+
+      if (lembreteHistoryWrap) lembreteHistoryWrap.classList.toggle('hidden', mode !== 'lembretes');
+      if (orcamentoAgendaWrap) orcamentoAgendaWrap.classList.toggle('hidden', mode !== 'limites');
+      if (metasAgendaWrap) metasAgendaWrap.classList.toggle('hidden', mode !== 'metas');
+      if (agendamentoList) agendamentoList.classList.toggle('hidden', mode !== 'agendamentos');
+      
       updateAgendaModalLabels();
-      loadAgendamentos();
+      if (mode === 'agendamentos') loadAgendamentos();
+      else if (mode === 'lembretes') loadLembreteHistory();
+      else if (mode === 'limites') loadOrcamentoAgenda();
+      else if (mode === 'metas') loadMetas();
     }
 
     function canUseChartMotion() {
