@@ -13,7 +13,7 @@ from telegram.ext import ContextTypes
 
 import config
 from database.database import get_db, get_or_create_user
-from models import Lancamento, Objetivo, Usuario, UserPlanUsageMonthly
+from models import Lancamento, Objetivo, Usuario, UserPlanUsageMonthly, XpDailyCounter
 from apscheduler.schedulers.background import BackgroundScheduler
 
 logger = logging.getLogger(__name__)
@@ -38,17 +38,17 @@ PLAN_PRICES = {
 }
 
 BLOCKED_ON_FREE = {
-    "voice_input",
-    "pdf_import",
     "relatorio_pdf",
     "dashboard_full",
 }
 
 FREE_LIMITS = {
     "lancamentos": 30,
-    "ocr": 3,
+    "ocr": 1,
     "ia_questions": 3,
     "metas_ativas": 1,
+    "voice_input": 1,
+    "pdf_import": 1,
 }
 
 # --- WHITELIST ---
@@ -302,6 +302,25 @@ def _count_active_goals(db: Session, user_id: int) -> int:
     )
     return int(total)
 
+def _count_daily_action(db: Session, user_id: int, action: str) -> int:
+    today = _now_utc().date()
+    counter = db.query(XpDailyCounter).filter(
+        XpDailyCounter.id_usuario == user_id,
+        XpDailyCounter.action == action,
+        XpDailyCounter.day_ref == today
+    ).first()
+    return counter.count if counter else 0
+
+def _count_monthly_action(db: Session, user_id: int, action: str) -> int:
+    start, end = _month_window()
+    total = db.query(func.sum(XpDailyCounter.count)).filter(
+        XpDailyCounter.id_usuario == user_id,
+        XpDailyCounter.action == action,
+        XpDailyCounter.day_ref >= start.date(),
+        XpDailyCounter.day_ref < end.date()
+    ).scalar()
+    return int(total) if total else 0
+
 def plan_allows_feature(db: Session, user: Usuario, feature: str) -> PlanGateResult:
     plan = get_effective_plan(db, user)
     if plan in {PLAN_TRIAL, PLAN_PREMIUM_MONTHLY, PLAN_PREMIUM_ANNUAL}:
@@ -311,15 +330,20 @@ def plan_allows_feature(db: Session, user: Usuario, feature: str) -> PlanGateRes
         text, _ = upgrade_prompt_for_feature(feature)
         return PlanGateResult(False, text)
 
-    now = _now_utc()
-    usage = get_or_create_monthly_usage(db, user.id, year=now.year, month=now.month)
-
-    if feature == "ocr" and usage.ocr_count >= FREE_LIMITS["ocr"]:
+    if feature == "ocr" and _count_daily_action(db, user.id, "ocr") >= FREE_LIMITS["ocr"]:
         text, _ = upgrade_prompt_for_feature("ocr")
         return PlanGateResult(False, text)
 
-    if feature == "ia_questions" and usage.ia_questions_count >= FREE_LIMITS["ia_questions"]:
+    if feature == "ia_questions" and _count_daily_action(db, user.id, "ia_questions") >= FREE_LIMITS["ia_questions"]:
         text, _ = upgrade_prompt_for_feature("ia_questions")
+        return PlanGateResult(False, text)
+
+    if feature == "voice_input" and _count_daily_action(db, user.id, "voice_input") >= FREE_LIMITS["voice_input"]:
+        text, _ = upgrade_prompt_for_feature("voice_input")
+        return PlanGateResult(False, text)
+
+    if feature == "pdf_import" and _count_monthly_action(db, user.id, "pdf_import") >= FREE_LIMITS["pdf_import"]:
+        text, _ = upgrade_prompt_for_feature("pdf_import")
         return PlanGateResult(False, text)
 
     if feature == "lancamentos" and _count_user_lancamentos_current_month(db, user.id) >= FREE_LIMITS["lancamentos"]:
@@ -340,18 +364,29 @@ def consume_feature_quota(db: Session, user: Usuario, feature: str, amount: int 
     if plan in {PLAN_TRIAL, PLAN_PREMIUM_MONTHLY, PLAN_PREMIUM_ANNUAL}:
         return
 
-    now = _now_utc()
-    usage = get_or_create_monthly_usage(db, user.id, year=now.year, month=now.month)
-
-    if feature == "ocr":
-        usage.ocr_count = int(usage.ocr_count or 0) + amount
-    elif feature == "ia_questions":
-        usage.ia_questions_count = int(usage.ia_questions_count or 0) + amount
-    elif feature == "lancamentos":
+    if feature == "lancamentos":
+        now = _now_utc()
+        usage = get_or_create_monthly_usage(db, user.id, year=now.year, month=now.month)
         usage.lancamentos_count = int(usage.lancamentos_count or 0) + amount
-
-    db.add(usage)
-    db.commit()
+        db.add(usage)
+        db.commit()
+    elif feature in {"ocr", "ia_questions", "voice_input", "pdf_import"}:
+        today = _now_utc().date()
+        counter = db.query(XpDailyCounter).filter(
+            XpDailyCounter.id_usuario == user.id,
+            XpDailyCounter.action == feature,
+            XpDailyCounter.day_ref == today
+        ).first()
+        if not counter:
+            counter = XpDailyCounter(
+                id_usuario=user.id,
+                action=feature,
+                day_ref=today,
+                count=0
+            )
+            db.add(counter)
+        counter.count += amount
+        db.commit()
 
 def require_plan(feature: str) -> Callable:
     def decorator(func: Callable) -> Callable:
@@ -446,8 +481,11 @@ def build_trial_usage_summary(db: Session, user: Usuario) -> dict:
     )
 
     ia_total = (
-        db.query(func.sum(UserPlanUsageMonthly.ia_questions_count))
-        .filter(UserPlanUsageMonthly.id_usuario == user.id)
+        db.query(func.sum(XpDailyCounter.count))
+        .filter(
+            XpDailyCounter.id_usuario == user.id,
+            XpDailyCounter.action == 'ia_questions'
+        )
         .scalar()
         or 0
     )
