@@ -643,29 +643,48 @@ def _is_intencao_de_criacao(texto: str) -> bool:
     return tem_verbo and not eh_consulta
 
 
-def _parse_br_money(val_str: str) -> float | None:
-    """Converte string de valor monetário brasileiro para float de forma robusta."""
+def _parse_br_money(val_str: str, texto_contexto: str = "") -> float | None:
+    """Converte string de valor monetário brasileiro para float de forma robusta, lidando com multiplicadores."""
     if not val_str:
         return None
-    v = val_str.replace("R$", "").replace("$", "").replace(" ", "").strip()
     
-    # Se tem vírgula e ponto, o ponto é milhar e vírgula é decimal (ex: 1.234,56)
+    # Limpeza básica
+    v = val_str.replace("R$", "").replace("$", "").replace(" ", "").lower().strip()
+    
+    # Se o valor vier acompanhado de "mil" ou "k" no texto próximo ou na própria string
+    multiplicador = 1.0
+    texto_para_checar = (v + " " + texto_contexto.lower()).strip()
+    
+    if "milhão" in texto_para_checar or "milhões" in texto_para_checar or "mi" in texto_para_checar.split():
+        multiplicador = 1000000.0
+    elif "mil" in texto_para_checar or " k" in texto_para_checar or v.endswith("k"):
+        multiplicador = 1000.0
+
+    # Remove caracteres não numéricos exceto , e .
+    v = re.sub(r'[^0-9,.]', '', v)
+    if not v: return None
+
+    # Lógica de vírgula e ponto
     if "," in v and "." in v:
         v = v.replace(".", "").replace(",", ".")
-    # Se tem vírgula, trocamos por ponto
     elif "," in v:
         v = v.replace(",", ".")
-    # Se só tem ponto, precisamos decidir se é milhar ou decimal
     elif "." in v:
         partes = v.split(".")
-        # Se a última parte tem 3 dígitos, é muito provável que seja milhar (ex: 7.500)
-        if len(partes[-1]) == 3:
+        if len(partes[-1]) == 3: # Provável milhar (ex: 7.500)
             v = v.replace(".", "")
     
     try:
-        return float(v)
+        valor_final = float(v) * multiplicador
+        return valor_final
     except ValueError:
         return None
+
+
+def _limpar_sujeira_string(s: str) -> str:
+    """Remove pontuação comum no final de capturas de regex gulosos."""
+    if not s: return s
+    return s.strip(" \t\n\r?.!,;:\"'").strip()
 
 
 def _intencao_busca_compra(texto: str) -> bool:
@@ -754,11 +773,13 @@ def _formatar_busca_compras(lancamentos: list[Lancamento], termo: str) -> str:
 
 def _extrair_valor_regex(texto: str) -> float | None:
     """Extrai o primeiro valor numérico que parece monetário."""
-    texto = texto.replace("reais", "").replace("real", "").strip()
-    # Pega qualquer sequência de dígitos, pontos e vírgulas que pareça um número
-    match = re.search(r'(\d[\d.,]*)', texto)
+    # Pega qualquer sequência de dígitos, pontos e vírgulas que pareça um número, 
+    # opcionalmente seguido de mil/milhão
+    match = re.search(r'(\d[\d.,]*)\s*(mil(?:h[õo]es|ão)?|k)?', texto, re.IGNORECASE)
     if match:
-        return _parse_br_money(match.group(1))
+        v_str = match.group(1)
+        suffix = match.group(2) or ""
+        return _parse_br_money(v_str + " " + suffix)
     return None
 
 
@@ -775,24 +796,33 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
     if "último" in t or "ultimo" in t or "histórico" in t or "historico" in t:
         return None
     
-    # Captura valor flexível (suporta 7.500 ou 7500,00)
-    valor_re = r'(?:r\$?\s*)?([\d.,]+)'
+    # Captura valor flexível (suporta 7.500, 7500,00 ou 12 mil)
+    valor_re = r'(?:r\$?\s*)?([\d.,]+)\s*(mil(?:h[õo]es|ão)?|k)?'
     
-    # 1. LEMBRETE (Prioridade para evitar confusão com agendamentos)
-    # "Me lembre de pagar o Michel 500 reais na quarta-feira que vem."
-    p_lembrete = r'\b(?:me\s+)?(?:lembre?|lembrar?|avisa?r?)\b\s+(?:de\s+)?(?:pagar\s+|receber\s+)?(.+?)\s+(?:de\s+|valor\s+)?' + valor_re + r'\s*(?:reais|real)?(?:\s+(?:na|em|dia|pra|para|no)\s+(.+))?'
-    m_lemb = re.search(p_lembrete, t)
+    # 1. LEMBRETE (Flexível)
+    # "Me lembra de pagar 500 reais pro Michel no dia 27."
+    # Padrao A: [Ação] [Valor] [Descrição] [Data]
+    p_lemb_v1 = r'\b(?:me\s+)?(?:lembre?|lembrar?|avisa?r?)\b\s+(?:de\s+)?(?:pagar\s+|receber\s+)?' + valor_re + r'\s*(?:reais|real)?\s*(?:para|pra|pro|ao|do|da)?\s+(.+?)(?:\s+(?:na|em|dia|pra|para|no)\s+(.+))?$'
+    # Padrao B: [Ação] [Descrição] [Valor] [Data]
+    p_lemb_v2 = r'\b(?:me\s+)?(?:lembre?|lembrar?|avisa?r?)\b\s+(?:de\s+)?(?:pagar\s+|receber\s+)?(.+?)\s+(?:de\s+|valor\s+)?' + valor_re + r'\s*(?:reais|real)?(?:\s+(?:na|em|dia|pra|para|no)\s+(.+))?$'
+    
+    m_lemb = re.search(p_lemb_v1, t) or re.search(p_lemb_v2, t)
     if m_lemb:
-        valor = _parse_br_money(m_lemb.group(2))
-        desc_raw = m_lemb.group(1).strip()
-        # Melhora a descrição baseada no contexto
-        desc = desc_raw
+        if m_lemb.re.pattern == p_lemb_v1:
+            valor = _parse_br_money(m_lemb.group(1) + " " + (m_lemb.group(2) or ""))
+            desc_raw = m_lemb.group(3).strip()
+            data_raw = (m_lemb.group(4) or "").strip()
+        else:
+            desc_raw = m_lemb.group(1).strip()
+            valor = _parse_br_money(m_lemb.group(2) + " " + (m_lemb.group(3) or ""))
+            data_raw = (m_lemb.group(4) or "").strip()
+
+        desc = _limpar_sujeira_string(desc_raw)
         if "pagar" in t and not desc.lower().startswith("pagar"):
-            desc = f"Pagar {desc_raw}"
+            desc = f"Pagar {desc}"
         elif "receber" in t and not desc.lower().startswith("receber"):
-            desc = f"Receber {desc_raw}"
+            desc = f"Receber {desc}"
             
-        data_raw = (m_lemb.group(3) or "").strip()
         # Se detectou "lembre", mas não tem data YYYY-MM-DD, deixamos para a IA resolver
         if data_raw and re.search(r'\d{4}-\d{2}-\d{2}', data_raw):
             return "criar_lembrete", {
@@ -822,8 +852,8 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
         p_agend = r'\b(?:agendamento|agendar?|recorrente)\b.*?' + valor_re + r'.*?(?:por|durante|são|vão ser)?\s*(\d+)\s+(m[êe]s(?:es)?|semana(?:s)?|dia(?:s)?|ano(?:s)?)'
         m_ag = re.search(p_agend, t)
         if m_ag:
-            valor = _parse_br_money(m_ag.group(1))
-            parcelas = int(m_ag.group(2))
+            valor = _parse_br_money(m_ag.group(1) + " " + (m_ag.group(2) or ""))
+            parcelas = int(m_ag.group(3))
             periodo = (m_ag.group(3) or "").lower()
             
             freq = "mensal"
@@ -846,7 +876,7 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
         p_agend_simples = r'\b(?:agendamento|agendar?|recorrente)\b.*?' + valor_re
         m_ag_s = re.search(p_agend_simples, t)
         if m_ag_s:
-            valor = _parse_br_money(m_ag_s.group(1))
+            valor = _parse_br_money(m_ag_s.group(1) + " " + (m_ag_s.group(2) or ""))
             fn = "agendar_receita" if "recei" in t else "agendar_despesa"
             if valor:
                 return fn, {
@@ -863,9 +893,9 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
 
     m_a = re.search(p_lanc_a, t)
     if m_a:
-        valor = _parse_br_money(m_a.group(1))
+        valor = _parse_br_money(m_a.group(1) + " " + (m_a.group(2) or ""))
         if valor is not None:
-            desc = m_a.group(2).strip()
+            desc = _limpar_sujeira_string(m_a.group(3))
             tipo = "Entrada" if any(x in t for x in palavras_entrada) else "Saída"
             return "registrar_lancamento", {
                 "valor": valor,
@@ -877,8 +907,8 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
         
     m_b = re.search(p_lanc_b, t)
     if m_b:
-        desc = m_b.group(1).strip()
-        valor = _parse_br_money(m_b.group(2))
+        desc = _limpar_sujeira_string(m_b.group(1))
+        valor = _parse_br_money(m_b.group(2) + " " + (m_b.group(3) or ""))
         if valor is not None:
             tipo = "Entrada" if any(x in t for x in palavras_entrada) else "Saída"
             return "registrar_lancamento", {
@@ -894,10 +924,9 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
     p_meta = r'\b(?:criar?|nova|novo?|definir?|adiciona?r?)\b\s+meta\s+(?:para\s+)?(?:comprar\s+|ter\s+|um[aa]?\s+)?(.+?)\s+(?:de\s+|são\s+|valor\s+|no valor de\s+)?' + valor_re
     m_meta = re.search(p_meta, t)
     if m_meta:
-        valor = _parse_br_money(m_meta.group(2))
+        valor = _parse_br_money(m_meta.group(2) + " " + (m_meta.group(3) or ""))
         if valor is not None:
-            desc = m_meta.group(1).strip()
-            # Limpa conectivos comuns no início da meta
+            desc = _limpar_sujeira_string(m_meta.group(1))
             desc = re.sub(r'^(?:a|o|um|uma|comprar|pagar|ter)\s+', '', desc, flags=re.IGNORECASE).capitalize()
             return "criar_meta", {"valor_alvo": valor, "descricao": desc}
 
@@ -913,9 +942,9 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
         elif "diár" in periodo or "diar" in periodo: periodo = "diário"
         else: periodo = "mensal"
         
-        valor = _parse_br_money(m_lim_c.group(2))
+        valor = _parse_br_money(m_lim_c.group(2) + " " + (m_lim_c.group(3) or ""))
         if valor is not None:
-            cat = m_lim_c.group(3).strip()
+            cat = _limpar_sujeira_string(m_lim_c.group(4))
             return "definir_limite_orcamento", {"valor": valor, "categoria": cat.capitalize(), "periodo": periodo}
 
     # Fallback para os limites simples existentes
@@ -924,15 +953,15 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
     
     m_lim_a = re.search(p_limite_a, t)
     if m_lim_a:
-        valor = _parse_br_money(m_lim_a.group(1))
+        valor = _parse_br_money(m_lim_a.group(1) + " " + (m_lim_a.group(2) or ""))
         if valor is not None:
-            cat = m_lim_a.group(2).strip()
+            cat = _limpar_sujeira_string(m_lim_a.group(3))
             return "definir_limite_orcamento", {"valor": valor, "categoria": cat.capitalize()}
 
     m_lim_b = re.search(p_limite_b, t)
     if m_lim_b:
-        cat = m_lim_b.group(1).strip()
-        valor = _parse_br_money(m_lim_b.group(2))
+        cat = _limpar_sujeira_string(m_lim_b.group(1))
+        valor = _parse_br_money(m_lim_b.group(2) + " " + (m_lim_b.group(3) or ""))
         if valor is not None:
             return "definir_limite_orcamento", {"valor": valor, "categoria": cat.capitalize()}
 
