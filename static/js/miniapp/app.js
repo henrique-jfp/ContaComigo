@@ -1043,7 +1043,7 @@ lucide.createIcons();
       if (lembreteHistoryWrap) lembreteHistoryWrap.classList.toggle('hidden', mode !== 'lembretes');
       if (orcamentoAgendaWrap) orcamentoAgendaWrap.classList.toggle('hidden', mode !== 'limites');
       if (metasAgendaWrap) metasAgendaWrap.classList.toggle('hidden', mode !== 'metas');
-      if (agendamentoList) agendamentoList.classList.toggle('hidden', mode !== 'agendamentos');
+      if (agendamentoList) agendamentoList.classList.toggle('hidden', mode !== 'agendamentos' && mode !== 'lembretes');
       
       updateAgendaModalLabels();
       if (mode === 'agendamentos') loadAgendamentos();
@@ -1227,7 +1227,7 @@ lucide.createIcons();
 
     function renderSankeyPremium(container, data) {
       if (!container || !data.length) return;
-      const width = 800; const height = 520; // Aumentada a altura do canvas
+      const width = 800; const height = 650; // Altura aumentada
       const vProfundo = '#064E3B'; const gProfundo = '#4a1019';
       const palette = ['#D4AF37', '#818cf8', '#f472b6', '#fbbf24', '#34d399', '#a78bfa'];
       
@@ -1235,49 +1235,48 @@ lucide.createIcons();
       const totalExp = data.filter(d => d.from === 'Caixa' && d.to === 'Despesas').reduce((a, b) => a + b.flow, 0);
       const despesas = data.filter(d => d.from === 'Despesas');
       
-      const maxHeight = 400; // Aumentada a altura máxima útil (era 300)
+      const maxHeight = 500; // Área útil aumentada
       const scale = maxHeight / Math.max(totalRec, totalExp, 1);
       
-      const rY = 60 + (maxHeight - Math.max(80, totalRec * scale)) / 2; // Altura mínima maior (80)
-      const hR = Math.max(80, totalRec * scale);
-      const cY = 60 + (maxHeight - Math.max(80, totalExp * scale)) / 2;
-      const hC = Math.max(80, totalExp * scale);
+      const rY = 50 + (maxHeight - Math.max(100, totalRec * scale)) / 2;
+      const hR = Math.max(100, totalRec * scale);
+      const cY = 50 + (maxHeight - Math.max(100, totalExp * scale)) / 2;
+      const hC = Math.max(100, totalExp * scale);
 
-      let svgHtml = `<svg viewBox=\"0 0 ${width} ${height}\" xmlns=\"http://www.w3.org/2000/svg\" style=\"width:100%; height:auto; max-height:380px; overflow:visible;\">
+      let svgHtml = `<svg viewBox=\"0 0 ${width} ${height}\" xmlns=\"http://www.w3.org/2000/svg\" style=\"width:100%; height:auto; overflow:visible;\">
         <defs>
           <linearGradient id=\"g-main-flow\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"0%\">
-            <stop offset=\"0%\" stop-color=\"#10b981\" stop-opacity=\"0.5\"/>
-            <stop offset=\"100%\" stop-color=\"#7b1e2d\" stop-opacity=\"0.5\"/>
+            <stop offset=\"0%\" stop-color=\"#10b981\" stop-opacity=\"0.6\"/>
+            <stop offset=\"100%\" stop-color=\"#7b1e2d\" stop-opacity=\"0.6\"/>
           </linearGradient>
-          ${despesas.map((c, i) => `<linearGradient id=\"g-cat-flow-${i}\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"0%\"><stop offset=\"0%\" stop-color=\"${gProfundo}\" stop-opacity=\"0.4\"/><stop offset=\"100%\" stop-color=\"${palette[i % palette.length]}\" stop-opacity=\"0.5\"/></linearGradient>`).join('')}
+          ${despesas.map((c, i) => `<linearGradient id=\"g-cat-flow-${i}\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"0%\"><stop offset=\"0%\" stop-color=\"${gProfundo}\" stop-opacity=\"0.5\"/><stop offset=\"100%\" stop-color=\"${palette[i % palette.length]}\" stop-opacity=\"0.6\"/></linearGradient>`).join('')}
         </defs>
         
-        <text x=\"85\" y=\"35\" text-anchor=\"middle\" font-size=\"12\" font-weight=\"900\" fill=\"${vProfundo}\" style=\"text-transform:uppercase; letter-spacing:1px\">Entrada</text>
-        <text x=\"300\" y=\"35\" text-anchor=\"middle\" font-size=\"12\" font-weight=\"900\" fill=\"${gProfundo}\" style=\"text-transform:uppercase; letter-spacing:1px\">Gestão</text>
-        <text x=\"610\" y=\"35\" text-anchor=\"middle\" font-size=\"12\" font-weight=\"900\" fill=\"#64748b\" style=\"text-transform:uppercase; letter-spacing:1px\">Saídas</text>
+        <text x=\"85\" y=\"30\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"900\" fill=\"${vProfundo}\" style=\"text-transform:uppercase; letter-spacing:1px\">Entrada</text>
+        <text x=\"300\" y=\"30\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"900\" fill=\"${gProfundo}\" style=\"text-transform:uppercase; letter-spacing:1px\">Gestão</text>
+        <text x=\"610\" y=\"30\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"900\" fill=\"#64748b\" style=\"text-transform:uppercase; letter-spacing:1px\">Saídas</text>
 
-        <!-- Fluxo Principal: Receitas -> Caixa -->
+        <!-- Fluxo Principal -->
         <path d=\"M145,${rY} C200,${rY} 200,${cY} 240,${cY} L240,${cY + hC} C200,${cY + hC} 200,${rY + hR} 145,${rY + hR} Z\" fill=\"url(#g-main-flow)\" />
 
-        <!-- Nós -->
-        <rect x=\"25\" y=\"${rY}\" width=\"120\" height=\"${hR}\" rx=\"16\" fill=\"rgba(16, 185, 129, 0.08)\" stroke=\"#10b981\" stroke-width=\"2.5\" />
-        <text x=\"85\" y=\"${rY + hR / 2 - 6}\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"900\" fill=\"${vProfundo}\">RECEITAS</text>
-        <text x=\"85\" y=\"${rY + hR / 2 + 14}\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"bold\" fill=\"#10b981\">${formatCurrencyBR(totalRec)}</text>
+        <rect x=\"25\" y=\"${rY}\" width=\"120\" height=\"${hR}\" rx=\"18\" fill=\"rgba(16, 185, 129, 0.12)\" stroke=\"#10b981\" stroke-width=\"3\" />
+        <text x=\"85\" y=\"${rY + hR / 2 - 8}\" text-anchor=\"middle\" font-size=\"15\" font-weight=\"900\" fill=\"${vProfundo}\">RECEITAS</text>
+        <text x=\"85\" y=\"${rY + hR / 2 + 16}\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"bold\" fill=\"#059669\">${formatCurrencyBR(totalRec)}</text>
 
-        <rect x=\"240\" y=\"${cY}\" width=\"120\" height=\"${hC}\" rx=\"16\" fill=\"rgba(123, 30, 45, 0.08)\" stroke=\"#7b1e2d\" stroke-width=\"2.5\" />
-        <text x=\"300\" y=\"${cY + hC / 2 - 6}\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"900\" fill=\"${gProfundo}\">CAIXA</text>
-        <text x=\"300\" y=\"${cY + hC / 2 + 12}\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"bold\" fill=\"${gProfundo}\">GESTÃO</text>
+        <rect x=\"240\" y=\"${cY}\" width=\"120\" height=\"${hC}\" rx=\"18\" fill=\"rgba(123, 30, 45, 0.12)\" stroke=\"#7b1e2d\" stroke-width=\"3\" />
+        <text x=\"300\" y=\"${cY + hC / 2 - 8}\" text-anchor=\"middle\" font-size=\"15\" font-weight=\"900\" fill=\"${gProfundo}\">CAIXA</text>
+        <text x=\"300\" y=\"${cY + hC / 2 + 14}\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"bold\" fill=\"${gProfundo}\">GESTÃO</text>
         
         ${despesas.slice(0, 5).map((cat, i) => {
-          const h = Math.max(60, cat.flow * scale); // Aumentada altura das sub-despesas
-          const y = 60 + (i * 75); 
+          const h = Math.max(75, cat.flow * scale); 
+          const y = 60 + (i * 95); 
           const color = palette[i % palette.length];
           return `
-            <path d=\"M360,${cY + (hC/5)*i + 10} C440,${cY + (hC/5)*i + 10} 440,${y + h/2} 510,${y + h/2}\" stroke=\"url(#g-cat-flow-${i})\" stroke-width=\"${Math.max(4, cat.flow * scale)}\" fill=\"none\" opacity=\"0.7\" />
-            <rect x=\"510\" y=\"${y}\" width=\"210\" height=\"${h}\" rx=\"16\" fill=\"rgba(255,255,255,0.04)\" stroke=\"${color}\" stroke-opacity=\"0.6\" stroke-width=\"2\" />
-            <rect x=\"510\" y=\"${y}\" width=\"5\" height=\"${h}\" rx=\"2.5\" fill=\"${color}\" />
-            <text x=\"615\" y=\"${y + h/2 - 6}\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"900\" fill=\"${gProfundo}\">${cat.to.toUpperCase()}</text>
-            <text x=\"615\" y=\"${y + h/2 + 14}\" text-anchor=\"middle\" font-size=\"13\" font-weight=\"bold\" fill=\"${color}\">${formatCurrencyBR(cat.flow)}</text>
+            <path d=\"M360,${cY + (hC/5)*i + 15} C440,${cY + (hC/5)*i + 15} 440,${y + h/2} 510,${y + h/2}\" stroke=\"url(#g-cat-flow-${i})\" stroke-width=\"${Math.max(6, cat.flow * scale * 0.8)}\" fill=\"none\" opacity=\"0.8\" />
+            <rect x=\"510\" y=\"${y}\" width=\"230\" height=\"${h}\" rx=\"18\" fill=\"rgba(255,255,255,0.06)\" stroke=\"${color}\" stroke-opacity=\"0.7\" stroke-width=\"2.5\" />
+            <rect x=\"510\" y=\"${y}\" width=\"6\" height=\"${h}\" rx=\"3\" fill=\"${color}\" />
+            <text x=\"625\" y=\"${y + h/2 - 8}\" text-anchor=\"middle\" font-size=\"12\" font-weight=\"900\" fill=\"${gProfundo}\">${cat.to.toUpperCase()}</text>
+            <text x=\"625\" y=\"${y + h/2 + 16}\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"bold\" fill=\"${color}\">${formatCurrencyBR(cat.flow)}</text>
           `;
         }).join('')}
       </svg>`;
@@ -3558,19 +3557,11 @@ lucide.createIcons();
         const data = await response.json();
         const items = data.items || [];
         const historyItems = data.history || [];
-        if (!data.ok || !items.length) {
+        
+        if (!data.ok || (items.length === 0 && historyItems.length === 0)) {
           agendamentoStatus.textContent = isReminder ? 'Nenhum lembrete.' : 'Nenhum agendamento.';
           agendamentoList.innerHTML = `<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint">Nenhum ${isReminder ? 'lembrete ativo' : 'agendamento futuro'}.</div>`;
-          if (lembreteHistoryWrap) lembreteHistoryWrap.classList.toggle('hidden', !isReminder);
-          if (isReminder && lembreteHistoryList) {
-            lembreteHistoryStatus.textContent = historyItems.length ? 'Histórico recente' : 'Sem histórico de lembretes.';
-            lembreteHistoryList.innerHTML = historyItems.map((item) => `
-              <div class="rounded-2xl border border-telegram-separator bg-telegram-card p-4 shadow-soft opacity-80">
-                <p class="font-semibold text-sm text-telegram-text">${item.descricao}</p>
-                <p class="mt-1 text-[11px] sm:text-xs text-telegram-hint">${new Date(item.proxima_data_execucao).toLocaleDateString('pt-BR')} • ${item.status || 'vencido'}</p>
-              </div>
-            `).join('');
-          }
+          if (lembreteHistoryWrap) lembreteHistoryWrap.classList.add('hidden');
           return;
         }
         agendamentoStatus.textContent = '';

@@ -811,20 +811,42 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
     # Mas NÃO deve bloquear limites de orçamento (que também usam semanal/mensal)
     recorrencia_keywords = ["recorrente", "todo mês", "todo mes", "fixo", "todo dia"]
     if any(w in t for w in recorrencia_keywords) and "limite" not in t:
-        # Tenta capturar agendamentos simples...
-        p_agend = r'\b(?:agendamento|agendar?|recorrente)\b\s+(?:de\s+)?(?:uma\s+)?(receita|despesa|gasto)?\s*(?:de\s+)?' + valor_re + r'\s*(?:reais|real)?\s*(?:por|cada|todo|a cada)?\s*(.+)'
+        # Tenta capturar agendamentos simples com parcelas (ex: "300 reais por 12 meses" ou "receita de 300 mensal por 12 meses")
+        # Padrao mais flexível para capturar Valor e Parcelas
+        p_agend = r'\b(?:agendamento|agendar?|recorrente)\b.*?' + valor_re + r'.*?(?:por|durante|são|vão ser)?\s*(\d+)\s+(m[êe]s(?:es)?|semana(?:s)?|dia(?:s)?|ano(?:s)?)'
         m_ag = re.search(p_agend, t)
         if m_ag:
-            valor = _parse_br_money(m_ag.group(2))
-            tipo_raw = (m_ag.group(1) or "").lower()
+            valor = _parse_br_money(m_ag.group(1))
+            parcelas = int(m_ag.group(2))
             periodo = (m_ag.group(3) or "").lower()
-            freq = "semanal" if "seman" in periodo else "mensal"
-            fn = "agendar_receita" if "recei" in tipo_raw or "recei" in t else "agendar_despesa"
+            
+            freq = "mensal"
+            if "seman" in periodo: freq = "semanal"
+            elif "dia" in periodo: freq = "diário"
+            
+            fn = "agendar_receita" if "recei" in t else "agendar_despesa"
+            
             if valor:
                 return fn, {
                     "valor": valor,
                     "frequencia": freq,
-                    "descricao": "Agendamento via Alfredo",
+                    "descricao": "Agendamento Recorrente",
+                    "data": datetime.now().strftime("%Y-%m-%d"),
+                    "parcelas": parcelas,
+                    "_origem": "regex"
+                }
+        
+        # Fallback para agendamento sem parcelas explícitas no mesmo padrão
+        p_agend_simples = r'\b(?:agendamento|agendar?|recorrente)\b.*?' + valor_re
+        m_ag_s = re.search(p_agend_simples, t)
+        if m_ag_s:
+            valor = _parse_br_money(m_ag_s.group(1))
+            fn = "agendar_receita" if "recei" in t else "agendar_despesa"
+            if valor:
+                return fn, {
+                    "valor": valor,
+                    "frequencia": "mensal",
+                    "descricao": "Agendamento Recorrente",
                     "data": datetime.now().strftime("%Y-%m-%d"),
                     "_origem": "regex"
                 }

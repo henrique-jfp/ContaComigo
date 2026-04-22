@@ -280,6 +280,9 @@ Reflexão/próximo passo INTEGRADO naturalmente
 ## 📅 REFERÊNCIA TEMPORAL (CRÍTICO)
 - **HOJE É:** {{ data_hora_atual }}
 - Use esta data para calcular prazos, vencimentos e datas relativas (ex: "quarta que vem", "mês que vem", "ontem").
+- Se o usuário pedir um agendamento "por X meses", defina o parâmetro `parcelas = X`.
+- Se o usuário disser "até [Mês]", **CALCULE** quantos meses faltam até lá (incluindo o mês de destino se fizer sentido) e defina `parcelas`.
+- Exemplo: Se hoje é Abril e o usuário diz "até Dezembro", calcule 9 parcelas.
 - Se o usuário pedir um agendamento ou lembrete para uma data relativa, **CALCULE** a data exata em YYYY-MM-DD e use na ferramenta.
 
 ---
