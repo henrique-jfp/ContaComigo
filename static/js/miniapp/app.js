@@ -1233,8 +1233,8 @@ lucide.createIcons();
           ${despesas.map((c, i) => `<linearGradient id=\"g-cat-flow-${i}\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"0%\"><stop offset=\"0%\" stop-color=\"${gProfundo}\" stop-opacity=\"0.4\"/><stop offset=\"100%\" stop-color=\"${palette[i % palette.length]}\" stop-opacity=\"0.5\"/></linearGradient>`).join('')}
         </defs>
         <text x=\"85\" y=\"40\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"900\" fill=\"${vProfundo}\">ENTRADA</text>
-        <text x=\"300\" y=\"40\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"900\" fill=\"${gProfundo}\">GEST�O</text>
-        <text x=\"610\" y=\"40\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"900\" fill=\"#64748b\">SA�DAS</text>
+        <text x=\"300\" y=\"40\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"900\" fill=\"${gProfundo}\">GESTAO</text>
+        <text x=\"610\" y=\"40\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"900\" fill=\"#64748b\">SAIDAS</text>
         <path d=\"M145,${rY} C195,${rY} 195,${cY} 240,${cY} L240,${cY + hC} C195,${cY + hC} 195,${rY + hR} 145,${rY + hR} Z\" fill=\"url(#g-main-flow)\" opacity=\"0.7\" />
 
         <!-- Nós -->
