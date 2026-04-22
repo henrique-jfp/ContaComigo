@@ -1835,12 +1835,12 @@ lucide.createIcons();
               data: chartData.heatmapData,
               backgroundColor(ctx) {
                 const item = ctx.dataset.data[ctx.dataIndex];
-                if (!item || item.type === 'empty') return 'rgba(0,0,0,0)';
-                if (item.type === 'income_win') return '#10b981'; // Verde Sólido
-                if (item.type === 'expense_win') return '#7b1e2d'; // Grená Sólido
-                return 'rgba(255, 255, 255, 0.08)'; 
+                if (!item || item.type === 'empty') return 'transparent';
+                if (item.type === 'income_win') return '#10b981';
+                if (item.type === 'expense_win') return '#7b1e2d';
+                return 'rgba(0, 0, 0, 0.05)'; 
               },
-              borderColor: 'rgba(255, 255, 255, 0.1)',
+              borderColor: 'rgba(0, 0, 0, 0.1)',
               borderWidth: 1,
               width: ({chart}) => (chart.chartArea || {}).width / 7 - 4,
               height: ({chart}) => (chart.chartArea || {}).height / 6 - 4,
