@@ -1288,7 +1288,9 @@ lucide.createIcons();
         if (g) g.setAttribute('d', greenD);
         if (r) r.setAttribute('d', redD);
       } catch (err) { console.warn('updateAquariumVisual error:', err); }
-    }function renderHomeOverview(summary) {
+    }
+
+    function renderHomeOverview(summary) {
       const balance = Number(summary?.balance || 0);
       const receita = Number(summary?.receita || 0);
       const despesa = Number(summary?.despesa || 0);
