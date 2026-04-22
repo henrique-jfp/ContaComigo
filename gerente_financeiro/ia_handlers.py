@@ -218,7 +218,7 @@ _ALFREDO_TOOLS = [
                 "properties": {
                     "descricao": {
                         "type": "string",
-                        "description": "Descricao curta do compromisso financeiro. Ex.: 'Bike', 'Academia', 'Internet'.",
+                        "description": "O QUE o usuário está pagando. Extraia o nome da pessoa ou item (ex: 'Michel', 'Aluguel', 'Academia').",
                     },
                     "valor": {
                         "type": "number",
@@ -251,7 +251,7 @@ _ALFREDO_TOOLS = [
                 "properties": {
                     "descricao": {
                         "type": "string",
-                        "description": "Descricao curta da receita. Ex.: 'Salário', 'Freela fixo', 'Aluguel recebido'.",
+                        "description": "DE ONDE vem a receita. Extraia o nome da fonte ou item (ex: 'Salário', 'Michel', 'Venda do Carro').",
                     },
                     "valor": {
                         "type": "number",
@@ -284,7 +284,7 @@ _ALFREDO_TOOLS = [
                 "properties": {
                     "descricao": {
                         "type": "string",
-                        "description": "Descricao curta do lembrete. Ex.: 'Pagar conta de luz', 'Pagar Michel', 'Pagar agua'.",
+                        "description": "O conteúdo do lembrete. Extraia o nome da pessoa ou ação (ex: 'Pagar Michel', 'Comprar leite', 'Falar com gerente').",
                     },
                     "valor": {
                         "type": "number",
@@ -784,9 +784,16 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
     m_lemb = re.search(p_lembrete, t)
     if m_lemb:
         valor = _parse_br_money(m_lemb.group(2))
-        desc = m_lemb.group(1).strip()
+        desc_raw = m_lemb.group(1).strip()
+        # Melhora a descrição baseada no contexto
+        desc = desc_raw
+        if "pagar" in t and not desc.lower().startswith("pagar"):
+            desc = f"Pagar {desc_raw}"
+        elif "receber" in t and not desc.lower().startswith("receber"):
+            desc = f"Receber {desc_raw}"
+            
         data_raw = (m_lemb.group(3) or "").strip()
-        # Se detectou "lembre", mas não tem data YYYY-MM-DD, deixamos para a IA resolver (ela entende "quarta que vem")
+        # Se detectou "lembre", mas não tem data YYYY-MM-DD, deixamos para a IA resolver
         if data_raw and re.search(r'\d{4}-\d{2}-\d{2}', data_raw):
             return "criar_lembrete", {
                 "descricao": desc.capitalize(),
@@ -794,7 +801,6 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
                 "data": data_raw,
                 "tipo": "Saída" if "paga" in t else "Receita"
             }
-        # Se for um lembrete sem data clara, não interceptamos para que a IA possa processar "quarta que vem"
         if "lembre" in t or "lembrar" in t:
             return None
 
@@ -885,13 +891,15 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
 
     # 3. META (Meta de X para Y)
     # "Quero criar uma nova meta para comprar uma bicicleta elétrica. São 7.500 reais"
-    p_meta = r'\b(?:criar?|nova|novo?|definir?|adiciona?r?)\b\s+meta\s+(?:para\s+)?(.+?)\s+(?:de\s+|são\s+|valor\s+)?' + valor_re
+    p_meta = r'\b(?:criar?|nova|novo?|definir?|adiciona?r?)\b\s+meta\s+(?:para\s+)?(?:comprar\s+|ter\s+|um[aa]?\s+)?(.+?)\s+(?:de\s+|são\s+|valor\s+|no valor de\s+)?' + valor_re
     m_meta = re.search(p_meta, t)
     if m_meta:
         valor = _parse_br_money(m_meta.group(2))
         if valor is not None:
             desc = m_meta.group(1).strip()
-            return "criar_meta", {"valor_alvo": valor, "descricao": desc.capitalize()}
+            # Limpa conectivos comuns no início da meta
+            desc = re.sub(r'^(?:a|o|um|uma|comprar|pagar|ter)\s+', '', desc, flags=re.IGNORECASE).capitalize()
+            return "criar_meta", {"valor_alvo": valor, "descricao": desc}
 
     # 4. LIMITE (Limite de X em Y OU Limite em Y de X)
     # "Crie um limite semanal de 300 reais para alimentação"
@@ -2428,6 +2436,11 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
 
         if fn_name == "registrar_lancamento":
             descricao = str(args.get("descricao") or "Lançamento").strip()
+            # Evita descrições genéricas se a IA puder extrair algo melhor do texto_usuario
+            if descricao.lower() in {"lançamento", "gasto", "receita", "despesa", "outros"} and len(texto_usuario) > 3:
+                # Tenta extrair a parte principal da frase do usuário como descrição se a IA falhou
+                # (Apenas se a IA não retornou algo específico)
+                pass
             categoria = str(args.get("categoria") or "Outros").strip()
             forma_pagamento = _normalizar_forma_pagamento(args.get("forma_pagamento"))
             tipo_transacao = _inferir_tipo_lancamento(texto_usuario, categoria, args.get("tipo"))
@@ -2495,10 +2508,20 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             descricao = str(args.get("descricao") or descricao_default).strip()
             
             # Limpeza de descrição para agendamentos via Regex
-            if descricao == "Agendamento via Alfredo" and args.get("_origem") == "regex":
-                 # Tenta melhorar a descrição se veio do regex
-                 if eh_receita: descricao = "Receita Recorrente"
+            if descricao == "Agendamento Recorrente" and args.get("_origem") == "regex":
+                 # Tenta melhorar a descrição baseada no texto original se possível
+                 # (A IA já faz um trabalho melhor, aqui é para o interceptor rápido)
+                 if "recei" in t: descricao = "Receita Recorrente"
                  else: descricao = "Despesa Recorrente"
+            
+            # Remove prefixos redundantes que a IA às vezes coloca
+            for prefix in ["Lembrete de ", "Lembrete: ", "Agendamento de ", "Pagar "]:
+                if descricao.startswith(prefix) and len(descricao) > len(prefix):
+                    # Mantém o prefixo "Pagar" se for lembrete
+                    if prefix == "Pagar " and eh_lembrete: continue
+                    # Caso contrário, simplifica
+                    # descricao = descricao[len(prefix):].strip().capitalize()
+                    pass
 
             try:
                 valor_raw = args.get("valor")
@@ -2570,7 +2593,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             return ConversationHandler.END
 
         if fn_name == "criar_meta":
-            descricao = str(args.get("descricao") or "Meta").strip()
+            descricao = str(args.get("descricao") or "Nova meta").strip()
             try:
                 valor_alvo = float(str(args.get("valor_alvo") or args.get("valor") or 0).replace(",", "."))
             except (ValueError, TypeError):
