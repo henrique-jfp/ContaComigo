@@ -835,9 +835,10 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
             return None
 
     # 2. LANÇAMENTO (Gastei, Paguei, Recebi, Lança, Comprei, Registra)
-    verbos = r'\b(?:gastei|paguei|recebi|lanç[ao]r?|registra?r?|coloque?i?|comprei|compras?|adiciona?r?|anota?r?)\b'
+    # 2. LANÇAMENTO
+    verbos = r'\b(?:gastei|paguei|recebi|lanç[ao]r?|registra?r?|coloque?i?|comprei|compras?|adiciona?r?|anota?r?|gastar|gastou|comprar|pagar|receber|recebeu)\b'
     fillers = r'(?:\s+(?:um|uma|o|a|os|as|do|da|no|na|em|com|de|valor|compra|gasto|despesa|receita|para|pra))*'
-    
+
     # Padrao A: Verbo + (Fillers) + Valor + (reais/real opcional) + (Fillers preposicionais) + Descrição
     p_lanc_a = verbos + fillers + r'\s+' + valor_re + r'\s*(?:reais|real)?\s*(?:no|na|em|com|de|para|pra)?\s*(.+)'
     # Padrao B: Verbo + (Fillers) + Descrição + (Fillers) + Valor no final
@@ -2475,7 +2476,11 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             tipo_transacao = _inferir_tipo_lancamento(texto_usuario, categoria, args.get("tipo"))
             data_lancamento = _normalizar_data_lancamento(args.get("data"))
             try:
-                valor = float(str(args.get("valor") or 0).replace(",", "."))
+                valor_raw = args.get("valor") or args.get("valor_alvo") or 0
+                if isinstance(valor_raw, (int, float)):
+                    valor = float(valor_raw)
+                else:
+                    valor = _parse_br_money(str(valor_raw))
             except (ValueError, TypeError):
                 valor = 0.0
 
@@ -2674,7 +2679,11 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         if fn_name == "definir_limite_orcamento":
             categoria = str(args.get("categoria") or "").strip()
             try:
-                valor = float(str(args.get("valor") or 0).replace(",", "."))
+                valor_raw = args.get("valor") or args.get("valor_alvo") or 0
+                if isinstance(valor_raw, (int, float)):
+                    valor = float(valor_raw)
+                else:
+                    valor = _parse_br_money(str(valor_raw))
             except (ValueError, TypeError):
                 valor = 0.0
             
