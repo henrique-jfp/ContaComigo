@@ -1824,20 +1824,24 @@ def miniapp_overview():
         categories = _category_distribution(lancamentos_mes)
         insight = _build_miniapp_insight(usuario, balance, receita, despesa, categories, cashflow)
 
-        # Agrupamento diário para o Mapa de Calor Real
+        # Agrupamento diário para o Mapa de Calor Real (Filtrado)
         heatmap_daily = {}
         for l in lancamentos_mes:
+            tipo_l = str(l.tipo).lower()
+            # Filtro ultra-rigoroso para o Mapa de Calor: Ignora Transferências
+            if tipo_l in ["transferencia", "transferência", "transfer"]:
+                continue
+                
             dia = l.data_transacao.day
             if dia not in heatmap_daily:
                 heatmap_daily[dia] = {"incT": 0.0, "expT": 0.0, "incC": 0, "expC": 0}
             
-            valor = float(l.valor or 0)
-            tipo_l = (l.tipo or "").lower()
-            if tipo_l.startswith(("recei", "entrada")):
+            valor = abs(float(l.valor or 0))
+            if tipo_l.startswith(("entr", "recei")):
                 heatmap_daily[dia]["incT"] += valor
                 heatmap_daily[dia]["incC"] += 1
-            else:
-                heatmap_daily[dia]["expT"] += abs(valor)
+            elif tipo_l.startswith(("desp", "saida")):
+                heatmap_daily[dia]["expT"] += valor
                 heatmap_daily[dia]["expC"] += 1
 
         recent_items = (
