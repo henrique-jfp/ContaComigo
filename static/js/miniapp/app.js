@@ -90,6 +90,8 @@ lucide.createIcons();
     const homePctDespesa = document.getElementById('homePctDespesa');
     const homeReceita = document.getElementById('homeReceita');
     const homeDespesa = document.getElementById('homeDespesa');
+    const homeInsight = document.getElementById('homeInsight');
+    const homeInsightDesktop = document.getElementById('homeInsightDesktop');
     const homeRecentList = document.getElementById('homeRecentList');
     const homeRecentRefresh = document.getElementById('homeRecentRefresh');
     const homeChartsPills = document.getElementById('homeChartsPills');
@@ -1790,8 +1792,6 @@ lucide.createIcons();
       }
 
       const insightText = summary?.ai_insight || 'Continue registrando para que eu possa analisar seu comportamento financeiro.';
-      const homeInsight = document.getElementById('homeInsight');
-      const homeInsightDesktop = document.getElementById('homeInsightDesktop');
       
       if (homeInsight) homeInsight.innerText = insightText;
       if (homeInsightDesktop) homeInsightDesktop.innerText = insightText;
@@ -4368,3 +4368,15 @@ lucide.createIcons();
         window.Telegram.WebApp.showAlert(`${info.title}\n\n${info.msg}`);
       }
     };
+
+    // --- INICIALIZAÇÃO FINAL ---
+    // Movemos a inicialização para o final para garantir que todas as consts globais acima
+    // tenham sido processadas antes de authTelegram chamar qualquer renderização.
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        await authTelegram();
+      } catch (e) {
+        console.warn('Falha ao autenticar automaticamente:', e);
+        await tryRecoverSessionFromStorage();
+      }
+    });
