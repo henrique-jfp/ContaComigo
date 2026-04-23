@@ -352,6 +352,27 @@ _ALFREDO_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "consultar_historico_financeiro",
+            "description": "Consulta o banco de dados para responder sobre histórico antigo, maiores gastos, somas por categoria ou buscas específicas. Use sempre que o usuário perguntar por algo que não está nos dados recentes enviados.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tipo_busca": {
+                        "type": "string", 
+                        "enum": ["maior_gasto", "maior_receita", "soma_categoria", "lista_por_termo", "detalhe_item"],
+                        "description": "O tipo de busca a ser realizada."
+                    },
+                    "termo": {"type": "string", "description": "Termo de busca (ex: nome da categoria ou palavra na descrição)."},
+                    "limite": {"type": "number", "description": "Quantidade de registros (padrão 5)."},
+                    "periodo": {"type": "string", "enum": ["este_mes", "mes_passado", "este_ano", "tudo"], "description": "Janela temporal da busca."}
+                },
+                "required": ["tipo_busca"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "categorizar_lancamentos_pendentes",
             "description": "Categoriza automaticamente todos os lançamentos financeiros do usuário que estão sem categoria registrada.",
             "parameters": {
@@ -1136,70 +1157,45 @@ def _resumo_contas_local(db, usuario_id: int) -> str:
 
 def _resumo_comparacao_local(db, usuario_id: int) -> str:
     hoje = datetime.now()
-    ignore_ids = _get_subcats_ignore_ids(db)
-    mes_atual_inicio = hoje.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    mes_anterior_fim = mes_atual_inicio - timedelta(microseconds=1)
-    mes_anterior_inicio = mes_anterior_fim.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    inicio_mes = hoje.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    mes_anterior_inicio = (inicio_mes - timedelta(days=1)).replace(day=1)
+    mes_anterior_fim = inicio_mes - timedelta(microseconds=1)
 
-    atual = (
-        db.query(Lancamento)
-        .filter(
-            Lancamento.id_usuario == usuario_id,
-            Lancamento.data_transacao >= mes_atual_inicio,
-        )
-        .all()
-    )
-    anterior = (
-        db.query(Lancamento)
-        .filter(
-            Lancamento.id_usuario == usuario_id,
-            Lancamento.data_transacao >= mes_anterior_inicio,
-            Lancamento.data_transacao <= mes_anterior_fim,
-        )
-        .all()
-    )
-    
-    total_atual = _calcular_saidas_reais(atual, ignore_ids)
-    total_anterior = _calcular_saidas_reais(anterior, ignore_ids)
-    
-    delta = total_atual - total_anterior
-    delta_pct = 0.0 if total_anterior <= 0 else (delta / total_anterior) * 100.0
+    lanc_mes = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_id, Lancamento.data_transacao >= inicio_mes).all()
+    ent_mes, sai_mes = _sum_consistente(lanc_mes)
 
-    if total_atual > total_anterior:
+    lanc_anterior = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_id, Lancamento.data_transacao >= mes_anterior_inicio, Lancamento.data_transacao <= mes_anterior_fim).all()
+    ent_ant, sai_ant = _sum_consistente(lanc_anterior)
+    
+    delta = sai_mes - sai_ant
+    delta_pct = 0.0 if sai_ant <= 0 else (delta / sai_ant) * 100.0
+
+    if sai_mes > sai_ant:
         status = f"⚠️ Seus gastos estão <b>{delta_pct:.1f}% acima</b> do mês passado."
-    elif total_atual < total_anterior:
+    elif sai_mes < sai_ant:
         status = f"✅ Excelente! Você reduziu seus gastos em <b>{abs(delta_pct):.1f}%</b> comparado ao mês passado."
     else:
         status = "📊 Seus gastos estão estáveis em relação ao mês passado."
 
     return (
         f"🔍 <b>Comparativo Mensal</b>\n\n"
-        f"• <b>Mês Atual:</b> <code>{_formatar_valor_brasileiro(total_atual)}</code>\n"
-        f"• <b>Mês Passado:</b> <code>{_formatar_valor_brasileiro(total_anterior)}</code>\n\n"
+        f"• <b>Mês Atual:</b> <code>{_formatar_valor_brasileiro(sai_mes)}</code>\n"
+        f"• <b>Mês Passado:</b> <code>{_formatar_valor_brasileiro(sai_ant)}</code>\n\n"
         f"{status}"
     )
 
 
 def _resumo_alerta_local(db, usuario_id: int) -> str:
     agora = datetime.now()
-    ignore_ids = _get_subcats_ignore_ids(db)
     inicio_mes = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    lanc_mes = (
-        db.query(Lancamento)
-        .filter(
-            Lancamento.id_usuario == usuario_id,
-            Lancamento.data_transacao >= inicio_mes,
-        )
-        .all()
-    )
-    saidas_mes = _calcular_saidas_reais(lanc_mes, ignore_ids)
-    entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith(("entr", "recei")))
-    saldo_mes = entradas_mes - saidas_mes
+    lanc_mes = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_id, Lancamento.data_transacao >= inicio_mes).all()
+    ent_mes, sai_mes = _sum_consistente(lanc_mes)
+    saldo_mes = ent_mes - sai_mes
     
     if saldo_mes < 0:
         titulo = "🚨 <b>Alerta de Atenção Máxima</b>"
         msg = f"Seu mês está fechando no negativo em <code>{_formatar_valor_brasileiro(abs(saldo_mes))}</code>."
-    elif saidas_mes > entradas_mes * 0.85:
+    elif sai_mes > ent_mes * 0.85 and ent_mes > 0:
         titulo = "⚠️ <b>Alerta de Margem Estreita</b>"
         msg = "Seus gastos já consumiram mais de 85% das suas entradas deste mês."
     else:
@@ -1211,49 +1207,19 @@ def _resumo_alerta_local(db, usuario_id: int) -> str:
 
 def _resumo_previsao_local(db, usuario_id: int, saldo: float, entradas: float, saidas: float) -> str:
     agora = datetime.now()
-    ignore_ids = _get_subcats_ignore_ids(db)
     inicio_mes = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    lanc_mes = (
-        db.query(Lancamento)
-        .filter(
-            Lancamento.id_usuario == usuario_id,
-            Lancamento.data_transacao >= inicio_mes,
-        )
-        .all()
-    )
+    lanc_mes = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_id, Lancamento.data_transacao >= inicio_mes).all()
+    ent_mes, sai_mes = _sum_consistente(lanc_mes)
+    
     dias_passados = max(1, agora.day)
     dias_no_mes = monthrange(agora.year, agora.month)[1]
     dias_restantes = max(1, dias_no_mes - agora.day)
     
-    saidas_mes = _calcular_saidas_reais(lanc_mes, ignore_ids)
-    entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith(("entr", "recei")))
-    
-    # Saldo do mês atual (Performance Mensal) - Alinhado com MiniApp
-    saldo_mes_atual = entradas_mes - saidas_mes
-
-    if not lanc_mes or (abs(entradas_mes) < 0.01 and abs(saidas_mes) < 0.01):
-        return (
-            "📭 <b>Ainda não tenho base suficiente deste mês</b>\n\n"
-            "Não encontrei lançamentos relevantes de "
-            f"{agora.strftime('%m/%Y')} para projetar se você fecha no vermelho."
-        )
-
-    if entradas_mes <= 0 and saidas_mes > 0:
-        return (
-            "⚠️ <b>Sinal de risco neste mês</b>\n\n"
-            f"Já identifiquei saídas de {_formatar_valor_brasileiro(saidas_mes)} "
-            "e nenhuma entrada registrada no período. Hoje você está em rota de aperto."
-        )
-    
-    media_diaria_saida = saidas_mes / dias_passados
+    media_diaria_saida = sai_mes / dias_passados
     proj_saida = media_diaria_saida * dias_no_mes
-    saldo_projetado = entradas_mes - proj_saida
+    saldo_projetado = ent_mes - proj_saida
     
-    # Limite diário baseado no saldo disponível real (ou do mês se for maior)
-    # Se o saldo total for muito baixo por dívidas antigas, o limite diário deve ser conservador.
-    # Mas se o usuário quer ver o "do mês", usamos o saldo_mes_atual como referência primária.
-    base_calculo_limite = max(0.0, saldo_mes_atual)
-    limite_diario = base_calculo_limite / dias_restantes
+    limite_diario = max(0, (ent_mes - sai_mes)) / dias_restantes
 
     if saldo_projetado < 0:
         primeira = f"⚠️ Nesse ritmo, você tende a fechar o mês no vermelho em <code>{_formatar_valor_brasileiro(abs(saldo_projetado))}</code>."
@@ -2737,7 +2703,49 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             
             return ConversationHandler.END
 
-        if fn_name == "categorizar_lancamentos_pendentes":
+        if fn_name == "consultar_historico_financeiro":
+            tipo_busca = args.get("tipo_busca")
+            termo = args.get("termo")
+            limite = int(args.get("limite") or 5)
+            periodo = args.get("periodo") or "tudo"
+            
+            query = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id)
+            # Regra de Paridade: Ignora transferências em qualquer busca de histórico
+            query = query.filter(not_(func.lower(Lancamento.tipo).in_(["transferencia", "transferência", "transfer"])))
+            
+            if periodo == "este_mes":
+                query = query.filter(Lancamento.data_transacao >= inicio_mes)
+            elif periodo == "mes_passado":
+                pm_inicio = (inicio_mes - timedelta(days=1)).replace(day=1)
+                query = query.filter(Lancamento.data_transacao >= pm_inicio, Lancamento.data_transacao < inicio_mes)
+            elif periodo == "este_ano":
+                query = query.filter(Lancamento.data_transacao >= hoje.replace(month=1, day=1))
+
+            if tipo_busca == "maior_gasto":
+                res = query.filter(Lancamento.tipo.ilike("saida%")).order_by(func.abs(Lancamento.valor).desc()).limit(limite).all()
+            elif tipo_busca == "maior_receita":
+                res = query.filter(Lancamento.tipo.ilike("entrada%")).order_by(func.abs(Lancamento.valor).desc()).limit(limite).all()
+            elif tipo_busca == "soma_categoria" and termo:
+                soma = query.filter(Lancamento.categoria.has(Categoria.nome.ilike(f"%{termo}%"))).with_entities(func.sum(Lancamento.valor)).scalar() or 0
+                res = f"Soma de {termo}: {_formatar_valor_brasileiro(abs(float(soma)))}"
+            elif tipo_busca == "lista_por_termo" and termo:
+                res = query.filter(or_(Lancamento.descricao.ilike(f"%{termo}%"), Lancamento.categoria.has(Categoria.nome.ilike(f"%{termo}%")))).order_by(Lancamento.data_transacao.desc()).limit(limite).all()
+            else:
+                res = query.order_by(Lancamento.data_transacao.desc()).limit(limite).all()
+
+            if isinstance(res, list):
+                if not res:
+                    txt_res = "Não encontrei registros para essa busca."
+                else:
+                    linhas = [f"• {l.descricao}: <code>{_formatar_valor_brasileiro(abs(float(l.valor or 0)))}</code> ({l.data_transacao.strftime('%d/%m')})" for l in res]
+                    txt_res = "\n".join(linhas)
+            else:
+                txt_res = str(res)
+
+            await _enviar_resposta_html_segura(update.message, 
+                f"🔍 <b>Resultado da busca:</b>\n\n{txt_res}\n\n<i>Fonte: Banco de Dados Completo</i>"
+            )
+            return ConversationHandler.END
             atualizados, total_pendentes = await _categorizar_lancamentos_sem_categoria_async(db, usuario_db.id)
             if total_pendentes == 0:
                 await _enviar_resposta_html_segura(update.message, 

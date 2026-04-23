@@ -293,6 +293,7 @@ def _contem_tool_call_json(texto: str) -> bool:
         '"name": "agendar_despesa"',
         '"name": "criar_lembrete"',
         '"name": "criar_meta"',
-        '"name": "definir_limite_orcamento"'
+        '"name": "definir_limite_orcamento"',
+        '"name": "consultar_historico_financeiro"'
     ]
     return any(ind in texto for ind in indicadores)
