@@ -536,8 +536,8 @@ def gerar_contexto_relatorio(db, telegram_id: int, mes: int, ano: int):
         .filter(
             and_(
                 Lancamento.id_usuario == usuario_q.id,
-                extract('year', lancamento.data_transacao) == ano,
-                extract('month', lancamento.data_transacao) == mes,
+                extract('year', Lancamento.data_transacao) == ano,
+                extract('month', Lancamento.data_transacao) == mes,
             )
         )
         .options(joinedload(Lancamento.categoria))

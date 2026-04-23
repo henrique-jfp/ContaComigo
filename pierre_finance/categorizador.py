@@ -679,6 +679,12 @@ _SINAIS_FORTES: list[tuple[str, str, str]] = [
     ("rappi", "Alimentação", "Delivery"),
     ("uber eats", "Alimentação", "Delivery"),
     ("ubereats", "Alimentação", "Delivery"),
+    ("food to save", "Alimentação", "Delivery"),
+    # Gateways de Pagamento (geralmente compras/serviços online)
+    ("pagar me", "Compras Online", "Marketplace"),
+    ("shpp brasil", "Compras Online", "Marketplace"),
+    ("frogpay", "Serviços e Assinaturas", "Assinaturas SaaS"),
+    ("pushinpay", "Serviços e Assinaturas", "Assinaturas SaaS"),
     # Uber transporte
     ("uber*", "Transporte", "Aplicativos"),
     ("uber trip", "Transporte", "Aplicativos"),
