@@ -1781,9 +1781,21 @@ lucide.createIcons();
       }
 
       if (homeHeatmapChartEl) {
-        renderPremiumHeatmap(homeHeatmapChartEl.parentElement, chartData.heatmapData, summary);
+        // Se estiver no mobile, usa o container original, se estiver no desktop usa a sidebar
+        const isDesktop = window.innerWidth >= 860;
+        const heatmapSidebar = document.getElementById('homeHeatmapSidebar');
+        const targetContainer = (isDesktop && heatmapSidebar) ? heatmapSidebar : homeHeatmapChartEl.parentElement;
+        
+        renderPremiumHeatmap(targetContainer, chartData.heatmapData, summary);
         homeHeatmapChartEl.style.display = 'none';
       }
+
+      const insightText = summary?.ai_insight || 'Continue registrando para que eu possa analisar seu comportamento financeiro.';
+      const homeInsight = document.getElementById('homeInsight');
+      const homeInsightDesktop = document.getElementById('homeInsightDesktop');
+      
+      if (homeInsight) homeInsight.innerText = insightText;
+      if (homeInsightDesktop) homeInsightDesktop.innerText = insightText;
 
       renderHomeRecent(summary?.recent || []);
       renderHomeRadar(summary);
