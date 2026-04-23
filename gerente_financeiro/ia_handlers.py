@@ -27,6 +27,19 @@ from sqlalchemy import and_, extract, func, or_, not_
 from database.database import get_db, get_or_create_user
 from models import Lancamento, Usuario, Categoria, Agendamento, Lembrete, Objetivo, ItemLancamento, OrcamentoCategoria, Subcategoria
 
+def _sum_consistente(lista):
+    """Soma consistente de lançamentos (Sincronizado com dashboard_app.py)"""
+    e = 0.0
+    s = 0.0
+    for l in lista:
+        t = str(l.tipo).lower()
+        if t in ["transferencia", "transferência", "transfer"]: continue
+        v = abs(float(l.valor or 0))
+        if t.startswith(("entr", "recei")): e += v
+        elif t.startswith(("desp", "saida", "saída", "pago", "enviado")): s += v
+    return round(e, 2), round(s, 2)
+
+
 def _get_subcats_ignore_ids(db) -> list[int]:
     """Retorna IDs de subcategorias que devem ser ignoradas para evitar duplicidade (Faturas e Transf. Internas)."""
     subcats = db.query(Subcategoria.id).filter(
@@ -360,7 +373,7 @@ _ALFREDO_TOOLS = [
                     "tipo_busca": {
                         "type": "string", 
                         "enum": ["maior_gasto", "maior_receita", "soma_categoria", "lista_por_termo", "detalhe_item"],
-                        "description": "O tipo de busca a ser realizada."
+                        "description": "Obrigatório. Use 'maior_gasto' se perguntarem qual foi o maior gasto. Use 'soma_categoria' para saber o total gasto em algo. Use 'lista_por_termo' para compras em um local."
                     },
                     "termo": {"type": "string", "description": "Termo de busca (ex: nome da categoria ou palavra na descrição)."},
                     "limite": {"type": "number", "description": "Quantidade de registros (padrão 5)."},
@@ -2006,6 +2019,18 @@ def _registrar_historico_ia(db, user_id: int, user_msg: str, ai_msg: str):
     except Exception as e:
         logger.warning(f"Erro ao registrar histórico do chat: {e}")
 
+def _sum_consistente(lista):
+    """Soma consistente de lançamentos (Sincronizado com dashboard_app.py)"""
+    e = 0.0
+    s = 0.0
+    for l in lista:
+        t = str(l.tipo).lower()
+        if t in ["transferencia", "transferência", "transfer"]: continue
+        v = abs(float(l.valor or 0))
+        if t.startswith(("entr", "recei")): e += v
+        elif t.startswith(("desp", "saida")): s += v
+    return round(e, 2), round(s, 2)
+
 async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Roteador sempre ativo: texto/voz -> Groq tools -> execução local."""
     if not update.message or not update.effective_user:
@@ -2105,19 +2130,6 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         hoje = datetime.now()
         hoje_str = hoje.strftime("%A, %d de %B de %Y às %H:%M")
         ignore_ids = _get_subcats_ignore_ids(db)
-        
-        # Função auxiliar para somas consistentes (Sincronizado com dashboard_app.py)
-        def _sum_consistente(lista):
-            e = 0.0
-            s = 0.0
-            for l in lista:
-                t = str(l.tipo).lower()
-                # Filtro IDÊNTICO ao analytics/dashboard_app.py
-                if t in ["transferencia", "transferência", "transfer"]: continue
-                v = abs(float(l.valor or 0))
-                if t.startswith(("entr", "recei")): e += v
-                elif t.startswith(("desp", "saida")): s += v
-            return round(e, 2), round(s, 2)
 
         # Mês Atual
         inicio_mes = hoje.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -2191,34 +2203,13 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             ensure_ascii=False
         )
 
-        try:
-            pm = PromptManager(Path("gerente_financeiro/prompts"))
-            p_config = PromptConfig(
-                user_name=(usuario_db.nome_completo or update.effective_user.first_name or "usuário"),
-                user_query=texto_usuario,
-                financial_context=json.loads(contexto_financeiro_str),
-                intent="general_analysis",
-                perfil_ia=usuario_db.perfil_ia,
-                relevant_skills=[
-                    "comparative_analysis",
-                    "lists_rankings",
-                    "payment_account_analysis",
-                    "period_summaries",
-                    "proactive_insights",
-                    "simple_predictive_analysis",
-                    "strategic_questions"
-                ],
-                data_hora_atual=hoje_str
-            )
-            system_prompt = pm.build_prompt(p_config)
-        except Exception as pm_err:
-            logger.warning("Falha ao usar PromptManager, caindo para Jinja2 local: %s", pm_err)
-            system_prompt = Template(PROMPT_ALFREDO_APRIMORADO).render(
-                user_name=(usuario_db.nome_completo or update.effective_user.first_name or "usuário"),
-                pergunta_usuario=texto_usuario,
-                contexto_financeiro_completo=contexto_financeiro_str,
-                data_hora_atual=hoje_str
-            )
+        # Bypass PromptManager para usar o prompt compacto (Evita Rate Limit Groq/Cerebras de 8K tokens)
+        system_prompt = Template(PROMPT_ALFREDO_APRIMORADO).render(
+            user_name=(usuario_db.nome_completo or update.effective_user.first_name or "usuário"),
+            pergunta_usuario=texto_usuario,
+            contexto_financeiro_completo=contexto_financeiro_str,
+            data_hora_atual=hoje_str
+        )
 
         completion = None
         # Só chamamos a IA se o interceptor de Regex não capturou uma ação direta
@@ -2607,7 +2598,9 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         if fn_name == "criar_meta":
             descricao = str(args.get("descricao") or "Nova meta").strip()
             try:
-                valor_alvo = float(str(args.get("valor_alvo") or args.get("valor") or 0).replace(",", "."))
+                # Usa o motor robusto para converter valor da IA ou Regex
+                v_raw = args.get("valor_alvo") or args.get("valor") or 0
+                valor_alvo = _parse_br_money(str(v_raw)) or 0.0
             except (ValueError, TypeError):
                 valor_alvo = 0.0
             data_meta_str = str(args.get("data_meta") or "").strip()
@@ -2734,11 +2727,25 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 query = query.filter(Lancamento.data_transacao >= hoje.replace(month=1, day=1))
 
             if tipo_busca == "maior_gasto":
-                res = query.filter(Lancamento.tipo.ilike("saida%")).order_by(func.abs(Lancamento.valor).desc()).limit(limite).all()
+                # Filtro robusto para gastos
+                res = query.filter(or_(
+                    Lancamento.tipo.ilike("saida%"),
+                    Lancamento.tipo.ilike("desp%"),
+                    Lancamento.tipo.ilike("%pago%"),
+                    Lancamento.tipo.ilike("%enviado%")
+                )).order_by(func.abs(Lancamento.valor).desc()).limit(limite).all()
             elif tipo_busca == "maior_receita":
-                res = query.filter(Lancamento.tipo.ilike("entrada%")).order_by(func.abs(Lancamento.valor).desc()).limit(limite).all()
+                res = query.filter(or_(
+                    Lancamento.tipo.ilike("entr%"),
+                    Lancamento.tipo.ilike("recei%"),
+                    Lancamento.tipo.ilike("%recebido%")
+                )).order_by(func.abs(Lancamento.valor).desc()).limit(limite).all()
             elif tipo_busca == "soma_categoria" and termo:
-                soma = query.filter(Lancamento.categoria.has(Categoria.nome.ilike(f"%{termo}%"))).with_entities(func.sum(Lancamento.valor)).scalar() or 0
+                # Busca soma por categoria ou termo na descrição
+                soma = query.filter(or_(
+                    Lancamento.categoria.has(Categoria.nome.ilike(f"%{termo}%")),
+                    Lancamento.descricao.ilike(f"%{termo}%")
+                )).with_entities(func.sum(Lancamento.valor)).scalar() or 0
                 res = f"Soma de {termo}: {_formatar_valor_brasileiro(abs(float(soma)))}"
             elif tipo_busca == "lista_por_termo" and termo:
                 res = query.filter(or_(Lancamento.descricao.ilike(f"%{termo}%"), Lancamento.categoria.has(Categoria.nome.ilike(f"%{termo}%")))).order_by(Lancamento.data_transacao.desc()).limit(limite).all()

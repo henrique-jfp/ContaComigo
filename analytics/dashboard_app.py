@@ -1375,6 +1375,12 @@ def miniapp_modo_deus():
             minhas_contas_list = []
 
             for c in contas:
+                # Ocultar conta interna "ContaComigo Digital" do dashboard conforme feedback
+                if c.nome == "ContaComigo Digital":
+                    # No entanto, ainda somamos os valores dela nos totais globais se necessário, 
+                    # mas não a mostramos na lista individual de "Minhas Contas".
+                    pass
+                
                 ultimo_snapshot = db.query(SaldoConta).filter(
                     SaldoConta.id_conta == c.id
                 ).order_by(SaldoConta.capturado_em.desc()).first()
@@ -1396,14 +1402,16 @@ def miniapp_modo_deus():
                 
                 current_acc_balance = base_balance + float(var_receitas) - float(var_despesas)
                 
-                # Adiciona à lista de contas individuais para a UI
-                minhas_contas_list.append({
-                    "id": c.id,
-                    "nome": c.nome,
-                    "tipo": c.tipo,
-                    "saldo": current_acc_balance,
-                    "limite": float(c.limite_cartao or 0) if c.tipo == "Cartão de Crédito" else None
-                })
+                # Adiciona à lista de contas individuais para a UI (excluindo a interna)
+                if c.nome != "ContaComigo Digital":
+                    minhas_contas_list.append({
+                        "id": c.id,
+                        "nome": c.nome,
+                        "tipo": c.tipo,
+                        "saldo": current_acc_balance,
+                        "saldo_disponivel": float(ultimo_snapshot.saldo_disponivel or 0) if ultimo_snapshot else 0.0,
+                        "limite": float(c.limite_cartao or 0) if c.tipo == "Cartão de Crédito" else None
+                    })
 
                 if c.tipo == "Cartão de Crédito":
                     divida_cartoes += abs(current_acc_balance)
@@ -1639,7 +1647,7 @@ def miniapp_modo_deus():
                 or_(FaturaCartao.status.in_(['em_aberto', 'aberta', 'aberto', 'PENDING']), and_(FaturaCartao.data_vencimento >= (today - timedelta(days=2)), FaturaCartao.data_vencimento <= v_limit_cards))
             ).order_by(FaturaCartao.data_vencimento.asc()).all()
             
-            colors_c = ["#534AB7","#378ADD","#1D9E75","#D85A30"]
+            colors_c = ["#82293e","#378ADD","#1D9E75","#D85A30"]
             lista_c = []
             seen_accounts = set()
             for i, f in enumerate(faturas):
@@ -1753,7 +1761,7 @@ def miniapp_modo_deus():
         try:
             v_limit = today + timedelta(days=30)
             lista_v = [{"descricao": a.descricao, "valor": float(a.valor), "data": a.proxima_data_execucao.isoformat(), "cor_hex": "#378ADD"} for a in db.query(Agendamento).filter(Agendamento.id_usuario == user_id, Agendamento.ativo == True, Agendamento.proxima_data_execucao <= v_limit).all()]
-            lista_v += [{"descricao": f"Fatura {f.conta.nome}", "valor": float(f.valor_total), "data": f.data_vencimento.isoformat(), "cor_hex": "#534AB7"} for f in db.query(FaturaCartao).filter(FaturaCartao.id_usuario == user_id, FaturaCartao.data_vencimento >= today, FaturaCartao.data_vencimento <= v_limit, FaturaCartao.status != 'paga').all()]
+            lista_v += [{"descricao": f"Fatura {f.conta.nome}", "valor": float(f.valor_total), "data": f.data_vencimento.isoformat(), "cor_hex": "#82293e"} for f in db.query(FaturaCartao).filter(FaturaCartao.id_usuario == user_id, FaturaCartao.data_vencimento <= v_limit, FaturaCartao.status != 'paga').all()]
             result['proximos_vencimentos'] = sorted(lista_v, key=lambda x: x['data'])[:8]
         except Exception as e:
             result['proximos_vencimentos'] = []

@@ -3980,7 +3980,14 @@ lucide.createIcons();
 
     function renderModoDeus(data) {
       const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-      const dtFmt = (d) => d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '--';
+      // Fix bug: datas ISO puro (YYYY-MM-DD) sem hora são interpretadas como Meia Noite UTC, 
+      // o que volta um dia no fuso GMT-3. Forçamos T12:00:00 para evitar isso.
+      const dtFmt = (d) => {
+          if (!d) return '--';
+          let dateObj = new Date(d);
+          if (d.length === 10) dateObj = new Date(d + 'T12:00:00');
+          return dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+      };
       const vg = data.visao_geral || {};
 
       // 0. Minhas Contas (Tempo Real)
@@ -3993,16 +4000,21 @@ lucide.createIcons();
           const color = isCard ? 'text-brand' : 'text-emerald-500';
           const bg = isCard ? 'bg-brand/5' : 'bg-emerald-500/5';
           
+          const labelPrincipal = isCard ? 'Fatura Atual' : 'Saldo';
+          const labelSecundario = isCard ? 'Disponível' : 'Limite';
+          const valorSecundario = isCard ? (acc.saldo_disponivel || 0) : (acc.limite || 0);
+
           accL.innerHTML += `
-            <div class="glass-card p-4 rounded-2xl bg-telegram-card/40 min-w-[140px] flex-shrink-0 border border-telegram-separator/30">
+            <div class="glass-card p-4 rounded-2xl bg-telegram-card/40 min-w-[150px] flex-shrink-0 border border-telegram-separator/30">
               <div class="flex items-center gap-2 mb-2">
                 <div class="w-6 h-6 rounded-lg ${bg} flex items-center justify-center">
                   <i data-lucide="${icon}" class="w-3 h-3 ${color}"></i>
                 </div>
-                <span class="text-[10px] font-black text-telegram-hint uppercase truncate">${acc.nome}</span>
+                <span class="text-[9px] font-black text-telegram-hint uppercase truncate">${acc.nome}</span>
               </div>
+              <p class="text-[8px] font-black text-telegram-hint uppercase mb-0.5">${labelPrincipal}</p>
               <div class="text-sm font-black text-telegram-text font-financial">${fmt.format(acc.saldo)}</div>
-              ${acc.limite ? `<div class="text-[8px] text-telegram-hint font-bold mt-1 uppercase">Limite ${fmt.format(acc.limite)}</div>` : ''}
+              ${valorSecundario ? `<div class="text-[8px] text-telegram-hint font-bold mt-1 uppercase">${labelSecundario} ${fmt.format(valorSecundario)}</div>` : ''}
             </div>
           `;
         });
@@ -4021,7 +4033,7 @@ lucide.createIcons();
             datasets: [{
               label: 'Total Faturas',
               data: data.faturas_evolucao.data || [],
-              backgroundColor: '#534AB7',
+              backgroundColor: '#82293e',
               borderRadius: 6,
               borderSkipped: false,
             }]
