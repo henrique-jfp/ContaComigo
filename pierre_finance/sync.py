@@ -693,6 +693,8 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
 
     _upsert_bill_summaries(usuario, db, client, accounts_map)
     _upsert_installments(usuario, db, client, accounts_map)
+    _sync_spending_limits(usuario, db, client)
+    _sync_payment_reminders(usuario, db, client)
     _enrich_user_profile(usuario, client)
 
     usuario.pierre_initial_sync_done = True
@@ -849,6 +851,8 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
 
     faturas_atualizadas = _upsert_bill_summaries(usuario, db, client, accounts_map)
     parcelamentos_atualizados = _upsert_installments(usuario, db, client, accounts_map)
+    _sync_spending_limits(usuario, db, client)
+    _sync_payment_reminders(usuario, db, client)
     _enrich_user_profile(usuario, client)
 
     usuario.last_pierre_sync_at = datetime.now(timezone.utc)

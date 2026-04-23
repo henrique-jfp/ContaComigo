@@ -29,6 +29,14 @@
     <!-- CONTEÚDO REAL (Oculto inicialmente) -->
     <div id="modoDeusContent" class="hidden space-y-6">
       
+      <!-- BLOCO 1.5: Minhas Contas (Carrossel Horizontal) -->
+      <div class="space-y-3">
+        <h3 class="text-[10px] font-black uppercase tracking-[0.2em] text-telegram-hint ml-1 font-mono">Saldos em Tempo Real</h3>
+        <div id="mdAccountsList" class="flex gap-3 overflow-x-auto pb-2 hide-scroll no-scrollbar">
+          <!-- Injetado via JS -->
+        </div>
+      </div>
+
       <!-- BLOCO 2: Cards de métricas principais -->
       <div class="grid grid-cols-2 gap-3">
         <div class="glass-card p-5 rounded-3xl bg-telegram-card/50 col-span-2 relative overflow-hidden">
@@ -102,7 +110,11 @@
 
       <!-- BLOCO 6: Faturas -->
       <div class="glass-card p-5 rounded-3xl bg-telegram-card">
-        <h3 class="text-xs font-bold text-telegram-text mb-4 uppercase tracking-widest">Faturas em aberto</h3>
+        <h3 class="text-xs font-bold text-telegram-text mb-4 uppercase tracking-widest">Evolução de Faturas</h3>
+        <div class="h-32 w-full mb-6">
+          <canvas id="mdFaturasChart"></canvas>
+        </div>
+        <h3 class="text-[10px] font-black uppercase tracking-[0.2em] text-telegram-hint mb-3 font-mono">Faturas Ativas</h3>
         <div id="mdCartoesList" class="space-y-4">
           <!-- Injetado via JS -->
         </div>

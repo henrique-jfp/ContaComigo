@@ -1372,6 +1372,7 @@ def miniapp_modo_deus():
             divida_cartoes = 0.0
             
             min_date_aware = datetime(1970, 1, 1, tzinfo=timezone.utc)
+            minhas_contas_list = []
 
             for c in contas:
                 ultimo_snapshot = db.query(SaldoConta).filter(
@@ -1395,6 +1396,15 @@ def miniapp_modo_deus():
                 
                 current_acc_balance = base_balance + float(var_receitas) - float(var_despesas)
                 
+                # Adiciona à lista de contas individuais para a UI
+                minhas_contas_list.append({
+                    "id": c.id,
+                    "nome": c.nome,
+                    "tipo": c.tipo,
+                    "saldo": current_acc_balance,
+                    "limite": float(c.limite_cartao or 0) if c.tipo == "Cartão de Crédito" else None
+                })
+
                 if c.tipo == "Cartão de Crédito":
                     divida_cartoes += abs(current_acc_balance)
                     total_patrimonio_contas -= abs(current_acc_balance)
@@ -1472,7 +1482,8 @@ def miniapp_modo_deus():
                 "dias_restantes_mes": dias_restantes,
                 "limite_diario_seguro": limite_diario,
                 "divida_cartoes": divida_cartoes,
-                "variacao_patrimonio_pct": 0.0  # TODO: Implementar cálculo real
+                "variacao_patrimonio_pct": 0.0,  # TODO: Implementar cálculo real
+                "minhas_contas": minhas_contas_list
             }
         except Exception as e:
             logger.error(f"Erro Modo Deus (visao_geral): {e}")
@@ -1746,6 +1757,27 @@ def miniapp_modo_deus():
             result['proximos_vencimentos'] = sorted(lista_v, key=lambda x: x['data'])[:8]
         except Exception as e:
             result['proximos_vencimentos'] = []
+
+        # --- SEÇÃO FINAL: PERFIL IA E EVOLUÇÃO ---
+        result['perfil_ia'] = usuario.perfil_ia
+        try:
+            f_evolucao = db.query(
+                extract('month', FaturaCartao.data_vencimento).label('mes'),
+                extract('year', FaturaCartao.data_vencimento).label('ano'),
+                func.sum(FaturaCartao.valor_total).label('total')
+            ).filter(
+                FaturaCartao.id_usuario == user_id,
+                FaturaCartao.status == 'paga',
+                FaturaCartao.data_vencimento >= (today - timedelta(days=210))
+            ).group_by('ano', 'mes').order_by('ano', 'mes').all()
+            
+            result['faturas_evolucao'] = {
+                "labels": [f"{int(f.mes):02d}/{str(int(f.ano))[2:]}" for f in f_evolucao],
+                "data": [float(f.total) for f in f_evolucao]
+            }
+        except Exception as e:
+            logger.error(f"Erro Evolução Faturas: {e}")
+            result['faturas_evolucao'] = {"labels": [], "data": []}
 
         # --- SEÇÃO 11: INSIGHTS RÁPIDOS ---
         try:

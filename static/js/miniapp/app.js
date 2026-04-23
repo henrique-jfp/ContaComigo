@@ -3983,6 +3983,68 @@ lucide.createIcons();
       const dtFmt = (d) => d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '--';
       const vg = data.visao_geral || {};
 
+      // 0. Minhas Contas (Tempo Real)
+      const accL = document.getElementById('mdAccountsList');
+      if (accL && vg.minhas_contas) {
+        accL.innerHTML = '';
+        vg.minhas_contas.forEach(acc => {
+          const isCard = acc.tipo === 'Cartão de Crédito';
+          const icon = isCard ? 'credit-card' : 'landmark';
+          const color = isCard ? 'text-brand' : 'text-emerald-500';
+          const bg = isCard ? 'bg-brand/5' : 'bg-emerald-500/5';
+          
+          accL.innerHTML += `
+            <div class="glass-card p-4 rounded-2xl bg-telegram-card/40 min-w-[140px] flex-shrink-0 border border-telegram-separator/30">
+              <div class="flex items-center gap-2 mb-2">
+                <div class="w-6 h-6 rounded-lg ${bg} flex items-center justify-center">
+                  <i data-lucide="${icon}" class="w-3 h-3 ${color}"></i>
+                </div>
+                <span class="text-[10px] font-black text-telegram-hint uppercase truncate">${acc.nome}</span>
+              </div>
+              <div class="text-sm font-black text-telegram-text font-financial">${fmt.format(acc.saldo)}</div>
+              ${acc.limite ? `<div class="text-[8px] text-telegram-hint font-bold mt-1 uppercase">Limite ${fmt.format(acc.limite)}</div>` : ''}
+            </div>
+          `;
+        });
+        if (window.lucide) lucide.createIcons();
+      }
+
+      // 0.1 Gráfico de Faturas
+      const faturesChartEl = document.getElementById('mdFaturasChart');
+      if (faturesChartEl && data.faturas_evolucao && window.Chart) {
+        if (window.mdFaturasChartInstance) window.mdFaturasChartInstance.destroy();
+        
+        window.mdFaturasChartInstance = new Chart(faturesChartEl, {
+          type: 'bar',
+          data: {
+            labels: data.faturas_evolucao.labels || [],
+            datasets: [{
+              label: 'Total Faturas',
+              data: data.faturas_evolucao.data || [],
+              backgroundColor: '#534AB7',
+              borderRadius: 6,
+              borderSkipped: false,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { 
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (context) => fmt.format(context.raw)
+                }
+              }
+            },
+            scales: {
+              y: { beginAtZero: true, grid: { display: false }, ticks: { display: false } },
+              x: { grid: { display: false }, ticks: { font: { size: 8, weight: 'bold' }, color: '#94a3b8' } }
+            }
+          }
+        });
+      }
+
       const mdMonthYear = document.getElementById('modoDeusMonthYear');
       if (mdMonthYear) {
         mdMonthYear.textContent = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
@@ -4293,9 +4355,20 @@ lucide.createIcons();
       const iL = document.getElementById('mdInsightsList');
       if (iL) {
         iL.innerHTML = '';
-        (data.insights_rapidos || []).forEach(i => {
-          iL.innerHTML += `<p>— ${i}</p>`;
+        const ins = data.insights_rapidos || [];
+        if (data.perfil_ia) {
+          iL.innerHTML += `
+            <div class="bg-brand/5 p-4 rounded-2xl mb-4 border border-brand/10">
+              <p class="text-[9px] font-black text-brand uppercase tracking-[0.2em] mb-2 flex items-center gap-2 font-mono">
+                <i data-lucide="brain" class="w-3 h-3"></i> ANÁLISE COMPORTAMENTAL
+              </p>
+              <p class="text-xs italic text-telegram-text leading-relaxed">"${data.perfil_ia}"</p>
+            </div>`;
+        }
+        ins.forEach(i => {
+          iL.innerHTML += `<p class="flex items-start gap-2 mb-1"><span>•</span> ${i}</p>`;
         });
+        if (window.lucide) lucide.createIcons();
       }
     }
 
