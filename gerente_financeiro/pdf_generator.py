@@ -113,30 +113,39 @@ class KPICard(Flowable):
         c = self.canv
         x, y = 0, 0
         
-        # Sombra (Retângulo cinza deslocado)
-        c.setFillColor(colors.Color(0,0,0,0.06))
-        c.roundRect(x+2, y-2, self.width, self.height, 6, fill=True, stroke=False)
+        # Sombra suave (Retângulo cinza deslocado)
+        c.setFillColor(colors.Color(0,0,0,0.04))
+        c.roundRect(x+1.5, y-1.5, self.width, self.height, 8, fill=True, stroke=False)
         
-        # Fundo do Card
+        # Fundo do Card (Branco Puro)
         c.setFillColor(COLOR_WHITE)
-        c.setStrokeColor(HexColor('#E2E8F0'))
-        c.roundRect(x, y, self.width, self.height, 6, fill=True, stroke=True)
+        c.setStrokeColor(HexColor('#F1F5F9'))
+        c.roundRect(x, y, self.width, self.height, 8, fill=True, stroke=True)
         
-        # Título (Label)
+        # Título (Label) - Mais clean
         c.setFillColor(COLOR_TEXT_LIGHT)
-        c.setFont(FONT_REG, 9)
-        c.drawString(x + 5*mm, y + self.height - 8*mm, self.title.upper())
+        c.setFont(FONT_BOLD, 8)
+        c.drawString(x + 6*mm, y + self.height - 10*mm, self.title.upper())
         
-        # Valor Principal
+        # Valor Principal - Grande e imponente
         c.setFillColor(COLOR_PRIMARY)
-        c.setFont(FONT_BOLD, 16)
-        # Ajusta tamanho da fonte se o valor for muito longo
-        if len(str(self.value)) > 15:
-             c.setFont(FONT_BOLD, 12)
-        c.drawString(x + 5*mm, y + self.height - 18*mm, str(self.value))
+        c.setFont(FONT_BOLD, 20)
+        # Ajusta tamanho da fonte se o valor for muito longo (evita estouro)
+        display_value = str(self.value)
+        if len(display_value) > 12:
+             c.setFont(FONT_BOLD, 16)
+        if len(display_value) > 16:
+             c.setFont(FONT_BOLD, 14)
+             
+        c.drawString(x + 6*mm, y + self.height - 22*mm, display_value)
         
-        # Ícone e Subtítulo
-        c.setFont(FONT_REG, 8)
+        # Linha separadora discreta
+        c.setStrokeColor(HexColor('#F8FAFC'))
+        c.setLineWidth(0.5)
+        c.line(x + 6*mm, y + 12*mm, x + self.width - 6*mm, y + 12*mm)
+
+        # Ícone e Subtítulo - Com cores de status
+        c.setFont(FONT_REG, 8.5)
         if self.trend == "up":
             c.setFillColor(COLOR_SUCCESS)
             icon = "▲"
@@ -147,7 +156,7 @@ class KPICard(Flowable):
             c.setFillColor(COLOR_TEXT_LIGHT)
             icon = "•"
             
-        c.drawString(x + 5*mm, y + 5*mm, f"{icon} {self.subtitle}")
+        c.drawString(x + 6*mm, y + 6*mm, f"{icon} {self.subtitle}")
 
 def footer_canvas(canvas, doc):
     """Desenha rodapé nas páginas de conteúdo (não na capa)"""
@@ -232,13 +241,15 @@ def generate_financial_pdf(context):
     style_insight = ParagraphStyle(
         'Insight', parent=styles['Normal'], 
         fontName=FONT_REG, fontSize=10, 
-        textColor=HexColor('#0B3B47'), 
-        backColor=HexColor('#E6FAFF'), 
-        padding=10, 
-        borderColor=COLOR_ACCENT, 
+        textColor=COLOR_TEXT_MAIN, 
+        backColor=HexColor('#F8FAFC'), # Fundo cinza quase branco
+        padding=12, 
+        borderColor=COLOR_ACCENT, # Borda neon lateral simulada ou contorno
         borderWidth=0.5, 
-        borderRadius=5, 
-        spaceAfter=5
+        borderRadius=8, 
+        leftIndent=0,
+        spaceAfter=8,
+        leading=14
     )
 
     # --- CONSTRUÇÃO DO CONTEÚDO ---
@@ -383,9 +394,11 @@ def generate_financial_pdf(context):
             ('ALIGN', (1,0), (-1,-1), 'RIGHT'),
             ('FONTNAME', (0,1), (-1,-1), FONT_REG),
             ('ROWBACKGROUNDS', (0,1), (-1,-1), [COLOR_BG_LIGHT, COLOR_WHITE]),
-            ('GRID', (0,0), (-1,-1), 0.5, HexColor('#E2E8F0')),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-            ('TOPPADDING', (0,0), (-1,-1), 6),
+            ('LINEBELOW', (0,0), (-1,0), 1.5, COLOR_PRIMARY), # Linha grossa sob o header
+            ('LINEBELOW', (0,1), (-1,-2), 0.2, HexColor('#E2E8F0')), # Linhas finas entre dados
+            ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+            ('TOPPADDING', (0,0), (-1,-1), 8),
+            ('LEFTPADDING', (0,0), (-1,-1), 10),
         ]))
         elements.append(t_cat)
     else:

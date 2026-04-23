@@ -1,3 +1,12 @@
+import sys
+from pathlib import Path
+
+# Garante que a raiz do projeto esteja no `sys.path` quando o script
+# for executado diretamente a partir da pasta `scripts/`.
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from database.database import get_db
 from models import Lancamento, Categoria
 from sqlalchemy import func
