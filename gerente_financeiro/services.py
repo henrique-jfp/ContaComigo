@@ -343,16 +343,16 @@ def gerar_contexto_relatorio(db: Session, telegram_id: int, mes: int, ano: int):
 
     # Todos os cálculos de receita, despesa e saldo agora usam a lista filtrada
     receitas_atual = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Receita')
-    despesas_atual = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Despesa')
+    despesas_atual = sum(abs(float(l.valor)) for l in lancamentos_financeiros if l.tipo == 'Despesa')
     saldo_atual = receitas_atual - despesas_atual
     taxa_poupanca_atual = (saldo_atual / receitas_atual) * 100 if receitas_atual > 0 else 0
 
     # O agrupamento de gastos também usa a lista filtrada
     gastos_por_categoria_atual = {}
     for l in lancamentos_financeiros:
-        if l.tipo == 'Despesa' and l.valor > 0:
+        if l.tipo == 'Despesa':
             cat_nome = l.categoria.nome if l.categoria else "Sem Categoria"
-            gastos_por_categoria_atual[cat_nome] = gastos_por_categoria_atual.get(cat_nome, 0) + float(l.valor)
+            gastos_por_categoria_atual[cat_nome] = gastos_por_categoria_atual.get(cat_nome, 0) + abs(float(l.valor))
     
     gastos_agrupados_final = sorted([(cat, val) for cat, val in gastos_por_categoria_atual.items()], key=lambda i: i[1], reverse=True)
 

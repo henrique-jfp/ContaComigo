@@ -38,6 +38,7 @@ from . import services as services_module
 from .gamification_utils import give_xp_for_action, touch_user_interaction
 from database.database import get_or_create_user
 from .monetization import ensure_user_plan_state, plan_allows_feature, upgrade_prompt_for_feature
+from .ai_service import _smart_ai_completion_async
 
 logger = logging.getLogger(__name__)
 
@@ -248,6 +249,48 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
         
         # 3. Debug do contexto (pode ser removido em produção)
         debug_contexto(contexto_dados)
+        
+        # 3.1 Gerar Análise de IA (Insights Reais do Alfredo)
+        logger.info("Gerando análise de IA para o relatório...")
+        try:
+            resumo_dados = (
+                f"Usuário: {getattr(contexto_dados.get('usuario'), 'nome_completo', 'Usuário')}\n"
+                f"Período: {contexto_dados.get('mes_nome')} de {contexto_dados.get('ano')}\n"
+                f"Receitas: R$ {contexto_dados.get('receita_total'):.2f}\n"
+                f"Despesas: R$ {contexto_dados.get('despesa_total'):.2f}\n"
+                f"Saldo: R$ {contexto_dados.get('saldo_mes'):.2f}\n"
+                f"Taxa de Poupança: {contexto_dados.get('taxa_poupanca'):.1f}%\n"
+            )
+            
+            gastos = contexto_dados.get('gastos_agrupados', [])
+            if gastos:
+                resumo_dados += "\nMaiores Gastos por Categoria:\n"
+                for cat, val in gastos[:5]:
+                    resumo_dados += f"- {cat}: R$ {val:.2f}\n"
+            
+            prompt_ia = [
+                {"role": "system", "content": (
+                    "Você é o Alfredo, um assistente financeiro inteligente, direto e parceiro. "
+                    "Analise os dados financeiros do usuário e forneça 3 a 4 insights curtos e acionáveis. "
+                    "Seja honesto sobre a situação (elogie se estiver bem, alerte se estiver gastando demais). "
+                    "Use um tom profissional mas próximo. Mantenha a resposta em português do Brasil e curta (máximo 700 caracteres)."
+                )},
+                {"role": "user", "content": f"Aqui estão meus dados do mês para o relatório:\n{resumo_dados}"}
+            ]
+            
+            analise_resultado = await _smart_ai_completion_async(prompt_ia)
+            
+            if analise_resultado:
+                if isinstance(analise_resultado, str):
+                    contexto_dados["analise_ia"] = analise_resultado
+                else:
+                    choice = (analise_resultado.get("choices") or [{}])[0]
+                    contexto_dados["analise_ia"] = (choice.get("message") or {}).get("content", "")
+            
+            logger.info("✅ Análise de IA gerada com sucesso para o relatório")
+        except Exception as e:
+            logger.error(f"Erro ao gerar análise de IA para relatório: {e}")
+            contexto_dados["analise_ia"] = "Não foi possível gerar a análise automática agora. Mas continue acompanhando seus gastos pelo Alfredo!"
         
         if not contexto_dados.get("has_data"):
             await update.message.reply_text(f"Não encontrei dados suficientes para {periodo_str} para gerar um relatório.")
