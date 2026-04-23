@@ -261,9 +261,30 @@ _CATEGORIAS_EXCLUIR = {'transferência', 'transferencias', 'transferências'}
 
 
 def _is_transferencia(lancamento) -> bool:
-    """Retorna True se o lançamento for uma transferência a ser ignorada."""
-    if lancamento.categoria:
-        return lancamento.categoria.nome.strip().lower() in _CATEGORIAS_EXCLUIR
+    """
+    Retorna True se o lançamento for uma transferência técnica interna (Fatura/Pix Crédito).
+    Isso alinha o cálculo do PDF com o restante do sistema (MiniApp e scripts CLI),
+    onde transferências reais continuam somando nos totais para conciliar o saldo do banco.
+    """
+    # 1. Tenta usar a propriedade centralizada no modelo (Recomendado)
+    if hasattr(lancamento, 'is_transferencia_interna'):
+        return lancamento.is_transferencia_interna
+    
+    # 2. Fallback para verificação manual de categoria caso o objeto seja um mock ou incompleto
+    cat_nome = ""
+    if hasattr(lancamento, 'categoria') and lancamento.categoria:
+        cat_nome = lancamento.categoria.nome
+    elif isinstance(lancamento, dict):
+        cat_nome = lancamento.get('categoria_nome', '')
+
+    if cat_nome.strip().lower() in _CATEGORIAS_EXCLUIR:
+        # Se for categoria Transferência, ainda precisamos checar se não é uma 
+        # transferência real que o usuário quer ver (comparando com a lógica do modelo)
+        desc = (getattr(lancamento, 'descricao', '') or '').upper()
+        if "PAGAMENTO FATURA" in desc or "PIX NO CRÉDITO" in desc or "PIX CRED" in desc:
+            return True
+        return False # Transferência real bancária
+        
     return False
 
 
