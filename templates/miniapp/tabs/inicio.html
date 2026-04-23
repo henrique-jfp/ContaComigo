@@ -327,7 +327,7 @@
                 <button type="button" data-home-chart-pill="chart-fluxo" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Fluxo de Caixa</button>
                 <button type="button" data-home-chart-pill="chart-distribuicao" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Distribuicao</button>
                 <button type="button" data-home-chart-pill="chart-sankey" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Fluxo</button>
-                <button type="button" data-home-chart-pill="chart-heatmap" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Densidade</button>
+                <button type="button" data-home-chart-pill="chart-heatmap" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition md:hidden">Densidade</button>
               </div>
             </div>
 
@@ -438,7 +438,7 @@
                 </div>
               </article>
 
-              <article id="chart-heatmap" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
+              <article id="chart-heatmap" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5 md:hidden">
                 <div class="mb-3 flex items-center justify-between">
                   <div>
                     <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Densidade</p>
@@ -455,16 +455,37 @@
               </article>
             </div>
           </div>
+
+          <!-- Alfredo Insights (Versão Desktop Esticada / Mobile Hidden) -->
+          <div class="hidden md:block glass-card alfredo-card home-reveal rounded-3xl p-8 mt-6" style="--delay: 200ms">
+            <div class="flex items-start gap-6">
+               <div class="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center shrink-0">
+                  <i data-lucide="sparkles" class="h-8 w-8 text-white"></i>
+               </div>
+               <div>
+                 <div class="alfredo-kicker mb-2 text-xs font-bold uppercase tracking-[0.24em] opacity-80">
+                   Alfredo em destaque
+                 </div>
+                 <p id="homeInsightDesktop" class="alfredo-body text-xl font-semibold leading-relaxed">Carregando análise estratégica do Alfredo...</p>
+               </div>
+            </div>
+          </div>
         </div>
 
         <!-- Coluna Lateral (Alfredo + Recent) -->
         <div class="space-y-4">
-          <div class="glass-card alfredo-card home-reveal rounded-3xl p-6" style="--delay: 165ms">
+          <!-- Alfredo Mobile Only -->
+          <div class="glass-card alfredo-card home-reveal rounded-3xl p-6 md:hidden" style="--delay: 165ms">
             <div class="alfredo-kicker mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em]">
               <i data-lucide="sparkles" class="h-4 w-4"></i>
               Alfredo em destaque
             </div>
             <p id="homeInsight" class="alfredo-body text-base font-semibold leading-relaxed">Carregando insight do Alfredo...</p>
+          </div>
+
+          <!-- Mapa de Calor Desktop Sidebar -->
+          <div id="homeHeatmapSidebar" class="hidden md:block home-reveal" style="--delay: 180ms">
+             <!-- Injetado via JS -->
           </div>
 
           <div class="glass-card home-reveal rounded-3xl p-6" style="--delay: 235ms">

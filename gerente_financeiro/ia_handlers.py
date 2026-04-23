@@ -377,7 +377,11 @@ _ALFREDO_TOOLS = [
                     },
                     "termo": {"type": "string", "description": "Termo de busca (ex: nome da categoria ou palavra na descrição)."},
                     "limite": {"type": "number", "description": "Quantidade de registros (padrão 5)."},
-                    "periodo": {"type": "string", "enum": ["este_mes", "mes_passado", "este_ano", "tudo"], "description": "Janela temporal da busca."}
+                    "periodo": {
+                        "type": "string", 
+                        "enum": ["esta_semana", "semana_passada", "este_mes", "mes_passado", "este_ano", "tudo"], 
+                        "description": "Janela temporal da busca. Padrão 'este_mes'."
+                    }
                 },
                 "required": ["tipo_busca"],
             },
@@ -2310,34 +2314,48 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 
                 if periodo == "este_mes":
                     query = query.filter(Lancamento.data_transacao >= inicio_mes)
+                elif periodo == "esta_semana":
+                    inicio_semana = hoje.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=hoje.weekday())
+                    query = query.filter(Lancamento.data_transacao >= inicio_semana)
+                elif periodo == "semana_passada":
+                    inicio_esta = hoje.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=hoje.weekday())
+                    inicio_passada = inicio_esta - timedelta(days=7)
+                    query = query.filter(Lancamento.data_transacao >= inicio_passada, Lancamento.data_transacao < inicio_esta)
                 elif periodo == "mes_passado":
                     pm_inicio = (inicio_mes - timedelta(days=1)).replace(day=1)
                     query = query.filter(Lancamento.data_transacao >= pm_inicio, Lancamento.data_transacao < inicio_mes)
                 elif periodo == "este_ano":
                     query = query.filter(Lancamento.data_transacao >= hoje.replace(month=1, day=1))
 
-                if tipo_busca == "maior_gasto":
-                    res = query.filter(or_(Lancamento.tipo.ilike("saida%"), Lancamento.tipo.ilike("desp%"), Lancamento.tipo.ilike("%pago%"), Lancamento.tipo.ilike("%enviado%"))).order_by(func.abs(Lancamento.valor).desc()).limit(limite).all()
-                elif tipo_busca == "maior_receita":
-                    res = query.filter(or_(Lancamento.tipo.ilike("entr%"), Lancamento.tipo.ilike("recei%"), Lancamento.tipo.ilike("%recebido%"))).order_by(func.abs(Lancamento.valor).desc()).limit(limite).all()
-                elif tipo_busca == "soma_categoria" and termo:
-                    # Busca soma cruzando Descrição, Categoria e Subcategoria
-                    soma = query.filter(or_(
+                # Filtro por termo (Categoria/Subcategoria/Descrição) se fornecido
+                if termo:
+                    query = query.filter(or_(
                         Lancamento.categoria.has(Categoria.nome.ilike(f"%{termo}%")),
                         Lancamento.subcategoria.has(Subcategoria.nome.ilike(f"%{termo}%")),
                         Lancamento.descricao.ilike(f"%{termo}%")
-                    )).with_entities(func.sum(Lancamento.valor)).scalar() or 0
+                    ))
+
+                if tipo_busca == "maior_gasto":
+                    res = query.filter(or_(
+                        Lancamento.tipo.ilike("saida%"),
+                        Lancamento.tipo.ilike("desp%"),
+                        Lancamento.tipo.ilike("%pago%"),
+                        Lancamento.tipo.ilike("%enviado%")
+                    )).order_by(func.abs(Lancamento.valor).desc()).limit(limite).all()
+                elif tipo_busca == "maior_receita":
+                    res = query.filter(or_(
+                        Lancamento.tipo.ilike("entr%"),
+                        Lancamento.tipo.ilike("recei%"),
+                        Lancamento.tipo.ilike("%recebido%")
+                    )).order_by(func.abs(Lancamento.valor).desc()).limit(limite).all()
+                elif tipo_busca == "soma_categoria" and termo:
+                    soma = query.with_entities(func.sum(Lancamento.valor)).scalar() or 0
                     res_str = f"Soma total para '{termo}': {_formatar_valor_brasileiro(abs(float(soma)))}"
                 elif tipo_busca == "lista_por_termo" and termo:
-                    # Lista cruzando Descrição, Categoria e Subcategoria
-                    res = query.filter(or_(
-                        Lancamento.descricao.ilike(f"%{termo}%"), 
-                        Lancamento.categoria.has(Categoria.nome.ilike(f"%{termo}%")),
-                        Lancamento.subcategoria.has(Subcategoria.nome.ilike(f"%{termo}%"))
-                    )).order_by(Lancamento.data_transacao.desc()).limit(limite).all()
-                else:
-
                     res = query.order_by(Lancamento.data_transacao.desc()).limit(limite).all()
+                else:
+                    res = query.order_by(Lancamento.data_transacao.desc()).limit(limite).all()
+
 
                 if not res_str:
                     if isinstance(res, list):
@@ -2366,16 +2384,15 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             
             prompt_humanizar = f"""
             Você é o Alfredo, o braço direito financeiro do {usuario_db.nome_completo}.
-            Sua missão é transformar dados brutos em conselhos inteligentes e conversas humanas.
             
-            DIRETRIZES:
-            1. Use emojis (💰, 🚀, ⚠️) de forma amigável.
-            2. NUNCA comece com "De acordo com os dados" ou "Resultado da busca". Vá direto ao assunto.
-            3. Se o usuário perguntou o maior gasto, destaque-o e diga se isso é preocupante ou normal.
-            4. Se não encontrar algo, seja empático: "Henrique, dei uma olhada aqui e não vi nenhum gasto com X este mês..."
+            DIRETRIZES DE OURO:
+            1. Use emojis (💰, 🚀, ⚠️) de forma amigável e moderada.
+            2. Vá direto ao assunto. Se o usuário perguntou sobre uma semana, foque nela.
+            3. Se o resultado da ferramenta vier vazio para uma categoria (ex: Transporte), diga: "Henrique, não encontrei nenhum gasto de 'Transporte' registrado nesta semana."
+            4. Se o usuário perguntou "e nessa semana" sem especificar categoria, assuma que ele quer o total geral da semana ou continue o assunto anterior.
             5. DATA HOJE: {hoje_str}
             
-            DADOS PARA INTERPRETAR:
+            DADOS REAIS DO BANCO (RESULTADO DA FERRAMENTA):
             {res_str}
             """
             
