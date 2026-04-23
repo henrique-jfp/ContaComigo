@@ -1805,6 +1805,12 @@ lucide.createIcons();
     function renderPremiumHeatmap(container, heatmapData, summary) {
       if (!container) return;
       
+      // Remove altura fixa se houver (para evitar scroll vertical interno)
+      if (container.classList.contains('h-[280px]')) {
+        container.classList.remove('h-[280px]');
+        container.classList.add('min-h-[280px]');
+      }
+
       const now = new Date();
       const monthNames = ['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
       const monthLabel = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
@@ -1814,27 +1820,27 @@ lucide.createIcons();
       const salT = recT - desT;
 
       container.innerHTML = `
-        <div class="premium-heatmap-wrap bg-telegram-card p-5 rounded-[20px] border border-telegram-separator shadow-sm">
-          <div class="flex justify-between items-center mb-6">
+        <div class="premium-heatmap-wrap bg-telegram-card p-3 md:p-5 rounded-[20px] border border-telegram-separator shadow-sm">
+          <div class="flex justify-between items-center mb-4 md:mb-6">
             <div>
-              <div class="text-[11px] font-bold text-brand font-mono tracking-widest uppercase">${monthLabel}</div>
-              <div class="text-base font-extrabold text-telegram-text">Mapa de Calor</div>
+              <div class="text-[9px] md:text-[11px] font-bold text-brand font-mono tracking-widest uppercase">${monthLabel}</div>
+              <div class="text-sm md:text-base font-extrabold text-telegram-text">Mapa de Calor</div>
             </div>
-            <div class="flex gap-3">
-               <div class="flex items-center gap-1.5 text-[9px] text-telegram-hint font-mono"><div class="w-2 h-2 rounded-sm bg-[#10b981]"></div> REC</div>
-               <div class="flex items-center gap-1.5 text-[9px] text-telegram-hint font-mono"><div class="w-2 h-2 rounded-sm bg-[#f43f5e]"></div> DES</div>
+            <div class="flex gap-2 md:gap-3">
+               <div class="flex items-center gap-1 md:gap-1.5 text-[8px] md:text-[9px] text-telegram-hint font-mono"><div class="w-1.5 h-1.5 md:w-2 md:h-2 rounded-sm bg-[#10b981]"></div> REC</div>
+               <div class="flex items-center gap-1 md:gap-1.5 text-[8px] md:text-[9px] text-telegram-hint font-mono"><div class="w-1.5 h-1.5 md:w-2 md:h-2 rounded-sm bg-[#f43f5e]"></div> DES</div>
             </div>
           </div>
 
-          <div class="grid grid-cols-[40px_repeat(7,1fr)] gap-1 mb-2">
+          <div class="grid grid-cols-[28px_repeat(7,1fr)] gap-1 mb-2">
             <div></div>
-            ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d => `<div class="text-center text-[9px] font-bold text-telegram-hint uppercase tracking-tighter">${d}</div>`).join('')}
+            ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d => `<div class="text-center text-[8px] md:text-[9px] font-bold text-telegram-hint uppercase tracking-tighter">${d}</div>`).join('')}
           </div>
 
           <div class="flex flex-col gap-1">
             ${Array.from({length: 6}).map((_, w) => `
-              <div class="grid grid-cols-[40px_repeat(7,1fr)] gap-1 items-center">
-                <div class="text-[8px] text-telegram-hint/30 text-right pr-2 font-mono">S${w+1}</div>
+              <div class="grid grid-cols-[28px_repeat(7,1fr)] gap-1 items-center">
+                <div class="text-[7px] md:text-[8px] text-telegram-hint/30 text-right pr-1 md:pr-2 font-mono">S${w+1}</div>
                 ${heatmapData.slice(w*7, (w+1)*7).map(d => {
                   if (!d.date) return `<div class="aspect-[1/0.8] rounded-md bg-telegram-separator/10 border border-telegram-separator/20 opacity-40"></div>`;
                   
@@ -1862,9 +1868,9 @@ lucide.createIcons();
                   return `
                     <div class="ph-cell aspect-[1/0.8] rounded-md border ${cellClass} relative overflow-hidden transition-all hover:scale-105 hover:z-10 active:scale-95 cursor-pointer" 
                          onclick="window.Telegram.WebApp.showAlert('📅 Dia ${d.date}\\n\\n${s.inc} Receitas: ${formatCurrencyBR(s.incT)}\\n${s.exp} Despesas: ${formatCurrencyBR(s.expT)}\\n\\nSaldo: ${formatCurrencyBR(s.incT - s.expT)}')">
-                      <span class="absolute top-1 left-1.5 text-[10px] font-bold ${textCol}">${d.date}</span>
+                      <span class="absolute top-0.5 md:top-1 left-1 md:left-1.5 text-[8px] md:text-[10px] font-bold ${textCol}">${d.date}</span>
                       ${total > 0 ? `
-                        <div class="absolute bottom-0 left-0 right-0 h-[3px] flex">
+                        <div class="absolute bottom-0 left-0 right-0 h-[2px] md:h-[3px] flex">
                           <div class="bg-[#10b981]/80" style="width:${incP}%"></div>
                           <div class="bg-white/30" style="width:${expP}%"></div>
                         </div>
@@ -1876,18 +1882,18 @@ lucide.createIcons();
             `).join('')}
           </div>
 
-          <div class="grid grid-cols-3 gap-3 mt-6 pt-5 border-t border-telegram-separator">
-            <div class="bg-telegram-card/50 p-3 rounded-xl border border-telegram-separator/50">
-              <div class="text-[8px] font-bold text-telegram-hint mb-1">RECEITAS</div>
-              <div class="text-xs font-black text-[#10b981] font-financial">${formatCurrencyBR(recT)}</div>
+          <div class="grid grid-cols-3 gap-2 md:gap-3 mt-4 md:mt-6 pt-4 md:pt-5 border-t border-telegram-separator">
+            <div class="bg-telegram-card/50 p-2 md:p-3 rounded-xl border border-telegram-separator/50">
+              <div class="text-[7px] md:text-[8px] font-bold text-telegram-hint mb-0.5 md:mb-1 uppercase">Rec</div>
+              <div class="text-[10px] md:text-xs font-black text-[#10b981] font-financial">${formatCurrencyBR(recT)}</div>
             </div>
-            <div class="bg-telegram-card/50 p-3 rounded-xl border border-telegram-separator/50">
-              <div class="text-[8px] font-bold text-telegram-hint mb-1">DESPESAS</div>
-              <div class="text-xs font-black text-[#f43f5e] font-financial">${formatCurrencyBR(desT)}</div>
+            <div class="bg-telegram-card/50 p-2 md:p-3 rounded-xl border border-telegram-separator/50">
+              <div class="text-[7px] md:text-[8px] font-bold text-telegram-hint mb-0.5 md:mb-1 uppercase">Des</div>
+              <div class="text-[10px] md:text-xs font-black text-[#f43f5e] font-financial">${formatCurrencyBR(desT)}</div>
             </div>
-            <div class="bg-telegram-card/50 p-3 rounded-xl border border-telegram-separator/50">
-              <div class="text-[8px] font-bold text-telegram-hint mb-1">SALDO</div>
-              <div class="text-xs font-black text-brand font-financial">${formatCurrencyBR(salT)}</div>
+            <div class="bg-telegram-card/50 p-2 md:p-3 rounded-xl border border-telegram-separator/50">
+              <div class="text-[7px] md:text-[8px] font-bold text-telegram-hint mb-0.5 md:mb-1 uppercase">Sal</div>
+              <div class="text-[10px] md:text-xs font-black text-brand font-financial">${formatCurrencyBR(salT)}</div>
             </div>
           </div>
         </div>
