@@ -1319,12 +1319,19 @@ def _resumo_semana_local(db, usuario_id: int) -> str:
 
 
 def _resumo_saldo_local(saldo: float, entradas: float, saidas: float) -> str:
-    status = "🟢 Positivo" if saldo >= 0 else "🔴 Negativo"
+    res_mes = round(entradas - saidas, 2)
+    status_mes = "🟢" if res_mes >= 0 else "🔴"
+    status_pat = "🟢" if saldo >= 0 else "🔴"
+    
     return (
-        f"💰 <b>Situação Financeira</b>\n\n"
-        f"• <b>Saldo Disponível:</b> <code>{_formatar_valor_brasileiro(saldo)}</code> ({status})\n"
-        f"• <b>Entradas:</b> <code>{_formatar_valor_brasileiro(entradas)}</code>\n"
-        f"• <b>Saídas:</b> <code>{_formatar_valor_brasileiro(saidas)}</code>"
+        f"💰 <b>Resumo das Suas Contas</b>\n\n"
+        f"<b>Mês Atual:</b>\n"
+        f"• Entradas: <code>{_formatar_valor_brasileiro(entradas)}</code>\n"
+        f"• Saídas: <code>{_formatar_valor_brasileiro(saidas)}</code>\n"
+        f"• Resultado: <code>{_formatar_valor_brasileiro(res_mes)}</code> {status_mes}\n\n"
+        f"<b>Geral (Patrimônio):</b>\n"
+        f"• Disponível Total: <code>{_formatar_valor_brasileiro(saldo)}</code> {status_pat}\n\n"
+        f"<i>Os números acima ignoram transferências internas para refletir seus gastos reais.</i>"
     )
 
 
@@ -2136,13 +2143,18 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
 
         # --- ÚLTIMOS LANÇAMENTOS (SUPER TRUNCADOS) ---
         limit_lanc = 5
-        base_lanc = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id).order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc()).limit(limit_lanc * 3).all()
+        base_lanc = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id).order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc()).limit(limit_lanc * 5).all()
         
         def _fmt_l(l):
             return {"d": l.data_transacao.strftime('%Y-%m-%d'), "desc": (l.descricao[:20] + '...') if l.descricao and len(l.descricao) > 20 else l.descricao, "v": float(l.valor or 0), "t": "Entrada" if str(l.tipo).lower().startswith(('entr', 'recei')) else "Saída", "cat": (l.categoria.nome[:15]) if l.categoria else "Outros"}
 
-        ultimas_receitas = [_fmt_l(l) for l in base_lanc if str(l.tipo).lower().startswith(('entr', 'recei'))][:3]
-        ultimas_despesas = [_fmt_l(l) for l in base_lanc if not str(l.tipo).lower().startswith(('entr', 'recei')) and l.id_subcategoria not in ignore_ids][:5]
+        # Filtro de transações reais (Sincronizado com os totais)
+        def _is_real_transacao(l):
+            t = str(l.tipo).lower()
+            return t not in ["transferencia", "transferência", "transfer"]
+
+        ultimas_receitas = [_fmt_l(l) for l in base_lanc if str(l.tipo).lower().startswith(('entr', 'recei')) and _is_real_transacao(l)][:3]
+        ultimas_despesas = [_fmt_l(l) for l in base_lanc if not str(l.tipo).lower().startswith(('entr', 'recei')) and _is_real_transacao(l) and l.id_subcategoria not in ignore_ids][:5]
 
         # --- MEMÓRIA HISTÓRICA (MÊS ANTERIOR) ---
         mes_anterior_inicio = (inicio_mes - timedelta(days=1)).replace(day=1)
