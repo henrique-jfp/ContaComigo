@@ -2004,30 +2004,32 @@ lucide.createIcons();
             }
             
             homeCardsGrid.innerHTML += `
-              <div class="min-w-[170px] glass-card rounded-2xl p-3 border border-white/5 shrink-0 snap-center shadow-lg">
-                <div class="flex items-center gap-2 mb-3">
-                  <div class="w-7 h-7 rounded-full ${bgAccent} flex items-center justify-center">
-                    <i data-lucide="credit-card" class="w-3.5 h-3.5 ${iconColor}"></i>
+              <div class="glass-card p-4 rounded-2xl bg-telegram-card/40 min-w-[150px] shrink-0 snap-center border border-telegram-separator/30">
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="w-6 h-6 rounded-lg ${bgAccent} flex items-center justify-center">
+                    <i data-lucide="credit-card" class="w-3 h-3 ${iconColor}"></i>
                   </div>
-                  <span class="text-[10px] font-bold text-telegram-text truncate">${card.nome}</span>
+                  <span class="text-[9px] font-black text-telegram-hint uppercase truncate">${card.nome}</span>
                   ${badge}
                 </div>
+                
                 <div class="space-y-0.5">
-                  <p class="text-[9px] font-bold uppercase tracking-tight text-telegram-hint">Fatura Atual</p>
-                  <p class="text-base font-black text-telegram-text">${formatCurrencyBR(fatura)}</p>
+                  <p class="text-[8px] font-black text-telegram-hint uppercase mb-0.5">Fatura Atual</p>
+                  <p class="text-sm font-black text-telegram-text font-financial">${formatCurrencyBR(fatura)}</p>
+                  
                   <div class="flex items-end justify-between mt-3">
                     <div class="flex flex-col">
-                      <span class="text-[8px] font-bold text-telegram-hint uppercase">Vence</span>
-                      <span class="text-[10px] font-extrabold text-telegram-text">${venceStr}</span>
+                      <span class="text-[7px] font-black text-telegram-hint/50 uppercase tracking-widest">Vence</span>
+                      <span class="text-[9px] font-bold text-telegram-text">${venceStr}</span>
                     </div>
-                    <div class="text-right">
+                    <div class="text-right flex flex-col items-end">
                       ${pct !== null ? `
-                        <span class="text-[9px] font-black ${statusColor}">${pct}%</span>
-                        <div class="w-12 h-1 bg-white/5 rounded-full mt-0.5 overflow-hidden">
+                        <span class="text-[8px] font-black ${statusColor} mb-0.5">${pct}%</span>
+                        <div class="w-10 h-0.5 bg-telegram-separator/20 rounded-full overflow-hidden">
                           <div class="h-full ${statusColor.replace('text', 'bg')}" style="width: ${pct}%"></div>
                         </div>
                       ` : `
-                        <span class="text-[8px] font-bold text-telegram-hint italic">S/ Limite</span>
+                        <span class="text-[7px] font-black text-telegram-hint/40 italic">S/ LIMITE</span>
                       `}
                     </div>
                   </div>
