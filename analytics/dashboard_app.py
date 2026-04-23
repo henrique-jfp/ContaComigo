@@ -1430,9 +1430,8 @@ def miniapp_modo_deus():
 
             entradas_mes_real = 0.0
             for lanc in lancamentos_entrada_mes:
-                # Ignora apenas se for explicitamente marcado como Transferência (ex: crédito no cartão)
-                # ou se for pagamento de fatura (ID 584)
-                if str(lanc.tipo).lower() == "transferência" or lanc.id_subcategoria == 584:
+                # Usa a regra centralizada para ignorar faturas e transferências internas
+                if lanc.is_transferencia_interna:
                     continue
                 entradas_mes_real += abs(float(lanc.valor))
             
@@ -1448,8 +1447,8 @@ def miniapp_modo_deus():
 
             saidas_mes_real = 0.0
             for lanc in lancamentos_saida_mes:
-                # Ignora apenas se for pagamento de fatura (ID 584) para evitar duplicidade com compras individuais
-                if lanc.id_subcategoria == 584 or str(lanc.tipo).lower() == "transferência":
+                # Usa a regra centralizada para evitar duplicidade com faturas e transferências
+                if lanc.is_transferencia_interna:
                     continue
                 saidas_mes_real += abs(float(lanc.valor))
             

@@ -425,7 +425,7 @@ def _sync_spending_limits(usuario: Usuario, db: Session, client: PierreClient):
             ext_id = str(lim.get("id") or "")
             if not ext_id: continue
             
-            cat_name = lim.get("category")
+            cat_name = (lim.get("category") or "").strip().title()
             if not cat_name: continue
 
             # Busca categoria local para associar

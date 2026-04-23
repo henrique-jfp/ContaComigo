@@ -32,21 +32,22 @@ TIPOS_DESPESA = ("Saída", "Despesa")
 # ============================================================================
 
 def calcular_gastos_mes_atual(usuario_id: int) -> float:
-    """Calcula o total de gastos do mês atual"""
+    """Calcula o total de gastos do mês atual (filtrando transferências internas)"""
     db = next(get_db())
     try:
         hoje = datetime.now()
         
-        total = db.query(func.sum(Lancamento.valor)).filter(
+        lancamentos = db.query(Lancamento).filter(
             and_(
                 Lancamento.id_usuario == usuario_id,
                 Lancamento.tipo.in_(TIPOS_DESPESA),
                 extract('year', Lancamento.data_transacao) == hoje.year,
                 extract('month', Lancamento.data_transacao) == hoje.month
             )
-        ).scalar()
+        ).all()
         
-        return float(total or 0)
+        total = sum(float(l.valor) for l in lancamentos if not l.is_transferencia_interna)
+        return float(total)
     finally:
         db.close()
 

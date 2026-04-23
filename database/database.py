@@ -211,6 +211,7 @@ def popular_dados_iniciais(db_session: Session):
 
     # (O resto da função continua exatamente igual)
     for nome_cat, subs in categorias_padrao.items():
+        nome_cat = nome_cat.strip().title()
         categoria_obj = db_session.query(Categoria).filter(func.lower(Categoria.nome) == func.lower(nome_cat)).first()
         if not categoria_obj:
             categoria_obj = Categoria(nome=nome_cat)
@@ -220,6 +221,7 @@ def popular_dados_iniciais(db_session: Session):
             logging.info(f"Categoria '{nome_cat}' criada.")
 
         for nome_sub in subs:
+            nome_sub = nome_sub.strip().title()
             subcategoria_obj = db_session.query(Subcategoria).filter(
                 and_(Subcategoria.id_categoria == categoria_obj.id, func.lower(Subcategoria.nome) == func.lower(nome_sub))
             ).first()

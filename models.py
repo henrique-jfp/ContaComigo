@@ -186,6 +186,27 @@ class Lancamento(Base):
     conta = relationship("Conta", back_populates="lancamentos")
     itens = relationship("ItemLancamento", back_populates="lancamento", cascade="all, delete-orphan")
 
+    @property
+    def is_transferencia_interna(self) -> bool:
+        """
+        Identifica se o lançamento é um ajuste técnico (Fatura/Pix Crédito) 
+        que gera duplicidade de saldo. Transferências bancárias comuns 
+        NÃO são marcadas aqui para que apareçam nos totais do Open Finance.
+        """
+        # 1. Pagamento de Fatura (Gera duplicidade com as compras individuais)
+        if self.subcategoria and "Pagamento De Fatura" in self.subcategoria.nome:
+            return True
+        
+        # 2. Pix no Crédito (Apenas a parte do 'Crédito Liberado' e o 'Pix Cred' técnico)
+        desc = (self.descricao or "").upper()
+        if "PIX NO CRÉDITO" in desc or "PIX NO CREDITO" in desc or "PIX CRED A VISTA" in desc:
+            return True
+        if "CREDITO LIBERADO" in desc or "CRÉDITO LIBERADO" in desc:
+            if "PIX" in desc:
+                return True
+
+        return False
+
 class ItemLancamento(Base):
     __tablename__ = 'itens_lancamento'
     id = Column(Integer, primary_key=True, autoincrement=True)

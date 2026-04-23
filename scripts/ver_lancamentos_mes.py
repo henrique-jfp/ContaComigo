@@ -27,14 +27,7 @@ def ver_lancamentos_mes(user_id: int, year: int, month: int, output_json: bool =
 
         # transações do mês com nome da categoria (quando existir)
         tx_rows = (
-            db.query(
-                Lancamento.id,
-                Lancamento.data_transacao,
-                Lancamento.descricao,
-                Lancamento.valor,
-                Lancamento.id_categoria,
-                Categoria.nome.label('categoria_nome'),
-            )
+            db.query(Lancamento)
             .outerjoin(Categoria, Lancamento.id_categoria == Categoria.id)
             .filter(Lancamento.id_usuario == user_id)
             .filter(Lancamento.data_transacao >= start)
@@ -43,37 +36,47 @@ def ver_lancamentos_mes(user_id: int, year: int, month: int, output_json: bool =
             .all()
         )
 
-        # total geral do mês
-        total_month = db.query(func.coalesce(func.sum(Lancamento.valor), 0)) \
-            .filter(Lancamento.id_usuario == user_id) \
-            .filter(Lancamento.data_transacao >= start) \
-            .filter(Lancamento.data_transacao < end) \
-            .scalar() or 0
-
+        # total geral do mês (filtrando transferências internas)
+        total_val = 0.0
+        
         # agrupa por categoria
         cats = {}
         transactions = []
         for r in tx_rows:
+            is_interna = r.is_transferencia_interna
             tx = {
-                'id': int(r[0]),
-                'date': r[1].strftime('%Y-%m-%d'),
-                'description': r[2] or '',
-                'amount': float(r[3]),
-                'category_id': int(r[4]) if r[4] is not None else None,
-                'category_name': r[5] if r[5] is not None else 'Uncategorized',
+                'id': int(r.id),
+                'date': r.data_transacao.strftime('%Y-%m-%d'),
+                'description': r.descricao or '',
+                'amount': float(r.valor),
+                'category_id': int(r.id_categoria) if r.id_categoria is not None else None,
+                'category_name': r.categoria.nome if r.categoria else 'Uncategorized',
+                'is_internal': is_interna
             }
             transactions.append(tx)
 
+            # Somente soma no total se NÃO for transferência interna
+            if not is_interna:
+                total_val += tx['amount']
+
             key = (tx['category_id'], tx['category_name'])
             if key not in cats:
-                cats[key] = {'total_amount': 0.0, 'count': 0}
-            cats[key]['total_amount'] += tx['amount']
-            cats[key]['count'] += 1
+                cats[key] = {'total_amount': 0.0, 'count': 0, 'internal_only': True}
+            
+            # Se encontrar pelo menos um lançamento real na categoria, ela não é "internal_only"
+            if not is_interna:
+                cats[key]['total_amount'] += tx['amount']
+                cats[key]['count'] += 1
+                cats[key]['internal_only'] = False
+            else:
+                # Mantemos o rastro mas não somamos no total da categoria para o gráfico
+                pass
 
         # monta lista de categorias com porcentagem
         categories = []
-        total_val = float(total_month)
         for (cat_id, cat_name), v in cats.items():
+            if v['internal_only']: continue # Pula categorias que só tem faturas/transferências
+            
             pct = (v['total_amount'] / total_val * 100) if total_val > 0 else 0.0
             categories.append({
                 'category_id': cat_id,
@@ -114,8 +117,11 @@ def ver_lancamentos_mes(user_id: int, year: int, month: int, output_json: bool =
             def summarize(tx_map):
                 out = []
                 for cat, txs in tx_map.items():
-                    total = sum(x['amount'] for x in txs)
-                    out.append({'category_name': cat, 'total_amount': round(total, 2), 'count': len(txs)})
+                    # Ignora transações internas na soma do cabeçalho de receitas/despesas
+                    total = sum(x['amount'] for x in txs if not x.get('is_internal'))
+                    count = len([x for x in txs if not x.get('is_internal')])
+                    if count > 0 or total != 0:
+                        out.append({'category_name': cat, 'total_amount': round(total, 2), 'count': count})
                 return out
 
             inc_summary = summarize(tx_income_by_cat)
@@ -126,7 +132,7 @@ def ver_lancamentos_mes(user_id: int, year: int, month: int, output_json: bool =
             exp_summary.sort(key=lambda x: x['total_amount'])
 
             # cabeçalhos resumidos
-            lines.append('RECEITAS:')
+            lines.append('RECEITAS (Orgânicas):')
             if inc_summary:
                 idx = 1
                 for c in inc_summary:
@@ -136,7 +142,7 @@ def ver_lancamentos_mes(user_id: int, year: int, month: int, output_json: bool =
                 lines.append('Nenhuma receita no período.')
 
             lines.append('-' * 70)
-            lines.append('DESPESAS:')
+            lines.append('DESPESAS (Orgânicas):')
             if exp_summary:
                 idx = 1
                 for c in exp_summary:
@@ -150,18 +156,29 @@ def ver_lancamentos_mes(user_id: int, year: int, month: int, output_json: bool =
             # detalhes por categoria (receitas)
             for c in inc_summary:
                 cat_name = c['category_name']
-                lines.append(f"\nCategoria (Receita): {cat_name} — {c['count']} lanç. — R$ {c['total_amount']:.2f}")
+                lines.append(f"\nCategoria (Receita): {cat_name}")
                 lines.append('-' * 40)
                 for t in tx_income_by_cat.get(cat_name, []):
-                    lines.append(f"{t['date']} | R$ {t['amount']:.2f} | {t['description']}")
+                    mark = " [INTERNA]" if t.get('is_internal') else ""
+                    lines.append(f"{t['date']} | R$ {t['amount']:.2f} | {t['description']}{mark}")
 
             # detalhes por categoria (despesas)
             for c in exp_summary:
                 cat_name = c['category_name']
-                lines.append(f"\nCategoria (Despesa): {cat_name} — {c['count']} lanç. — R$ {c['total_amount']:.2f}")
+                lines.append(f"\nCategoria (Despesa): {cat_name}")
                 lines.append('-' * 40)
                 for t in tx_expense_by_cat.get(cat_name, []):
-                    lines.append(f"{t['date']} | R$ {t['amount']:.2f} | {t['description']}")
+                    mark = " [INTERNA]" if t.get('is_internal') else ""
+                    lines.append(f"{t['date']} | R$ {t['amount']:.2f} | {t['description']}{mark}")
+
+            # Seção de Movimentações Internas (Ignoradas nos totais)
+            internas = [t for t in transactions if t.get('is_internal')]
+            if internas:
+                lines.append('\n' + '-' * 70)
+                lines.append('MOVIMENTAÇÕES INTERNAS (Ignoradas nos totais acima):')
+                lines.append('-' * 70)
+                for t in internas:
+                    lines.append(f"{t['date']} | R$ {t['amount']:>9.2f} | {t['category_name']:<20} | {t['description']}")
 
             lines.append('\n' + '=' * 70)
             return '\n'.join(lines)

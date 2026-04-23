@@ -1,0 +1,177 @@
+======================================================================
+Resumo mês 2026-04 — total: R$ 1581.03
+----------------------------------------------------------------------
+RECEITAS (Orgânicas):
+1) Financeiro: R$ 4239.07 (4 lanç.)
+----------------------------------------------------------------------
+DESPESAS (Orgânicas):
+1) Transferências: R$ -1098.79 (26 lanç.)
+2) Transporte: R$ -797.69 (15 lanç.)
+3) Alimentação: R$ -327.67 (25 lanç.)
+4) Juros E Encargos: R$ -291.99 (23 lanç.)
+5) Compras: R$ -76.27 (7 lanç.)
+6) Saúde: R$ -26.52 (3 lanç.)
+7) Serviços E Assinaturas: R$ -23.80 (2 lanç.)
+8) Financeiro: R$ -9.31 (1 lanç.)
+9) Moradia: R$ -6.00 (2 lanç.)
+----------------------------------------------------------------------
+
+Categoria (Receita): Financeiro
+----------------------------------------
+2026-04-04 | R$ 1500.00 | Pix recebido - Natasha Gabrielle Andrade Santos
+2026-04-07 | R$ 5.00 | Pix recebido - Henrique De Jesus Freitas Pereira
+2026-04-09 | R$ 1130.07 | Pix recebido - Henrique De Jesus Freitas Pereira
+2026-04-16 | R$ 1604.00 | Pix recebido - Henrique De Jesus Freitas Pereira
+
+Categoria (Despesa): Transferências
+----------------------------------------
+2026-04-04 | R$ -23.76 | Pix enviado  - Pagar Me Pagamentos
+2026-04-05 | R$ -23.76 | Pix enviado devolvido - Pagar Me Pagamentos
+2026-04-06 | R$ -33.11 | Pix enviado  - Shpp Brasil Instituicao De Pag
+2026-04-07 | R$ -30.80 | Pix enviado  - Laura Formighieri Freitas Pereira
+2026-04-07 | R$ -9.00 | Pix enviado  - 48015286 Noemia Cruz
+2026-04-07 | R$ -22.00 | Pix enviado  - 57361048 Maycon Feitosa Ribeiro
+2026-04-08 | R$ -6.00 | Pix enviado  - 48015286 Noemia Cruz
+2026-04-09 | R$ -520.00 | Pix enviado  - Michel De Lima Cavalcante
+2026-04-10 | R$ -8.00 | Pix enviado  - Veronica Rodrigues Da Silva
+2026-04-16 | R$ -7.00 | Pix enviado  - Veronica Rodrigues Da Silva
+2026-04-17 | R$ -40.05 | Pix enviado  - Henrique De Jesus Freitas Pereira
+2026-04-18 | R$ -10.00 | Pix enviado  - Eduardo Da Guia Da Silva
+2026-04-18 | R$ -110.00 | Pix enviado  - Henrique De Jesus Freitas Pereira
+2026-04-18 | R$ -10.00 | Pix enviado  - Henrique De Jesus Freitas Pereira
+2026-04-18 | R$ -3.00 | Pix enviado  - 57758469 Celma Da Silva Andrade
+2026-04-18 | R$ -6.00 | Pix enviado  - Resilene Santina Da Conceicao
+2026-04-19 | R$ -63.19 | Pix enviado  - Pagar Me Pagamentos
+2026-04-19 | R$ -63.19 | Pix enviado devolvido - Pagar Me Pagamentos
+2026-04-19 | R$ -64.18 | Pix enviado  - Pagar Me Pagamentos
+2026-04-20 | R$ -4.00 | Pix enviado  - 57758469 Celma Da Silva Andrade
+2026-04-20 | R$ -7.00 | Pix enviado  - Angela Molinaro
+2026-04-20 | R$ -4.00 | Pix enviado  - Veronica Rodrigues Da Silva
+2026-04-21 | R$ -3.00 | Pix enviado  - Carmem Lucia Lima Ribeiro
+2026-04-21 | R$ -15.00 | Pix enviado  - Michel De Lima Cavalcante
+2026-04-22 | R$ -4.00 | Pix enviado  - 57758469 Celma Da Silva Andrade
+2026-04-22 | R$ -8.75 | Pix enviado  - 57758469 Celma Da Silva Andrade
+
+Categoria (Despesa): Transporte
+----------------------------------------
+2026-04-01 | R$ -47.50 | rocal prod de petroleo rio de janeir bra
+2026-04-07 | R$ -33.04 | ROCAL PROD DE PETROLEO RIO DE JANEIR BRA
+2026-04-07 | R$ -293.09 | ZAPAY DETRANRJ         BRASILIA      BRA
+2026-04-09 | R$ -30.51 | POSTOS I C E S LTDA    RIO DE JANEIR BRA
+2026-04-12 | R$ -36.71 | POSTO DE GASOLINA BAND RIO DE JANEIR BRA
+2026-04-13 | R$ -40.14 | ROCAL PROD DE PETROLEO RIO DE JANEIR BRA
+2026-04-14 | R$ -43.46 | ROCAL PROD DE PETROLEO RIO DE JANEIR BRA
+2026-04-14 | R$ -25.96 | POSTO DE GASOLINA JOCK RIO DE JANEIR BRA
+2026-04-16 | R$ -36.81 | ROCAL PROD DE PETROLEO RIO DE JANEIR BRA
+2026-04-17 | R$ -48.71 | ROCAL PROD DE PETROLEO RIO DE JANEIR BRA
+2026-04-17 | R$ -21.24 | PONEY POSTO            RIO DE JANEIR BRA
+2026-04-18 | R$ -37.05 | POSTO GNOMO            RIO DE JANEIR BRA
+2026-04-20 | R$ -26.45 | POSTO EXCEDE           RIO DE JANEIR BRA
+2026-04-20 | R$ -36.57 | COMBUSTIVEIS LOBINHO L
+2026-04-21 | R$ -40.45 | ROCAL PROD DE PETROLEO RIO DE JANEIR BRA
+
+Categoria (Despesa): Alimentação
+----------------------------------------
+2026-04-01 | R$ -11.74 | mercado extra-1635     r. de janeiro bra
+2026-04-06 | R$ -3.00 | A FORMIGUINHA          RIO DE JANEIR BRA
+2026-04-08 | R$ -15.99 | Food To Save
+2026-04-08 | R$ -5.49 | PAO DE ACUCAR-1281     R. DE JANEIRO BRA
+2026-04-09 | R$ -3.00 | Pix enviado  - A Formiguinha
+2026-04-10 | R$ -16.64 | MERCADO EXTRA-1635     R. DE JANEIRO BRA
+2026-04-10 | R$ -3.00 | A FORMIGUINHA          RIO DE JANEIR BRA
+2026-04-12 | R$ -6.99 | PAO DE ACUCAR-1281     R. DE JANEIRO BRA
+2026-04-12 | R$ -3.00 | Pix enviado  - Essential Distribuidora De Alimentos E Bebidas Ltda
+2026-04-13 | R$ -14.00 | A FORMIGUINHA          RIO DE JANEIR BRA
+2026-04-13 | R$ -3.00 | A FORMIGUINHA          RIO DE JANEIR BRA
+2026-04-14 | R$ -6.00 | ZONA SUL FL 21         RIO DE JANEIR BRA
+2026-04-14 | R$ -17.25 | CAFE E BAR POLUX LTDA  RIO DE JANEIR BRA
+2026-04-16 | R$ -13.00 | Food To Save
+2026-04-16 | R$ -14.00 | Bonomia Lanches
+2026-04-16 | R$ -4.20 | DL DLRAPPI BR          RIO JANEIRO   BRA
+2026-04-16 | R$ -11.99 | PAO DE ACUCAR-1287     R. DE JANEIRO BRA
+2026-04-16 | R$ -9.75 | A FORMIGUINHA          RIO DE JANEIR BRA
+2026-04-17 | R$ -2.50 | RAPPI RAPPI BRASIL INT SAO PAULO     BRA
+2026-04-17 | R$ -4.50 | Pix enviado  - A Formiguinha
+2026-04-18 | R$ -118.45 | ZONA SUL FL 38         RIO DE JANEIR BRA
+2026-04-19 | R$ -20.99 | ZONA SUL FL 28         RIO DE JANEIR BRA
+2026-04-19 | R$ -3.00 | Pix enviado  - A Formiguinha
+2026-04-20 | R$ -13.19 | PAO DE ACUCAR-1412     R. DE JANEIRO BRA
+2026-04-21 | R$ -3.00 | Compra no débito - A Formiguinha          Rio De Janeir Bra
+
+Categoria (Despesa): Juros E Encargos
+----------------------------------------
+2026-04-05 | R$ -1.12 | IOF ADICIONAL DB PF
+2026-04-05 | R$ -0.08 | IOF ADICIONAL DB PF
+2026-04-05 | R$ -0.04 | JUROS PROJETADOS
+2026-04-05 | R$ -0.70 | ENCARGOS ROTATIVO
+2026-04-05 | R$ -0.22 | IOF DIARIO DB PF
+2026-04-05 | R$ -15.56 | ENCARGOS ROTATIVO
+2026-04-05 | R$ -0.20 | IOF DIARIO DB PF
+2026-04-05 | R$ -205.92 | ENCARGOS ROTATIVO
+2026-04-05 | R$ -41.12 | MULTA POR ATRASO
+2026-04-05 | R$ -0.87 | JUROS DE MORA
+2026-04-05 | R$ -0.06 | JUROS DE MORA
+2026-04-05 | R$ -5.13 | JUROS DE MORA
+2026-04-05 | R$ -0.39 | JUROS DE MORA
+2026-04-05 | R$ -0.50 | IOF ADICIONAL DB PF
+2026-04-05 | R$ -6.68 | IOF ADICIONAL DB PF
+2026-04-05 | R$ -6.24 | ENCARGOS ROTATIVO
+2026-04-05 | R$ -0.02 | IOF DIARIO DB PF
+2026-04-05 | R$ -2.91 | IOF DIARIO DB PF
+2026-04-08 | R$ -1.05 | JUROS PIX CREDITO
+2026-04-09 | R$ -0.51 | JUROS PIX CREDITO
+2026-04-10 | R$ -1.31 | JUROS PIX CREDITO
+2026-04-12 | R$ -0.46 | JUROS PIX CREDITO
+2026-04-22 | R$ -0.90 | JUROS PIX CREDITO
+
+Categoria (Despesa): Compras
+----------------------------------------
+2026-04-01 | R$ -6.00 | Rita Mari Barros
+2026-04-08 | R$ -2.21 | Render
+2026-04-12 | R$ -3.40 | Casas Pedro
+2026-04-17 | R$ -2.50 | S M C Comercio Atacadi
+2026-04-20 | R$ -3.40 | CASAS PEDRO
+2026-04-20 | R$ -0.90 | IFD OLA COMERCIO DE AC
+2026-04-20 | R$ -57.86 | IFD D.C. GALVAO COMERC
+
+Categoria (Despesa): Saúde
+----------------------------------------
+2026-04-16 | R$ -4.59 | DROGARIAS PACHECO      RIO DE JANEIR BRA
+2026-04-19 | R$ -6.85 | RD SAUDE ONLINE        SAO PAULO     BRA
+2026-04-19 | R$ -15.08 | Raia
+
+Categoria (Despesa): Serviços E Assinaturas
+----------------------------------------
+2026-04-01 | R$ -19.90 | amazonprimebr          sao paulo     bra
+2026-04-05 | R$ -3.90 | Deb Cartao + Protegido - Seguro Cartão Protegido/plano Standard
+
+Categoria (Despesa): Financeiro
+----------------------------------------
+2026-04-06 | R$ -9.31 | Rotativo Saldo
+
+Categoria (Despesa): Moradia
+----------------------------------------
+2026-04-05 | R$ -3.00 | Pix enviado  - 57758469 Celma Da Silva Andrade Ferreira
+2026-04-09 | R$ -3.00 | Pix enviado  - 57758469 Celma Da Silva Andrade Ferreira
+
+----------------------------------------------------------------------
+MOVIMENTAÇÕES INTERNAS (Ignoradas nos totais acima):
+----------------------------------------------------------------------
+2026-04-04 | R$   1394.94 | Cartão De Crédito    | pagamento on line
+2026-04-04 | R$  -1394.94 | Cartão De Crédito    | Pagamento efetuado - Pagamento Fatura - HENRIQUE DE JESUS FREITAS PEREIRA
+2026-04-08 | R$     -6.00 | Empréstimos E Financiamentos | PIX CRED A VISTA 48015286 NOEMIA CRUZ
+2026-04-08 | R$      6.00 | Empréstimos E Financiamentos | Crédito liberado - Pix No Crédito
+2026-04-09 | R$     -3.00 | Empréstimos E Financiamentos | PIX CRED A VISTA 57758469 CELMA DA SI
+2026-04-09 | R$      3.00 | Empréstimos E Financiamentos | Crédito liberado - Pix No Crédito
+2026-04-09 | R$   -611.00 | Cartão De Crédito    | Pagamento efetuado - CARTOES CAIXA ELO PF
+2026-04-10 | R$     -8.00 | Empréstimos E Financiamentos | PIX CRED A VISTA VERONICA RODRIGUES D
+2026-04-10 | R$      8.00 | Empréstimos E Financiamentos | Crédito liberado - Pix No Crédito
+2026-04-12 | R$     -3.00 | Empréstimos E Financiamentos | PIX CRED A VISTA ESSENTIAL DISTRIBUID
+2026-04-12 | R$      3.00 | Empréstimos E Financiamentos | Crédito liberado - Pix No Crédito
+2026-04-16 | R$   1297.90 | Cartão De Crédito    | Pagamento recebido
+2026-04-16 | R$   1297.90 | Cartão De Crédito    | PAGAMENTO ON LINE
+2026-04-16 | R$  -1297.90 | Cartão De Crédito    | Pagamento efetuado - Pagamento Fatura - HENRIQUE DE JESUS FREITAS PEREIRA
+2026-04-22 | R$     -8.75 | Empréstimos E Financiamentos | PIX CRED A VISTA 57758469 CELMA DA SI
+2026-04-22 | R$      8.75 | Empréstimos E Financiamentos | Crédito liberado - Pix No Crédito
+
+======================================================================

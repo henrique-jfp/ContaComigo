@@ -797,6 +797,10 @@ def persistir_ids_categoria(
     subcat_cache: dict | None = None,
 ) -> tuple[int | None, int | None]:
     """Resolve ou cria Categoria/Subcategoria e retorna os IDs."""
+    # Padroniza para evitar duplicatas por capitalização (ex: Alimentação vs ALIMENTAÇÃO)
+    cat_nome_db = (cat_nome_db or "Outros").strip().title()
+    subcat_nome = (subcat_nome or "Geral").strip().title()
+
     if cat_cache is not None and cat_nome_db in cat_cache:
         cat_id = cat_cache[cat_nome_db]
     else:

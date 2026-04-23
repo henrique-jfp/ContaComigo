@@ -222,8 +222,8 @@ async def categorizar_lote_llm(db: Session, lancamentos: list[Lancamento]) -> in
         if desc_limpa and len(desc_limpa) > 1:
             l_obj.descricao = desc_limpa
 
-        cat_nome = (res.get("categoria") or "").strip()
-        sub_nome = (res.get("subcategoria") or "").strip()
+        cat_nome = (res.get("categoria") or "").strip().title()
+        sub_nome = (res.get("subcategoria") or "").strip().title()
 
         if not cat_nome or not sub_nome:
             continue
