@@ -1,4 +1,8 @@
-# gerente_financeiro/pdf_generator.py
+"""
+Gerador de relatório financeiro premium — ContaComigo
+Layout: Capa escura | Resumo KPI | Score Financeiro | Distribuição |
+        Evolução 6m | Heatmap | Top Despesas | Metas | Insights Alfredo
+"""
 
 import io
 import os
@@ -8,99 +12,172 @@ from reportlab.lib.units import mm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import (
     BaseDocTemplate, PageTemplate, Frame, Paragraph, Spacer,
-    Table, TableStyle, PageBreak, NextPageTemplate, Flowable, Image
+    Table, TableStyle, PageBreak, NextPageTemplate, Flowable, Image,
+    HRFlowable, KeepTogether,
 )
-from reportlab.graphics.shapes import Drawing, Rect, String, Line
-from reportlab.graphics.charts.piecharts import Pie
+from reportlab.graphics.shapes import Drawing, Rect, String, Line, Circle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.lib.colors import HexColor
+from reportlab.lib.colors import HexColor, Color
 
-# --- CONFIGURAÇÃO DE CORES (Paleta Private Bank) ---
-COLOR_PRIMARY = HexColor('#0B1220')    # Azul profundo
-COLOR_ACCENT = HexColor('#00F0FF')     # Ciano neon
-COLOR_ACCENT_2 = HexColor('#6366F1')   # Indigo
-COLOR_BG_LIGHT = HexColor('#F8FAFC')   # Cinza muito claro
-COLOR_TEXT_MAIN = HexColor('#0F172A')  # Cinza escuro
-COLOR_TEXT_LIGHT = HexColor('#64748B') # Cinza médio
-COLOR_SUCCESS = HexColor('#10B981')    # Verde esmeralda
-COLOR_DANGER = HexColor('#EF4444')     # Vermelho
-COLOR_WHITE = colors.white
+# ── Paleta de Cores ─────────────────────────────────────────
+C_NAVY      = HexColor('#0B1220')
+C_CYAN      = HexColor('#00C2CB')
+C_INDIGO    = HexColor('#6366F1')
+C_EMERALD   = HexColor('#10B981')
+C_RED       = HexColor('#EF4444')
+C_AMBER     = HexColor('#F59E0B')
+C_BG        = HexColor('#F8FAFC')
+C_BORDER    = HexColor('#E2E8F0')
+C_TEXT      = HexColor('#0F172A')
+C_MUTED     = HexColor('#64748B')
+C_WHITE     = colors.white
+C_CARD_BG   = HexColor('#FFFFFF')
+C_SECTION   = HexColor('#F1F5F9')
 
-# --- REGISTRO DE FONTES ---
+# Escala de score (verde → amarelo → vermelho)
+def score_color(score: float) -> HexColor:
+    if score >= 75:
+        return C_EMERALD
+    if score >= 50:
+        return C_AMBER
+    return C_RED
+
+
+# ── Fontes ──────────────────────────────────────────────────
 def register_fonts():
-    """Tenta registrar fontes Inter, fallback para Helvetica se não encontrar"""
     font_dir = os.path.join(os.path.dirname(__file__), '..', 'static', 'fonts')
     try:
-        pdfmetrics.registerFont(TTFont('Inter-Bold', os.path.join(font_dir, 'Inter-Bold.ttf')))
+        pdfmetrics.registerFont(TTFont('Inter-Bold',    os.path.join(font_dir, 'Inter-Bold.ttf')))
         pdfmetrics.registerFont(TTFont('Inter-Regular', os.path.join(font_dir, 'Inter-Regular.ttf')))
-        return 'Inter-Regular', 'Inter-Bold'
+        pdfmetrics.registerFont(TTFont('Inter-Light',   os.path.join(font_dir, 'Inter-Light.ttf')))
+        return 'Inter-Regular', 'Inter-Bold', 'Inter-Light'
     except Exception:
-        return 'Helvetica', 'Helvetica-Bold'
+        return 'Helvetica', 'Helvetica-Bold', 'Helvetica'
 
-FONT_REG, FONT_BOLD = register_fonts()
+FONT_REG, FONT_BOLD, FONT_LIGHT = register_fonts()
+
+
+# ── Utilitários de formatação ────────────────────────────────
+def fmt_brl(value) -> str:
+    try:
+        v = float(value)
+        return f"R$ {v:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    except (TypeError, ValueError):
+        return "R$ 0,00"
+
+def fmt_pct(value) -> str:
+    try:
+        return f"{float(value):.1f}%"
+    except (TypeError, ValueError):
+        return "0,0%"
+
+def trend_arrow(value) -> tuple[str, HexColor]:
+    """Retorna (símbolo, cor) baseado na direção da tendência."""
+    try:
+        v = float(value)
+        if v > 1:
+            return "▲", C_EMERALD
+        if v < -1:
+            return "▼", C_RED
+        return "→", C_MUTED
+    except (TypeError, ValueError):
+        return "→", C_MUTED
+
+
+# ── Flowables Personalizados ─────────────────────────────────
 
 class GradientCover(Flowable):
-    """
-    Desenha a capa ocupando 100% da página (sem margens).
-    """
-    def __init__(self, width, height, user_name, period_str):
+    """Capa com fundo escuro, elementos decorativos e badge do usuário."""
+
+    def __init__(self, width, height, user_name, period_str, mes_ano):
         Flowable.__init__(self)
         self.width = width
         self.height = height
         self.user_name = user_name
         self.period_str = period_str
+        self.mes_ano = mes_ano
 
     def draw(self):
         c = self.canv
-        
-        # 1. Fundo Azul Profundo (Ocupa tudo)
-        c.setFillColor(COLOR_PRIMARY)
-        c.rect(0, 0, self.width, self.height, fill=True, stroke=False)
-        
-        # 2. Elementos decorativos (tech glow)
-        c.setFillColor(COLOR_ACCENT)
-        c.setFillAlpha(0.08)
-        c.circle(self.width - 40*mm, self.height - 10*mm, 220, fill=True, stroke=False)
-        c.setFillColor(COLOR_ACCENT_2)
-        c.setFillAlpha(0.08)
-        c.circle(20*mm, 20*mm, 180, fill=True, stroke=False)
+        W, H = self.width, self.height
+
+        # Fundo principal
+        c.setFillColor(C_NAVY)
+        c.rect(0, 0, W, H, fill=True, stroke=False)
+
+        # Círculos decorativos com opacidade
+        for col, x, y, r, alpha in [
+            (C_CYAN,   W - 35*mm, H - 8*mm,  220, 0.06),
+            (C_INDIGO, 15*mm,     18*mm,      180, 0.07),
+            (C_EMERALD, W*0.5,    H*0.3,      130, 0.04),
+        ]:
+            c.setFillColor(col)
+            c.setFillAlpha(alpha)
+            c.circle(x, y, r, fill=True, stroke=False)
         c.setFillAlpha(1)
 
-        # 3. Cabeçalho da Capa
-        c.setFillColor(COLOR_WHITE)
-        c.setFont(FONT_BOLD, 12)
-        c.drawString(20*mm, self.height - 28*mm, "CONTACOMIGO // CRISIS SENSOR")
-        
-        # 4. Título Gigante
-        c.setFont(FONT_BOLD, 40)
-        c.drawString(20*mm, self.height - 80*mm, "Relatório")
-        c.drawString(20*mm, self.height - 95*mm, "Financeiro")
-        
-        # 5. Linha de destaque
-        c.setStrokeColor(COLOR_ACCENT)
-        c.setLineWidth(2)
-        c.line(20*mm, self.height - 110*mm, 60*mm, self.height - 110*mm)
-        
-        # 6. Período
-        c.setFont(FONT_REG, 14)
-        c.drawString(20*mm, self.height - 125*mm, self.period_str)
-        
-        # 7. Badge do Usuário (Retângulo arredondado simulado)
-        c.setFillColor(HexColor('#111827'))
-        c.roundRect(20*mm, self.height - 160*mm, 140*mm, 16*mm, 4*mm, fill=True, stroke=False)
-        
-        c.setFillColor(COLOR_ACCENT)
+        # Linha decorativa superior (cyan)
+        c.setStrokeColor(C_CYAN)
+        c.setLineWidth(3)
+        c.line(0, H - 2*mm, W, H - 2*mm)
+
+        # Tag do produto
+        c.setFillColor(C_CYAN)
         c.setFont(FONT_BOLD, 9)
-        c.drawString(25*mm, self.height - 150*mm, "PREPARADO EXCLUSIVAMENTE PARA")
-        
-        c.setFillColor(COLOR_WHITE)
-        c.setFont(FONT_BOLD, 14)
-        c.drawString(25*mm, self.height - 156*mm, self.user_name.upper())
+        c.drawString(20*mm, H - 22*mm, "CONTACOMIGO  //  RELATÓRIO FINANCEIRO")
+
+        # Título central
+        c.setFillColor(C_WHITE)
+        c.setFont(FONT_BOLD, 52)
+        c.drawString(20*mm, H - 72*mm, "Relatório")
+        c.setFont(FONT_BOLD, 38)
+        c.drawString(20*mm, H - 92*mm, "Financeiro")
+
+        # Sublinhado ciano
+        c.setStrokeColor(C_CYAN)
+        c.setLineWidth(2.5)
+        c.line(20*mm, H - 97*mm, 72*mm, H - 97*mm)
+
+        # Período
+        c.setFillColor(HexColor('#94A3B8'))
+        c.setFont(FONT_REG, 16)
+        c.drawString(20*mm, H - 112*mm, self.period_str)
+
+        # Separador pontilhado
+        c.setStrokeColor(HexColor('#1E293B'))
+        c.setLineWidth(1)
+        c.setDash(2, 4)
+        c.line(20*mm, H - 130*mm, W - 20*mm, H - 130*mm)
+        c.setDash()
+
+        # Badge do usuário
+        bx, by, bw, bh = 20*mm, H - 166*mm, 155*mm, 24*mm
+        c.setFillColor(HexColor('#111827'))
+        c.roundRect(bx, by, bw, bh, 5*mm, fill=True, stroke=False)
+        c.setStrokeColor(C_CYAN)
+        c.setLineWidth(1)
+        c.roundRect(bx, by, bw, bh, 5*mm, fill=False, stroke=True)
+
+        c.setFillColor(C_CYAN)
+        c.setFont(FONT_BOLD, 7.5)
+        c.drawString(bx + 5*mm, by + bh - 8*mm, "PREPARADO EXCLUSIVAMENTE PARA")
+
+        c.setFillColor(C_WHITE)
+        c.setFont(FONT_BOLD, 13)
+        c.drawString(bx + 5*mm, by + 5*mm, self.user_name.upper())
+
+        # Rodapé da capa
+        c.setFillColor(HexColor('#475569'))
+        c.setFont(FONT_REG, 8)
+        c.drawCentredString(W / 2, 12*mm, "Documento confidencial gerado automaticamente pelo ContaComigo")
+
 
 class KPICard(Flowable):
-    """Card de KPI com sombra simulada e borda fina"""
-    def __init__(self, title, value, subtitle, trend="neutral", width=80*mm, height=35*mm):
+    """Card de KPI premium com indicador de tendência."""
+
+    def __init__(self, title, value, subtitle, trend="neutral",
+                 width=80*mm, height=38*mm, accent_color=None):
         Flowable.__init__(self)
         self.width = width
         self.height = height
@@ -108,406 +185,593 @@ class KPICard(Flowable):
         self.value = value
         self.subtitle = subtitle
         self.trend = trend
+        self.accent = accent_color or C_CYAN
 
     def draw(self):
         c = self.canv
         x, y = 0, 0
-        
-        # Sombra suave (Retângulo cinza deslocado)
-        c.setFillColor(colors.Color(0,0,0,0.04))
-        c.roundRect(x+1.5, y-1.5, self.width, self.height, 8, fill=True, stroke=False)
-        
-        # Fundo do Card (Branco Puro)
-        c.setFillColor(COLOR_WHITE)
-        c.setStrokeColor(HexColor('#F1F5F9'))
-        c.roundRect(x, y, self.width, self.height, 8, fill=True, stroke=True)
-        
-        # Título (Label) - Mais clean
-        c.setFillColor(COLOR_TEXT_LIGHT)
-        c.setFont(FONT_BOLD, 8)
-        c.drawString(x + 6*mm, y + self.height - 10*mm, self.title.upper())
-        
-        # Valor Principal - Grande e imponente
-        c.setFillColor(COLOR_PRIMARY)
-        c.setFont(FONT_BOLD, 20)
-        # Ajusta tamanho da fonte se o valor for muito longo (evita estouro)
-        display_value = str(self.value)
-        if len(display_value) > 12:
-             c.setFont(FONT_BOLD, 16)
-        if len(display_value) > 16:
-             c.setFont(FONT_BOLD, 14)
-             
-        c.drawString(x + 6*mm, y + self.height - 22*mm, display_value)
-        
-        # Linha separadora discreta
-        c.setStrokeColor(HexColor('#F8FAFC'))
-        c.setLineWidth(0.5)
-        c.line(x + 6*mm, y + 12*mm, x + self.width - 6*mm, y + 12*mm)
+        W, H = self.width, self.height
 
-        # Ícone e Subtítulo - Com cores de status
-        c.setFont(FONT_REG, 8.5)
+        # Sombra
+        c.setFillColor(Color(0, 0, 0, 0.05))
+        c.roundRect(x + 1.5, y - 1.5, W, H, 6, fill=True, stroke=False)
+
+        # Fundo branco
+        c.setFillColor(C_CARD_BG)
+        c.setStrokeColor(C_BORDER)
+        c.setLineWidth(0.5)
+        c.roundRect(x, y, W, H, 6, fill=True, stroke=True)
+
+        # Barra de acento (lateral esquerda)
+        c.setFillColor(self.accent)
+        c.roundRect(x, y, 3, H, 3, fill=True, stroke=False)
+
+        # Título
+        c.setFillColor(C_MUTED)
+        c.setFont(FONT_BOLD, 7.5)
+        c.drawString(x + 7*mm, y + H - 10*mm, self.title.upper())
+
+        # Valor principal
+        c.setFillColor(C_NAVY)
+        font_size = 19
+        val_str = str(self.value)
+        if len(val_str) > 13:
+            font_size = 15
+        elif len(val_str) > 10:
+            font_size = 17
+        c.setFont(FONT_BOLD, font_size)
+        c.drawString(x + 7*mm, y + H / 2 - 2*mm, val_str)
+
+        # Linha separadora
+        c.setStrokeColor(C_SECTION)
+        c.setLineWidth(0.4)
+        c.line(x + 7*mm, y + 11*mm, x + W - 7*mm, y + 11*mm)
+
+        # Ícone de tendência + subtítulo
         if self.trend == "up":
-            c.setFillColor(COLOR_SUCCESS)
-            icon = "▲"
+            icon, icon_color = "▲", C_EMERALD
         elif self.trend == "down":
-            c.setFillColor(COLOR_DANGER)
-            icon = "▼"
+            icon, icon_color = "▼", C_RED
         else:
-            c.setFillColor(COLOR_TEXT_LIGHT)
-            icon = "•"
-            
-        c.drawString(x + 6*mm, y + 6*mm, f"{icon} {self.subtitle}")
+            icon, icon_color = "•", C_MUTED
+
+        c.setFont(FONT_REG, 8)
+        c.setFillColor(icon_color)
+        c.drawString(x + 7*mm, y + 5*mm, f"{icon}  {self.subtitle}")
+
+
+class ScoreGauge(Flowable):
+    """
+    Arco semi-circular de score financeiro (0–100).
+    Desenha um arco colorido com ponteiro e valor central.
+    """
+
+    def __init__(self, score: float, width=90*mm, height=52*mm):
+        Flowable.__init__(self)
+        self.score = min(max(float(score), 0), 100)
+        self.width = width
+        self.height = height
+
+    def draw(self):
+        import math
+        c = self.canv
+        cx, cy = self.width / 2, 16*mm
+        r_out, r_in = 22*mm, 15*mm
+
+        # Fundo cinza do arco
+        c.setStrokeColor(C_BORDER)
+        c.setLineWidth((r_out - r_in) / mm)
+        c.setLineCap(1)
+        c.arc(cx - r_out, cy - r_out, cx + r_out, cy + r_out,
+              startAng=180, extent=180)
+
+        # Arco colorido preenchido até o score
+        extent = self.score / 100 * 180
+        col = score_color(self.score)
+        c.setStrokeColor(col)
+        c.arc(cx - r_out, cy - r_out, cx + r_out, cy + r_out,
+              startAng=180, extent=extent)
+
+        # Valor numérico
+        c.setFillColor(C_NAVY)
+        c.setFont(FONT_BOLD, 22)
+        c.drawCentredString(cx, cy + 4*mm, f"{self.score:.0f}")
+
+        # Label "/100"
+        c.setFont(FONT_REG, 8)
+        c.setFillColor(C_MUTED)
+        c.drawCentredString(cx, cy - 3*mm, "/ 100")
+
+        # Rótulo
+        c.setFont(FONT_BOLD, 9)
+        c.setFillColor(col)
+        if self.score >= 75:
+            label = "Excelente"
+        elif self.score >= 50:
+            label = "Moderado"
+        else:
+            label = "Atenção"
+        c.drawCentredString(cx, cy - 10*mm, label)
+
+
+class SectionHeader(Flowable):
+    """Cabeçalho de seção com linha decorativa e ícone."""
+
+    def __init__(self, title: str, icon: str = "●", width=170*mm):
+        Flowable.__init__(self)
+        self.title = title
+        self.icon = icon
+        self.width = width
+        self.height = 14*mm
+
+    def draw(self):
+        c = self.canv
+        W = self.width
+
+        # Fundo
+        c.setFillColor(C_NAVY)
+        c.roundRect(0, 2*mm, W, 10*mm, 3, fill=True, stroke=False)
+
+        # Linha cyan lateral
+        c.setFillColor(C_CYAN)
+        c.rect(0, 2*mm, 2.5, 10*mm, fill=True, stroke=False)
+
+        # Texto
+        c.setFillColor(C_WHITE)
+        c.setFont(FONT_BOLD, 11)
+        c.drawString(6*mm, 5.5*mm, f"{self.icon}  {self.title.upper()}")
+
+
+class InsightCard(Flowable):
+    """Card de insight com borda esquerda colorida."""
+
+    def __init__(self, text: str, index: int = 0, width=170*mm):
+        Flowable.__init__(self)
+        self.text = text
+        self.index = index
+        self.width = width
+        accent_colors = [C_CYAN, C_EMERALD, C_INDIGO, C_AMBER]
+        self.accent = accent_colors[index % len(accent_colors)]
+        # Altura dinâmica: ~5mm por 60 caracteres + padding
+        lines = max(1, len(text) // 70 + 1)
+        self.height = (lines * 4.5 + 10) * mm
+
+    def draw(self):
+        c = self.canv
+        W, H = self.width, self.height
+
+        # Fundo
+        c.setFillColor(C_BG)
+        c.roundRect(0, 0, W, H, 4, fill=True, stroke=False)
+
+        # Borda accent
+        c.setFillColor(self.accent)
+        c.rect(0, 0, 3, H, fill=True, stroke=False)
+
+        # Número
+        c.setFillColor(self.accent)
+        c.setFont(FONT_BOLD, 10)
+        c.drawString(7*mm, H - 7*mm, str(self.index + 1))
+
+        # Texto (truncado para caber)
+        c.setFillColor(C_TEXT)
+        c.setFont(FONT_REG, 8.5)
+        # Simples quebra manual de texto
+        words = self.text.split()
+        line, lines = '', []
+        for w in words:
+            test = f"{line} {w}".strip()
+            if len(test) * 2.3 < (W - 18*mm) / mm:
+                line = test
+            else:
+                lines.append(line)
+                line = w
+        if line:
+            lines.append(line)
+        for i, l in enumerate(lines[:6]):
+            c.drawString(13*mm, H - 7*mm - i * 4.5*mm, l)
+
+
+# ── Rodapé ──────────────────────────────────────────────────
 
 def footer_canvas(canvas, doc):
-    """Desenha rodapé nas páginas de conteúdo (não na capa)"""
     canvas.saveState()
-    canvas.setFont(FONT_REG, 8)
-    canvas.setFillColor(COLOR_TEXT_LIGHT)
-    
-    # Texto Esquerda
-    canvas.drawString(20*mm, 10*mm, "ContaComigo • Relatório Confidencial")
-    
-    # Texto Direita (Número da página)
-    canvas.drawRightString(A4[0] - 20*mm, 10*mm, f"Página {doc.page}")
-    
-    # Linha decorativa
-    canvas.setStrokeColor(COLOR_ACCENT)
-    canvas.setLineWidth(1)
-    canvas.line(20*mm, 14*mm, A4[0]-20*mm, 14*mm)
-    
+    # Linha
+    canvas.setStrokeColor(C_CYAN)
+    canvas.setLineWidth(0.8)
+    canvas.line(20*mm, 15*mm, A4[0] - 20*mm, 15*mm)
+    # Textos
+    canvas.setFont(FONT_REG, 7.5)
+    canvas.setFillColor(C_MUTED)
+    canvas.drawString(20*mm, 9*mm, "ContaComigo  •  Relatório Confidencial")
+    canvas.drawRightString(A4[0] - 20*mm, 9*mm, f"Página {doc.page}")
     canvas.restoreState()
 
-def validate_flowable_size(flowable, max_width, max_height):
-    """
-    Valida se o tamanho do Flowable está dentro dos limites permitidos.
-    Se exceder, ajusta o tamanho proporcionalmente.
-    """
-    if flowable.width > max_width or flowable.height > max_height:
-        scale_factor = min(max_width / flowable.width, max_height / flowable.height)
-        flowable.width *= scale_factor
-        flowable.height *= scale_factor
-        if hasattr(flowable, 'x') and hasattr(flowable, 'y'):
-            flowable.x *= scale_factor
-            flowable.y *= scale_factor
 
-def generate_financial_pdf(context):
+# ── Função principal ─────────────────────────────────────────
+
+def generate_financial_pdf(context: dict) -> bytes:
     """
-    Gera o PDF usando BaseDocTemplate para permitir layouts diferentes (Capa vs Conteúdo).
+    Gera o relatório financeiro completo em PDF e retorna os bytes.
+
+    Espera as seguintes chaves no contexto (todas opcionais com fallback):
+        usuario_nome, periodo_extenso, mes_ano,
+        total_receitas, total_gastos, saldo_periodo, taxa_poupanca,
+        tendencia_receita_percent, tendencia_despesa_percent,
+        media_receitas_3m, media_despesas_3m, media_saldo_3m,
+        qtd_receitas, qtd_despesas, total_transacoes,
+        gastos_agrupados  [(cat, val), ...],
+        grafico_pizza_png  (bytes PNG),
+        grafico_evolucao_png  (bytes PNG),
+        grafico_heatmap_png   (bytes PNG, opcional),
+        top_gastos  [Lancamento, ...],
+        metas  [dict, ...],
+        analise_ia  (str),
+        insights  [str, ...],
+        score_financeiro  (float 0-100, calculado internamente se ausente),
+        dia_mais_gasto, valor_dia_mais_gasto, categoria_top, valor_categoria_top,
     """
     buffer = io.BytesIO()
-    
-    # 1. DEFINIÇÃO DOS FRAMES E TEMPLATES
-    
-    # Frame da Capa: Margem Zero, ocupa a folha toda
-    frame_cover = Frame(
-        0, 0, A4[0], A4[1], 
-        id='cover', 
-        leftPadding=0, bottomPadding=0, rightPadding=0, topPadding=0
-    )
-    template_cover = PageTemplate(id='Cover', frames=[frame_cover])
-    
-    # Frame do Conteúdo: Margens de 20mm
-    frame_content = Frame(
-        20*mm, 20*mm, A4[0]-40*mm, A4[1]-40*mm, 
-        id='content'
-    )
-    template_content = PageTemplate(id='Normal', frames=[frame_content], onPage=footer_canvas)
-    
-    # Inicializa o Documento Base
+
+    # Frames
+    frame_cover = Frame(0, 0, A4[0], A4[1], id='cover',
+                        leftPadding=0, bottomPadding=0,
+                        rightPadding=0, topPadding=0)
+    frame_content = Frame(20*mm, 22*mm, A4[0] - 40*mm, A4[1] - 38*mm, id='content')
+
     doc = BaseDocTemplate(buffer, pagesize=A4)
-    doc.addPageTemplates([template_cover, template_content])
-    
+    doc.addPageTemplates([
+        PageTemplate(id='Cover',  frames=[frame_cover]),
+        PageTemplate(id='Normal', frames=[frame_content], onPage=footer_canvas),
+    ])
+
     elements = []
+
+    # ── Helpers ─────────────────────────────────────────────
     styles = getSampleStyleSheet()
-    
-    # Estilos Personalizados
-    style_h2 = ParagraphStyle(
-        'H2', parent=styles['Heading2'], 
-        fontName=FONT_BOLD, fontSize=16, 
-        textColor=COLOR_PRIMARY, 
-        spaceAfter=10, spaceBefore=20
-    )
-    style_h3 = ParagraphStyle(
-        'H3', parent=styles['Heading3'],
-        fontName=FONT_BOLD, fontSize=12,
-        textColor=COLOR_PRIMARY,
-        spaceAfter=6, spaceBefore=10
-    )
-    style_normal = ParagraphStyle(
-        'Normal', parent=styles['Normal'], 
-        fontName=FONT_REG, fontSize=10, 
-        textColor=COLOR_TEXT_MAIN, leading=14
-    )
-    style_insight = ParagraphStyle(
-        'Insight', parent=styles['Normal'], 
-        fontName=FONT_REG, fontSize=10, 
-        textColor=COLOR_TEXT_MAIN, 
-        backColor=HexColor('#F8FAFC'), # Fundo cinza quase branco
-        padding=12, 
-        borderColor=COLOR_ACCENT, # Borda neon lateral simulada ou contorno
-        borderWidth=0.5, 
-        borderRadius=8, 
-        leftIndent=0,
-        spaceAfter=8,
-        leading=14
-    )
 
-    # --- CONSTRUÇÃO DO CONTEÚDO ---
+    def style(name, **kw):
+        defaults = dict(fontName=FONT_REG, fontSize=10,
+                        textColor=C_TEXT, leading=14)
+        defaults.update(kw)
+        return ParagraphStyle(name, parent=styles['Normal'], **defaults)
 
-    def format_currency(value):
-        try:
-            return f"R$ {float(value):,.2f}"
-        except (TypeError, ValueError):
-            return "R$ 0,00"
+    s_body   = style('body')
+    s_small  = style('small', fontSize=8.5, textColor=C_MUTED)
+    s_label  = style('label', fontName=FONT_BOLD, fontSize=8,
+                     textColor=C_MUTED, spaceBefore=0, spaceAfter=2)
+    s_caption = style('caption', fontSize=8, textColor=C_MUTED,
+                      alignment=1)  # centrado
 
-    def format_percent(value):
-        try:
-            return f"{float(value):.1f}%"
-        except (TypeError, ValueError):
-            return "0.0%"
+    # Dados do contexto
+    rec   = context.get('total_receitas', 0)
+    desp  = context.get('total_gastos', 0)
+    saldo = context.get('saldo_periodo', 0)
+    poup  = context.get('taxa_poupanca', 0)
+    tr_r  = context.get('tendencia_receita_percent', 0)
+    tr_d  = context.get('tendencia_despesa_percent', 0)
+    m3_r  = context.get('media_receitas_3m', 0)
+    m3_d  = context.get('media_despesas_3m', 0)
+    m3_s  = context.get('media_saldo_3m', 0)
 
-    # 1. CAPA (Usa o template 'Cover' implicitamente por ser o primeiro)
+    # Score financeiro (simples: baseado em poupança e saldo)
+    score = context.get('score_financeiro')
+    if score is None:
+        base = min(poup / 30 * 60, 60)          # até 60 pts pela poupança
+        bonus_saldo = 20 if saldo > 0 else 0     # 20 pts se saldo positivo
+        bonus_med   = 20 if m3_s > 0 else 0      # 20 pts se média histórica ok
+        score = min(base + bonus_saldo + bonus_med, 100)
+
+    # ── 1. CAPA ──────────────────────────────────────────────
     elements.append(GradientCover(
-        A4[0], A4[1], 
-        context.get('usuario_nome', 'Investidor'), 
-        context.get('periodo_extenso', 'Mês Atual')
+        A4[0], A4[1],
+        context.get('usuario_nome', 'Investidor'),
+        context.get('periodo_extenso', 'Período Atual'),
+        context.get('mes_ano', ''),
     ))
-    
-    # Comando para mudar para o template 'Normal' na próxima página
     elements.append(NextPageTemplate('Normal'))
     elements.append(PageBreak())
 
-    # 2. RESUMO EXECUTIVO (KPIs)
-    elements.append(Paragraph("Resumo Executivo", style_h2))
+    # ── 2. RESUMO EXECUTIVO ───────────────────────────────────
+    elements.append(SectionHeader("Resumo Executivo", "📊"))
     elements.append(Spacer(1, 5*mm))
-    
-    # Dados
-    rec = context.get('total_receitas', 0)
-    desp = context.get('total_gastos', 0)
-    saldo = context.get('saldo_periodo', 0)
-    poup = context.get('taxa_poupanca', 0)
-    
-    # Grid de Cards
-    card_w = 82*mm
-    card_h = 35*mm
-    
-    kpi_data = [
+
+    card_w, card_h = 83*mm, 40*mm
+    arrow_r, col_r = trend_arrow(tr_r)
+    arrow_d, col_d = trend_arrow(-tr_d)   # inverso: despesa subindo = ruim
+
+    kpi_table = Table([
         [
-            KPICard("Receitas", format_currency(rec), "Entradas", "up", card_w, card_h),
-            KPICard("Despesas", format_currency(desp), "Saídas", "down", card_w, card_h)
+            KPICard("Receitas Totais",   fmt_brl(rec),
+                    f"{arrow_r} {fmt_pct(tr_r)} vs mês anterior",
+                    "up", card_w, card_h, C_EMERALD),
+            KPICard("Despesas Totais",   fmt_brl(desp),
+                    f"{arrow_d} {fmt_pct(tr_d)} vs mês anterior",
+                    "down", card_w, card_h, C_RED),
         ],
         [
-            KPICard("Saldo Líquido", format_currency(saldo), "Caixa", "neutral", card_w, card_h),
-            KPICard("Taxa Poupança", format_percent(poup), "Meta: 20%", "up" if poup > 20 else "down", card_w, card_h)
-        ]
-    ]
-    
-    t_kpi = Table(kpi_data, colWidths=[85*mm, 85*mm], rowHeights=[40*mm, 40*mm])
-    t_kpi.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            KPICard("Saldo Líquido",     fmt_brl(saldo),
+                    "Caixa do período",
+                    "up" if saldo > 0 else "down", card_w, card_h, C_INDIGO),
+            KPICard("Taxa de Poupança",  fmt_pct(poup),
+                    "Meta recomendada: 20%",
+                    "up" if poup >= 20 else "down", card_w, card_h, C_AMBER),
+        ],
+    ], colWidths=[86*mm, 86*mm], rowHeights=[44*mm, 44*mm])
+    kpi_table.setStyle(TableStyle([
+        ('VALIGN',  (0, 0), (-1, -1), 'TOP'),
+        ('ALIGN',   (0, 0), (-1, -1), 'CENTER'),
+        ('TOPPADDING',    (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
     ]))
-    elements.append(t_kpi)
-    
-    # 3. TENDÊNCIAS E MÉDIAS
+    elements.append(kpi_table)
+
+    # ── 3. SCORE FINANCEIRO + MÉTRICAS COMPLEMENTARES ────────
+    elements.append(Spacer(1, 4*mm))
+    elements.append(SectionHeader("Saúde Financeira do Mês", "🏅"))
+    elements.append(Spacer(1, 4*mm))
+
+    score_table = Table(
+        [[
+            ScoreGauge(score, 88*mm, 54*mm),
+            Table([
+                [Paragraph("<b>Médias dos Últimos 3 Meses</b>", style('h3m', fontName=FONT_BOLD, fontSize=10))],
+                [Table([
+                    ["Média Receitas 3m",  fmt_brl(m3_r)],
+                    ["Média Despesas 3m",  fmt_brl(m3_d)],
+                    ["Média Saldo 3m",     fmt_brl(m3_s)],
+                    ["Transações no mês",  str(context.get('total_transacoes', '-'))],
+                    ["Dia com mais gastos",
+                     f"Dia {context.get('dia_mais_gasto', '-')}" if context.get('dia_mais_gasto') else '-'],
+                    ["Categoria top",      str(context.get('categoria_top', '-'))[:28]],
+                ], colWidths=[60*mm, 48*mm],
+                   style=TableStyle([
+                       ('FONTNAME',    (0, 0), (-1, -1), FONT_REG),
+                       ('FONTSIZE',    (0, 0), (-1, -1), 8.5),
+                       ('TEXTCOLOR',   (0, 0), (0, -1), C_MUTED),
+                       ('TEXTCOLOR',   (1, 0), (1, -1), C_NAVY),
+                       ('FONTNAME',    (1, 0), (1, -1), FONT_BOLD),
+                       ('ROWBACKGROUNDS', (0, 0), (-1, -1), [C_BG, C_WHITE]),
+                       ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                       ('TOPPADDING',    (0, 0), (-1, -1), 5),
+                       ('LEFTPADDING',   (0, 0), (-1, -1), 6),
+                       ('GRID', (0, 0), (-1, -1), 0.3, C_BORDER),
+                   ])],
+            ], rowHeights=None),
+        ]],
+        colWidths=[92*mm, 82*mm],
+    )
+    score_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING',  (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    elements.append(score_table)
+
+    # ── 4. DISTRIBUIÇÃO DE GASTOS ─────────────────────────────
     elements.append(Spacer(1, 6*mm))
-    elements.append(Paragraph("Tendências e Médias", style_h2))
+    elements.append(SectionHeader("Distribuição de Despesas", "🥧"))
+    elements.append(Spacer(1, 4*mm))
 
-    tendencia_receita = context.get('tendencia_receita_percent', 0)
-    tendencia_despesa = context.get('tendencia_despesa_percent', 0)
-    media_receitas_3m = context.get('media_receitas_3m', 0)
-    media_despesas_3m = context.get('media_despesas_3m', 0)
-    media_saldo_3m = context.get('media_saldo_3m', 0)
+    cats = context.get('gastos_agrupados', [])[:8]
+    pizza_png = context.get('grafico_pizza_png')
 
-    tendencia_table = [
-        ["Receitas (mês vs anterior)", format_percent(tendencia_receita)],
-        ["Despesas (mês vs anterior)", format_percent(tendencia_despesa)],
-        ["Média receitas 3m", format_currency(media_receitas_3m)],
-        ["Média despesas 3m", format_currency(media_despesas_3m)],
-        ["Média saldo 3m", format_currency(media_saldo_3m)],
-    ]
-    t_tend = Table(tendencia_table, colWidths=[95*mm, 60*mm])
-    t_tend.setStyle(TableStyle([
-        ('FONTNAME', (0,0), (-1,-1), FONT_REG),
-        ('BACKGROUND', (0,0), (-1,-1), COLOR_BG_LIGHT),
-        ('TEXTCOLOR', (0,0), (-1,-1), COLOR_TEXT_MAIN),
-        ('GRID', (0,0), (-1,-1), 0.5, HexColor('#E2E8F0')),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-        ('TOPPADDING', (0,0), (-1,-1), 6),
-    ]))
-    elements.append(t_tend)
-
-    # 4. GRÁFICO E TABELA
-    elements.append(Spacer(1, 5*mm))
-    elements.append(Paragraph("Distribuição de Gastos", style_h2))
-
-    raw_cats = context.get('gastos_agrupados', [])
-    cats = raw_cats[:6]
-
-    grafico_pizza_png = context.get('grafico_pizza_png')
-    if grafico_pizza_png:
-        img = Image(io.BytesIO(grafico_pizza_png))
-        img.drawWidth = 160*mm
-        img.drawHeight = 90*mm
+    if pizza_png:
+        img = Image(io.BytesIO(pizza_png))
+        img.drawWidth  = 170*mm
+        img.drawHeight = 85*mm
         elements.append(img)
+        elements.append(Paragraph(
+            "Transferências excluídas do cálculo de despesas.",
+            s_caption
+        ))
     else:
-        d = Drawing(400, 170)
-        pc = Pie()
-        pc.x = 125
-        pc.y = 10
-        pc.width = 150
-        pc.height = 150
+        elements.append(Paragraph("Gráfico indisponível.", s_body))
 
-        if cats:
-            pc.data = [float(x[1]) for x in cats]
-            pc.labels = [f"{x[0]}" for x in cats]
+    elements.append(Spacer(1, 4*mm))
 
-            colors_list = [COLOR_PRIMARY, COLOR_ACCENT, COLOR_SUCCESS, COLOR_DANGER, HexColor('#6366F1'), HexColor('#8B5CF6')]
-            for i, color in enumerate(colors_list):
-                if i < len(pc.data):
-                    pc.slices[i].fillColor = color
-                    pc.slices[i].strokeColor = COLOR_WHITE
-                    pc.slices[i].strokeWidth = 1
-        else:
-            pc.data = [1]
-            pc.labels = ["Sem dados"]
-            pc.slices[0].fillColor = HexColor('#E2E8F0')
-
-        d.add(pc)
-        elements.append(d)
-    
-    # Tabela de Categorias
-    elements.append(Spacer(1, 5*mm))
-    
+    # Tabela de categorias
     if cats:
-        table_data = [['Categoria', 'Valor', '%']]
-        for cat, val in cats:
-            val_float = float(val)
-            perc = (val_float / float(desp) * 100) if desp > 0 else 0
-            table_data.append([cat, f"R$ {val_float:,.2f}", f"{perc:.1f}%"])
-            
-        t_cat = Table(table_data, colWidths=[90*mm, 40*mm, 30*mm])
+        total_desp = float(desp) if desp else 1
+        header = [
+            Paragraph('<b>Categoria</b>', style('th', fontName=FONT_BOLD,
+                      fontSize=9, textColor=C_WHITE)),
+            Paragraph('<b>Valor</b>', style('th2', fontName=FONT_BOLD,
+                      fontSize=9, textColor=C_WHITE, alignment=2)),
+            Paragraph('<b>%</b>', style('th3', fontName=FONT_BOLD,
+                      fontSize=9, textColor=C_WHITE, alignment=2)),
+        ]
+        rows = [header]
+        for i, (cat, val) in enumerate(cats):
+            val_f = float(val)
+            pct   = val_f / total_desp * 100
+            # Barra de progresso visual simples: █ chars
+            bar_len = max(1, int(pct / 5))
+            bar = '█' * bar_len
+            rows.append([
+                cat[:35],
+                fmt_brl(val_f),
+                f"{pct:.1f}%  {bar}",
+            ])
+
+        t_cat = Table(rows, colWidths=[80*mm, 40*mm, 50*mm])
         t_cat.setStyle(TableStyle([
-            ('FONTNAME', (0,0), (-1,0), FONT_BOLD),
-            ('BACKGROUND', (0,0), (-1,0), COLOR_PRIMARY),
-            ('TEXTCOLOR', (0,0), (-1,0), COLOR_WHITE),
-            ('ALIGN', (1,0), (-1,-1), 'RIGHT'),
-            ('FONTNAME', (0,1), (-1,-1), FONT_REG),
-            ('ROWBACKGROUNDS', (0,1), (-1,-1), [COLOR_BG_LIGHT, COLOR_WHITE]),
-            ('LINEBELOW', (0,0), (-1,0), 1.5, COLOR_PRIMARY), # Linha grossa sob o header
-            ('LINEBELOW', (0,1), (-1,-2), 0.2, HexColor('#E2E8F0')), # Linhas finas entre dados
-            ('BOTTOMPADDING', (0,0), (-1,-1), 8),
-            ('TOPPADDING', (0,0), (-1,-1), 8),
-            ('LEFTPADDING', (0,0), (-1,-1), 10),
+            ('BACKGROUND',   (0, 0), (-1, 0),  C_NAVY),
+            ('TEXTCOLOR',    (0, 0), (-1, 0),  C_WHITE),
+            ('FONTNAME',     (0, 0), (-1, 0),  FONT_BOLD),
+            ('FONTSIZE',     (0, 0), (-1, 0),  9),
+            ('FONTNAME',     (0, 1), (-1, -1), FONT_REG),
+            ('FONTSIZE',     (0, 1), (-1, -1), 8.5),
+            ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_BG, C_WHITE]),
+            ('ALIGN',        (1, 0), (-1, -1), 'RIGHT'),
+            ('TEXTCOLOR',    (1, 1), (1, -1),  C_NAVY),
+            ('FONTNAME',     (1, 1), (1, -1),  FONT_BOLD),
+            ('TEXTCOLOR',    (2, 1), (2, -1),  C_INDIGO),
+            ('BOTTOMPADDING',(0, 0), (-1, -1), 7),
+            ('TOPPADDING',   (0, 0), (-1, -1), 7),
+            ('LEFTPADDING',  (0, 0), (-1, -1), 8),
+            ('LINEBELOW',    (0, 0), (-1, 0),  1.5, C_CYAN),
+            ('LINEBELOW',    (0, 1), (-1, -2), 0.3, C_BORDER),
         ]))
         elements.append(t_cat)
     else:
-        elements.append(Paragraph("Nenhum gasto registrado neste período.", style_normal))
+        elements.append(Paragraph("Nenhum gasto registrado neste período.", s_body))
 
-    # 5. EVOLUCAO 6 MESES
+    # ── 5. EVOLUÇÃO 6 MESES ───────────────────────────────────
     elements.append(PageBreak())
-    elements.append(Paragraph("Evolução 6 Meses", style_h2))
+    elements.append(SectionHeader("Evolução dos Últimos 6 Meses", "📈"))
+    elements.append(Spacer(1, 4*mm))
 
-    grafico_evolucao_png = context.get('grafico_evolucao_png')
-    if grafico_evolucao_png:
-        img = Image(io.BytesIO(grafico_evolucao_png))
-        img.drawWidth = 170*mm
-        img.drawHeight = 85*mm
-        elements.append(img)
+    evolucao_png = context.get('grafico_evolucao_png')
+    if evolucao_png:
+        img2 = Image(io.BytesIO(evolucao_png))
+        img2.drawWidth  = 170*mm
+        img2.drawHeight = 90*mm
+        elements.append(img2)
+        elements.append(Paragraph(
+            "Barras: Receitas (verde) e Despesas (vermelho). Linha roxa: Saldo líquido.",
+            s_caption
+        ))
     else:
-        elements.append(Paragraph("Gráfico de evolução indisponível.", style_normal))
+        elements.append(Paragraph("Gráfico de evolução indisponível.", s_body))
 
-    # 6. TOP GASTOS
-    elements.append(Spacer(1, 10*mm))
-    elements.append(Paragraph("Top Gastos", style_h2))
+    # ── 6. MAPA DE CALOR (HEATMAP) ────────────────────────────
+    heatmap_png = context.get('grafico_heatmap_png')
+    if heatmap_png:
+        elements.append(Spacer(1, 6*mm))
+        elements.append(SectionHeader("Mapa de Calor de Gastos", "🗓️"))
+        elements.append(Spacer(1, 4*mm))
+        img3 = Image(io.BytesIO(heatmap_png))
+        img3.drawWidth  = 170*mm
+        img3.drawHeight = 60*mm
+        elements.append(img3)
+        elements.append(Paragraph(
+            "Intensidade de cor indica volume de despesas no dia. Azul escuro = maior gasto.",
+            s_caption
+        ))
+
+    # ── 7. TOP DESPESAS ───────────────────────────────────────
+    elements.append(Spacer(1, 8*mm))
+    elements.append(SectionHeader("Top Despesas do Mês", "💸"))
+    elements.append(Spacer(1, 4*mm))
+
     top_gastos = context.get('top_gastos', [])
     if top_gastos:
-        table_gastos = [["Descrição", "Categoria", "Valor", "Data"]]
-        for g in top_gastos[:8]:
-            table_gastos.append([
-                str(getattr(g, 'descricao', '')),
-                str(getattr(getattr(g, 'categoria', None), 'nome', '')),
-                format_currency(getattr(g, 'valor', 0)),
-                getattr(g, 'data_transacao', None).strftime('%d/%m/%Y') if getattr(g, 'data_transacao', None) else ''
-            ])
-        t_gastos = Table(table_gastos, colWidths=[70*mm, 45*mm, 30*mm, 25*mm])
-        t_gastos.setStyle(TableStyle([
-            ('FONTNAME', (0,0), (-1,0), FONT_BOLD),
-            ('BACKGROUND', (0,0), (-1,0), COLOR_PRIMARY),
-            ('TEXTCOLOR', (0,0), (-1,0), COLOR_WHITE),
-            ('ALIGN', (2,0), (2,-1), 'RIGHT'),
-            ('FONTNAME', (0,1), (-1,-1), FONT_REG),
-            ('ROWBACKGROUNDS', (0,1), (-1,-1), [COLOR_BG_LIGHT, COLOR_WHITE]),
-            ('GRID', (0,0), (-1,-1), 0.5, HexColor('#E2E8F0')),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-            ('TOPPADDING', (0,0), (-1,-1), 6),
-        ]))
-        elements.append(t_gastos)
-    else:
-        elements.append(Paragraph("Sem gastos registrados para o período.", style_normal))
+        header_g = [
+            Paragraph('<b>#</b>',         style('tg0', fontName=FONT_BOLD, fontSize=9, textColor=C_WHITE)),
+            Paragraph('<b>Descrição</b>',  style('tg1', fontName=FONT_BOLD, fontSize=9, textColor=C_WHITE)),
+            Paragraph('<b>Categoria</b>',  style('tg2', fontName=FONT_BOLD, fontSize=9, textColor=C_WHITE)),
+            Paragraph('<b>Valor</b>',      style('tg3', fontName=FONT_BOLD, fontSize=9, textColor=C_WHITE, alignment=2)),
+            Paragraph('<b>Data</b>',       style('tg4', fontName=FONT_BOLD, fontSize=9, textColor=C_WHITE, alignment=2)),
+        ]
+        rows_g = [header_g]
+        for i, g in enumerate(top_gastos[:10], 1):
+            desc = str(getattr(g, 'descricao', '') or '')[:40]
+            cat  = str(getattr(getattr(g, 'categoria', None), 'nome', '') or '')[:20]
+            val  = fmt_brl(abs(float(getattr(g, 'valor', 0))))
+            dt   = getattr(g, 'data_transacao', None)
+            data_str = dt.strftime('%d/%m/%y') if dt else '-'
+            rows_g.append([str(i), desc, cat, val, data_str])
 
-    # 7. METAS
-    elements.append(Spacer(1, 10*mm))
-    elements.append(Paragraph("Metas", style_h2))
+        t_g = Table(rows_g, colWidths=[8*mm, 68*mm, 40*mm, 32*mm, 22*mm])
+        t_g.setStyle(TableStyle([
+            ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
+            ('FONTNAME',      (0, 0), (-1, 0),  FONT_BOLD),
+            ('FONTSIZE',      (0, 0), (-1, -1), 8.5),
+            ('FONTNAME',      (0, 1), (-1, -1), FONT_REG),
+            ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_BG, C_WHITE]),
+            ('ALIGN',         (3, 0), (4, -1),  'RIGHT'),
+            ('TEXTCOLOR',     (3, 1), (3, -1),  C_RED),
+            ('FONTNAME',      (3, 1), (3, -1),  FONT_BOLD),
+            ('TEXTCOLOR',     (0, 1), (0, -1),  C_MUTED),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING',    (0, 0), (-1, -1), 6),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 6),
+            ('LINEBELOW',     (0, 0), (-1, 0),  1.5, C_CYAN),
+            ('LINEBELOW',     (0, 1), (-1, -2), 0.3, C_BORDER),
+        ]))
+        elements.append(t_g)
+    else:
+        elements.append(Paragraph("Nenhum gasto individual registrado neste período.", s_body))
+
+    # ── 8. METAS ──────────────────────────────────────────────
     metas = context.get('metas', [])
     if metas:
-        table_metas = [["Meta", "Atual", "Objetivo", "Progresso"]]
-        for meta in metas[:6]:
-            table_metas.append([
-                meta.get('descricao', 'Meta'),
-                format_currency(meta.get('valor_atual', 0)),
-                format_currency(meta.get('valor_meta', 0)),
-                format_percent(meta.get('progresso_percent', 0)),
+        elements.append(Spacer(1, 8*mm))
+        elements.append(SectionHeader("Metas Financeiras", "🎯"))
+        elements.append(Spacer(1, 4*mm))
+
+        header_m = [
+            Paragraph('<b>Meta</b>',      style('tm1', fontName=FONT_BOLD, fontSize=9, textColor=C_WHITE)),
+            Paragraph('<b>Atual</b>',     style('tm2', fontName=FONT_BOLD, fontSize=9, textColor=C_WHITE, alignment=2)),
+            Paragraph('<b>Objetivo</b>',  style('tm3', fontName=FONT_BOLD, fontSize=9, textColor=C_WHITE, alignment=2)),
+            Paragraph('<b>Progresso</b>', style('tm4', fontName=FONT_BOLD, fontSize=9, textColor=C_WHITE, alignment=2)),
+        ]
+        rows_m = [header_m]
+        for m in metas[:8]:
+            prog = float(m.get('progresso_percent', 0))
+            bar  = '█' * int(min(prog, 100) / 10) + '░' * (10 - int(min(prog, 100) / 10))
+            rows_m.append([
+                str(m.get('descricao', 'Meta'))[:40],
+                fmt_brl(m.get('valor_atual', 0)),
+                fmt_brl(m.get('valor_meta', 0)),
+                f"{prog:.0f}%  {bar}",
             ])
-        t_metas = Table(table_metas, colWidths=[80*mm, 35*mm, 35*mm, 25*mm])
-        t_metas.setStyle(TableStyle([
-            ('FONTNAME', (0,0), (-1,0), FONT_BOLD),
-            ('BACKGROUND', (0,0), (-1,0), COLOR_PRIMARY),
-            ('TEXTCOLOR', (0,0), (-1,0), COLOR_WHITE),
-            ('ALIGN', (1,0), (-1,-1), 'RIGHT'),
-            ('FONTNAME', (0,1), (-1,-1), FONT_REG),
-            ('ROWBACKGROUNDS', (0,1), (-1,-1), [COLOR_BG_LIGHT, COLOR_WHITE]),
-            ('GRID', (0,0), (-1,-1), 0.5, HexColor('#E2E8F0')),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-            ('TOPPADDING', (0,0), (-1,-1), 6),
+
+        t_m = Table(rows_m, colWidths=[70*mm, 30*mm, 30*mm, 42*mm])
+        t_m.setStyle(TableStyle([
+            ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
+            ('FONTNAME',      (0, 0), (-1, 0),  FONT_BOLD),
+            ('FONTSIZE',      (0, 0), (-1, -1), 8.5),
+            ('FONTNAME',      (0, 1), (-1, -1), FONT_REG),
+            ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_BG, C_WHITE]),
+            ('ALIGN',         (1, 0), (-1, -1), 'RIGHT'),
+            ('TEXTCOLOR',     (3, 1), (3, -1),  C_INDIGO),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
+            ('TOPPADDING',    (0, 0), (-1, -1), 7),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 8),
+            ('LINEBELOW',     (0, 0), (-1, 0),  1.5, C_CYAN),
+            ('LINEBELOW',     (0, 1), (-1, -2), 0.3, C_BORDER),
         ]))
-        elements.append(t_metas)
-    else:
-        elements.append(Paragraph("Nenhuma meta registrada.", style_normal))
+        elements.append(t_m)
 
-    # 8. INSIGHTS
+    # ── 9. INSIGHTS DO ALFREDO ────────────────────────────────
+    elements.append(PageBreak())
+    elements.append(SectionHeader("Insights do Alfredo", "🤖"))
+    elements.append(Spacer(1, 5*mm))
+
+    analise_ia = context.get('analise_ia', '')
+    insights   = context.get('insights', [])
+
+    # Converte analise_ia em lista de insights individuais (separa por número ou ponto final duplo)
+    all_insights = list(insights)
+    if analise_ia and analise_ia not in insights:
+        import re
+        # Tenta separar em pontos de insight numerados: "1. xxx 2. yyy"
+        partes = re.split(r'\n+|\d+\.\s+', analise_ia.strip())
+        partes = [p.strip() for p in partes if len(p.strip()) > 20]
+        all_insights = (partes if partes else [analise_ia]) + all_insights
+
+    if not all_insights:
+        all_insights = [
+            "Continue registrando seus gastos para receber análises personalizadas do Alfredo."
+        ]
+
+    for i, insight in enumerate(all_insights[:6]):
+        elements.append(InsightCard(insight, i))
+        elements.append(Spacer(1, 3*mm))
+
+    # Rodapé final
     elements.append(Spacer(1, 10*mm))
-    elements.append(Paragraph("Insights do Alfredo", style_h2))
+    elements.append(HRFlowable(width='100%', color=C_BORDER, thickness=0.5))
+    elements.append(Spacer(1, 3*mm))
+    elements.append(Paragraph(
+        f"Relatório gerado em {__import__('datetime').datetime.now().strftime('%d/%m/%Y às %H:%M')} "
+        f"• ContaComigo — Seu parceiro financeiro inteligente",
+        style('footer_txt', fontSize=7.5, textColor=C_MUTED, alignment=1)
+    ))
 
-    insights = context.get('insights', [])
-    analise_ia = context.get('analise_ia')
-    if analise_ia:
-        elements.append(Paragraph(f"💡 {analise_ia}", style_insight))
-        elements.append(Spacer(1, 2*mm))
-
-    if not insights and not analise_ia:
-        insights = ["Continue registrando seus gastos para receber análises personalizadas."]
-
-    for insight in insights:
-        elements.append(Paragraph(f"💡 {insight}", style_insight))
-        elements.append(Spacer(1, 2*mm))
-
-    # 6. GERAR PDF
-    try:
-        # Adiciona validação antes de incluir elementos no PDF
-        for element in elements:
-            if isinstance(element, GradientCover):
-                validate_flowable_size(element, frame_content._width, frame_content._height)
-            elif isinstance(element, Drawing):
-                for sub_element in element.contents:
-                    if hasattr(sub_element, 'width') and hasattr(sub_element, 'height'):
-                        validate_flowable_size(sub_element, frame_content._width, frame_content._height)
-        
-        doc.build(elements)
-    except Exception as e:
-        print(f"Erro crítico ao construir PDF: {e}")
-        # Retorna um PDF vazio ou lança erro dependendo da necessidade
-        raise e
-    
+    # ── Build ─────────────────────────────────────────────────
+    doc.build(elements)
     buffer.seek(0)
     return buffer.getvalue()

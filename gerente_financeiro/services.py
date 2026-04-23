@@ -239,225 +239,488 @@ def preparar_contexto_json(lancamentos: List[Lancamento]) -> str:
 
 
 
+import io
+import logging
+import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import seaborn as sns
+import numpy as np
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+from sqlalchemy import and_, extract, or_
+from sqlalchemy.orm import joinedload
+
+# ── Paleta de cores consistente com o PDF ──────────────────
+_PALETTE = ["#0B1220", "#00C2CB", "#6366F1", "#10B981", "#F59E0B",
+            "#EF4444", "#8B5CF6", "#EC4899", "#14B8A6", "#F97316"]
+
+_CATEGORIAS_EXCLUIR = {'transferência', 'transferencias', 'transferências'}
+
+
+def _is_transferencia(lancamento) -> bool:
+    """Retorna True se o lançamento for uma transferência a ser ignorada."""
+    if lancamento.categoria:
+        return lancamento.categoria.nome.strip().lower() in _CATEGORIAS_EXCLUIR
+    return False
+
+
+# ── Gráfico de Pizza / Donut ────────────────────────────────
+
 def gerar_grafico_para_relatorio(gastos_por_categoria: dict) -> io.BytesIO | None:
-    """Gera um gráfico de pizza a partir de um dicionário de gastos por categoria."""
+    """
+    Gera gráfico donut com legenda lateral.
+    Agrupa categorias além das top-6 em 'Outros'.
+    """
     if not gastos_por_categoria:
         return None
     try:
         plt.style.use('seaborn-v0_8-whitegrid')
-
-        df = pd.DataFrame(list(gastos_por_categoria.items()), columns=['Categoria', 'Valor']).sort_values('Valor', ascending=False)
-
-        if len(df) > 6:
-            top_5 = df.iloc[:5].copy()
-            outros_valor = df.iloc[5:]['Valor'].sum()
-            outros_df = pd.DataFrame([{'Categoria': 'Outros', 'Valor': outros_valor}])
-            df = pd.concat([top_5, outros_df], ignore_index=True)
-
-        # aumentar dpi para melhorar qualidade ao inserir no PDF
-        fig, ax = plt.subplots(figsize=(8, 5), dpi=200)
-
-        colors = sns.color_palette("viridis_r", len(df))
-
-        wedges, _, autotexts = ax.pie(
-            df['Valor'], 
-            autopct='%1.1f%%', 
-            startangle=140, 
-            pctdistance=0.85, 
-            colors=colors, 
-            wedgeprops={'edgecolor': 'white', 'linewidth': 1.5}
+        df = (
+            pd.DataFrame(list(gastos_por_categoria.items()), columns=['Categoria', 'Valor'])
+            .sort_values('Valor', ascending=False)
         )
-        plt.setp(autotexts, size=10, weight="bold", color="white")
 
-        centre_circle = plt.Circle((0,0),0.70,fc='white')
-        fig.gca().add_artist(centre_circle)
+        # Agrupa excedentes em "Outros"
+        if len(df) > 6:
+            top = df.iloc[:6].copy()
+            outros_val = df.iloc[6:]['Valor'].sum()
+            df = pd.concat(
+                [top, pd.DataFrame([{'Categoria': 'Outros', 'Valor': outros_val}])],
+                ignore_index=True
+            )
 
-        ax.set_title('Distribuição de Despesas', fontsize=16, pad=15, weight='bold')
-        ax.axis('equal')
+        total = df['Valor'].sum()
+        colors = _PALETTE[:len(df)]
 
-        plt.tight_layout()
+        fig, (ax_pie, ax_legend) = plt.subplots(
+            1, 2, figsize=(11, 5.5), dpi=180,
+            gridspec_kw={'width_ratios': [1.4, 1]}
+        )
+        fig.patch.set_facecolor('white')
+
+        # — Donut —
+        wedges, _, autotexts = ax_pie.pie(
+            df['Valor'],
+            autopct=lambda p: f'{p:.1f}%' if p > 3 else '',
+            startangle=140,
+            pctdistance=0.82,
+            colors=colors,
+            wedgeprops={'edgecolor': 'white', 'linewidth': 2},
+        )
+        plt.setp(autotexts, size=9, weight='bold', color='white')
+
+        # Buraco central
+        centre_circle = plt.Circle((0, 0), 0.68, fc='white')
+        ax_pie.add_artist(centre_circle)
+        ax_pie.text(0, 0.08, 'Total', ha='center', va='center',
+                    fontsize=10, color='#64748B', fontweight='bold')
+        ax_pie.text(0, -0.15, f'R$ {total:,.0f}', ha='center', va='center',
+                    fontsize=13, color='#0B1220', fontweight='bold')
+        ax_pie.set_title('Distribuição de Despesas', fontsize=14,
+                         pad=12, weight='bold', color='#0B1220')
+
+        # — Legenda detalhada —
+        ax_legend.axis('off')
+        legend_y = 0.97
+        for i, row in df.iterrows():
+            pct = row['Valor'] / total * 100
+            patch = mpatches.FancyBboxPatch(
+                (0.0, legend_y - 0.055), 0.06, 0.045,
+                boxstyle='round,pad=0.005',
+                facecolor=colors[i], edgecolor='none'
+            )
+            ax_legend.add_patch(patch)
+            ax_legend.text(0.10, legend_y - 0.03, row['Categoria'],
+                           va='center', fontsize=9, color='#0F172A', fontweight='bold')
+            ax_legend.text(0.10, legend_y - 0.055,
+                           f'R$ {row["Valor"]:,.2f}  ({pct:.1f}%)',
+                           va='center', fontsize=8, color='#64748B')
+            legend_y -= 0.14
+
+        ax_legend.set_xlim(0, 1)
+        ax_legend.set_ylim(0, 1)
+
+        plt.tight_layout(pad=1.5)
         buffer = io.BytesIO()
-        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=200)
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=180,
+                    facecolor='white')
         buffer.seek(0)
         return buffer
+
     except Exception as e:
-        logger.error(f"Erro CRÍTICO ao gerar gráfico para relatório: {e}", exc_info=True)
+        logger.error(f"Erro ao gerar gráfico donut: {e}", exc_info=True)
         return None
     finally:
         plt.close('all')
 
-def gerar_contexto_relatorio(db: Session, telegram_id: int, mes: int, ano: int):
+
+# ── Gráfico de Evolução 6 meses ─────────────────────────────
+
+def gerar_grafico_evolucao_mensal(lancamentos_historico: list) -> io.BytesIO | None:
     """
-    Coleta e processa dados detalhados para o relatório avançado, ignorando
-    transações da categoria 'Transferência' para os cálculos financeiros.
+    Gera gráfico de barras agrupadas (receita / despesa) + linha de saldo.
+    Ignora transferências.
     """
-    
+    if not lancamentos_historico:
+        return None
+    try:
+        dados = [
+            {
+                'data': l.data_transacao,
+                'valor': float(l.valor),
+                'tipo': l.tipo
+            }
+            for l in lancamentos_historico
+            if not _is_transferencia(l)
+        ]
+        if not dados:
+            return None
+
+        df = pd.DataFrame(dados)
+        df['mes_ano'] = df['data'].dt.to_period('M')
+        df_ag = (
+            df.groupby(['mes_ano', 'tipo'])['valor']
+            .sum()
+            .unstack(fill_value=0)
+            .sort_index()
+        )
+        for col in ('Receita', 'Despesa'):
+            if col not in df_ag.columns:
+                df_ag[col] = 0
+
+        df_ag['Despesa'] = df_ag['Despesa'].abs()
+        df_ag['Saldo'] = df_ag['Receita'] - df_ag['Despesa']
+        labels = df_ag.index.strftime('%b/%y')
+        x = np.arange(len(labels))
+        width = 0.35
+
+        fig, ax1 = plt.subplots(figsize=(11, 5.5), dpi=180)
+        fig.patch.set_facecolor('white')
+        ax1.set_facecolor('#FAFAFA')
+
+        bars_rec = ax1.bar(x - width / 2, df_ag['Receita'], width,
+                           label='Receitas', color='#10B981', alpha=0.85,
+                           edgecolor='white', linewidth=0.8)
+        bars_desp = ax1.bar(x + width / 2, df_ag['Despesa'], width,
+                            label='Despesas', color='#EF4444', alpha=0.85,
+                            edgecolor='white', linewidth=0.8)
+
+        # Linha de saldo no eixo secundário
+        ax2 = ax1.twinx()
+        ax2.plot(x, df_ag['Saldo'], color='#6366F1', marker='o',
+                 linewidth=2.5, markersize=6, label='Saldo', zorder=5)
+        ax2.axhline(0, color='#6366F1', linewidth=0.8, linestyle='--', alpha=0.4)
+        ax2.set_ylabel('Saldo (R$)', color='#6366F1', fontsize=9)
+        ax2.tick_params(axis='y', labelcolor='#6366F1')
+
+        # Labels de valor nas barras
+        for bar in [*bars_rec, *bars_desp]:
+            h = bar.get_height()
+            if h > 0:
+                ax1.text(bar.get_x() + bar.get_width() / 2, h + 30,
+                         f'R${h/1000:.1f}k' if h >= 1000 else f'R${h:.0f}',
+                         ha='center', va='bottom', fontsize=7, color='#374151')
+
+        ax1.set_xticks(x)
+        ax1.set_xticklabels(labels, fontsize=9)
+        ax1.set_ylabel('Valor (R$)', fontsize=9)
+        ax1.set_title('Receitas vs. Despesas — Últimos 6 Meses',
+                      fontsize=14, weight='bold', color='#0B1220', pad=12)
+        ax1.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.6)
+        ax1.spines[['top', 'right']].set_visible(False)
+
+        # Legenda unificada
+        handles1, labels1 = ax1.get_legend_handles_labels()
+        handles2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(handles1 + handles2, labels1 + labels2,
+                   loc='upper left', fontsize=9, framealpha=0.9)
+
+        plt.tight_layout(pad=1.5)
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format='png', bbox_inches='tight',
+                    dpi=180, facecolor='white')
+        buffer.seek(0)
+        return buffer
+
+    except Exception as e:
+        logger.error(f"Erro ao gerar gráfico de evolução: {e}", exc_info=True)
+        return None
+    finally:
+        plt.close('all')
+
+
+# ── Heatmap de gastos diários ────────────────────────────────
+
+def gerar_grafico_heatmap_diario(lancamentos_mes: list, mes: int, ano: int) -> io.BytesIO | None:
+    """
+    Gera um heatmap de calendário com intensidade de gastos por dia do mês.
+    Retorna None se não houver dados suficientes.
+    """
+    try:
+        dados = [
+            {'dia': l.data_transacao.day, 'valor': abs(float(l.valor))}
+            for l in lancamentos_mes
+            if l.tipo == 'Despesa' and not _is_transferencia(l)
+        ]
+        if not dados:
+            return None
+
+        df = pd.DataFrame(dados)
+        gastos_dia = df.groupby('dia')['valor'].sum()
+
+        import calendar
+        _, total_dias = calendar.monthrange(ano, mes)
+        todos_dias = pd.Series(0.0, index=range(1, total_dias + 1))
+        todos_dias.update(gastos_dia)
+
+        # Reshape em grade de semanas (7 colunas)
+        # Descobre o dia da semana do dia 1
+        primeiro_dia_semana = datetime(ano, mes, 1).weekday()  # 0=Seg
+        pad = [0.0] * primeiro_dia_semana
+        valores = pad + list(todos_dias.values)
+        while len(valores) % 7 != 0:
+            valores.append(np.nan)
+
+        grid = np.array(valores, dtype=float).reshape(-1, 7)
+
+        fig, ax = plt.subplots(figsize=(10, 3.5), dpi=180)
+        fig.patch.set_facecolor('white')
+
+        cmap = matplotlib.colors.LinearSegmentedColormap.from_list(
+            'heat', ['#EFF6FF', '#BFDBFE', '#3B82F6', '#1E3A8A']
+        )
+        im = ax.imshow(grid, cmap=cmap, aspect='auto',
+                       vmin=0, vmax=max(gastos_dia.max(), 1))
+
+        dias_semana = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
+        ax.set_xticks(range(7))
+        ax.set_xticklabels(dias_semana, fontsize=9)
+        ax.set_yticks([])
+
+        # Numera os dias dentro das células
+        dia_num = 1
+        for row in range(grid.shape[0]):
+            for col in range(grid.shape[1]):
+                val = grid[row, col]
+                if np.isnan(val) or (row == 0 and col < primeiro_dia_semana):
+                    continue
+                if dia_num > total_dias:
+                    break
+                cor_txt = 'white' if val > gastos_dia.max() * 0.6 else '#1E3A8A'
+                ax.text(col, row, str(dia_num), ha='center', va='center',
+                        fontsize=7.5, color=cor_txt, fontweight='bold')
+                if val > 0:
+                    ax.text(col, row + 0.28, f'R${val:.0f}',
+                            ha='center', va='center', fontsize=5.5, color=cor_txt)
+                dia_num += 1
+
+        plt.colorbar(im, ax=ax, label='Gastos (R$)', fraction=0.02, pad=0.02)
+        nome_mes = datetime(ano, mes, 1).strftime('%B/%Y').capitalize()
+        ax.set_title(f'Mapa de Calor de Gastos — {nome_mes}',
+                     fontsize=12, weight='bold', color='#0B1220', pad=10)
+        ax.spines[:].set_visible(False)
+
+        plt.tight_layout(pad=1)
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format='png', bbox_inches='tight',
+                    dpi=180, facecolor='white')
+        buffer.seek(0)
+        return buffer
+
+    except Exception as e:
+        logger.error(f"Erro ao gerar heatmap diário: {e}", exc_info=True)
+        return None
+    finally:
+        plt.close('all')
+
+
+# ── Contexto completo do relatório ──────────────────────────
+
+def gerar_contexto_relatorio(db, telegram_id: int, mes: int, ano: int):
+    """
+    Coleta e processa todos os dados para o relatório financeiro.
+    Transferências são ignoradas em TODOS os cálculos financeiros.
+    """
     usuario_q = db.query(Usuario).filter(Usuario.telegram_id == telegram_id).first()
-    if not usuario_q: 
-        logging.warning(f"Usuário com telegram_id {telegram_id} não encontrado para gerar relatório.")
+    if not usuario_q:
+        logger.warning(f"Usuário {telegram_id} não encontrado.")
         return None
 
     data_alvo = datetime(ano, mes, 1)
     periodo_alvo = pd.Period(data_alvo, freq='M')
+    mes_nome_str = data_alvo.strftime('%B').capitalize()
 
-    # Busca todos os lançamentos do período, incluindo transferências
-    lancamentos_mes_atual = db.query(Lancamento).filter(
-        and_(
-            Lancamento.id_usuario == usuario_q.id,
-            extract('year', Lancamento.data_transacao) == ano,
-            extract('month', Lancamento.data_transacao) == mes
+    # ── Lançamentos do mês atual ────────────────────────────
+    lancamentos_mes_atual = (
+        db.query(Lancamento)
+        .filter(
+            and_(
+                Lancamento.id_usuario == usuario_q.id,
+                extract('year', Lancamento.data_transacao) == ano,
+                extract('month', Lancamento.data_transacao) == mes,
+            )
         )
-    ).options(joinedload(Lancamento.categoria)).all()
+        .options(joinedload(Lancamento.categoria))
+        .all()
+    )
 
-    # Busca histórico de 6 meses usando extract para evitar problemas de timezone
-    from sqlalchemy import or_
+    # ── Histórico 6 meses ───────────────────────────────────
     historico_conditions = []
     temp_date = data_alvo
     for _ in range(6):
         historico_conditions.append(
             and_(
                 extract('year', Lancamento.data_transacao) == temp_date.year,
-                extract('month', Lancamento.data_transacao) == temp_date.month
+                extract('month', Lancamento.data_transacao) == temp_date.month,
             )
         )
         temp_date -= relativedelta(months=1)
 
-    lancamentos_historico_6m = db.query(Lancamento).filter(
-        and_(
-            Lancamento.id_usuario == usuario_q.id,
-            or_(*historico_conditions)
-        )
-    ).options(joinedload(Lancamento.categoria)).all()
-
-    mes_nome_str = data_alvo.strftime("%B").capitalize()
+    lancamentos_historico_6m = (
+        db.query(Lancamento)
+        .filter(and_(Lancamento.id_usuario == usuario_q.id, or_(*historico_conditions)))
+        .options(joinedload(Lancamento.categoria))
+        .all()
+    )
 
     if not lancamentos_mes_atual:
-        return {"has_data": False, "usuario": usuario_q, "mes_nome": mes_nome_str, "ano": ano, "now": datetime.now}
-    
-    # --- CORREÇÃO APLICADA: FILTRAGEM DE TRANSFERÊNCIAS ---
-    # Cria uma nova lista contendo apenas lançamentos que NÃO são transferências
-    lancamentos_financeiros = [
-        l for l in lancamentos_mes_atual 
-        if not (l.categoria and l.categoria.nome.lower() == 'transferência')
-    ]
+        return {
+            'has_data': False,
+            'usuario': usuario_q,
+            'mes_nome': mes_nome_str,
+            'ano': ano,
+            'now': datetime.now,
+        }
 
-    # Todos os cálculos de receita, despesa e saldo agora usam a lista filtrada
-    receitas_atual = sum(float(l.valor) for l in lancamentos_financeiros if l.tipo == 'Receita')
-    despesas_atual = sum(abs(float(l.valor)) for l in lancamentos_financeiros if l.tipo == 'Despesa')
+    # ── Filtra transferências ───────────────────────────────
+    financeiros = [l for l in lancamentos_mes_atual if not _is_transferencia(l)]
+    despesas_lista = sorted(
+        [l for l in financeiros if l.tipo == 'Despesa'],
+        key=lambda l: abs(float(l.valor)),
+        reverse=True,
+    )
+
+    receitas_atual = sum(float(l.valor) for l in financeiros if l.tipo == 'Receita')
+    despesas_atual = sum(abs(float(l.valor)) for l in financeiros if l.tipo == 'Despesa')
     saldo_atual = receitas_atual - despesas_atual
-    taxa_poupanca_atual = (saldo_atual / receitas_atual) * 100 if receitas_atual > 0 else 0
+    taxa_poupanca_atual = (saldo_atual / receitas_atual * 100) if receitas_atual > 0 else 0
 
-    # O agrupamento de gastos também usa a lista filtrada
-    gastos_por_categoria_atual = {}
-    for l in lancamentos_financeiros:
+    # ── Gastos por categoria ────────────────────────────────
+    gastos_por_categoria: dict[str, float] = {}
+    for l in financeiros:
         if l.tipo == 'Despesa':
-            cat_nome = l.categoria.nome if l.categoria else "Sem Categoria"
-            gastos_por_categoria_atual[cat_nome] = gastos_por_categoria_atual.get(cat_nome, 0) + abs(float(l.valor))
-    
-    gastos_agrupados_final = sorted([(cat, val) for cat, val in gastos_por_categoria_atual.items()], key=lambda i: i[1], reverse=True)
+            cat = l.categoria.nome if l.categoria else 'Sem Categoria'
+            gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0) + abs(float(l.valor))
 
-    # A análise histórica pode continuar usando todos os dados, se desejado, ou também pode ser filtrada
-    df_historico = pd.DataFrame([
-        {'data': l.data_transacao, 'valor': float(l.valor), 'tipo': l.tipo} 
-        for l in lancamentos_historico_6m 
-        if not (l.categoria and l.categoria.nome.lower() == 'transferência') # Filtrando aqui também
+    gastos_agrupados = sorted(gastos_por_categoria.items(), key=lambda i: i[1], reverse=True)
+
+    # ── Histórico filtrado ──────────────────────────────────
+    df_hist = pd.DataFrame([
+        {'data': l.data_transacao, 'valor': float(l.valor), 'tipo': l.tipo}
+        for l in lancamentos_historico_6m
+        if not _is_transferencia(l)
     ])
-    
-    if not df_historico.empty:
-        df_historico['mes_ano'] = df_historico['data'].dt.to_period('M')
-        dados_mensais = df_historico.groupby(['mes_ano', 'tipo'])['valor'].sum().unstack(fill_value=0)
-    else:
-        dados_mensais = pd.DataFrame()
-        
-    if 'Receita' not in dados_mensais.columns: dados_mensais['Receita'] = 0
-    if 'Despesa' not in dados_mensais.columns: dados_mensais['Despesa'] = 0
 
-    periodo_3m = dados_mensais.index[dados_mensais.index < periodo_alvo][-3:]
-    media_3m = dados_mensais.loc[periodo_3m].mean() if not periodo_3m.empty else pd.Series(dtype=float)
-    media_receitas_3m = media_3m.get('Receita', 0.0)
-    media_despesas_3m = media_3m.get('Despesa', 0.0)
+    dados_mensais = pd.DataFrame()
+    if not df_hist.empty:
+        df_hist['mes_ano'] = df_hist['data'].dt.to_period('M')
+        dados_mensais = (
+            df_hist.groupby(['mes_ano', 'tipo'])['valor']
+            .sum()
+            .unstack(fill_value=0)
+        )
+    for col in ('Receita', 'Despesa'):
+        if col not in dados_mensais.columns:
+            dados_mensais[col] = 0
 
+    # ── Tendências ──────────────────────────────────────────
     periodo_anterior = periodo_alvo - 1
     if periodo_anterior in dados_mensais.index:
-        receitas_anterior = dados_mensais.loc[periodo_anterior, 'Receita']
-        despesas_anterior = dados_mensais.loc[periodo_anterior, 'Despesa']
-        tendencia_receita_percent = ((receitas_atual - receitas_anterior) / receitas_anterior * 100) if receitas_anterior > 0 else 0
-        tendencia_despesa_percent = ((despesas_atual - despesas_anterior) / despesas_anterior * 100) if despesas_anterior > 0 else 0
+        rec_ant = dados_mensais.loc[periodo_anterior, 'Receita']
+        desp_ant = abs(dados_mensais.loc[periodo_anterior, 'Despesa'])
+        tendencia_receita = ((receitas_atual - rec_ant) / rec_ant * 100) if rec_ant > 0 else 0
+        tendencia_despesa = ((despesas_atual - desp_ant) / desp_ant * 100) if desp_ant > 0 else 0
     else:
-        tendencia_receita_percent = 0
-        tendencia_despesa_percent = 0
+        tendencia_receita = tendencia_despesa = 0
 
-    # Placeholders para futuras implementações
-    analise_ia = "Análise inteligente do Alfredo aparecerá aqui."
-    metas_com_progresso = []
+    # ── Médias 3 meses ──────────────────────────────────────
+    periodos_3m = dados_mensais.index[dados_mensais.index < periodo_alvo][-3:]
+    if not periodos_3m.empty:
+        media_3m = dados_mensais.loc[periodos_3m].mean()
+    else:
+        media_3m = pd.Series(dtype=float)
+    media_receitas_3m = float(media_3m.get('Receita', 0))
+    media_despesas_3m = abs(float(media_3m.get('Despesa', 0)))
+
+    # ── Evolução mensal para o gráfico de barras ────────────
+    evolucao_mensal = []
+    for p in sorted(dados_mensais.index):
+        evolucao_mensal.append({
+            'mes': p.strftime('%b/%y'),
+            'receita': float(dados_mensais.loc[p, 'Receita']),
+            'despesa': abs(float(dados_mensais.loc[p, 'Despesa'])),
+        })
+
+    # ── Número de transações por tipo ──────────────────────
+    qtd_receitas = sum(1 for l in financeiros if l.tipo == 'Receita')
+    qtd_despesas = sum(1 for l in financeiros if l.tipo == 'Despesa')
+
+    # ── Dia com mais gastos ─────────────────────────────────
+    if despesas_lista:
+        df_dias = pd.DataFrame([
+            {'dia': l.data_transacao.day, 'valor': abs(float(l.valor))}
+            for l in despesas_lista
+        ])
+        dia_mais_gasto = int(df_dias.groupby('dia')['valor'].sum().idxmax())
+        valor_dia_mais_gasto = float(df_dias.groupby('dia')['valor'].sum().max())
+    else:
+        dia_mais_gasto = None
+        valor_dia_mais_gasto = 0
 
     contexto = {
-        "has_data": True, "now": datetime.now, "usuario": usuario_q,
-        "mes_nome": mes_nome_str, "ano": ano,
-        "receita_total": receitas_atual,
-        "despesa_total": despesas_atual,
-        "saldo_mes": saldo_atual,
-        "taxa_poupanca": taxa_poupanca_atual,
-        "gastos_agrupados": gastos_agrupados_final,
-        "gastos_por_categoria_dict": gastos_por_categoria_atual,
-        "lancamentos_historico": lancamentos_historico_6m, # Mantém o histórico completo para referência
-        "tendencia_receita_percent": tendencia_receita_percent,
-        "tendencia_despesa_percent": tendencia_despesa_percent,
-        "media_receitas_3m": media_receitas_3m,
-        "media_despesas_3m": media_despesas_3m,
-        "media_saldo_3m": media_receitas_3m - media_despesas_3m,
-        "analise_ia": analise_ia,
-        "metas": metas_com_progresso,
+        'has_data': True,
+        'now': datetime.now,
+        'usuario': usuario_q,
+        'mes_nome': mes_nome_str,
+        'ano': ano,
+        # Financeiro
+        'receita_total': receitas_atual,
+        'despesa_total': despesas_atual,
+        'saldo_mes': saldo_atual,
+        'taxa_poupanca': taxa_poupanca_atual,
+        # Gastos
+        'gastos_agrupados': gastos_agrupados,
+        'gastos_por_categoria_dict': gastos_por_categoria,
+        'lista_despesas': despesas_lista,
+        # Histórico
+        'lancamentos_historico': lancamentos_historico_6m,
+        'evolucao_mensal': evolucao_mensal,
+        # Tendências
+        'tendencia_receita_percent': tendencia_receita,
+        'tendencia_despesa_percent': tendencia_despesa,
+        # Médias
+        'media_receitas_3m': media_receitas_3m,
+        'media_despesas_3m': media_despesas_3m,
+        'media_saldo_3m': media_receitas_3m - media_despesas_3m,
+        # Quantidades
+        'qtd_receitas': qtd_receitas,
+        'qtd_despesas': qtd_despesas,
+        'total_transacoes': qtd_receitas + qtd_despesas,
+        # Extras
+        'dia_mais_gasto': dia_mais_gasto,
+        'valor_dia_mais_gasto': valor_dia_mais_gasto,
+        'categoria_top': gastos_agrupados[0][0] if gastos_agrupados else None,
+        'valor_categoria_top': gastos_agrupados[0][1] if gastos_agrupados else 0,
+        # Placeholders
+        'analise_ia': None,
+        'metas': [],
+        'insights': [],
     }
-    
+
     return contexto
-
-def gerar_grafico_evolucao_mensal(lancamentos_historico: list) -> io.BytesIO | None:
-    if not lancamentos_historico:
-        return None
-
-    try:
-        dados = []
-        for l in lancamentos_historico:
-            dados.append({
-                'data': l.data_transacao,
-                'valor': float(l.valor),
-                'tipo': l.tipo
-            })
-        
-        df = pd.DataFrame(dados)
-        df['mes_ano'] = df['data'].dt.to_period('M')
-
-        df_agrupado = df.groupby(['mes_ano', 'tipo'])['valor'].sum().unstack(fill_value=0)
-        
-        if 'Receita' not in df_agrupado.columns: df_agrupado['Receita'] = 0
-        if 'Despesa' not in df_agrupado.columns: df_agrupado['Despesa'] = 0
-        
-        df_agrupado = df_agrupado.sort_index()
-        
-        df_agrupado.index = df_agrupado.index.strftime('%b/%y')
-
-        # aumentar dpi para maior nitidez nos PDFs
-        fig, ax = plt.subplots(figsize=(10, 5), dpi=200)
-
-        ax.plot(df_agrupado.index, df_agrupado['Receita'], marker='o', linestyle='-', color='#2ecc71', label='Receitas')
-        ax.plot(df_agrupado.index, df_agrupado['Despesa'], marker='o', linestyle='-', color='#e74c3c', label='Despesas')
-
-        ax.set_title('Receitas vs. Despesas (Últimos 6 Meses)', fontsize=16, weight='bold')
-        ax.set_ylabel('Valor (R$)')
-        ax.grid(True, which='both', linestyle='--', linewidth=0.5)
-        ax.legend()
-
-        plt.tight_layout()
-        buffer = io.BytesIO()
-        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=200)
-        buffer.seek(0)
-        return buffer
-    except Exception as e:
-        logger.error(f"Erro ao gerar gráfico de evolução: {e}", exc_info=True)
-        return None
-    finally:
-        plt.close('all')
 
 def detectar_intencao_e_topico(pergunta: str) -> Optional[tuple[str, str]]:
     pergunta_lower = pergunta.lower()

@@ -326,6 +326,19 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
         except Exception as e:
             logger.error(f"Erro ao gerar gráfico de evolução: {e}")
             contexto_dados["grafico_evolucao_png_bytes"] = None
+
+        # 4.2 Gerar Mapa de Calor Diário
+        logger.info("Gerando mapa de calor diário...")
+        try:
+            from .services import gerar_grafico_heatmap_diario
+            grafico_heatmap = gerar_grafico_heatmap_diario(contexto_dados.get("lista_despesas", []), mes_alvo, ano_alvo)
+            if grafico_heatmap:
+                contexto_dados["grafico_heatmap_png_bytes"] = grafico_heatmap.getvalue()
+            else:
+                contexto_dados["grafico_heatmap_png_bytes"] = None
+        except Exception as e:
+            logger.error(f"Erro ao gerar mapa de calor: {e}")
+            contexto_dados["grafico_heatmap_png_bytes"] = None
         
         # 5. Renderizar o template HTML com os dados
         logger.info("Renderizando template HTML...")
@@ -401,9 +414,11 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
                 'total_gastos': contexto_dados.get('despesa_total', 0),
                 'saldo_periodo': contexto_dados.get('saldo_mes', 0),
                 'taxa_poupanca': contexto_dados.get('taxa_poupanca', 0),
+                'score_financeiro': contexto_dados.get('score_financeiro'),
                 'gastos_agrupados': contexto_dados.get('gastos_agrupados', []),
                 'grafico_pizza_png': contexto_dados.get('grafico_pizza_png_bytes'),
                 'grafico_evolucao_png': contexto_dados.get('grafico_evolucao_png_bytes'),
+                'grafico_heatmap_png': contexto_dados.get('grafico_heatmap_png_bytes'),
                 # Inclui o HTML renderizado opcionalmente para permitir HTML->PDF se disponível
                 'html_renderizado': html_renderizado,
                 'top_gastos': contexto_dados.get('lista_despesas', [])[:10],
