@@ -90,7 +90,6 @@ lucide.createIcons();
     const homePctDespesa = document.getElementById('homePctDespesa');
     const homeReceita = document.getElementById('homeReceita');
     const homeDespesa = document.getElementById('homeDespesa');
-    const homeInsight = document.getElementById('homeInsight');
     const homeRecentList = document.getElementById('homeRecentList');
     const homeRecentRefresh = document.getElementById('homeRecentRefresh');
     const homeChartsPills = document.getElementById('homeChartsPills');
