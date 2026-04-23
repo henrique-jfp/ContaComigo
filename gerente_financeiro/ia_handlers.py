@@ -38,14 +38,21 @@ def _get_subcats_ignore_ids(db) -> list[int]:
     return [s[0] for s in subcats]
 
 def _filtrar_saidas_reais(lancamentos: list[Lancamento], ignore_ids: list[int]) -> list[Lancamento]:
-    """Retorna apenas os lançamentos que são saídas reais (não duplicatas)."""
-    return [l for l in lancamentos 
-            if not str(l.tipo).lower().startswith(("entr", "recei"))
-            and (l.id_subcategoria not in ignore_ids)]
+    """Retorna apenas os lançamentos que são saídas reais (não duplicatas). Sincronizado com MiniApp."""
+    saidas = []
+    for l in lancamentos:
+        tipo = str(l.tipo).lower()
+        # Filtro IDÊNTICO ao analytics/dashboard_app.py
+        if tipo in ["transferencia", "transferência", "transfer"]:
+            continue
+        if tipo.startswith(("entr", "recei")):
+            continue
+        saidas.append(l)
+    return saidas
 
 def _calcular_saidas_reais(lancamentos: list[Lancamento], ignore_ids: list[int]) -> float:
     """Calcula a soma absoluta de saídas reais."""
-    return sum(abs(float(l.valor or 0)) for l in _filtrar_saidas_reais(lancamentos, ignore_ids))
+    return round(sum(abs(float(l.valor or 0)) for l in _filtrar_saidas_reais(lancamentos, ignore_ids)), 2)
 import config
 from gerente_financeiro.services import _categorizar_com_mapa_inteligente
 from gerente_financeiro.prompt_manager import PromptManager, PromptConfig
@@ -484,14 +491,33 @@ def _usuario_e_saldo(db, telegram_user) -> tuple[Usuario, float, float, float]:
     usuario_db = get_or_create_user(db, telegram_user.id, telegram_user.full_name)
     ignore_ids = _get_subcats_ignore_ids(db)
     
-    # Filtramos despesas duplicadas (faturas sincronizadas e transferências entre contas)
-    lancamentos = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id).all()
+    # Busca TODOS os lançamentos para o Saldo Acumulado (Patrimônio)
+    todos_lanc = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id).all()
     
-    entradas = sum(float(l.valor or 0) for l in lancamentos if str(l.tipo).lower().startswith(("entr", "recei")))
-    saidas = _calcular_saidas_reais(lancamentos, ignore_ids)
+    # Lógica de soma sincronizada
+    def _calc_totals(lista):
+        ent = 0.0
+        sai = 0.0
+        for l in lista:
+            tipo = str(l.tipo).lower()
+            if tipo in ["transferencia", "transferência", "transfer"]: continue
+            val = abs(float(l.valor or 0))
+            if tipo.startswith(("entr", "recei")): ent += val
+            elif tipo.startswith(("desp", "saida")): sai += val
+        return round(ent, 2), round(sai, 2)
+
+    ent_total, sai_total = _calc_totals(todos_lanc)
+    saldo_acumulado = round(ent_total - sai_total, 2)
+
+    # Busca lançamentos do MÊS ATUAL para bater com a Home do MiniApp
+    hoje = datetime.now()
+    inicio_mes = hoje.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    lanc_mes = [l for l in todos_lanc if l.data_transacao >= inicio_mes]
+    ent_mes, sai_mes = _calc_totals(lanc_mes)
                  
-    saldo = entradas - saidas
-    return usuario_db, saldo, entradas, saidas
+    # Retornamos os dados do MÊS ATUAL como padrão para as análises rápidas
+    # Mas mantemos o objeto usuario_db e o saldo_acumulado acessíveis
+    return usuario_db, saldo_acumulado, ent_mes, sai_mes
 
 
 def _formatar_valor_brasileiro(valor: float) -> str:
@@ -2102,51 +2128,45 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             await _enviar_resposta_html_segura(update.message, resposta_local)
             return ConversationHandler.END
 
-        # --- PREPARAÇÃO DE CONTEXTO RICO PARA O ALFREDO (IA) ---
+        # --- PREPARAÇÃO DE CONTEXTO SINCRONIZADO COM MINIAPP ---
         hoje = datetime.now()
         hoje_str = hoje.strftime("%A, %d de %B de %Y às %H:%M")
-        
         ignore_ids = _get_subcats_ignore_ids(db)
         
+        # Função auxiliar para somas consistentes (Sincronizado com dashboard_app.py)
+        def _sum_consistente(lista):
+            e = 0.0
+            s = 0.0
+            for l in lista:
+                t = str(l.tipo).lower()
+                # Filtro IDÊNTICO ao analytics/dashboard_app.py
+                if t in ["transferencia", "transferência", "transfer"]: continue
+                v = abs(float(l.valor or 0))
+                if t.startswith(("entr", "recei")): e += v
+                elif t.startswith(("desp", "saida")): s += v
+            return round(e, 2), round(s, 2)
+
+        # Mês Atual
         inicio_mes = hoje.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        lanc_mes = db.query(Lancamento).filter(
-            Lancamento.id_usuario == usuario_db.id,
-            Lancamento.data_transacao >= inicio_mes
-        ).all()
+        lanc_mes = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id, Lancamento.data_transacao >= inicio_mes).all()
+        ent_mes, sai_mes = _sum_consistente(lanc_mes)
         
-        # Filtro de duplicidade para despesas reais
-        def _filtrar_saidas(lista):
-            return [l for l in lista 
-                    if not str(l.tipo).lower().startswith(("entr", "recei"))
-                    and (l.id_subcategoria not in ignore_ids)]
-
-        saidas_mes_list = _filtrar_saidas(lanc_mes)
-        saidas_mes = sum(abs(float(l.valor or 0)) for l in saidas_mes_list)
-        entradas_mes = sum(float(l.valor or 0) for l in lanc_mes if str(l.tipo).lower().startswith(("entr", "recei")))
-
+        # Hoje
         inicio_hoje = hoje.replace(hour=0, minute=0, second=0, microsecond=0)
         lanc_hoje = [l for l in lanc_mes if l.data_transacao >= inicio_hoje]
-        saidas_hoje = sum(abs(float(l.valor or 0)) for l in _filtrar_saidas(lanc_hoje))
+        _, sai_hoje = _sum_consistente(lanc_hoje)
         
-        # Gastos de Ontem (Otimizado: tenta filtrar de lanc_mes primeiro)
+        # Ontem
         ontem = hoje - timedelta(days=1)
         inicio_ontem = ontem.replace(hour=0, minute=0, second=0, microsecond=0)
         fim_ontem = ontem.replace(hour=23, minute=59, second=59, microsecond=999999)
-        
-        if ontem.month == hoje.month:
-            lanc_ontem = [l for l in lanc_mes if inicio_ontem <= l.data_transacao <= fim_ontem]
-        else:
-            lanc_ontem = db.query(Lancamento).filter(
-                Lancamento.id_usuario == usuario_db.id,
-                Lancamento.data_transacao >= inicio_ontem,
-                Lancamento.data_transacao <= fim_ontem
-            ).all()
-        saidas_ontem = sum(abs(float(l.valor or 0)) for l in _filtrar_saidas(lanc_ontem))
+        lanc_ontem = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id, Lancamento.data_transacao >= inicio_ontem, Lancamento.data_transacao <= fim_ontem).all()
+        _, sai_ontem = _sum_consistente(lanc_ontem)
 
-        inicio_semana = hoje - timedelta(days=hoje.weekday())
-        inicio_semana = inicio_semana.replace(hour=0, minute=0, second=0, microsecond=0)
+        # Semana
+        inicio_semana = hoje.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=hoje.weekday())
         lanc_semana = [l for l in lanc_mes if l.data_transacao >= inicio_semana]
-        saidas_semana = sum(abs(float(l.valor or 0)) for l in _filtrar_saidas(lanc_semana))
+        _, sai_semana = _sum_consistente(lanc_semana)
 
         # --- ÚLTIMOS LANÇAMENTOS (SUPER TRUNCADOS) ---
         limit_lanc = 5
@@ -2162,8 +2182,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         mes_anterior_inicio = (inicio_mes - timedelta(days=1)).replace(day=1)
         mes_anterior_fim = inicio_mes - timedelta(microseconds=1)
         lanc_anterior = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id, Lancamento.data_transacao >= mes_anterior_inicio, Lancamento.data_transacao <= mes_anterior_fim).all()
-        saidas_anterior = _calcular_saidas_reais(lanc_anterior, ignore_ids)
-        entradas_anterior = sum(float(l.valor or 0) for l in lanc_anterior if str(l.tipo).lower().startswith(("entr", "recei")))
+        ent_anterior, sai_anterior = _sum_consistente(lanc_anterior)
 
         # --- METAS ---
         metas_ativas = db.query(Objetivo).filter(Objetivo.id_usuario == usuario_db.id, func.coalesce(Objetivo.valor_atual, 0) < func.coalesce(Objetivo.valor_meta, 0)).all()
@@ -2172,12 +2191,24 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         contexto_financeiro_str = json.dumps(
             {
                 "data_hoje": hoje.strftime("%Y-%m-%d"),
-                "mes_atual": {"nome": hoje.strftime("%B"), "entradas": entradas_mes, "saidas": saidas_mes, "hoje": saidas_hoje, "ontem": saidas_ontem, "semana": saidas_semana},
-                "mes_anterior": {"nome": mes_anterior_inicio.strftime("%B"), "entradas": entradas_anterior, "saidas": saidas_anterior},
+                "mes_atual": {
+                    "nome": hoje.strftime("%B"),
+                    "receitas_total": ent_mes,
+                    "gastos_total": sai_mes,
+                    "resultado_liquido_mes": round(ent_mes - sai_mes, 2),
+                    "gastos_hoje": sai_hoje,
+                    "gastos_ontem": sai_ontem,
+                    "gastos_semana": sai_semana
+                },
+                "mes_anterior": {
+                    "nome": mes_anterior_inicio.strftime("%B"),
+                    "receitas": ent_anterior,
+                    "gastos": sai_anterior
+                },
                 "ultimas_receitas": ultimas_receitas,
                 "ultimas_despesas": ultimas_despesas,
                 "metas": resumo_metas,
-                "saldo_disponivel": saldo
+                "patrimonio_total_acumulado": saldo
             },
             ensure_ascii=False
         )
