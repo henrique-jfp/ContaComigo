@@ -452,86 +452,63 @@ def gerar_grafico_evolucao_mensal(lancamentos_historico: list) -> io.BytesIO | N
         plt.close('all')
 
 
-# ── Heatmap de gastos diários ────────────────────────────────
+# ── Perfil Semanal (Gastos x Receitas por dia da semana) ────
 
-def gerar_grafico_heatmap_diario(lancamentos_mes: list, mes: int, ano: int) -> io.BytesIO | None:
+def gerar_grafico_perfil_semanal(lancamentos_mes: list) -> io.BytesIO | None:
     """
-    Gera um heatmap de calendário com intensidade de gastos por dia do mês.
-    Retorna None se não houver dados suficientes.
+    Gera gráfico de barras agrupadas mostrando entradas e saídas por dia da semana.
+    0=Segunda, 6=Domingo.
     """
     try:
-        dados = [
-            {'dia': l.data_transacao.day, 'valor': abs(float(l.valor))}
-            for l in lancamentos_mes
-            if l.tipo == 'Despesa' and not _is_transferencia(l)
-        ]
-        if not dados:
-            return None
-
+        dados = []
+        for l in lancamentos_mes:
+            if _is_transferencia(l): continue
+            dados.append({
+                'dia_semana': l.data_transacao.weekday(),
+                'valor': abs(float(l.valor)),
+                'tipo': l.tipo
+            })
+        
+        if not dados: return None
+        
         df = pd.DataFrame(dados)
-        gastos_dia = df.groupby('dia')['valor'].sum()
-
-        import calendar
-        _, total_dias = calendar.monthrange(ano, mes)
-        todos_dias = pd.Series(0.0, index=range(1, total_dias + 1))
-        todos_dias.update(gastos_dia)
-
-        # Reshape em grade de semanas (7 colunas)
-        # Descobre o dia da semana do dia 1
-        primeiro_dia_semana = datetime(ano, mes, 1).weekday()  # 0=Seg
-        pad = [0.0] * primeiro_dia_semana
-        valores = pad + list(todos_dias.values)
-        while len(valores) % 7 != 0:
-            valores.append(np.nan)
-
-        grid = np.array(valores, dtype=float).reshape(-1, 7)
-
-        fig, ax = plt.subplots(figsize=(10, 3.5), dpi=180)
+        df_ag = df.groupby(['dia_semana', 'tipo'])['valor'].sum().unstack(fill_value=0)
+        
+        # Garante que todos os dias da semana e tipos existam
+        for i in range(7):
+            if i not in df_ag.index:
+                df_ag.loc[i] = 0
+        for col in ('Receita', 'Despesa'):
+            if col not in df_ag.columns:
+                df_ag[col] = 0
+                
+        df_ag = df_ag.sort_index()
+        dias_nome = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
+        
+        fig, ax = plt.subplots(figsize=(10, 4.5), dpi=180)
         fig.patch.set_facecolor('white')
-
-        cmap = matplotlib.colors.LinearSegmentedColormap.from_list(
-            'heat', ['#EFF6FF', '#BFDBFE', '#3B82F6', '#1E3A8A']
-        )
-        im = ax.imshow(grid, cmap=cmap, aspect='auto',
-                       vmin=0, vmax=max(gastos_dia.max(), 1))
-
-        dias_semana = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
-        ax.set_xticks(range(7))
-        ax.set_xticklabels(dias_semana, fontsize=9)
-        ax.set_yticks([])
-
-        # Numera os dias dentro das células
-        dia_num = 1
-        for row in range(grid.shape[0]):
-            for col in range(grid.shape[1]):
-                val = grid[row, col]
-                if np.isnan(val) or (row == 0 and col < primeiro_dia_semana):
-                    continue
-                if dia_num > total_dias:
-                    break
-                cor_txt = 'white' if val > gastos_dia.max() * 0.6 else '#1E3A8A'
-                ax.text(col, row, str(dia_num), ha='center', va='center',
-                        fontsize=7.5, color=cor_txt, fontweight='bold')
-                if val > 0:
-                    ax.text(col, row + 0.28, f'R${val:.0f}',
-                            ha='center', va='center', fontsize=5.5, color=cor_txt)
-                dia_num += 1
-
-        plt.colorbar(im, ax=ax, label='Gastos (R$)', fraction=0.02, pad=0.02)
-        nome_mes = datetime(ano, mes, 1).strftime('%B/%Y').capitalize()
-        ax.set_title(f'Mapa de Calor de Gastos — {nome_mes}',
-                     fontsize=12, weight='bold', color='#0B1220', pad=10)
-        ax.spines[:].set_visible(False)
-
-        plt.tight_layout(pad=1)
+        
+        x = np.arange(len(dias_nome))
+        width = 0.4
+        
+        ax.bar(x - width/2, df_ag['Receita'], width, label='Entradas', color='#10B981', alpha=0.9)
+        ax.bar(x + width/2, df_ag['Despesa'], width, label='Saídas', color='#EF4444', alpha=0.9)
+        
+        ax.set_xticks(x)
+        ax.set_xticklabels(dias_nome, fontsize=9, fontweight='bold', color='#0B1220')
+        ax.set_title('Perfil de Movimentação por Dia da Semana', fontsize=12, fontweight='bold', pad=15)
+        ax.legend(fontsize=9, frameon=False, loc='upper right')
+        
+        ax.grid(axis='y', linestyle='--', alpha=0.4)
+        ax.spines[['top', 'right', 'left']].set_visible(False)
+        
+        plt.tight_layout()
         buffer = io.BytesIO()
-        plt.savefig(buffer, format='png', bbox_inches='tight',
-                    dpi=180, facecolor='white')
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=180)
         buffer.seek(0)
         return buffer
-
     except Exception as e:
-        logger.error(f"Erro ao gerar heatmap diário: {e}", exc_info=True)
+        logger.error(f"Erro ao gerar perfil semanal: {e}", exc_info=True)
         return None
     finally:
         plt.close('all')
@@ -559,8 +536,8 @@ def gerar_contexto_relatorio(db, telegram_id: int, mes: int, ano: int):
         .filter(
             and_(
                 Lancamento.id_usuario == usuario_q.id,
-                extract('year', Lancamento.data_transacao) == ano,
-                extract('month', Lancamento.data_transacao) == mes,
+                extract('year', lancamento.data_transacao) == ano,
+                extract('month', lancamento.data_transacao) == mes,
             )
         )
         .options(joinedload(Lancamento.categoria))
@@ -600,6 +577,12 @@ def gerar_contexto_relatorio(db, telegram_id: int, mes: int, ano: int):
     despesas_lista = sorted(
         [l for l in financeiros if l.tipo == 'Despesa'],
         key=lambda l: abs(float(l.valor)),
+        reverse=True,
+    )
+    
+    receitas_lista = sorted(
+        [l for l in financeiros if l.tipo == 'Receita'],
+        key=lambda l: float(l.valor),
         reverse=True,
     )
 
@@ -695,6 +678,7 @@ def gerar_contexto_relatorio(db, telegram_id: int, mes: int, ano: int):
         'gastos_agrupados': gastos_agrupados,
         'gastos_por_categoria_dict': gastos_por_categoria,
         'lista_despesas': despesas_lista,
+        'lista_receitas': receitas_lista,
         # Histórico
         'lancamentos_historico': lancamentos_historico_6m,
         'evolucao_mensal': evolucao_mensal,

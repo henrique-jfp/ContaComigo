@@ -635,22 +635,64 @@ def generate_financial_pdf(context: dict) -> bytes:
     else:
         elements.append(Paragraph("Gráfico de evolução indisponível.", s_body))
 
-    # ── 6. MAPA DE CALOR (HEATMAP) ────────────────────────────
-    heatmap_png = context.get('grafico_heatmap_png')
-    if heatmap_png:
+    # ── 6. PERFIL SEMANAL DE GASTOS ───────────────────────────
+    semanal_png = context.get('grafico_semanal_png')
+    if semanal_png:
         elements.append(Spacer(1, 6*mm))
-        elements.append(SectionHeader("Mapa de Calor de Gastos", "🗓️"))
+        elements.append(SectionHeader("Perfil Semanal de Movimentação", "🗓️"))
         elements.append(Spacer(1, 4*mm))
-        img3 = Image(io.BytesIO(heatmap_png))
+        img3 = Image(io.BytesIO(semanal_png))
         img3.drawWidth  = 170*mm
-        img3.drawHeight = 60*mm
+        img3.drawHeight = 70*mm
         elements.append(img3)
         elements.append(Paragraph(
-            "Intensidade de cor indica volume de despesas no dia. Azul escuro = maior gasto.",
+            "Distribuição de entradas (verde) e saídas (vermelho) agrupadas por dia da semana.",
             s_caption
         ))
 
-    # ── 7. TOP DESPESAS ───────────────────────────────────────
+    # ── 7. TOP RECEITAS ───────────────────────────────────────
+    top_receitas = context.get('top_receitas', [])
+    if top_receitas:
+        elements.append(Spacer(1, 8*mm))
+        elements.append(SectionHeader("Maiores Entradas do Mês", "💰"))
+        elements.append(Spacer(1, 4*mm))
+
+        header_r = [
+            Paragraph('<b>#</b>',         style('tr0', fontName=FONT_BOLD, fontSize=9, textColor=C_WHITE)),
+            Paragraph('<b>Descrição</b>',  style('tr1', fontName=FONT_BOLD, fontSize=9, textColor=C_WHITE)),
+            Paragraph('<b>Categoria</b>',  style('tr2', fontName=FONT_BOLD, fontSize=9, textColor=C_WHITE)),
+            Paragraph('<b>Valor</b>',      style('tr3', fontName=FONT_BOLD, fontSize=9, textColor=C_WHITE, alignment=2)),
+            Paragraph('<b>Data</b>',       style('tr4', fontName=FONT_BOLD, fontSize=9, textColor=C_WHITE, alignment=2)),
+        ]
+        rows_r = [header_r]
+        for i, g in enumerate(top_receitas[:8], 1):
+            desc = str(getattr(g, 'descricao', '') or '')[:40]
+            cat  = str(getattr(getattr(g, 'categoria', None), 'nome', '') or '')[:20]
+            val  = fmt_brl(float(getattr(g, 'valor', 0)))
+            dt   = getattr(g, 'data_transacao', None)
+            data_str = dt.strftime('%d/%m/%y') if dt else '-'
+            rows_r.append([str(i), desc, cat, val, data_str])
+
+        t_r = Table(rows_r, colWidths=[8*mm, 68*mm, 40*mm, 32*mm, 22*mm])
+        t_r.setStyle(TableStyle([
+            ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
+            ('FONTNAME',      (0, 0), (-1, 0),  FONT_BOLD),
+            ('FONTSIZE',      (0, 0), (-1, -1), 8.5),
+            ('FONTNAME',      (0, 1), (-1, -1), FONT_REG),
+            ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_BG, C_WHITE]),
+            ('ALIGN',         (3, 0), (4, -1),  'RIGHT'),
+            ('TEXTCOLOR',     (3, 1), (3, -1),  C_EMERALD),
+            ('FONTNAME',      (3, 1), (3, -1),  FONT_BOLD),
+            ('TEXTCOLOR',     (0, 1), (0, -1),  C_MUTED),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING',    (0, 0), (-1, -1), 6),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 6),
+            ('LINEBELOW',     (0, 0), (-1, 0),  1.5, C_CYAN),
+            ('LINEBELOW',     (0, 1), (-1, -2), 0.3, C_BORDER),
+        ]))
+        elements.append(t_r)
+
+    # ── 8. TOP DESPESAS ───────────────────────────────────────
     elements.append(Spacer(1, 8*mm))
     elements.append(SectionHeader("Top Despesas do Mês", "💸"))
     elements.append(Spacer(1, 4*mm))

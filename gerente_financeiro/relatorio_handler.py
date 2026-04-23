@@ -327,18 +327,28 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
             logger.error(f"Erro ao gerar gráfico de evolução: {e}")
             contexto_dados["grafico_evolucao_png_bytes"] = None
 
-        # 4.2 Gerar Mapa de Calor Diário
-        logger.info("Gerando mapa de calor diário...")
+        # 4.2 Gerar Perfil Semanal
+        logger.info("Gerando perfil semanal...")
         try:
-            from .services import gerar_grafico_heatmap_diario
-            grafico_heatmap = gerar_grafico_heatmap_diario(contexto_dados.get("lista_despesas", []), mes_alvo, ano_alvo)
-            if grafico_heatmap:
-                contexto_dados["grafico_heatmap_png_bytes"] = grafico_heatmap.getvalue()
+            from .services import gerar_grafico_perfil_semanal
+            grafico_semanal = gerar_grafico_perfil_semanal(contexto_dados.get("lancamentos_mes", financeiros_para_grafico))
+            # Fallback se lancamentos_mes não estiver no contexto principal
+            if not grafico_semanal:
+                 # financeiros_para_grafico não existe aqui, vamos usar a lista filtrada se disponível ou buscar de novo
+                 # mas como já estamos dentro do handler, vamos usar o que o contexto tem
+                 pass
+            
+            # Correção: buscar direto da lista de financeiros que foi gerada no contexto
+            financeiros_full = contexto_dados.get('lista_despesas', []) + contexto_dados.get('lista_receitas', [])
+            grafico_semanal = gerar_grafico_perfil_semanal(financeiros_full)
+            
+            if grafico_semanal:
+                contexto_dados["grafico_semanal_png_bytes"] = grafico_semanal.getvalue()
             else:
-                contexto_dados["grafico_heatmap_png_bytes"] = None
+                contexto_dados["grafico_semanal_png_bytes"] = None
         except Exception as e:
-            logger.error(f"Erro ao gerar mapa de calor: {e}")
-            contexto_dados["grafico_heatmap_png_bytes"] = None
+            logger.error(f"Erro ao gerar perfil semanal: {e}")
+            contexto_dados["grafico_semanal_png_bytes"] = None
         
         # 5. Renderizar o template HTML com os dados
         logger.info("Renderizando template HTML...")
@@ -418,10 +428,11 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
                 'gastos_agrupados': contexto_dados.get('gastos_agrupados', []),
                 'grafico_pizza_png': contexto_dados.get('grafico_pizza_png_bytes'),
                 'grafico_evolucao_png': contexto_dados.get('grafico_evolucao_png_bytes'),
-                'grafico_heatmap_png': contexto_dados.get('grafico_heatmap_png_bytes'),
+                'grafico_semanal_png': contexto_dados.get('grafico_semanal_png_bytes'),
                 # Inclui o HTML renderizado opcionalmente para permitir HTML->PDF se disponível
                 'html_renderizado': html_renderizado,
                 'top_gastos': contexto_dados.get('lista_despesas', [])[:10],
+                'top_receitas': contexto_dados.get('lista_receitas', [])[:10],
                 'insights': contexto_dados.get('insights', []),
                 'analise_ia': contexto_dados.get('analise_ia'),
                 'metas': contexto_dados.get('metas', []),
