@@ -1201,8 +1201,6 @@ lucide.createIcons();
       const monthlyCashflow = Array.isArray(summary?.cashflow_monthly) ? summary.cashflow_monthly : [];
       const patrimonySeries = Array.isArray(summary?.patrimony_series) ? summary.patrimony_series : [];
       const budgetItems = Array.isArray(summary?.budget_vs_realizado) ? summary.budget_vs_realizado : [];
-      const projectionSeries = Array.isArray(summary?.projection_series) ? summary.projection_series : [];
-      const topVillains = Array.isArray(summary?.top_villains) ? summary.top_villains : [];
 
       const sankeyData = [];
       if (receita > 0) sankeyData.push({ from: 'Receitas', to: 'Caixa', flow: receita });
@@ -1222,10 +1220,6 @@ lucide.createIcons();
         budgetPlanned: budgetItems.map(i => Number(i.orcamento || 0)),
         budgetActual: budgetItems.map(i => Number(i.realizado || 0)),
         categories, distroLabels: categories.map(i => i.label || ''), distroValues: categories.map(i => Number(i.value || 0)),
-        projectionLabels: projectionSeries.map(i => i.label || ''),
-        projectionHistory: projectionSeries.map(i => i.historico == null ? null : Number(i.historico)),
-        projectionFuture: projectionSeries.map(i => i.futuro == null ? null : Number(i.futuro)),
-        villains: topVillains.map(i => [i.label, Number(i.value)]),
         sankeyData, heatmapData
       };
     }
@@ -1781,82 +1775,6 @@ lucide.createIcons();
         }
       }
 
-      if (homeProjectionChartEl) {
-        homeCharts.projection = safeChart(homeProjectionChartEl, {
-          type: 'line',
-          data: {
-            labels: chartData.projectionLabels,
-            datasets: [
-              {
-                label: 'Histórico',
-                data: chartData.projectionHistory,
-                tension: 0.4,
-                borderColor: '#6366f1',
-                backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                borderWidth: 3,
-                fill: true,
-                pointRadius: 0,
-              },
-              {
-                label: 'Futuro estimado',
-                data: chartData.projectionFuture,
-                tension: 0.4,
-                borderColor: '#f59e0b',
-                backgroundColor: 'rgba(245, 158, 11, 0.05)',
-                borderWidth: 3,
-                fill: true,
-                pointRadius: 0,
-                borderDash: [8, 4],
-              },
-            ],
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: commonAnimation,
-            plugins: {
-              legend: commonLegend,
-              tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatCurrencyBR(ctx.raw)}` } },
-            },
-            scales: {
-              x: { grid: { display: false }, ticks: { color: '#64748b' } },
-              y: { grid: { color: 'rgba(148, 163, 184, 0.14)' }, ticks: { color: '#64748b', callback: (v) => `R$ ${Number(v).toLocaleString('pt-BR')}` } },
-            },
-          },
-        });
-      }
-
-      if (homeVillainsChartEl) {
-        homeCharts.villains = safeChart(homeVillainsChartEl, {
-          type: 'bar',
-          data: {
-            labels: chartData.villains.map((item) => item[0]),
-            datasets: [{
-              label: 'Gasto',
-              data: chartData.villains.map((item) => item[1]),
-              borderRadius: 8,
-              borderSkipped: false,
-              backgroundColor: ['#ff0055', '#ef4444', '#f43f5e', '#fb7185', '#fda4af'],
-              barThickness: chartRuntime.barThickness + 6,
-            }],
-          },
-          options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: commonAnimation,
-            plugins: {
-              legend: { display: false },
-              tooltip: { callbacks: { label: (ctx) => `Total: ${formatCurrencyBR(ctx.raw)}` } },
-            },
-            scales: {
-              x: { grid: { display: false }, ticks: { color: '#64748b', callback: (v) => `R$ ${Number(v).toLocaleString('pt-BR')}` } },
-              y: { grid: { display: false }, ticks: { color: '#475569' } },
-            },
-          },
-        });
-      }
-
       if (homeSankeyChartEl) {
         renderSankeyPremium(homeSankeyChartEl.parentElement, chartData.sankeyData);
         homeSankeyChartEl.style.display = 'none';
@@ -1884,15 +1802,15 @@ lucide.createIcons();
       const salT = recT - desT;
 
       container.innerHTML = `
-        <div class="premium-heatmap-wrap bg-[#1a0508] p-5 rounded-[20px] border border-[#7b1e2d]/30 shadow-2xl">
+        <div class="premium-heatmap-wrap bg-telegram-card p-5 rounded-[20px] border border-telegram-separator shadow-sm">
           <div class="flex justify-between items-center mb-6">
             <div>
-              <div class="text-[11px] font-bold text-[#D4AF37] font-mono tracking-widest uppercase">${monthLabel}</div>
-              <div class="text-base font-extrabold text-[#e8e8f0]">Mapa de Calor</div>
+              <div class="text-[11px] font-bold text-brand font-mono tracking-widest uppercase">${monthLabel}</div>
+              <div class="text-base font-extrabold text-telegram-text">Mapa de Calor</div>
             </div>
             <div class="flex gap-3">
-               <div class="flex items-center gap-1.5 text-[9px] text-white/40 font-mono"><div class="w-2 h-2 rounded-sm bg-[#10b981]"></div> REC</div>
-               <div class="flex items-center gap-1.5 text-[9px] text-white/40 font-mono"><div class="w-2 h-2 rounded-sm bg-[#f43f5e]"></div> DES</div>
+               <div class="flex items-center gap-1.5 text-[9px] text-telegram-hint font-mono"><div class="w-2 h-2 rounded-sm bg-[#10b981]"></div> REC</div>
+               <div class="flex items-center gap-1.5 text-[9px] text-telegram-hint font-mono"><div class="w-2 h-2 rounded-sm bg-[#f43f5e]"></div> DES</div>
             </div>
           </div>
 
@@ -4404,14 +4322,6 @@ lucide.createIcons();
         'distribuicao': {
           title: 'Distribuição de Despesas',
           msg: 'Quais categorias estão "roubando" mais o seu dinheiro. Útil para identificar para onde seu dinheiro está indo realmente.'
-        },
-        'projecao': {
-          title: 'Projeção de Saldo',
-          msg: 'Uma estimativa baseada no seu comportamento atual de como seu dinheiro estará nos próximos meses se você mantiver o ritmo.'
-        },
-        'viloes': {
-          title: 'Top 5 Vilões',
-          msg: 'Identifica os 5 estabelecimentos ou descrições específicas onde você mais gastou nos últimos 90 dias.'
         },
         'sankey': {
           title: 'Caminho do Dinheiro',

@@ -325,10 +325,7 @@
                 <button type="button" data-home-chart-pill="chart-gauge" class="rounded-full border border-brand/25 bg-brand/10 px-4 py-2 text-xs font-bold text-brand whitespace-nowrap transition">Saúde</button>
                 <button type="button" data-home-chart-pill="chart-patrimonio" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Patrimonio</button>
                 <button type="button" data-home-chart-pill="chart-fluxo" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Fluxo de Caixa</button>
-                <button type="button" data-home-chart-pill="chart-orcamento" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Orcamento vs Realizado</button>
                 <button type="button" data-home-chart-pill="chart-distribuicao" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Distribuicao</button>
-                <button type="button" data-home-chart-pill="chart-projecao" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Projecao</button>
-                <button type="button" data-home-chart-pill="chart-viloes" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Top 5 Viloes</button>
                 <button type="button" data-home-chart-pill="chart-sankey" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Fluxo</button>
                 <button type="button" data-home-chart-pill="chart-heatmap" class="rounded-full border border-telegram-separator bg-telegram-card px-4 py-2 text-xs font-semibold text-telegram-hint whitespace-nowrap transition">Densidade</button>
               </div>
@@ -401,22 +398,6 @@
                 </div>
               </article>
 
-              <article id="chart-orcamento" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
-                <div class="mb-3 flex items-center justify-between">
-                  <div>
-                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Planejado</p>
-                    <div class="flex items-center gap-2">
-                      <h3 class="text-lg font-extrabold text-telegram-text">Orcamento vs Realizado</h3>
-                      <button onclick="showChartHelp('gauge')" class="opacity-40 hover:opacity-100 transition"><i data-lucide="help-circle" class="w-3.5 h-3.5"></i></button>
-                    </div>
-                  </div>
-                  <i data-lucide="target" class="h-5 w-5 text-brand"></i>
-                </div>
-                <div class="h-[280px]">
-                  <canvas id="homeBudgetChart"></canvas>
-                </div>
-              </article>
-
               <article id="chart-distribuicao" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
                 <div class="mb-3 flex items-center justify-between">
                   <div>
@@ -437,38 +418,6 @@
                     <div id="homeCategoryValue" class="text-sm font-extrabold text-brand leading-none">R$ 0,00</div>
                     <div id="homeCategoryLabel" class="truncate text-xs font-semibold text-telegram-hint">Nenhuma fatia</div>
                   </div>
-                </div>
-              </article>
-
-              <article id="chart-projecao" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
-                <div class="mb-3 flex items-center justify-between">
-                  <div>
-                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Futuro</p>
-                    <div class="flex items-center gap-2">
-                      <h3 class="text-lg font-extrabold text-telegram-text">Projecao de Saldo</h3>
-                      <button onclick="showChartHelp('projecao')" class="opacity-40 hover:opacity-100 transition"><i data-lucide="help-circle" class="w-3.5 h-3.5"></i></button>
-                    </div>
-                  </div>
-                  <i data-lucide="trending-up" class="h-5 w-5 text-brand"></i>
-                </div>
-                <div class="h-[280px]">
-                  <canvas id="homeProjectionChart"></canvas>
-                </div>
-              </article>
-
-              <article id="chart-viloes" data-home-chart-card class="min-w-full snap-center shrink-0 rounded-[24px] border border-telegram-separator bg-telegram-card p-5">
-                <div class="mb-3 flex items-center justify-between">
-                  <div>
-                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand-soft/90">Gastos</p>
-                    <div class="flex items-center gap-2">
-                      <h3 class="text-lg font-extrabold text-telegram-text">Top 5 Viloes</h3>
-                      <button onclick="showChartHelp('viloes')" class="opacity-40 hover:opacity-100 transition"><i data-lucide="help-circle" class="w-3.5 h-3.5"></i></button>
-                    </div>
-                  </div>
-                  <i data-lucide="alert-triangle" class="h-5 w-5 text-brand"></i>
-                </div>
-                <div class="h-[280px]">
-                  <canvas id="homeVillainsChart"></canvas>
                 </div>
               </article>
 
