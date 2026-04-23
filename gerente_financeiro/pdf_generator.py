@@ -266,7 +266,9 @@ class ScoreGauge(Flowable):
               startAng=180, extent=180)
 
         # Arco colorido preenchido até o score
-        extent = self.score / 100 * 180
+        extent = (self.score / 100 * 180)
+        if extent < 0.1: extent = 0.1 # Proteção contra ZeroDivisionError no ReportLab
+        
         col = score_color(self.score)
         c.setStrokeColor(col)
         c.arc(cx - r_out, cy - r_out, cx + r_out, cy + r_out,

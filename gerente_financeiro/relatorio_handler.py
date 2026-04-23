@@ -331,14 +331,8 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
         logger.info("Gerando perfil semanal...")
         try:
             from .services import gerar_grafico_perfil_semanal
-            grafico_semanal = gerar_grafico_perfil_semanal(contexto_dados.get("lancamentos_mes", financeiros_para_grafico))
-            # Fallback se lancamentos_mes não estiver no contexto principal
-            if not grafico_semanal:
-                 # financeiros_para_grafico não existe aqui, vamos usar a lista filtrada se disponível ou buscar de novo
-                 # mas como já estamos dentro do handler, vamos usar o que o contexto tem
-                 pass
             
-            # Correção: buscar direto da lista de financeiros que foi gerada no contexto
+            # Buscar a lista filtrada de lançamentos que já foi processada no contexto
             financeiros_full = contexto_dados.get('lista_despesas', []) + contexto_dados.get('lista_receitas', [])
             grafico_semanal = gerar_grafico_perfil_semanal(financeiros_full)
             
