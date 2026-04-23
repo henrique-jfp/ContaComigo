@@ -787,52 +787,13 @@ def _detectar_e_extrair_acao_direta(texto: str) -> tuple[str, dict] | None:
     """
     Tenta detectar intenções de ação (Lançamento, Meta, Agendamento) via Regex.
     Retorna (nome_funcao, argumentos) ou None.
+    
+    DESATIVADO: O interceptor via regex estava capturando incorretamente intenções 
+    complexas (como metas e limites) como se fossem lançamentos financeiros simples.
+    Agora o Alfredo confia 100% no LLM para o roteamento (Function Calling), 
+    garantindo precisão máxima.
     """
-    t = texto.lower().strip()
-    
-    # Ignorar explicitamente perguntas ou buscas sobre o passado
-    if t.startswith(("qual", "quais", "como", "onde", "por que", "quando", "tem", "você acha", "voce acha")):
-        return None
-    if "último" in t or "ultimo" in t or "histórico" in t or "historico" in t:
-        return None
-    
-    # Captura valor flexível (suporta 7.500, 7500,00 ou 12 mil)
-    valor_re = r'(?:r\$?\s*)?([\d.,]+)\s*(mil(?:h[õo]es|ão)?|k)?'
-    
-    # 1. LEMBRETE (Flexível)
-    # "Me lembra de pagar 500 reais pro Michel no dia 27."
-    # Padrao A: [Ação] [Valor] [Descrição] [Data]
-    p_lemb_v1 = r'\b(?:me\s+)?(?:lembre?|lembrar?|avisa?r?)\b\s+(?:de\s+)?(?:pagar\s+|receber\s+)?' + valor_re + r'\s*(?:reais|real)?\s*(?:para|pra|pro|ao|do|da)?\s+(.+?)(?:\s+(?:na|em|dia|pra|para|no)\s+(.+))?$'
-    # Padrao B: [Ação] [Descrição] [Valor] [Data]
-    p_lemb_v2 = r'\b(?:me\s+)?(?:lembre?|lembrar?|avisa?r?)\b\s+(?:de\s+)?(?:pagar\s+|receber\s+)?(.+?)\s+(?:de\s+|valor\s+)?' + valor_re + r'\s*(?:reais|real)?(?:\s+(?:na|em|dia|pra|para|no)\s+(.+))?$'
-    
-    m_lemb = re.search(p_lemb_v1, t) or re.search(p_lemb_v2, t)
-    if m_lemb:
-        if m_lemb.re.pattern == p_lemb_v1:
-            valor = _parse_br_money(m_lemb.group(1) + " " + (m_lemb.group(2) or ""))
-            desc_raw = m_lemb.group(3).strip()
-            data_raw = (m_lemb.group(4) or "").strip()
-        else:
-            desc_raw = m_lemb.group(1).strip()
-            valor = _parse_br_money(m_lemb.group(2) + " " + (m_lemb.group(3) or ""))
-            data_raw = (m_lemb.group(4) or "").strip()
-
-        desc = _limpar_sujeira_string(desc_raw)
-        if "pagar" in t and not desc.lower().startswith("pagar"):
-            desc = f"Pagar {desc}"
-        elif "receber" in t and not desc.lower().startswith("receber"):
-            desc = f"Receber {desc}"
-            
-        # Se detectou "lembre", mas não tem data YYYY-MM-DD, deixamos para a IA resolver
-        if data_raw and re.search(r'\d{4}-\d{2}-\d{2}', data_raw):
-            return "criar_lembrete", {
-                "descricao": desc.capitalize(),
-                "valor": valor,
-                "data": data_raw,
-                "tipo": "Saída" if "paga" in t else "Receita"
-            }
-        if "lembre" in t or "lembrar" in t:
-            return None
+    return None
 
     # 2. LANÇAMENTO (Gastei, Paguei, Recebi, Lança, Comprei, Registra)
     # 2. LANÇAMENTO
