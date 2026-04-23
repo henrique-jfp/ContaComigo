@@ -1816,15 +1816,15 @@ lucide.createIcons();
 
           <div class="grid grid-cols-[40px_repeat(7,1fr)] gap-1 mb-2">
             <div></div>
-            ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d => `<div class="text-center text-[9px] font-bold text-white/20 uppercase tracking-tighter">${d}</div>`).join('')}
+            ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d => `<div class="text-center text-[9px] font-bold text-telegram-hint uppercase tracking-tighter">${d}</div>`).join('')}
           </div>
 
           <div class="flex flex-col gap-1">
             ${Array.from({length: 6}).map((_, w) => `
               <div class="grid grid-cols-[40px_repeat(7,1fr)] gap-1 items-center">
-                <div class="text-[8px] text-white/10 text-right pr-2 font-mono">S${w+1}</div>
+                <div class="text-[8px] text-telegram-hint/30 text-right pr-2 font-mono">S${w+1}</div>
                 ${heatmapData.slice(w*7, (w+1)*7).map(d => {
-                  if (!d.date) return `<div class="aspect-[1/0.8] rounded-md bg-[#2d0a10]/60 border border-[#7b1e2d]/30 opacity-20"></div>`;
+                  if (!d.date) return `<div class="aspect-[1/0.8] rounded-md bg-telegram-separator/10 border border-telegram-separator/20 opacity-40"></div>`;
                   
                   const s = d.stats || {incT:0, expT:0, inc:0, exp:0};
                   const total = s.incT + s.expT;
@@ -1832,16 +1832,25 @@ lucide.createIcons();
                   const expP = 100 - incP;
                   const isToday = parseInt(d.date) === now.getDate();
 
-                  let cellClass = "bg-[#2d0a10]/60 border-[#7b1e2d]/30";
-                  if (s.incT > s.expT) cellClass = "bg-gradient-to-br from-[#10b981] to-[#059669] border-[#10b981]/50 shadow-[0_2px_10px_rgba(16,185,129,0.2)]";
-                  if (s.expT > s.incT) cellClass = "bg-gradient-to-br from-[#f43f5e] to-[#e11d48] border-[#f43f5e]/50 shadow-[0_2px_10px_rgba(244,63,94,0.2)]";
+                  let cellClass = "bg-telegram-card border-telegram-separator/50";
+                  let textCol = "text-telegram-text";
                   
-                  if (isToday) cellClass = cellClass.replace(/border-\[#.*?\](\/\d+)?/, "border-[#D4AF37] border-2");
+                  if (s.incT > s.expT) {
+                    cellClass = "bg-gradient-to-br from-[#10b981] to-[#059669] border-[#10b981]/50 shadow-[0_2px_10px_rgba(16,185,129,0.1)]";
+                    textCol = "text-white";
+                  } else if (s.expT > s.incT) {
+                    cellClass = "bg-gradient-to-br from-[#f43f5e] to-[#e11d48] border-[#f43f5e]/50 shadow-[0_2px_10px_rgba(244,63,94,0.1)]";
+                    textCol = "text-white";
+                  } else if (total === 0) {
+                    textCol = "text-telegram-hint/50";
+                  }
+                  
+                  if (isToday) cellClass += " border-brand border-2 ring-2 ring-brand/20";
 
                   return `
-                    <div class="ph-cell aspect-[1/0.8] rounded-md border ${cellClass} relative overflow-hidden transition-transform active:scale-95" 
+                    <div class="ph-cell aspect-[1/0.8] rounded-md border ${cellClass} relative overflow-hidden transition-all hover:scale-105 hover:z-10 active:scale-95 cursor-pointer" 
                          onclick="window.Telegram.WebApp.showAlert('📅 Dia ${d.date}\\n\\n${s.inc} Receitas: ${formatCurrencyBR(s.incT)}\\n${s.exp} Despesas: ${formatCurrencyBR(s.expT)}\\n\\nSaldo: ${formatCurrencyBR(s.incT - s.expT)}')">
-                      <span class="absolute top-1 left-1.5 text-[10px] font-bold ${ (total > 0) ? 'text-white' : 'text-white/50' }">${d.date}</span>
+                      <span class="absolute top-1 left-1.5 text-[10px] font-bold ${textCol}">${d.date}</span>
                       ${total > 0 ? `
                         <div class="absolute bottom-0 left-0 right-0 h-[3px] flex">
                           <div class="bg-[#10b981]/80" style="width:${incP}%"></div>
@@ -1855,18 +1864,18 @@ lucide.createIcons();
             `).join('')}
           </div>
 
-          <div class="grid grid-cols-3 gap-3 mt-6 pt-5 border-t border-white/5">
-            <div class="bg-white/[0.03] p-3 rounded-xl border border-white/5">
-              <div class="text-[8px] font-bold text-white/40 mb-1">RECEITAS</div>
-              <div class="text-xs font-black text-[#10b981] font-mono">${formatCurrencyBR(recT)}</div>
+          <div class="grid grid-cols-3 gap-3 mt-6 pt-5 border-t border-telegram-separator">
+            <div class="bg-telegram-card/50 p-3 rounded-xl border border-telegram-separator/50">
+              <div class="text-[8px] font-bold text-telegram-hint mb-1">RECEITAS</div>
+              <div class="text-xs font-black text-[#10b981] font-financial">${formatCurrencyBR(recT)}</div>
             </div>
-            <div class="bg-white/[0.03] p-3 rounded-xl border border-white/5">
-              <div class="text-[8px] font-bold text-white/40 mb-1">DESPESAS</div>
-              <div class="text-xs font-black text-[#f43f5e] font-mono">${formatCurrencyBR(desT)}</div>
+            <div class="bg-telegram-card/50 p-3 rounded-xl border border-telegram-separator/50">
+              <div class="text-[8px] font-bold text-telegram-hint mb-1">DESPESAS</div>
+              <div class="text-xs font-black text-[#f43f5e] font-financial">${formatCurrencyBR(desT)}</div>
             </div>
-            <div class="bg-white/[0.03] p-3 rounded-xl border border-white/5">
-              <div class="text-[8px] font-bold text-white/40 mb-1">SALDO</div>
-              <div class="text-xs font-black text-[#D4AF37] font-mono">${formatCurrencyBR(salT)}</div>
+            <div class="bg-telegram-card/50 p-3 rounded-xl border border-telegram-separator/50">
+              <div class="text-[8px] font-bold text-telegram-hint mb-1">SALDO</div>
+              <div class="text-xs font-black text-brand font-financial">${formatCurrencyBR(salT)}</div>
             </div>
           </div>
         </div>
