@@ -366,26 +366,40 @@ _ALFREDO_TOOLS = [
         "type": "function",
         "function": {
             "name": "consultar_historico_financeiro",
-            "description": "Consulta o banco de dados para responder sobre histórico antigo, maiores gastos, somas por categoria ou buscas específicas. Use sempre que o usuário perguntar por algo que não está nos dados recentes enviados.",
+            "description": "Consulta o banco de dados para histórico, maiores gastos ou somas. Se o usuário usar termos como 'besteira', use 'tipo_busca=lista_por_termo' e busque por categorias de Lazer ou Alimentação. Se perguntar por 'impulso', busque por gastos pequenos e frequentes.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "tipo_busca": {
                         "type": "string", 
                         "enum": ["maior_gasto", "maior_receita", "soma_categoria", "lista_por_termo", "detalhe_item"],
-                        "description": "Obrigatório. Use 'maior_gasto' se perguntarem qual foi o maior gasto. Use 'soma_categoria' para saber o total gasto em algo. Use 'lista_por_termo' para compras em um local."
+                        "description": "Obrigatório. Use 'maior_gasto' para o valor mais alto. 'soma_categoria' para totais."
                     },
-                    "termo": {"type": "string", "description": "Termo de busca (ex: nome da categoria ou palavra na descrição)."},
-                    "limite": {"type": "number", "description": "Quantidade de registros (padrão 5)."},
+                    "termo": {"type": "string", "description": "Termo de busca. Mapeie termos humanos: 'besteira' -> 'Lazer', 'mercado' -> 'Alimentação'."},
+                    "limite": {"type": "number", "description": "Quantidade de registros."},
                     "periodo": {
                         "type": "string", 
                         "enum": ["esta_semana", "semana_passada", "este_mes", "mes_passado", "este_ano", "tudo"], 
-                        "description": "Janela temporal da busca. Padrão 'este_mes'."
+                        "description": "Janela temporal."
                     }
                 },
                 "required": ["tipo_busca"],
             },
         },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_compromissos_futuros",
+            "description": "Consulta o que o usuário ainda tem para pagar ou receber (Agendamentos e Lembretes) no futuro próximo.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "periodo": {"type": "string", "enum": ["hoje", "esta_semana", "proximos_30_dias"], "description": "Janela de busca de compromissos."}
+                },
+                "required": ["periodo"]
+            }
+        }
     },
     {
         "type": "function",
@@ -1463,17 +1477,22 @@ def _intencao_metas(texto: str) -> bool:
         ]
     )
 
-
 def _intencao_contas(texto: str) -> bool:
     texto = (texto or "").lower()
     if _is_intencao_de_criacao(texto):
         return False
+    # Desambiguação: "Quanto tenho na conta" NÃO é intenção de listar boletos (contas a pagar)
+    if "quanto" in texto and "conta" in texto:
+        return False
+    if "saldo" in texto:
+        return False
+
     sinais = [
-        "conta",
-        "contas",
+        "minhas contas",
         "venc",
-        "pagar",
-        "paguei",
+        "contas a pagar",
+        "contas do mes",
+        "boletos",
         "atrasad",
         "aluguel",
         "luz",
@@ -1738,16 +1757,8 @@ def _intencao_resumo_semana(texto: str) -> bool:
     texto = (texto or "").lower()
     if _is_intencao_de_criacao(texto):
         return False
-    return any(
-        s in texto
-        for s in [
-            "essa semana",
-            "semana inteira",
-            "resumo da semana",
-            "quanto gastei essa semana",
-            "gastei essa semana",
-        ]
-    )
+    # Deixamos a IA cuidar de resumos para que a resposta seja personalizada
+    return False
 
 
 def _intencao_agendamentos(texto: str) -> bool:
@@ -2363,6 +2374,38 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                         else: res_str = "\n".join([f"• {l.descricao}: {_formatar_valor_brasileiro(abs(float(l.valor or 0)))} ({l.data_transacao.strftime('%d/%m/%Y')})" for l in res])
                     else: res_str = str(res)
             
+            elif fn_name == "consultar_compromissos_futuros":
+                periodo = args.get("periodo") or "esta_semana"
+                fim_busca = hoje + timedelta(days=7)
+                if periodo == "hoje": fim_busca = hoje.replace(hour=23, minute=59)
+                elif periodo == "proximos_30_dias": fim_busca = hoje + timedelta(days=30)
+                
+                # 1. Busca Agendamentos (Controle)
+                agends = db.query(Agendamento).filter(
+                    Agendamento.id_usuario == usuario_db.id,
+                    Agendamento.ativo == True,
+                    Agendamento.proxima_data_execucao >= hoje.date(),
+                    Agendamento.proxima_data_execucao <= fim_busca.date()
+                ).all()
+                
+                # 2. Busca Lembretes (Controle)
+                lembretes = db.query(Lembrete).filter(
+                    Lembrete.id_usuario == usuario_db.id,
+                    Lembrete.concluido == False,
+                    Lembrete.data_lembrete >= hoje.date(),
+                    Lembrete.data_lembrete <= fim_busca.date()
+                ).all()
+                
+                res_parts = []
+                if agends:
+                    res_parts.append("Agendamentos:")
+                    res_parts.extend([f"• {a.descricao}: {_formatar_valor_brasileiro(abs(float(a.valor or 0)))} em {a.proxima_data_execucao.strftime('%d/%m')}" for a in agends])
+                if lembretes:
+                    res_parts.append("\nLembretes:")
+                    res_parts.extend([f"• {l.descricao}: {l.data_lembrete.strftime('%d/%m')}" for l in lembretes])
+                
+                res_str = "\n".join(res_parts) if res_parts else "Nenhum compromisso pendente para o período."
+
             elif fn_name == "categorizar_lancamentos_pendentes":
                 atualizados, total = await _categorizar_lancamentos_sem_categoria_async(db, usuario_db.id)
                 res_str = f"Categorização concluída. Analisados: {total}, Atualizados: {atualizados}."
@@ -2386,13 +2429,15 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             Você é o Alfredo, o braço direito financeiro do {usuario_db.nome_completo}.
             
             DIRETRIZES DE OURO:
-            1. Use emojis (💰, 🚀, ⚠️) de forma amigável e moderada.
-            2. Vá direto ao assunto. Se o usuário perguntou sobre uma semana, foque nela.
-            3. Se o resultado da ferramenta vier vazio para uma categoria (ex: Transporte), diga: "Henrique, não encontrei nenhum gasto de 'Transporte' registrado nesta semana."
-            4. Se o usuário perguntou "e nessa semana" sem especificar categoria, assuma que ele quer o total geral da semana ou continue o assunto anterior.
-            5. DATA HOJE: {hoje_str}
+            1. Use emojis (💰, 🚀, ⚠️) de forma parceira.
+            2. TRADUZA CONCEITOS: 
+               - "Besteira" ou "Lanche" -> Analise categorias de Lazer, Alimentação Fora ou Outros.
+               - "Impulso" -> Procure por gastos pequenos e frequentes não planejados.
+               - "Mudança" -> Compare os pesos das categorias deste mês vs mês passado.
+            3. CATEGORIAS REAIS: Nunca diga "Sua categoria Pix enviado pesa mais". Pix é a FORMA. A categoria é o MOTIVO (ex: Alimentação, Transporte). Use o campo 'cat' dos dados.
+            4. DATA HOJE: {hoje_str}
             
-            DADOS REAIS DO BANCO (RESULTADO DA FERRAMENTA):
+            DADOS REAIS DO BANCO PARA ANALISAR:
             {res_str}
             """
             
