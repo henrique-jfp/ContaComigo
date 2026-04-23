@@ -1235,20 +1235,18 @@ def _resumo_previsao_local(db, usuario_id: int, saldo: float, entradas: float, s
     limite_diario = max(0, (ent_mes - sai_mes)) / dias_restantes
 
     if saldo_projetado < 0:
-        primeira = f"⚠️ Nesse ritmo, você tende a fechar o mês no vermelho em <code>{_formatar_valor_brasileiro(abs(saldo_projetado))}</code>."
+        status = f"🔴 <b>Atenção:</b> No ritmo atual, você pode fechar o mês com um déficit de <code>{_formatar_valor_brasileiro(abs(saldo_projetado))}</code>."
     elif saldo_projetado > 0:
-        primeira = f"✅ Nesse ritmo, você deve fechar o mês no positivo em <code>{_formatar_valor_brasileiro(saldo_projetado)}</code>."
+        status = f"🟢 <b>Tudo certo:</b> Você está em rota para fechar o mês com <code>{_formatar_valor_brasileiro(saldo_projetado)}</code> de folga!"
     else:
-        primeira = "➡️ Nesse ritmo, o mês deve fechar no zero a zero."
+        status = "➡️ <b>Equilíbrio:</b> Você está fechando exatamente o que ganha."
 
-    linhas = [
-        f"📊 <b>Previsão de Fechamento</b>\n",
-        primeira,
-        f"\n💰 <b>Média de gastos:</b> <code>{_formatar_valor_brasileiro(media_diaria_saida)}</code>/dia",
-        f"🎯 <b>Limite seguro:</b> <code>{_formatar_valor_brasileiro(limite_diario)}</code>/dia",
-        f"\n💡 <i>Estes valores consideram apenas seus gastos reais, ignorando transferências e faturas.</i>"
-    ]
-    return "\n".join(linhas)
+    return (
+        f"📊 <b>Previsão de Fechamento</b>\n\n"
+        f"{status}\n\n"
+        f"💰 <b>Gasto Médio:</b> <code>{_formatar_valor_brasileiro(media_diaria_saida)}</code>/dia\n"
+        f"🎯 <b>Para fechar no azul:</b> Gaste no máximo <code>{_formatar_valor_brasileiro(limite_diario)}</code>/dia"
+    )
 
 
 def _resumo_analise_gastos_local(db, usuario_id: int) -> str:
@@ -2330,99 +2328,111 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             "consultar_memorias_ia"
         ]
         
-        if fn_name in PIERRE_TOOLS_LIST and hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key:
-            from pierre_finance.ai_tools import executar_tool_pierre
-            
+        # --- FERRAMENTAS ANALÍTICAS (INTERPRETADAS PELA IA) ---
+        ANALYTIC_TOOLS = ["consultar_historico_financeiro", "categorizar_lancamentos_pendentes", "responder_duvida_financeira"]
+        
+        if fn_name in ANALYTIC_TOOLS or fn_name in PIERRE_TOOLS_LIST:
             await update.message.reply_chat_action(action="typing")
             
-            resultado_bruto = executar_tool_pierre(fn_name, args, usuario_db.pierre_api_key)
-            
-            # 🛡️ FIX 413: Converter para JSON e truncar resultado gigante
-            if not resultado_bruto:
-                res_str = "Nenhum dado encontrado para esta consulta bancária no período ou com estes critérios."
-            else:
-                res_str = json.dumps(resultado_bruto, ensure_ascii=False) if not isinstance(resultado_bruto, str) else resultado_bruto
-            
-            if len(res_str) > 12000:
-                res_str = res_str[:12000] + "... [Resultado truncado por ser muito longo]"
-            
-            # Se o resultado for erro 401 ou 403, avisar o usuário diretamente.
-            if isinstance(resultado_bruto, dict) and resultado_bruto.get("status_code") in [401, 403]:
-                msg_erro = "❌ <b>Sua Chave do Open Finance é inválida ou expirou.</b>"
-                if resultado_bruto.get("type") == "no_subscription":
-                    msg_erro = "❌ <b>Assinatura Pierre Finance Inativa.</b>\n\nVerifique seu plano no site da Pierre."
+            res_str = ""
+            if fn_name == "consultar_historico_financeiro":
+                tipo_busca = args.get("tipo_busca")
+                termo = args.get("termo")
+                limite = int(args.get("limite") or 5)
+                periodo = args.get("periodo") or "tudo"
                 
-                await _enviar_resposta_html_segura(update.message, 
-                    f"{msg_erro}\n\nUse o comando <code>/pierre</code> para configurar uma nova chave se necessário."
-                )
-                return ConversationHandler.END
+                query = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id)
+                query = query.filter(not_(func.lower(Lancamento.tipo).in_(["transferencia", "transferência", "transfer"])))
+                
+                if periodo == "este_mes":
+                    query = query.filter(Lancamento.data_transacao >= inicio_mes)
+                elif periodo == "mes_passado":
+                    pm_inicio = (inicio_mes - timedelta(days=1)).replace(day=1)
+                    query = query.filter(Lancamento.data_transacao >= pm_inicio, Lancamento.data_transacao < inicio_mes)
+                elif periodo == "este_ano":
+                    query = query.filter(Lancamento.data_transacao >= hoje.replace(month=1, day=1))
 
-            # Adiciona a mensagem do assistente que chamou a tool (obrigatório para o histórico)
-            messages.append({
-                "role": "assistant",
-                "tool_calls": tool_calls
-            })
-
-            # Adiciona o resultado da tool usando o ID consistente
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call["id"],
-                "name": fn_name,
-                "content": res_str
-            })
-            
-            # Segunda chamada à IA para interpretar os dados (Orquestrada)
-            logger.info(f"🧠 [ALFREDO] Iniciando interpretação dos dados (Tool: {fn_name}, Tamanho: {len(res_str)} chars)")
-            
-            prompt_interpretacao = f"""
-            Você é o Alfredo, interpretando dados brutos do banco para o usuário.
-            DATA ATUAL: {hoje_str}.
-            CONTEXTO: {contexto_financeiro_str}
-            
-            DADOS RECEBIDOS DA FERRAMENTA '{fn_name}':
-            {res_str}
-            
-            INSTRUÇÃO: Responda a pergunta do usuário de forma humana, direta e precisa usando estes dados. 
-            Se os dados indicarem risco (ex: muitos gastos, pouco saldo), avise com clareza.
-            Mantenha sua personalidade: direto, inteligente e parceiro.
-            """
-
-            messages_interpret = [
-                {"role": "system", "content": prompt_interpretacao},
-                {"role": "user", "content": texto_usuario}
-            ]
-            
-            completion2 = await _smart_ai_completion_async(messages_interpret)
-            
-            # Fallback agressivo se Cerebras/Groq falharem na interpretação
-            if not completion2 or (hasattr(completion2, 'get') and not completion2.get("choices")):
-                logger.warning("⚠️ [ALFREDO] Orquestrador falhou na interpretação. Forçando Gemini...")
-                from gerente_financeiro.ai_service import _gemini_chat_completion_async
-                completion2 = await _gemini_chat_completion_async(messages_interpret)
-
-            if completion2:
-                if isinstance(completion2, str):
-                    final_text = completion2
+                if tipo_busca == "maior_gasto":
+                    res = query.filter(or_(Lancamento.tipo.ilike("saida%"), Lancamento.tipo.ilike("desp%"), Lancamento.tipo.ilike("%pago%"), Lancamento.tipo.ilike("%enviado%"))).order_by(func.abs(Lancamento.valor).desc()).limit(limite).all()
+                elif tipo_busca == "maior_receita":
+                    res = query.filter(or_(Lancamento.tipo.ilike("entr%"), Lancamento.tipo.ilike("recei%"), Lancamento.tipo.ilike("%recebido%"))).order_by(func.abs(Lancamento.valor).desc()).limit(limite).all()
+                elif tipo_busca == "soma_categoria" and termo:
+                    # Busca soma cruzando Descrição, Categoria e Subcategoria
+                    soma = query.filter(or_(
+                        Lancamento.categoria.has(Categoria.nome.ilike(f"%{termo}%")),
+                        Lancamento.subcategoria.has(Subcategoria.nome.ilike(f"%{termo}%")),
+                        Lancamento.descricao.ilike(f"%{termo}%")
+                    )).with_entities(func.sum(Lancamento.valor)).scalar() or 0
+                    res_str = f"Soma total para '{termo}': {_formatar_valor_brasileiro(abs(float(soma)))}"
+                elif tipo_busca == "lista_por_termo" and termo:
+                    # Lista cruzando Descrição, Categoria e Subcategoria
+                    res = query.filter(or_(
+                        Lancamento.descricao.ilike(f"%{termo}%"), 
+                        Lancamento.categoria.has(Categoria.nome.ilike(f"%{termo}%")),
+                        Lancamento.subcategoria.has(Subcategoria.nome.ilike(f"%{termo}%"))
+                    )).order_by(Lancamento.data_transacao.desc()).limit(limite).all()
                 else:
-                    choice2 = ((completion2 or {}).get("choices") or [{}])[0]
-                    ia_message_2 = choice2.get("message") or {}
-                    final_text = ia_message_2.get("content")
-                
-                logger.info(f"✅ [ALFREDO] Resposta da IA obtida (Tamanho: {len(final_text or '')} chars)")
-                
-                # Limpeza de vazamento de JSON (Anti-Leak)
-                if final_text and ("{" in final_text and "}" in final_text and "name" in final_text):
-                    final_text = re.sub(r'\{.*\}', '', final_text, flags=re.DOTALL).strip()
-                
-                if not final_text or len(final_text.strip()) < 5:
-                    final_text = "Recebi os dados do seu banco, mas não consegui gerar uma análise clara agora. No MiniApp você consegue ver o detalhamento completo em tempo real!"
-                
-                # Salva no histórico para memória
-                _registrar_historico_ia(db, usuario_db.id, texto_usuario, final_text)
-                await _enviar_resposta_html_segura(update.message, final_text)
-            else:
-                await _enviar_resposta_html_segura(update.message, "Ocorreu uma instabilidade na inteligência de análise. Por favor, verifique seu saldo e lançamentos diretamente no MiniApp.")
+
+                    res = query.order_by(Lancamento.data_transacao.desc()).limit(limite).all()
+
+                if not res_str:
+                    if isinstance(res, list):
+                        if not res: res_str = f"Nenhum registro encontrado para '{termo or tipo_busca}'."
+                        else: res_str = "\n".join([f"• {l.descricao}: {_formatar_valor_brasileiro(abs(float(l.valor or 0)))} ({l.data_transacao.strftime('%d/%m/%Y')})" for l in res])
+                    else: res_str = str(res)
             
+            elif fn_name == "categorizar_lancamentos_pendentes":
+                atualizados, total = await _categorizar_lancamentos_sem_categoria_async(db, usuario_db.id)
+                res_str = f"Categorização concluída. Analisados: {total}, Atualizados: {atualizados}."
+            
+            elif fn_name == "responder_duvida_financeira":
+                res_str = "Responda baseando-se nos dados de resumo financeiro já enviados no contexto de sistema."
+
+            elif fn_name in PIERRE_TOOLS_LIST and hasattr(usuario_db, 'pierre_api_key') and usuario_db.pierre_api_key:
+                from pierre_finance.ai_tools import executar_tool_pierre
+                resultado_bruto = executar_tool_pierre(fn_name, args, usuario_db.pierre_api_key)
+                res_str = json.dumps(resultado_bruto, ensure_ascii=False) if not isinstance(resultado_bruto, str) else resultado_bruto
+                if len(res_str) > 12000: res_str = res_str[:12000] + "... [Truncado]"
+
+            # Adiciona o ciclo de interpretação pela IA
+            messages.append({"role": "assistant", "tool_calls": tool_calls})
+            messages.append({"role": "tool", "tool_call_id": tool_call["id"], "name": fn_name, "content": res_str})
+            
+            logger.info(f"🧠 [ALFREDO] Ciclo de interpretação humana para tool: {fn_name}")
+            
+            prompt_humanizar = f"""
+            Você é o Alfredo, o braço direito financeiro do {usuario_db.nome_completo}.
+            Sua missão é transformar dados brutos em conselhos inteligentes e conversas humanas.
+            
+            DIRETRIZES:
+            1. Use emojis (💰, 🚀, ⚠️) de forma amigável.
+            2. NUNCA comece com "De acordo com os dados" ou "Resultado da busca". Vá direto ao assunto.
+            3. Se o usuário perguntou o maior gasto, destaque-o e diga se isso é preocupante ou normal.
+            4. Se não encontrar algo, seja empático: "Henrique, dei uma olhada aqui e não vi nenhum gasto com X este mês..."
+            5. DATA HOJE: {hoje_str}
+            
+            DADOS PARA INTERPRETAR:
+            {res_str}
+            """
+            
+            messages_human = [{"role": "system", "content": prompt_humanizar}, {"role": "user", "content": texto_usuario}]
+            completion_h = await _smart_ai_completion_async(messages_human)
+            
+            if not completion_h:
+                from gerente_financeiro.ai_service import _gemini_chat_completion_async
+                completion_h = await _gemini_chat_completion_async(messages_human)
+
+            if completion_h:
+                if isinstance(completion_h, str): final_text = completion_h
+                else: final_text = (((completion_h or {}).get("choices") or [{}])[0].get("message") or {}).get("content")
+                
+                if final_text:
+                    final_text = re.sub(r'\{.*\}', '', final_text, flags=re.DOTALL).strip()
+                    await _enviar_resposta_html_segura(update.message, final_text)
+                    _registrar_historico_ia(db, usuario_db.id, texto_usuario, final_text)
+                    return ConversationHandler.END
+
+            await _enviar_resposta_html_segura(update.message, f"Aqui está o que encontrei:\n\n{res_str}")
             return ConversationHandler.END
 
         if fn_name == "registrar_lancamento":
@@ -2715,7 +2725,6 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             periodo = args.get("periodo") or "tudo"
             
             query = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id)
-            # Regra de Paridade: Ignora transferências em qualquer busca de histórico
             query = query.filter(not_(func.lower(Lancamento.tipo).in_(["transferencia", "transferência", "transfer"])))
             
             if periodo == "este_mes":
@@ -2727,7 +2736,6 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 query = query.filter(Lancamento.data_transacao >= hoje.replace(month=1, day=1))
 
             if tipo_busca == "maior_gasto":
-                # Filtro robusto para gastos
                 res = query.filter(or_(
                     Lancamento.tipo.ilike("saida%"),
                     Lancamento.tipo.ilike("desp%"),
@@ -2741,12 +2749,11 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                     Lancamento.tipo.ilike("%recebido%")
                 )).order_by(func.abs(Lancamento.valor).desc()).limit(limite).all()
             elif tipo_busca == "soma_categoria" and termo:
-                # Busca soma por categoria ou termo na descrição
                 soma = query.filter(or_(
                     Lancamento.categoria.has(Categoria.nome.ilike(f"%{termo}%")),
                     Lancamento.descricao.ilike(f"%{termo}%")
                 )).with_entities(func.sum(Lancamento.valor)).scalar() or 0
-                res = f"Soma de {termo}: {_formatar_valor_brasileiro(abs(float(soma)))}"
+                return f"Soma de {termo}: {_formatar_valor_brasileiro(abs(float(soma)))}"
             elif tipo_busca == "lista_por_termo" and termo:
                 res = query.filter(or_(Lancamento.descricao.ilike(f"%{termo}%"), Lancamento.categoria.has(Categoria.nome.ilike(f"%{termo}%")))).order_by(Lancamento.data_transacao.desc()).limit(limite).all()
             else:
@@ -2754,17 +2761,10 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
 
             if isinstance(res, list):
                 if not res:
-                    txt_res = "Não encontrei registros para essa busca."
-                else:
-                    linhas = [f"• {l.descricao}: <code>{_formatar_valor_brasileiro(abs(float(l.valor or 0)))}</code> ({l.data_transacao.strftime('%d/%m')})" for l in res]
-                    txt_res = "\n".join(linhas)
-            else:
-                txt_res = str(res)
-
-            await _enviar_resposta_html_segura(update.message, 
-                f"🔍 <b>Resultado da busca:</b>\n\n{txt_res}\n\n<i>Fonte: Banco de Dados Completo</i>"
-            )
-            return ConversationHandler.END
+                    return "Não encontrei registros para essa busca no banco de dados."
+                linhas = [f"• {l.descricao}: {_formatar_valor_brasileiro(abs(float(l.valor or 0)))} em {l.data_transacao.strftime('%d/%m/%Y')}" for l in res]
+                return "\n".join(linhas)
+            return str(res)
             atualizados, total_pendentes = await _categorizar_lancamentos_sem_categoria_async(db, usuario_db.id)
             if total_pendentes == 0:
                 await _enviar_resposta_html_segura(update.message, 
