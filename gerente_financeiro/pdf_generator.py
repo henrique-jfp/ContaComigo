@@ -511,8 +511,8 @@ def generate_financial_pdf(context: dict) -> bytes:
     elements.append(SectionHeader("Saúde Financeira do Mês", "🏅"))
     elements.append(Spacer(1, 4*mm))
 
-    score_table = Table(
-        [[
+    score_table_data = [
+        [
             ScoreGauge(score, 88*mm, 54*mm),
             Table([
                 [Paragraph("<b>Médias dos Últimos 3 Meses</b>", style('h3m', fontName=FONT_BOLD, fontSize=10))],
@@ -521,8 +521,7 @@ def generate_financial_pdf(context: dict) -> bytes:
                     ["Média Despesas 3m",  fmt_brl(m3_d)],
                     ["Média Saldo 3m",     fmt_brl(m3_s)],
                     ["Transações no mês",  str(context.get('total_transacoes', '-'))],
-                    ["Dia com mais gastos",
-                     f"Dia {context.get('dia_mais_gasto', '-')}" if context.get('dia_mais_gasto') else '-'],
+                    ["Dia com mais gastos", f"Dia {context.get('dia_mais_gasto', '-')}" if context.get('dia_mais_gasto') else '-'],
                     ["Categoria top",      str(context.get('categoria_top', '-'))[:28]],
                 ], colWidths=[60*mm, 48*mm],
                    style=TableStyle([
@@ -536,11 +535,12 @@ def generate_financial_pdf(context: dict) -> bytes:
                        ('TOPPADDING',    (0, 0), (-1, -1), 5),
                        ('LEFTPADDING',   (0, 0), (-1, -1), 6),
                        ('GRID', (0, 0), (-1, -1), 0.3, C_BORDER),
-                   ])],
-            ], rowHeights=None),
-        ]],
-        colWidths=[92*mm, 82*mm],
-    )
+                   ]))]
+            ], rowHeights=None)
+        ]
+    ]
+
+    score_table = Table(score_table_data, colWidths=[92*mm, 82*mm])
     score_table.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING',  (0, 0), (-1, -1), 0),
