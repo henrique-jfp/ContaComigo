@@ -1028,6 +1028,38 @@ def _montar_resposta_local_alfredo(texto_usuario: str, texto_normalizado: str, d
     # Este método é o fallback quando a IA falha.
     # Ele deve ser elegante e informativo, mantendo a persona do Alfredo.
     
+    # --- INTELIGÊNCIA LOCAL PARA GASTOS (Fallback Robusto) ---
+    if any(x in texto_normalizado for x in ["quanto gastei", "meus gastos", "valor de", "total de"]):
+        # Tenta extrair um termo de categoria do texto
+        termo = None
+        for chunk in texto_normalizado.split():
+            if len(chunk) > 3 and chunk not in ["quanto", "gastei", "com", "essa", "esse", "esta", "nesta", "neste", "semana", "mes", "mês"]:
+                termo = chunk
+                break
+        
+        if termo:
+            # Busca no banco usando a lógica da ferramenta, mas de forma simplificada
+            pm_inicio = datetime.now().replace(day=1, hour=0, minute=0, second=0)
+            if "semana" in texto_normalizado:
+                pm_inicio = datetime.now() - timedelta(days=datetime.now().weekday())
+            
+            soma = db.query(func.sum(Lancamento.valor)).filter(
+                Lancamento.id_usuario == usuario_db.id,
+                Lancamento.data_transacao >= pm_inicio,
+                or_(
+                    Lancamento.descricao.ilike(f"%{termo}%"),
+                    Lancamento.categoria.has(Categoria.nome.ilike(f"%{termo}%"))
+                )
+            ).scalar() or 0
+            
+            if abs(soma) > 0:
+                periodo_txt = "nesta semana" if "semana" in texto_normalizado else "neste mês"
+                return (
+                    f"📊 <b>Análise Rápida (Modo de Segurança)</b>\n\n"
+                    f"Identifiquei que você gastou <code>{_formatar_valor_brasileiro(abs(float(soma)))}</code> com <b>{termo.capitalize()}</b> {periodo_txt}.\n\n"
+                    f"<i>Nota: Estou operando em modo simplificado devido a uma instabilidade momentânea nos meus servidores de IA.</i>"
+                )
+
     if _intencao_contas(texto_normalizado):
         return _resumo_contas_local(db, usuario_db.id)
 
