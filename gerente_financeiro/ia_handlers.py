@@ -380,7 +380,7 @@ _ALFREDO_TOOLS = [
                     "periodo": {
                         "type": "string", 
                         "enum": ["esta_semana", "semana_passada", "este_mes", "mes_passado", "este_ano", "ultimos_7_dias", "ultimos_30_dias", "tudo"], 
-                        "description": "Janela temporal."
+                        "description": "Janela temporal. Use 'esta_semana' para 'essa semana', 'nessa semana' ou 'esta semana'."
                     }
                 },
                 "required": ["tipo_busca"],
