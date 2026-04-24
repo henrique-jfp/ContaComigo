@@ -2355,7 +2355,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             if fn_name == "consultar_historico_financeiro":
                 tipo_busca = args.get("tipo_busca")
                 termo = args.get("termo")
-                limite = int(args.get("limite") or 5)
+                limite = int(args.get("limite") or 40)
                 periodo = args.get("periodo") or "tudo"
                 
                 query = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id)

@@ -169,12 +169,12 @@ async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | N
         return new_msgs
 
     providers = []
+    if config.GEMINI_API_KEY:
+        providers.append(("GEMINI", _gemini_chat_completion_async))
     if config.CEREBRAS_API_KEY:
         providers.append(("CEREBRAS", _cerebras_chat_completion_async))
     if config.GROQ_API_KEY:
         providers.append(("GROQ", _groq_chat_completion_async))
-    if config.GEMINI_API_KEY:
-        providers.append(("GEMINI", _gemini_chat_completion_async))
 
     last_error = None
     for attempt, (name, fn) in enumerate(providers):
