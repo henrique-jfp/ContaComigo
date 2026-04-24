@@ -2393,20 +2393,47 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             res_str = ""
             if fn_name == "consultar_historico_financeiro":
                 tipo_busca = args.get("tipo_busca")
-                termo = args.get("termo")
+                termo = (args.get("termo") or "").strip().lower()
                 limite = int(args.get("limite") or 40)
                 periodo = args.get("periodo") or "tudo"
                 
+                # --- DICIONÁRIO DE SINÔNIMOS (HUMANO -> CATEGORIA) ---
+                mapa_sinonimos = {
+                    "comida": "Alimentação",
+                    "lanche": "Alimentação",
+                    "restaurante": "Alimentação",
+                    "mercado": "Alimentação",
+                    "supermercado": "Alimentação",
+                    "gasolina": "Transporte",
+                    "combustivel": "Transporte",
+                    "combustível": "Transporte",
+                    "uber": "Transporte",
+                    "99": "Transporte",
+                    "carro": "Transporte",
+                    "lazer": "Lazer",
+                    "besteira": "Lazer",
+                    "shopping": "Compras",
+                    "online": "Compras Online",
+                    "amazon": "Compras Online",
+                    "ifood": "Alimentação"
+                }
+                
+                # Se o termo for um sinônimo, buscamos pela categoria real também
+                termo_busca = termo
+                if termo in mapa_sinonimos:
+                    termo_busca = mapa_sinonimos[termo]
+
                 query = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id)
                 query = query.filter(not_(func.lower(Lancamento.tipo).in_(["transferencia", "transferência", "transfer"])))
                 
                 if periodo == "este_mes":
                     query = query.filter(Lancamento.data_transacao >= inicio_mes)
                 elif periodo == "esta_semana":
-                    inicio_semana = hoje.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=hoje.weekday())
+                    # Garante que 'esta_semana' comece no domingo para pegar o final de semana passado
+                    inicio_semana = hoje.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=hoje.weekday() + 1)
                     query = query.filter(Lancamento.data_transacao >= inicio_semana)
                 elif periodo == "semana_passada":
-                    inicio_esta = hoje.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=hoje.weekday())
+                    inicio_esta = hoje.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=hoje.weekday() + 1)
                     inicio_passada = inicio_esta - timedelta(days=7)
                     query = query.filter(Lancamento.data_transacao >= inicio_passada, Lancamento.data_transacao < inicio_esta)
                 elif periodo == "mes_passado":
@@ -2422,9 +2449,10 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 # Filtro por termo (Categoria/Subcategoria/Descrição) se fornecido
                 if termo:
                     query = query.filter(or_(
-                        Lancamento.categoria.has(Categoria.nome.ilike(f"%{termo}%")),
-                        Lancamento.subcategoria.has(Subcategoria.nome.ilike(f"%{termo}%")),
-                        Lancamento.descricao.ilike(f"%{termo}%")
+                        Lancamento.categoria.has(Categoria.nome.ilike(f"%{termo_busca}%")),
+                        Lancamento.subcategoria.has(Subcategoria.nome.ilike(f"%{termo_busca}%")),
+                        Lancamento.descricao.ilike(f"%{termo}%"),
+                        Lancamento.descricao.ilike(f"%{termo_busca}%")
                     ))
 
                 if tipo_busca == "maior_gasto":
