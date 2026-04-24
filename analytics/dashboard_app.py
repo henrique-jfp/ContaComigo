@@ -1108,8 +1108,8 @@ def miniapp_pierre_dashboard():
         cleaned_categories = { (name or "Outros"): float(val) for name, val in results }
         cleaned_categories = dict(sorted(cleaned_categories.items(), key=lambda item: item[1], reverse=True)[:5])
 
-        # 3. Buscar Parcelamentos (da tabela parcelamentos)
-        parcelas_db = db.query(Parcelamento).filter(Parcelamento.id_usuario == usuario.id).order_by(Parcelamento.data_proxima_parcela.asc()).limit(15).all()
+        # 3. Buscar Parcelamentos (da tabela parcelamentos) usando ParcelamentoItem
+        parcelas_db = db.query(ParcelamentoItem).filter(ParcelamentoItem.id_usuario == usuario.id).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(15).all()
         installments_res = []
         for p in parcelas_db:
             installments_res.append({
@@ -1121,21 +1121,25 @@ def miniapp_pierre_dashboard():
                 "totalInstallments": p.total_parcelas
             })
 
-        # 4. Cálculo Dinâmico de Saúde
+        # 4. Cálculo Dinâmico de Saúde e Insight Rápido (Fallback se IA falhar ou estiver em hot-path)
         total_expenses = sum(cleaned_categories.values())
         
         if total_balance < 100:
             health_score = 25
             health_label = "Crítico"
+            fast_insight = "Atenção: Seu saldo está muito baixo. Tente priorizar contas essenciais esta semana."
         elif total_balance < 1000:
             health_score = 50
             health_label = "Atenção"
+            fast_insight = "Seu saldo exige cautela. Evite gastos impulsivos até a próxima entrada."
         elif total_expenses > total_balance:
             health_score = 40
             health_label = "Risco"
+            fast_insight = "Suas despesas dos últimos 90 dias estão altas. Que tal revisar seus 'vilões'?"
         else:
             health_score = 90
             health_label = "Excelente"
+            fast_insight = "Suas finanças estão saudáveis! Ótimo trabalho mantendo o controle."
 
         return jsonify({
             "ok": True,
@@ -1145,6 +1149,7 @@ def miniapp_pierre_dashboard():
                 "categories": cleaned_categories,
                 "installments": installments_res,
                 "health": {"score": health_score, "label": health_label},
+                "insight": fast_insight, # Alfredo em Destaque agora garantido
                 "sync_time": usuario.last_pierre_sync_at.isoformat() if usuario.last_pierre_sync_at else datetime.now(timezone.utc).isoformat()
             }
         })
@@ -1857,65 +1862,134 @@ def miniapp_overview():
             # Comportamento padrão: Mês Atual
             start_date, end_date = _month_bounds()
         
-        base_query = (
+        # --- OTIMIZAÇÃO MASSIVA: Agregações do Mês Atual (Gargalo de 11s resolvido) ---
+        # 1. Totais de Receita e Despesa (Ignora Transferências)
+        totais_mes = db.query(
+            func.sum(case((or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')), func.abs(Lancamento.valor)), else_=0)).label('rec'),
+            func.sum(case((or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%')), func.abs(Lancamento.valor)), else_=0)).label('des')
+        ).filter(
+            Lancamento.id_usuario == usuario.id,
+            Lancamento.data_transacao >= datetime.combine(start_date, datetime.min.time()),
+            Lancamento.data_transacao <= datetime.combine(end_date, datetime.max.time()),
+            not_(func.lower(Lancamento.tipo).like('transfer%'))
+        ).first()
+
+        receita = float(totais_mes.rec or 0)
+        despesa = float(totais_mes.des or 0)
+        balance = receita - despesa
+
+        # 2. Fluxo de Caixa Diário via SQL
+        cashflow_daily_stats = db.query(
+            extract('day', Lancamento.data_transacao).label('dia'),
+            func.sum(case((or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')), func.abs(Lancamento.valor)), else_=0)).label('ent'),
+            func.sum(case((or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%')), func.abs(Lancamento.valor)), else_=0)).label('sai'),
+            func.count(case((or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')), 1))).label('ent_c'),
+            func.count(case((or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%')), 1))).label('sai_c')
+        ).filter(
+            Lancamento.id_usuario == usuario.id,
+            Lancamento.data_transacao >= datetime.combine(start_date, datetime.min.time()),
+            Lancamento.data_transacao <= datetime.combine(end_date, datetime.max.time()),
+            not_(func.lower(Lancamento.tipo).like('transfer%'))
+        ).group_by('dia').all()
+
+        # Montar Mapa de Calor e Cashflow a partir das stats
+        days_in_period = (end_date - start_date).days + 1
+        cashflow = []
+        heatmap_daily = {}
+        
+        # Mapa auxiliar para busca rápida
+        stats_map = {int(s.dia): s for s in cashflow_daily_stats}
+        
+        for i in range(days_in_period):
+            curr_d = start_date + timedelta(days=i)
+            dia_num = curr_d.day
+            s = stats_map.get(dia_num)
+            
+            label = curr_d.strftime("%d/%m")
+            ent_v = float(s.ent or 0) if s else 0.0
+            sai_v = float(s.sai or 0) if s else 0.0
+            
+            cashflow.append({"label": label, "entrada": round(ent_v, 2), "saida": round(sai_v, 2)})
+            
+            if s:
+                heatmap_daily[dia_num] = {
+                    "incT": ent_v, "expT": sai_v, 
+                    "incC": int(s.ent_c or 0), "expC": int(s.sai_c or 0)
+                }
+
+        # 3. Distribuição de Categorias via SQL
+        cat_stats = db.query(
+            Categoria.nome,
+            func.sum(func.abs(Lancamento.valor)).label('total')
+        ).join(Categoria, Lancamento.id_categoria == Categoria.id, isouter=True).filter(
+            Lancamento.id_usuario == usuario.id,
+            Lancamento.data_transacao >= datetime.combine(start_date, datetime.min.time()),
+            Lancamento.data_transacao <= datetime.combine(end_date, datetime.max.time()),
+            or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%'))
+        ).group_by(Categoria.nome).order_by(desc('total')).all()
+
+        palette = ["#D4AF37", "#2C2C2C", "#064E3B", "#881337", "#1E3A8A", "#451A03"]
+        categories = []
+        total_geral_gastos = sum(float(c.total or 0) for c in cat_stats)
+        for i, c in enumerate(cat_stats[:6]):
+            val = float(c.total or 0)
+            categories.append({
+                "label": (c.nome or "SEM CATEGORIA").upper(),
+                "value": round(val, 2),
+                "color": palette[i % len(palette)],
+                "percentage": round((val / total_geral_gastos * 100), 1) if total_geral_gastos > 0 else 0
+            })
+
+        # 4. Orçamento vs realizado (Otimizado: Query Única para o Insight usar)
+        orcamentos_reais = db.query(OrcamentoCategoria).filter(
+            OrcamentoCategoria.id_usuario == usuario.id,
+            OrcamentoCategoria.ativo == True
+        ).all()
+        
+        budget_items = []
+        if orcamentos_reais:
+            cat_ids = [o.id_categoria for o in orcamentos_reais if o.id_categoria]
+            realizados_stats = db.query(
+                Lancamento.id_categoria,
+                func.sum(func.abs(Lancamento.valor)).label('total')
+            ).filter(
+                Lancamento.id_usuario == usuario.id,
+                Lancamento.id_categoria.in_(cat_ids),
+                Lancamento.data_transacao >= datetime.combine(today.replace(day=1), datetime.min.time()),
+                not_(or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')))
+            ).group_by(Lancamento.id_categoria).all()
+            
+            realizados_map = {int(r.id_categoria): float(r.total or 0) for r in realizados_stats}
+            for o in orcamentos_reais:
+                budget_items.append({
+                    "label": o.categoria.nome if o.categoria else "Outros",
+                    "orcamento": float(o.valor_limite),
+                    "realizado": realizados_map.get(o.id_categoria, 0.0),
+                    "periodo": o.periodo or 'monthly'
+                })
+
+        # --- ALFREDO EM DESTAQUE: Fast Insight (Garante funcionamento instantâneo sem IA) ---
+        if not MINIAPP_AI_INSIGHT_ENABLED or balance == 0:
+            if balance > 0:
+                fast_text = f"Excelente! Você está com R$ {balance:.2f} de folga este mês. "
+                if categories:
+                    fast_text += f"Seu maior gasto foi com {categories[0]['label'].title()}."
+                insight = fast_text
+            elif balance < 0:
+                fast_text = f"Atenção: Suas despesas superaram a receita em R$ {abs(balance):.2f}. "
+                if budget_items:
+                    estourados = [b['label'] for b in budget_items if b['realizado'] > b['orcamento']]
+                    if estourados: fast_text += f"O limite de {estourados[0]} foi ultrapassado."
+                insight = fast_text
+            else:
+                insight = "Alfredo está monitorando seus primeiros lançamentos. Vamos colocar as contas em ordem!"
+        else:
+            insight = _build_miniapp_insight(usuario, balance, receita, despesa, categories, cashflow)
+
+        recent_items = (
             db.query(Lancamento)
             .options(joinedload(Lancamento.categoria), joinedload(Lancamento.subcategoria))
             .filter(Lancamento.id_usuario == usuario.id)
-        )
-        lancamentos_mes = (
-            base_query
-            .filter(Lancamento.data_transacao >= datetime.combine(start_date, datetime.min.time()))
-            .filter(Lancamento.data_transacao <= datetime.combine(end_date, datetime.max.time()))
-            .order_by(Lancamento.data_transacao.asc())
-            .all()
-        )
-
-        # --- LÓGICA DE DEDUPLICAÇÃO (Livro Único - Mostra TUDO) ---
-        receita = 0.0
-        despesa = 0.0
-        
-        for lanc in lancamentos_mes:
-            tipo_l = str(lanc.tipo).lower()
-            
-            # Filtro ultra-rigoroso: Ignora variações de 'Transferência' (com ou sem acento)
-            if tipo_l in ["transferencia", "transferência", "transfer"]:
-                continue
-                
-            valor = abs(float(lanc.valor or 0))
-            if tipo_l.startswith(("entr", "recei")):
-                receita += valor
-            elif tipo_l.startswith(("desp", "saida")):
-                despesa += valor
-        
-        # Saldo do mês (Resultado Líquido)
-        balance = receita - despesa
-
-        cashflow = _daily_cashflow(lancamentos_mes, start_date, end_date)
-        categories = _category_distribution(lancamentos_mes)
-        insight = _build_miniapp_insight(usuario, balance, receita, despesa, categories, cashflow)
-
-        # Agrupamento diário para o Mapa de Calor Real (Filtrado)
-        heatmap_daily = {}
-        for l in lancamentos_mes:
-            tipo_l = str(l.tipo).lower()
-            # Filtro ultra-rigoroso para o Mapa de Calor: Ignora Transferências
-            if tipo_l in ["transferencia", "transferência", "transfer"]:
-                continue
-                
-            dia = l.data_transacao.day
-            if dia not in heatmap_daily:
-                heatmap_daily[dia] = {"incT": 0.0, "expT": 0.0, "incC": 0, "expC": 0}
-            
-            valor = abs(float(l.valor or 0))
-            if tipo_l.startswith(("entr", "recei")):
-                heatmap_daily[dia]["incT"] += valor
-                heatmap_daily[dia]["incC"] += 1
-            elif tipo_l.startswith(("desp", "saida")):
-                heatmap_daily[dia]["expT"] += valor
-                heatmap_daily[dia]["expC"] += 1
-
-        recent_items = (
-            base_query
             .order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc())
             .limit(10)
             .all()
@@ -1923,6 +1997,7 @@ def miniapp_overview():
 
         # Series reais para os 6 gráficos estratégicos.
         today = datetime.utcnow().date()
+
 
         # Últimos 6 meses para fluxo de caixa.
         month_refs_6 = []
@@ -2030,45 +2105,33 @@ def miniapp_overview():
                 "value": round(running_balance, 2),
             })
 
-        # Orçamento vs realizado REAL (apenas o que o usuário cadastrou)
+        # 4. Orçamento vs realizado (Otimizado: Query Única)
         orcamentos_reais = db.query(OrcamentoCategoria).filter(
             OrcamentoCategoria.id_usuario == usuario.id,
             OrcamentoCategoria.ativo == True
         ).all()
         
         budget_items = []
-        for o in orcamentos_reais:
-            if not o.categoria: continue
-            
-            # Determina o intervalo de tempo com base no período
-            b_start = None
-            b_end = today
-            
-            if o.periodo == 'daily':
-                b_start = today
-            elif o.periodo == 'weekly':
-                # Considera a semana atual (segunda a domingo)
-                b_start = today - timedelta(days=today.weekday())
-            else: # monthly ou default
-                b_start = date(today.year, today.month, 1)
-            
-            # Soma despesas da categoria no intervalo
-            realizado = db.query(func.sum(func.abs(Lancamento.valor))).filter(
-                Lancamento.id_usuario == usuario.id,
-                Lancamento.id_categoria == o.id_categoria,
-                Lancamento.data_transacao >= datetime.combine(b_start, datetime.min.time()),
-                Lancamento.data_transacao <= datetime.combine(b_end, datetime.max.time())
+        if orcamentos_reais:
+            cat_ids = [o.id_categoria for o in orcamentos_reais if o.id_categoria]
+            realizados_stats = db.query(
+                Lancamento.id_categoria,
+                func.sum(func.abs(Lancamento.valor)).label('total')
             ).filter(
-                not_(Lancamento.tipo.ilike("entr%")),
-                not_(Lancamento.tipo.ilike("recei%"))
-            ).scalar() or 0.0
+                Lancamento.id_usuario == usuario.id,
+                Lancamento.id_categoria.in_(cat_ids),
+                Lancamento.data_transacao >= datetime.combine(today.replace(day=1), datetime.min.time()),
+                not_(or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')))
+            ).group_by(Lancamento.id_categoria).all()
             
-            budget_items.append({
-                "label": o.categoria.nome,
-                "orcamento": float(o.valor_limite),
-                "realizado": float(realizado),
-                "periodo": o.periodo or 'monthly'
-            })
+            realizados_map = {int(r.id_categoria): float(r.total or 0) for r in realizados_stats}
+            for o in orcamentos_reais:
+                budget_items.append({
+                    "label": o.categoria.nome if o.categoria else "Outros",
+                    "orcamento": float(o.valor_limite),
+                    "realizado": realizados_map.get(o.id_categoria, 0.0),
+                    "periodo": o.periodo or 'monthly'
+                })
 
         # Projeção simples com base no saldo e média de resultado mensal recente.
         avg_net = sum(monthly_map[key]["net"] for key in month_refs_6) / max(len(month_refs_6), 1)
