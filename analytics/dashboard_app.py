@@ -825,6 +825,43 @@ def after_request(response):
         response.headers['X-Response-Time'] = f"{duration:.2f}ms"
     return response
 
+import hmac
+import hashlib
+import subprocess
+
+@app.route('/api/deploy/webhook', methods=['POST'])
+def github_webhook():
+    """Webhook para deploy automático vindo do GitHub"""
+    signature = request.headers.get('X-Hub-Signature-256')
+    if not signature:
+        return jsonify({"ok": False, "error": "No signature"}), 403
+
+    secret = os.getenv("GITHUB_WEBHOOK_SECRET")
+    if not secret:
+        return jsonify({"ok": False, "error": "Secret not configured"}), 500
+
+    # Valida a assinatura do GitHub
+    hash_object = hmac.new(secret.encode(), request.data, hashlib.sha256)
+    expected_signature = "sha256=" + hash_object.hexdigest()
+
+    if not hmac.compare_digest(signature, expected_signature):
+        return jsonify({"ok": False, "error": "Invalid signature"}), 403
+
+    # Executa o update em background para não travar a resposta
+    # Usamos um delay pequeno para dar tempo do Flask responder antes do restart
+    deploy_cmd = "cd /home/pvserver/contacomigo && git pull origin main && sudo systemctl restart contacomigo"
+    subprocess.Popen(["nohup", "sh", "-c", f"sleep 2 && {deploy_cmd}"], 
+                    stdout=open('/dev/null', 'w'), 
+                    stderr=open('/dev/null', 'w'), 
+                    preexec_fn=os.setpgrp)
+
+    return jsonify({"ok": True, "message": "Deploy iniciado"}), 200
+
+@app.errorhandler(404)
+def page_not_found(e):
+    logger.error(f"❌ 404 NOT FOUND: {request.url} [Method: {request.method}]")
+    return jsonify({"ok": False, "error": "not_found", "url": request.url}), 404
+
 # --- ROTAS PRINCIPAIS ---
 
 @app.route('/')
