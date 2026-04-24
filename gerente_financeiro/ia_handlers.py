@@ -2317,7 +2317,10 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         ANALYTIC_TOOLS = ["consultar_historico_financeiro", "categorizar_lancamentos_pendentes", "responder_duvida_financeira"]
         
         if fn_name in ANALYTIC_TOOLS or fn_name in PIERRE_TOOLS_LIST:
-            await update.message.reply_chat_action(action="typing")
+            try:
+                await update.message.reply_chat_action(action="typing")
+            except Exception:
+                pass
             
             res_str = ""
             if fn_name == "consultar_historico_financeiro":

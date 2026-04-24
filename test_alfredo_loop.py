@@ -26,6 +26,7 @@ class MockMessage:
         self.reply_text = AsyncMock()
         self.reply_html = AsyncMock()
         self.delete = AsyncMock()
+        self.reply_chat_action = AsyncMock()
 
 class MockUpdate:
     def __init__(self, text):
@@ -37,16 +38,22 @@ class MockContext:
         self.user_data = {}
 
 perguntas = [
-    "Qual meu saldo do mês?",
-    "Quanto tenho de patrimônio total?",
-    "Como estão meus gastos comparados ao mês passado?",
-    "Gastei 40 reais no mercado agora.",
-    "Me lembre de pagar o Michel 500 reais na quarta-feira que vem.",
-    "Qual foi meu maior gasto de todos os tempos?",
-    "Crie uma meta de 12 mil reais para uma moto em 17 meses.",
-    "Estou correndo risco de fechar no vermelho este mês?",
-    "Agendar o pagamento da internet 100 reais todo mês.",
-    "Quanto gastei no total este ano?"
+    "Quanto eu gastei com transporte este mês e como isso se compara com a média da semana passada?",
+    "Qual foi o meu maior gasto individual desde o começo do ano?",
+    "Se eu continuar gastando com alimentação o que gastei hoje, quanto vou ter de saldo no fim do mês?",
+    "Liste os 3 dias em que mais saiu dinheiro da minha conta em abril e o motivo.",
+    "Quanto eu já gastei com 'besteira' (lanches/lazer) este mês?",
+    "O que mudou no meu perfil de gastos entre o mês passado e este mês?",
+    "Qual categoria de despesa cresceu mais em percentual este mês?",
+    "Me diga exatamente o que eu ainda preciso pagar até domingo (incluindo agendamentos).",
+    "Eu estou tendo muitos gastos por impulso? Me dê exemplos reais.",
+    "Qual foi a minha maior receita e qual a maior despesa desta semana?",
+    "Quanto eu gastei no total com o Michel (via Pix) este mês?",
+    "Meu saldo total acumulado é suficiente para cobrir os agendamentos dos próximos 30 dias?",
+    "Qual a minha categoria mais econômica este mês em relação ao mês anterior?",
+    "Teve algum gasto recorrente que subiu de preço recentemente?",
+    "Quanto eu gastei com Mercado este ano, mês a mês?",
+    "Se eu quiser economizar 500 reais extra este mês, qual categoria você recomenda cortar baseado nos meus dados?"
 ]
 
 import sys
@@ -85,10 +92,10 @@ async def run_tests():
         print(f"RESPOSTA:\n{resposta_final}")
         print("="*60)
         
-        # Pausa de 10 segundos conforme solicitado
+        # Pausa de 30 segundos conforme solicitado (mitigar rate limit)
         if i < len(perguntas):
-            print("Aguardando 10 segundos...")
-            await asyncio.sleep(10)
+            print("Aguardando 30 segundos...")
+            await asyncio.sleep(30)
 
 if __name__ == "__main__":
     asyncio.run(run_tests())
