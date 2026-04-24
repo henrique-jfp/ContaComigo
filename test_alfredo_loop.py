@@ -92,10 +92,10 @@ async def run_tests():
         print(f"RESPOSTA:\n{resposta_final}")
         print("="*60)
         
-        # Pausa de 30 segundos conforme solicitado (mitigar rate limit)
+        # Pausa de 45 segundos para mitigar rate limit severo das APIs gratuitas
         if i < len(perguntas):
-            print("Aguardando 30 segundos...")
-            await asyncio.sleep(30)
+            print("Aguardando 45 segundos...")
+            await asyncio.sleep(45)
 
 if __name__ == "__main__":
     asyncio.run(run_tests())
