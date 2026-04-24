@@ -2,10 +2,15 @@ import asyncio
 import time
 import os
 import json
+import sys
+import codecs
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
-# Configuração do ambiente para conectar no Supabase
+# Forçar saída em UTF-8 para evitar erros de encode no terminal
+sys.stdout = codecs.getwriter('utf-8')(sys.stdout.detach())
+
+# Configuração do ambiente
 os.environ["CONTACOMIGO_MODE"] = "BOT"
 
 # Importa o banco de dados e os handlers
@@ -25,8 +30,8 @@ class MockMessage:
         self.voice = None
         self.reply_text = AsyncMock()
         self.reply_html = AsyncMock()
-        self.delete = AsyncMock()
         self.reply_chat_action = AsyncMock()
+        self.delete = AsyncMock()
 
 class MockUpdate:
     def __init__(self, text):
@@ -38,32 +43,28 @@ class MockContext:
         self.user_data = {}
 
 perguntas = [
-    "Quanto eu gastei com transporte este mês e como isso se compara com a média da semana passada?",
-    "Qual foi o meu maior gasto individual desde o começo do ano?",
-    "Se eu continuar gastando com alimentação o que gastei hoje, quanto vou ter de saldo no fim do mês?",
-    "Liste os 3 dias em que mais saiu dinheiro da minha conta em abril e o motivo.",
-    "Quanto eu já gastei com 'besteira' (lanches/lazer) este mês?",
-    "O que mudou no meu perfil de gastos entre o mês passado e este mês?",
-    "Qual categoria de despesa cresceu mais em percentual este mês?",
-    "Me diga exatamente o que eu ainda preciso pagar até domingo (incluindo agendamentos).",
-    "Eu estou tendo muitos gastos por impulso? Me dê exemplos reais.",
-    "Qual foi a minha maior receita e qual a maior despesa desta semana?",
-    "Quanto eu gastei no total com o Michel (via Pix) este mês?",
-    "Meu saldo total acumulado é suficiente para cobrir os agendamentos dos próximos 30 dias?",
-    "Qual a minha categoria mais econômica este mês em relação ao mês anterior?",
-    "Teve algum gasto recorrente que subiu de preço recentemente?",
-    "Quanto eu gastei com Mercado este ano, mês a mês?",
-    "Se eu quiser economizar 500 reais extra este mês, qual categoria você recomenda cortar baseado nos meus dados?"
+    "Qual a porcentagem exata do meu patrimônio total que eu comprometi com gastos reais este mês?",
+    "Se eu mantiver o ritmo de gastos desta semana até o fim do ano, qual será meu saldo acumulado em dezembro?",
+    "Qual subcategoria mais cresceu em valor absoluto nos últimos 30 dias e como isso afetou meu lucro mensal?",
+    "Identifique 3 gastos recorrentes que podem ser 'vazamentos' de dinheiro e quanto eles custam por ano.",
+    "Comparando os últimos 15 dias com o mês passado, estou sendo mais disciplinado com 'besteiras'?",
+    "Quanto do meu saldo disponível hoje já está 'reservado' para compromissos que vencem nos próximos 15 dias?",
+    "Qual o gasto mais 'fora da curva' (anomalia) que você encontrou no meu histórico recente?",
+    "Se eu cortar 20% de 'Alimentação Fora', em quantos meses antecipo minha meta de 12 mil reais?",
+    "Liste as 5 maiores entradas de abril e me diga se elas são recorrentes ou pontuais.",
+    "Qual dia da semana é historicamente o meu 'dia mais caro' em gastos variáveis?",
+    "Tem algum gasto fixo que parou de aparecer e eu posso ter esquecido de pagar?",
+    "Se eu recebesse um bônus de 2 mil reais hoje, qual meta você recomendaria focar e por quê?",
+    "Qual a diferença real entre meus limites de orçamento e o que eu realmente gastei este mês?",
+    "Alfredo, analise se meus gastos com transporte estão correlacionados com o aumento de despesas em lazer.",
+    "Quanto eu gastei com taxas e juros este ano e o que isso representa em relação ao meu lucro mensal médio?",
+    "Diagnóstico Final: Baseado em todos os dados do MiniApp, eu estou construindo patrimônio ou apenas 'pagando incêndio'?"
 ]
 
-import sys
-import codecs
-sys.stdout = codecs.getwriter('utf-8')(sys.stdout.detach())
-
 async def run_tests():
-    print("=== INICIANDO TESTE DO ALFREDO (BOT-LOOP-DEBUGGER) ===\n")
+    print("=== INICIANDO EXAME DE ALTA COMPLEXIDADE — ALFREDO 4.0 ===\n")
     for i, pergunta in enumerate(perguntas, 1):
-        print(f"\n[{i}/10] PERGUNTA: {pergunta}")
+        print(f"\n[{i}/16] PERGUNTA: {pergunta}")
         
         update = MockUpdate(pergunta)
         context = MockContext()
@@ -73,29 +74,22 @@ async def run_tests():
         try:
             await processar_mensagem_com_alfredo(update, context)
             
-            # Captura a resposta enviada via reply_html ou reply_text
             respostas = []
-            for call in update.message.reply_html.call_args_list:
-                respostas.append(call[0][0])
-            for call in update.message.reply_text.call_args_list:
-                respostas.append(call[0][0])
-                
+            for call in update.message.reply_html.call_args_list: respostas.append(call[0][0])
+            for call in update.message.reply_text.call_args_list: respostas.append(call[0][0])
             resposta_final = "\n---\n".join(respostas)
             
         except Exception as e:
             resposta_final = f"ERRO INTERNO: {e}"
             
-        end_time = time.time()
-        elapsed = end_time - start_time
-        
-        print(f"TEMPO: {elapsed:.2f}s")
-        print(f"RESPOSTA:\n{resposta_final}")
+        elapsed = time.time() - start_time
+        print(f"⏱️ TEMPO: {elapsed:.2f}s")
+        print(f"🤖 ALFREDO:\n{resposta_final}")
         print("="*60)
         
-        # Pausa de 45 segundos para mitigar rate limit severo das APIs gratuitas
         if i < len(perguntas):
-            print("Aguardando 45 segundos...")
-            await asyncio.sleep(45)
+            print("⏳ Aguardando 60 segundos para evitar Rate Limit...")
+            await asyncio.sleep(60)
 
 if __name__ == "__main__":
     asyncio.run(run_tests())
