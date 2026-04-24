@@ -1061,24 +1061,33 @@ def miniapp_pierre_dashboard():
         if not usuario or not usuario.pierre_api_key:
             return jsonify({"ok": False, "error": "pierre_not_configured"}), 403
 
-        # 1. Buscar Contas e Saldo Unificado (Conta Digital Central)
+        # 1. Buscar Contas e Saldo Unificado (Otimizado: Query única para snapshots)
         digital_acc = db.query(Conta).filter(Conta.id_usuario == usuario.id, Conta.nome == "ContaComigo Digital").first()
         
         # O Saldo Total é a soma histórica de lançamentos (receitas - despesas)
-        total_balance = db.query(func.sum(Lancamento.valor)).filter(Lancamento.id_usuario == usuario.id).scalar() or 0.0
-        total_balance = float(total_balance)
+        # Otimizado: Usa tipos exatos para bater no índice idx_lancamentos_usuario_tipo_data
+        total_balance = float(db.query(
+            func.sum(case((Lancamento.tipo.in_(['Entrada', 'Receita']), func.abs(Lancamento.valor)), else_=0)) -
+            func.sum(case((Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida']), func.abs(Lancamento.valor)), else_=0))
+        ).filter(Lancamento.id_usuario == usuario.id).scalar() or 0.0)
 
         contas = db.query(Conta).filter(Conta.id_usuario == usuario.id).all()
-        accounts_res = []
         
+        # Otimização: Subquery para buscar todos os últimos snapshots de uma vez
+        last_snapshot_ids = db.query(
+            func.max(SaldoConta.id).label('max_id')
+        ).filter(SaldoConta.id_conta.in_([c.id for c in contas])).group_by(SaldoConta.id_conta).subquery()
+        
+        snapshots = db.query(SaldoConta).filter(SaldoConta.id.in_(last_snapshot_ids)).all()
+        snapshots_map = {s.id_conta: s for s in snapshots}
+
+        accounts_res = []
         for c in contas:
-            # Se for a conta central, mostramos o saldo calculado. 
-            # Se forem contas externas do Pierre, mostramos o último saldo capturado via API.
             if c.id == (digital_acc.id if digital_acc else None):
                 saldo_val = total_balance
             else:
-                ultimo_saldo = db.query(SaldoConta).filter(SaldoConta.id_conta == c.id).order_by(SaldoConta.capturado_em.desc()).first()
-                saldo_val = float(ultimo_saldo.saldo) if ultimo_saldo else 0.0
+                s = snapshots_map.get(c.id)
+                saldo_val = float(s.saldo) if s else 0.0
             
             display_info = None
             if c.tipo == "Cartão de Crédito":
@@ -1101,7 +1110,7 @@ def miniapp_pierre_dashboard():
             func.sum(func.abs(Lancamento.valor))
         ).join(Categoria, Lancamento.id_categoria == Categoria.id, isouter=True).filter(
             Lancamento.id_usuario == usuario.id,
-            Lancamento.tipo.in_(['Saída', 'Despesa']),
+            Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida']),
             Lancamento.data_transacao >= noventa_dias_atras
         ).group_by(Categoria.nome).all()
 
@@ -1149,7 +1158,7 @@ def miniapp_pierre_dashboard():
                 "categories": cleaned_categories,
                 "installments": installments_res,
                 "health": {"score": health_score, "label": health_label},
-                "insight": fast_insight, # Alfredo em Destaque agora garantido
+                "ai_insight": fast_insight, # Alfredo em Destaque agora garantido e com chave correta
                 "sync_time": usuario.last_pierre_sync_at.isoformat() if usuario.last_pierre_sync_at else datetime.now(timezone.utc).isoformat()
             }
         })
@@ -1852,26 +1861,29 @@ def miniapp_overview():
         if not usuario:
             return jsonify({"ok": False, "error": "user_not_found"}), 404
 
+        # Definir data de hoje no início para evitar NameError
+        today = datetime.utcnow().date()
+
         # Filtro de período: padrão é o mês atual, mas aceita '90d' para visão MACRO
         period = request.args.get("period", "monthly")
         
         if period == "90d":
-            start_date = datetime.utcnow().date() - timedelta(days=90)
-            end_date = datetime.utcnow().date() + timedelta(days=30)
+            start_date = today - timedelta(days=90)
+            end_date = today + timedelta(days=30)
         else:
             # Comportamento padrão: Mês Atual
             start_date, end_date = _month_bounds()
         
         # --- OTIMIZAÇÃO MASSIVA: Agregações do Mês Atual (Gargalo de 11s resolvido) ---
-        # 1. Totais de Receita e Despesa (Ignora Transferências)
+        # 1. Totais de Receita e Despesa (Usa tipos exatos para bater no índice idx_lancamentos_usuario_tipo_data)
         totais_mes = db.query(
-            func.sum(case((or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')), func.abs(Lancamento.valor)), else_=0)).label('rec'),
-            func.sum(case((or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%')), func.abs(Lancamento.valor)), else_=0)).label('des')
+            func.sum(case((Lancamento.tipo.in_(['Entrada', 'Receita']), func.abs(Lancamento.valor)), else_=0)).label('rec'),
+            func.sum(case((Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida']), func.abs(Lancamento.valor)), else_=0)).label('des')
         ).filter(
             Lancamento.id_usuario == usuario.id,
             Lancamento.data_transacao >= datetime.combine(start_date, datetime.min.time()),
             Lancamento.data_transacao <= datetime.combine(end_date, datetime.max.time()),
-            not_(func.lower(Lancamento.tipo).like('transfer%'))
+            not_(Lancamento.tipo.ilike('transfer%'))
         ).first()
 
         receita = float(totais_mes.rec or 0)
@@ -1881,15 +1893,15 @@ def miniapp_overview():
         # 2. Fluxo de Caixa Diário via SQL
         cashflow_daily_stats = db.query(
             extract('day', Lancamento.data_transacao).label('dia'),
-            func.sum(case((or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')), func.abs(Lancamento.valor)), else_=0)).label('ent'),
-            func.sum(case((or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%')), func.abs(Lancamento.valor)), else_=0)).label('sai'),
-            func.count(case((or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')), 1))).label('ent_c'),
-            func.count(case((or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%')), 1))).label('sai_c')
+            func.sum(case((Lancamento.tipo.in_(['Entrada', 'Receita']), func.abs(Lancamento.valor)), else_=0)).label('ent'),
+            func.sum(case((Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida']), func.abs(Lancamento.valor)), else_=0)).label('sai'),
+            func.count(case((Lancamento.tipo.in_(['Entrada', 'Receita']), 1))).label('ent_c'),
+            func.count(case((Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida']), 1))).label('sai_c')
         ).filter(
             Lancamento.id_usuario == usuario.id,
             Lancamento.data_transacao >= datetime.combine(start_date, datetime.min.time()),
             Lancamento.data_transacao <= datetime.combine(end_date, datetime.max.time()),
-            not_(func.lower(Lancamento.tipo).like('transfer%'))
+            not_(Lancamento.tipo.ilike('transfer%'))
         ).group_by('dia').all()
 
         # Montar Mapa de Calor e Cashflow a partir das stats
@@ -1925,7 +1937,7 @@ def miniapp_overview():
             Lancamento.id_usuario == usuario.id,
             Lancamento.data_transacao >= datetime.combine(start_date, datetime.min.time()),
             Lancamento.data_transacao <= datetime.combine(end_date, datetime.max.time()),
-            or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%'))
+            Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida'])
         ).group_by(Categoria.nome).order_by(desc('total')).all()
 
         palette = ["#D4AF37", "#2C2C2C", "#064E3B", "#881337", "#1E3A8A", "#451A03"]
@@ -1956,7 +1968,7 @@ def miniapp_overview():
                 Lancamento.id_usuario == usuario.id,
                 Lancamento.id_categoria.in_(cat_ids),
                 Lancamento.data_transacao >= datetime.combine(today.replace(day=1), datetime.min.time()),
-                not_(or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')))
+                not_(Lancamento.tipo.in_(['Entrada', 'Receita']))
             ).group_by(Lancamento.id_categoria).all()
             
             realizados_map = {int(r.id_categoria): float(r.total or 0) for r in realizados_stats}
@@ -1969,7 +1981,10 @@ def miniapp_overview():
                 })
 
         # --- ALFREDO EM DESTAQUE: Fast Insight (Garante funcionamento instantâneo sem IA) ---
-        if not MINIAPP_AI_INSIGHT_ENABLED or balance == 0:
+        # Forçamos False aqui para garantir performance instantânea no carregamento inicial
+        hotpath_ai_enabled = False 
+        
+        if not hotpath_ai_enabled or balance == 0:
             if balance > 0:
                 fast_text = f"Excelente! Você está com R$ {balance:.2f} de folga este mês. "
                 if categories:
@@ -1995,6 +2010,7 @@ def miniapp_overview():
             .all()
         )
 
+
         # Series reais para os 6 gráficos estratégicos.
         today = datetime.utcnow().date()
 
@@ -2015,14 +2031,15 @@ def miniapp_overview():
         cashflow_stats = db.query(
             extract('year', Lancamento.data_transacao).label('year'),
             extract('month', Lancamento.data_transacao).label('month'),
-            func.sum(case((or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')), func.abs(Lancamento.valor)), else_=0)).label('ent'),
-            func.sum(case((or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%')), func.abs(Lancamento.valor)), else_=0)).label('sai')
+            func.sum(case((Lancamento.tipo.in_(['Entrada', 'Receita']), func.abs(Lancamento.valor)), else_=0)).label('ent'),
+            func.sum(case((Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida']), func.abs(Lancamento.valor)), else_=0)).label('sai')
         ).filter(
             Lancamento.id_usuario == usuario.id,
             Lancamento.data_transacao >= datetime.combine(start_6, datetime.min.time()),
             Lancamento.id_subcategoria != 584, # Ignora Faturas
-            not_(func.lower(Lancamento.tipo).like('transfer%')) # Ignora Transferências
+            not_(Lancamento.tipo.ilike('transfer%'))
         ).group_by('year', 'month').all()
+
 
         monthly_map: dict[tuple[int, int], dict[str, float]] = {
             key: {"entrada": 0.0, "saida": 0.0, "net": 0.0}
