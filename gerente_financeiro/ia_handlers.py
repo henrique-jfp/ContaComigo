@@ -1029,12 +1029,18 @@ def _montar_resposta_local_alfredo(texto_usuario: str, texto_normalizado: str, d
     # Ele deve ser elegante e informativo, mantendo a persona do Alfredo.
     
     # --- INTELIGÊNCIA LOCAL PARA GASTOS (Fallback Robusto) ---
-    if any(x in texto_normalizado for x in ["quanto gastei", "meus gastos", "valor de", "total de"]):
+    texto_limpo = texto_normalizado.replace('"', '').replace("'", "").strip()
+    gatilhos_gastos = ["quanto gastei", "quanto eu gastei", "meus gastos", "valor de", "total de", "quanto foi", "total em"]
+    
+    if any(x in texto_limpo for x in gatilhos_gastos):
         # Tenta extrair um termo de categoria do texto
         termo = None
-        for chunk in texto_normalizado.split():
-            if len(chunk) > 3 and chunk not in ["quanto", "gastei", "com", "essa", "esse", "esta", "nesta", "neste", "semana", "mes", "mês"]:
-                termo = chunk
+        # Palavras para ignorar na busca do termo
+        ignore = ["quanto", "gastei", "com", "essa", "esse", "esta", "nesta", "neste", "semana", "mes", "mês", "eu", "foi", "total", "valor", "de", "em"]
+        for chunk in texto_limpo.split():
+            chunk_limpo = chunk.strip("?.,!")
+            if len(chunk_limpo) > 3 and chunk_limpo not in ignore:
+                termo = chunk_limpo
                 break
         
         if termo:

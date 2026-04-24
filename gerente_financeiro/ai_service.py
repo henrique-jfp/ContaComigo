@@ -187,13 +187,19 @@ async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | N
         except Exception as e:
             last_error = e
             wait = min(2 ** attempt, 8)
+            # Se for erro de cota (429), não reduzimos contexto, apenas tentamos o próximo se houver
             if "429" in str(e):
-                logger.warning(f"⚠️ [{name}] Cota esgotada (429). Aguardando {wait}s...")
+                logger.warning(f"⚠️ [{name}] Cota esgotada ou limite de velocidade (429).")
+                # Se ainda houver outros provedores, tenta o próximo sem esperar muito
+                if attempt < len(providers) - 1:
+                    logger.info(f"🔄 Tentando próximo provedor devido a limite de cota...")
+                    continue 
             elif "413" in str(e) or "400" in str(e):
                 logger.warning(f"⚠️ [{name}] Erro de Payload. Reduzindo contexto...")
                 messages = _truncar_mensagens(messages)
             else:
                 logger.error(f"❌ [{name}] Falha técnica: {e}")
+            
             if attempt < len(providers) - 1:
                 await asyncio.sleep(wait)
 
