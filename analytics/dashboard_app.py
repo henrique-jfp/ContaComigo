@@ -1094,17 +1094,18 @@ def miniapp_pierre_dashboard():
             
         # 2. Buscar Categorias Caras (últimos 90 dias usando dados locais - Livro Único)
         noventa_dias_atras = datetime.now(timezone.utc) - timedelta(days=90)
-        lancamentos_mes = db.query(Lancamento).filter(
+        
+        # Agregação direta no banco para evitar N+1 e excesso de memória (Gargalo de 11s resolvido)
+        results = db.query(
+            Categoria.nome,
+            func.sum(func.abs(Lancamento.valor))
+        ).join(Categoria, Lancamento.id_categoria == Categoria.id, isouter=True).filter(
             Lancamento.id_usuario == usuario.id,
             Lancamento.tipo.in_(['Saída', 'Despesa']),
             Lancamento.data_transacao >= noventa_dias_atras
-        ).all()
-        
-        cleaned_categories = {}
-        for l in lancamentos_mes:
-            cat_name = l.categoria.nome if l.categoria else "Outros"
-            cleaned_categories[cat_name] = cleaned_categories.get(cat_name, 0) + float(abs(l.valor))
-            
+        ).group_by(Categoria.nome).all()
+
+        cleaned_categories = { (name or "Outros"): float(val) for name, val in results }
         cleaned_categories = dict(sorted(cleaned_categories.items(), key=lambda item: item[1], reverse=True)[:5])
 
         # 3. Buscar Parcelamentos (da tabela parcelamentos)
@@ -1411,33 +1412,28 @@ def miniapp_modo_deus():
             min_date_aware = datetime(1970, 1, 1, tzinfo=timezone.utc)
             minhas_contas_list = []
 
+            # Otimização: Agrupar variações de saldo por conta em uma única query
+            variacoes = db.query(
+                Lancamento.id_conta,
+                func.sum(case((or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')), Lancamento.valor), else_=0)).label('ent'),
+                func.sum(case((or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%')), Lancamento.valor), else_=0)).label('sai')
+            ).filter(
+                Lancamento.id_usuario == user_id,
+                Lancamento.id_conta != None
+            ).group_by(Lancamento.id_conta).all()
+            
+            var_map = {v.id_conta: (float(v.ent or 0), float(v.sai or 0)) for v in variacoes}
+
             for c in contas:
-                # Ocultar conta interna "ContaComigo Digital" do dashboard conforme feedback
-                if c.nome == "ContaComigo Digital":
-                    # No entanto, ainda somamos os valores dela nos totais globais se necessário, 
-                    # mas não a mostramos na lista individual de "Minhas Contas".
-                    pass
-                
                 ultimo_snapshot = db.query(SaldoConta).filter(
                     SaldoConta.id_conta == c.id
                 ).order_by(SaldoConta.capturado_em.desc()).first()
                 
                 base_balance = float(ultimo_snapshot.saldo or 0) if ultimo_snapshot else 0.0
-                since_date = ultimo_snapshot.capturado_em if ultimo_snapshot else min_date_aware
                 
-                var_receitas = db.query(func.sum(Lancamento.valor)).filter(
-                    Lancamento.id_conta == c.id,
-                    Lancamento.tipo.in_(['Entrada', 'Receita']),
-                    Lancamento.data_transacao > since_date
-                ).scalar() or 0
-                
-                var_despesas = db.query(func.sum(Lancamento.valor)).filter(
-                    Lancamento.id_conta == c.id,
-                    Lancamento.tipo.in_(['Saída', 'Despesa']),
-                    Lancamento.data_transacao > since_date
-                ).scalar() or 0
-                
-                current_acc_balance = base_balance + float(var_receitas) - float(var_despesas)
+                # Usar os valores pré-calculados ou 0
+                ent, sai = var_map.get(c.id, (0.0, 0.0))
+                current_acc_balance = base_balance + ent - abs(sai)
                 
                 # Adiciona à lista de contas individuais para a UI (excluindo a interna)
                 if c.nome != "ContaComigo Digital":
@@ -1460,7 +1456,6 @@ def miniapp_modo_deus():
 
             # --- LÓGICA DE PATRIMÔNIO HISTÓRICO (Lucro/Prejuízo Total) ---
             # Filtro para ignorar APENAS Faturas (ID Subcat 584) nos totais de Receita/Despesa.
-            # Pix entre contas do mesmo usuário deve permanecer como Receita/Despesa conforme solicitado.
             total_receitas_hist = db.query(func.sum(Lancamento.valor)).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.tipo.in_(['Entrada', 'Receita']),
@@ -1476,7 +1471,7 @@ def miniapp_modo_deus():
             patrimonio_liquido = float(total_receitas_hist) - abs(float(total_despesas_hist))
             
             # Fluxo de Caixa Mensal (Cálculo Granular para evitar duplicidade)
-            lancamentos_entrada_mes = db.query(Lancamento).filter(
+            lancamentos_entrada_mes = db.query(Lancamento).options(joinedload(Lancamento.categoria), joinedload(Lancamento.subcategoria)).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.tipo.in_(['Entrada', 'Receita']),
                 Lancamento.data_transacao >= datetime.combine(start_month, time.min),
@@ -1485,7 +1480,6 @@ def miniapp_modo_deus():
 
             entradas_mes_real = 0.0
             for lanc in lancamentos_entrada_mes:
-                # Usa a regra centralizada para ignorar faturas e transferências internas
                 if lanc.is_transferencia_interna:
                     continue
                 entradas_mes_real += abs(float(lanc.valor))
@@ -1493,7 +1487,7 @@ def miniapp_modo_deus():
             entradas_mes = entradas_mes_real
             
             # --- LÓGICA DE DUPLICIDADE DE SAÍDAS ---
-            lancamentos_saida_mes = db.query(Lancamento).filter(
+            lancamentos_saida_mes = db.query(Lancamento).options(joinedload(Lancamento.categoria), joinedload(Lancamento.subcategoria)).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.tipo.in_(['Saída', 'Despesa']),
                 Lancamento.data_transacao >= datetime.combine(start_month, time.min),
@@ -1941,41 +1935,32 @@ def miniapp_overview():
             month_refs_6.append((year, month))
 
         start_6 = date(month_refs_6[0][0], month_refs_6[0][1], 1)
-        lanc_6m = (
-            db.query(Lancamento)
-            .options(joinedload(Lancamento.categoria), joinedload(Lancamento.subcategoria))
-            .filter(Lancamento.id_usuario == usuario.id)
-            .filter(Lancamento.data_transacao >= datetime.combine(start_6, datetime.min.time()))
-            .all()
-        )
+        
+        # Otimização: Fluxo de Caixa Mensal (Últimos 6 meses) via Agregação SQL
+        cashflow_stats = db.query(
+            extract('year', Lancamento.data_transacao).label('year'),
+            extract('month', Lancamento.data_transacao).label('month'),
+            func.sum(case((or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')), func.abs(Lancamento.valor)), else_=0)).label('ent'),
+            func.sum(case((or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%')), func.abs(Lancamento.valor)), else_=0)).label('sai')
+        ).filter(
+            Lancamento.id_usuario == usuario.id,
+            Lancamento.data_transacao >= datetime.combine(start_6, datetime.min.time()),
+            Lancamento.id_subcategoria != 584, # Ignora Faturas
+            not_(func.lower(Lancamento.tipo).like('transfer%')) # Ignora Transferências
+        ).group_by('year', 'month').all()
 
         monthly_map: dict[tuple[int, int], dict[str, float]] = {
             key: {"entrada": 0.0, "saida": 0.0, "net": 0.0}
             for key in month_refs_6
         }
-        for lanc in lanc_6m:
-            if not lanc.data_transacao:
-                continue
-            key = (lanc.data_transacao.year, lanc.data_transacao.month)
-            if key not in monthly_map:
-                continue
-            
-            valor = abs(float(lanc.valor or 0))
-            tipo_norm = str(lanc.tipo).lower()
-            sub_id = lanc.id_subcategoria
-
-            # Filtro inteligente de duplicidade (igual ao da Visão Geral)
-            if sub_id == 584 or tipo_norm == "transferência":
-                continue
-            
-            if tipo_norm.startswith(("entr", "recei")):
-                monthly_map[key]["entrada"] += valor
-                monthly_map[key]["net"] += valor
-            elif tipo_norm.startswith(("desp", "saida")):
-                saida = valor
-                monthly_map[key]["saida"] += saida
-                monthly_map[key]["net"] -= saida
-            # Se for 'Transferência', ignoramos para o fluxo de caixa
+        for row in cashflow_stats:
+            key = (int(row.year), int(row.month))
+            if key in monthly_map:
+                ent = float(row.ent or 0)
+                sai = float(row.sai or 0)
+                monthly_map[key]["entrada"] = ent
+                monthly_map[key]["saida"] = sai
+                monthly_map[key]["net"] = ent - sai
 
         monthly_cashflow = []
         for year, month in month_refs_6:
@@ -1998,40 +1983,42 @@ def miniapp_overview():
             month_refs_8.append((year, month))
         start_8 = date(month_refs_8[0][0], month_refs_8[0][1], 1)
 
-        prior_lanc = (
-            db.query(Lancamento)
-            .filter(Lancamento.id_usuario == usuario.id)
-            .filter(Lancamento.data_transacao < datetime.combine(start_8, datetime.min.time()))
-            .all()
-        )
-        prior_balance = 0.0
-        for lanc in prior_lanc:
-            valor = abs(float(lanc.valor or 0))
-            tipo_norm = str(lanc.tipo).lower()
-            if tipo_norm.startswith(("entr", "recei")):
-                prior_balance += valor
-            elif tipo_norm.startswith(("desp", "saida")):
-                prior_balance -= valor
+        # Otimização: Saldo anterior calculado via Agregação SQL (Elimina carga de memória de todo o histórico)
+        prior_balance_res = db.query(
+            func.sum(
+                case(
+                    (or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')), func.abs(Lancamento.valor)),
+                    (or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%')), -func.abs(Lancamento.valor)),
+                    else_=0
+                )
+            )
+        ).filter(
+            Lancamento.id_usuario == usuario.id,
+            Lancamento.data_transacao < datetime.combine(start_8, datetime.min.time())
+        ).scalar() or 0.0
+        prior_balance = float(prior_balance_res)
 
+        # Otimização: Patrimônio Mensal via Agregação SQL
         patrimony_map: dict[tuple[int, int], float] = {key: 0.0 for key in month_refs_8}
-        lanc_8m = (
-            db.query(Lancamento)
-            .filter(Lancamento.id_usuario == usuario.id)
-            .filter(Lancamento.data_transacao >= datetime.combine(start_8, datetime.min.time()))
-            .all()
-        )
-        for lanc in lanc_8m:
-            if not lanc.data_transacao:
-                continue
-            key = (lanc.data_transacao.year, lanc.data_transacao.month)
-            if key not in patrimony_map:
-                continue
-            valor = abs(float(lanc.valor or 0))
-            tipo_norm = str(lanc.tipo).lower()
-            if tipo_norm.startswith(("entr", "recei")):
-                patrimony_map[key] += valor
-            elif tipo_norm.startswith(("desp", "saida")):
-                patrimony_map[key] -= valor
+        monthly_patrimony_stats = db.query(
+            extract('year', Lancamento.data_transacao).label('year'),
+            extract('month', Lancamento.data_transacao).label('month'),
+            func.sum(
+                case(
+                    (or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')), func.abs(Lancamento.valor)),
+                    (or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%')), -func.abs(Lancamento.valor)),
+                    else_=0
+                )
+            ).label('net')
+        ).filter(
+            Lancamento.id_usuario == usuario.id,
+            Lancamento.data_transacao >= datetime.combine(start_8, datetime.min.time())
+        ).group_by('year', 'month').all()
+
+        for row in monthly_patrimony_stats:
+            key = (int(row.year), int(row.month))
+            if key in patrimony_map:
+                patrimony_map[key] = float(row.net or 0)
 
         running_balance = prior_balance
         patrimony_series = []
@@ -2157,28 +2144,21 @@ def miniapp_overview():
                 "vence": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None
             })
 
-        # Top vilões reais dos últimos 90 dias.
+        # Otimização: Top vilões reais (maiores gastos por descrição) via Agregação SQL
         villains_start = today - timedelta(days=90)
-        villains_lanc = (
-            db.query(Lancamento)
-            .filter(Lancamento.id_usuario == usuario.id)
-            .filter(Lancamento.data_transacao >= datetime.combine(villains_start, datetime.min.time()))
-            .all()
-        )
-        villains_totals = {}
-        for lanc in villains_lanc:
-            try:
-                if not lanc.tipo or str(lanc.tipo).lower().startswith(("entr", "recei")):
-                    continue
-                nome = (lanc.descricao or "Sem nome").strip() or "Sem nome"
-                valor_lanc = abs(float(lanc.valor or 0))
-                villains_totals[nome] = villains_totals.get(nome, 0.0) + valor_lanc
-            except (TypeError, ValueError):
-                continue
+        villains_stats = db.query(
+            Lancamento.descricao,
+            func.sum(func.abs(Lancamento.valor)).label('total')
+        ).filter(
+            Lancamento.id_usuario == usuario.id,
+            Lancamento.data_transacao >= datetime.combine(villains_start, datetime.min.time()),
+            or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%')),
+            Lancamento.id_subcategoria != 584 # Ignora faturas para não duplicar vilões
+        ).group_by(Lancamento.descricao).order_by(desc('total')).limit(5).all()
 
         top_villains = [
-            {"label": nome, "value": round(valor, 2)}
-            for nome, valor in sorted(villains_totals.items(), key=lambda x: x[1], reverse=True)[:5]
+            {"label": (row.descricao or "Sem nome").strip() or "Sem nome", "value": round(float(row.total), 2)}
+            for row in villains_stats
         ]
 
         progress_base = float(receita + despesa)

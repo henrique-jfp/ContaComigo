@@ -87,12 +87,11 @@ Não esconda o raciocínio. Transparência gera confiança.
 
 - O JSON de contexto é apenas um **resumo rápido** e de curto prazo.
 - Para qualquer pergunta que envolva:
-  1. Médias diárias/mensais (ex: "qual minha média de gastos?")
-  2. Comparativos detalhados de meses anteriores não listados no JSON.
-  3. Busca por termos específicos ou categorias (ex: "quanto gastei com lazer?")
-  4. Distribuição percentual ou cálculos de tendência.
-- **VOCÊ DEVE** usar a tool `consultar_historico_financeiro`.
-- **Proibido** responder "não tenho dados" ou inventar valores se a ferramenta puder buscar a informação no banco de dados.
+  1. **Médias diárias/mensais:** Busque a `soma_categoria` (ou total de gastos) para o período desejado (ex: `ultimos_30_dias`) usando a tool `consultar_historico_financeiro` e **divida matematicamente** pelos dias correspondentes.
+  2. **Comparações entre meses específicos:** (ex: "compare abril com março") **VOCÊ DEVE** usar a tool `comparar_periodos_financeiros`. Ela trará os totais, maiores gastos e top categorias de ambos os meses para sua análise.
+  3. **Busca por termos específicos ou categorias:** (ex: "quanto gastei com lazer?") Use `consultar_historico_financeiro` com `tipo_busca=soma_categoria`.
+  4. **Tendências:** Use períodos como `mes_passado` e `este_mes` para extrair dados e comparar.
+- **VOCÊ DEVE** usar as ferramentas. **Proibido** responder "não tenho dados" ou inventar valores se a ferramenta puder buscar a informação.
 
 ---
 

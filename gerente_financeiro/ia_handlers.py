@@ -366,7 +366,7 @@ _ALFREDO_TOOLS = [
         "type": "function",
         "function": {
             "name": "consultar_historico_financeiro",
-            "description": "Consulta o banco de dados para histórico, maiores gastos ou somas. Se o usuário usar termos como 'besteira', use 'tipo_busca=lista_por_termo' e busque por categorias de Lazer ou Alimentação. Se perguntar por 'impulso', busque por gastos pequenos e frequentes.",
+            "description": "Consulta o banco de dados para histórico, maiores gastos ou somas. Se o usuário usar termos como 'besteira', use 'tipo_busca=lista_por_termo' e busque por categorias de Lazer ou Alimentação.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -379,13 +379,30 @@ _ALFREDO_TOOLS = [
                     "limite": {"type": "number", "description": "Quantidade de registros."},
                     "periodo": {
                         "type": "string", 
-                        "enum": ["esta_semana", "semana_passada", "este_mes", "mes_passado", "este_ano", "tudo"], 
+                        "enum": ["esta_semana", "semana_passada", "este_mes", "mes_passado", "este_ano", "ultimos_7_dias", "ultimos_30_dias", "tudo"], 
                         "description": "Janela temporal."
                     }
                 },
                 "required": ["tipo_busca"],
             },
         },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "comparar_periodos_financeiros",
+            "description": "Compara dois meses específicos do histórico financeiro do usuário. Útil para 'comparar abril com março'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mes_alvo": {"type": "number", "description": "Número do mês a comparar (1-12)."},
+                    "ano_alvo": {"type": "number", "description": "Ano do mês a comparar (ex: 2026)."},
+                    "mes_referencia": {"type": "number", "description": "Número do mês de referência (base) para comparação (1-12)."},
+                    "ano_referencia": {"type": "number", "description": "Ano do mês de referência (ex: 2026)."}
+                },
+                "required": ["mes_alvo", "ano_alvo", "mes_referencia", "ano_referencia"]
+            }
+        }
     },
     {
         "type": "function",
@@ -2326,7 +2343,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         ]
         
         # --- FERRAMENTAS ANALÍTICAS (INTERPRETADAS PELA IA) ---
-        ANALYTIC_TOOLS = ["consultar_historico_financeiro", "categorizar_lancamentos_pendentes", "responder_duvida_financeira"]
+        ANALYTIC_TOOLS = ["consultar_historico_financeiro", "categorizar_lancamentos_pendentes", "responder_duvida_financeira", "comparar_periodos_financeiros"]
         
         if fn_name in ANALYTIC_TOOLS or fn_name in PIERRE_TOOLS_LIST:
             try:
@@ -2358,6 +2375,10 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                     query = query.filter(Lancamento.data_transacao >= pm_inicio, Lancamento.data_transacao < inicio_mes)
                 elif periodo == "este_ano":
                     query = query.filter(Lancamento.data_transacao >= hoje.replace(month=1, day=1))
+                elif periodo == "ultimos_7_dias":
+                    query = query.filter(Lancamento.data_transacao >= hoje - timedelta(days=7))
+                elif periodo == "ultimos_30_dias":
+                    query = query.filter(Lancamento.data_transacao >= hoje - timedelta(days=30))
 
                 # Filtro por termo (Categoria/Subcategoria/Descrição) se fornecido
                 if termo:
@@ -2388,12 +2409,56 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 else:
                     res = query.order_by(Lancamento.data_transacao.desc()).limit(limite).all()
 
-
                 if not res_str:
                     if isinstance(res, list):
                         if not res: res_str = f"Nenhum registro encontrado para '{termo or tipo_busca}'."
                         else: res_str = "\n".join([f"• {l.descricao}: {_formatar_valor_brasileiro(abs(float(l.valor or 0)))} ({l.data_transacao.strftime('%d/%m/%Y')})" for l in res])
                     else: res_str = str(res)
+
+            elif fn_name == "comparar_periodos_financeiros":
+                try:
+                    mes_a = int(args.get("mes_alvo"))
+                    ano_a = int(args.get("ano_alvo"))
+                    mes_r = int(args.get("mes_referencia"))
+                    ano_r = int(args.get("ano_referencia"))
+
+                    def _get_stats_mes(m, a):
+                        start = datetime(a, m, 1)
+                        _, last_day = monthrange(a, m)
+                        end = datetime(a, m, last_day, 23, 59, 59)
+                        
+                        base_q = db.query(Lancamento).filter(
+                            Lancamento.id_usuario == usuario_db.id,
+                            Lancamento.data_transacao >= start,
+                            Lancamento.data_transacao <= end
+                        ).filter(not_(func.lower(Lancamento.tipo).in_(["transferencia", "transferência", "transfer"])))
+                        
+                        todos_mes = base_q.all()
+                        ent, sai = _sum_consistente(todos_mes)
+                        
+                        top_sai = base_q.filter(or_(Lancamento.tipo.ilike("saida%"), Lancamento.tipo.ilike("desp%"), Lancamento.tipo.ilike("%pago%"), Lancamento.tipo.ilike("%enviado%"))).order_by(func.abs(Lancamento.valor).desc()).limit(3).all()
+                        top_ent = base_q.filter(or_(Lancamento.tipo.ilike("entr%"), Lancamento.tipo.ilike("recei%"), Lancamento.tipo.ilike("%recebido%"))).order_by(func.abs(Lancamento.valor).desc()).limit(3).all()
+                        
+                        cats = _resumo_categoria_gastos_por_lancamentos(todos_mes, ignore_ids=ignore_ids, limite=3)
+                        
+                        return {
+                            "mes_ano": f"{m}/{a}",
+                            "receitas": ent,
+                            "despesas": sai,
+                            "maiores_saidas": [{"desc": l.descricao, "v": float(l.valor)} for l in top_sai],
+                            "maiores_entradas": [{"desc": l.descricao, "v": float(l.valor)} for l in top_ent],
+                            "top_categorias": [{"c": c, "v": v} for c, v in cats]
+                        }
+                    
+                    stats_alvo = _get_stats_mes(mes_a, ano_a)
+                    stats_ref = _get_stats_mes(mes_r, ano_r)
+                    
+                    res_str = json.dumps({
+                        "periodo_alvo": stats_alvo,
+                        "periodo_referencia": stats_ref
+                    }, ensure_ascii=False)
+                except Exception as e:
+                    res_str = f"Erro ao comparar períodos: {str(e)}"
             
             elif fn_name == "consultar_compromissos_futuros":
                 periodo = args.get("periodo") or "esta_semana"
@@ -2762,71 +2827,6 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 ])
                 await _enviar_resposta_html_segura(update.message, texto_pergunta, reply_markup=keyboard)
             
-            return ConversationHandler.END
-
-        if fn_name == "consultar_historico_financeiro":
-            tipo_busca = args.get("tipo_busca")
-            termo = args.get("termo")
-            limite = int(args.get("limite") or 5)
-            periodo = args.get("periodo") or "tudo"
-            
-            query = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id)
-            query = query.filter(not_(func.lower(Lancamento.tipo).in_(["transferencia", "transferência", "transfer"])))
-            
-            if periodo == "este_mes":
-                query = query.filter(Lancamento.data_transacao >= inicio_mes)
-            elif periodo == "mes_passado":
-                pm_inicio = (inicio_mes - timedelta(days=1)).replace(day=1)
-                query = query.filter(Lancamento.data_transacao >= pm_inicio, Lancamento.data_transacao < inicio_mes)
-            elif periodo == "este_ano":
-                query = query.filter(Lancamento.data_transacao >= hoje.replace(month=1, day=1))
-
-            if tipo_busca == "maior_gasto":
-                res = query.filter(or_(
-                    Lancamento.tipo.ilike("saida%"),
-                    Lancamento.tipo.ilike("desp%"),
-                    Lancamento.tipo.ilike("%pago%"),
-                    Lancamento.tipo.ilike("%enviado%")
-                )).order_by(func.abs(Lancamento.valor).desc()).limit(limite).all()
-            elif tipo_busca == "maior_receita":
-                res = query.filter(or_(
-                    Lancamento.tipo.ilike("entr%"),
-                    Lancamento.tipo.ilike("recei%"),
-                    Lancamento.tipo.ilike("%recebido%")
-                )).order_by(func.abs(Lancamento.valor).desc()).limit(limite).all()
-            elif tipo_busca == "soma_categoria" and termo:
-                soma = query.filter(or_(
-                    Lancamento.categoria.has(Categoria.nome.ilike(f"%{termo}%")),
-                    Lancamento.descricao.ilike(f"%{termo}%")
-                )).with_entities(func.sum(Lancamento.valor)).scalar() or 0
-                return f"Soma de {termo}: {_formatar_valor_brasileiro(abs(float(soma)))}"
-            elif tipo_busca == "lista_por_termo" and termo:
-                res = query.filter(or_(Lancamento.descricao.ilike(f"%{termo}%"), Lancamento.categoria.has(Categoria.nome.ilike(f"%{termo}%")))).order_by(Lancamento.data_transacao.desc()).limit(limite).all()
-            else:
-                res = query.order_by(Lancamento.data_transacao.desc()).limit(limite).all()
-
-            if isinstance(res, list):
-                if not res:
-                    return "Não encontrei registros para essa busca no banco de dados."
-                linhas = [f"• {l.descricao}: {_formatar_valor_brasileiro(abs(float(l.valor or 0)))} em {l.data_transacao.strftime('%d/%m/%Y')}" for l in res]
-                return "\n".join(linhas)
-            return str(res)
-            atualizados, total_pendentes = await _categorizar_lancamentos_sem_categoria_async(db, usuario_db.id)
-            if total_pendentes == 0:
-                await _enviar_resposta_html_segura(update.message, 
-                    "🏷️ <b>Categorização automática</b>\n\n"
-                    "Não encontrei lançamentos pendentes sem categoria no seu histórico."
-                )
-                return ConversationHandler.END
-
-            nao_classificados = max(0, total_pendentes - atualizados)
-            await _enviar_resposta_html_segura(update.message, 
-                "🏷️ <b>Categorização automática concluída!</b>\n\n"
-                f"• <b>Lançamentos analisados:</b> {total_pendentes}\n"
-                f"• <b>Categorizados com sucesso:</b> {atualizados}\n"
-                f"• <b>Ainda sem categoria:</b> {nao_classificados}\n\n"
-                "Pronto! Alfredo organizou os lançamentos usando regras inteligentes."
-            )
             return ConversationHandler.END
 
         if fn_name == "responder_duvida_financeira":
