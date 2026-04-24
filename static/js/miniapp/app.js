@@ -9,16 +9,6 @@ document.addEventListener('DOMContentLoaded', () => {
   ghost.parentElement.addEventListener('touchstart', () => ghost.classList.add('lift'));
   ghost.parentElement.addEventListener('touchend', () => ghost.classList.remove('lift'));
 });
-// --- Inicialização automática dos dados principais ao carregar o DOM ---
-document.addEventListener('DOMContentLoaded', async () => {
-  // Tenta autenticar/recuperar sessão e carregar dados essenciais
-  try {
-    await authTelegram();
-  } catch (e) {
-    console.warn('Falha ao autenticar automaticamente:', e);
-    await tryRecoverSessionFromStorage();
-  }
-});
 lucide.createIcons();
 
     // Chart.js Global Defaults
