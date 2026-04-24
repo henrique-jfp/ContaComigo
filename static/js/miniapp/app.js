@@ -1,3 +1,20 @@
+// --- DEBUG INICIAL ---
+window.onerror = function(msg, url, line) {
+  const errDiv = document.createElement('div');
+  errDiv.style.position = 'fixed';
+  errDiv.style.top = '0';
+  errDiv.style.left = '0';
+  errDiv.style.width = '100%';
+  errDiv.style.background = 'red';
+  errDiv.style.color = 'white';
+  errDiv.style.zIndex = '9999';
+  errDiv.style.padding = '10px';
+  errDiv.textContent = "Erro JS: " + msg + " (Linha: " + line + ")";
+  document.body.appendChild(errDiv);
+  return false;
+};
+console.log("ContaComigo App.js inicializando...");
+
 // --- Fantasma Pierre: animação de hover ---
 document.addEventListener('DOMContentLoaded', () => {
   const ghost = document.getElementById('nav-fantasma');
