@@ -29,12 +29,38 @@ try:
     if not config.DATABASE_URL:
         raise ValueError("DATABASE_URL não configurada em config.py")
 
-    engine = create_engine(config.DATABASE_URL, client_encoding='utf8')
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    
-    with engine.connect() as connection:
-        logging.info("✅ Conexão com o banco de dados estabelecida com sucesso!")
+    db_url = config.DATABASE_URL
+    if db_url.startswith('postgres://'):
+        db_url = db_url.replace('postgres://', 'postgresql://', 1)
 
+    # Configuração de Connection Pool Robusta (Resolução de erro FATAL: Max client connections reached)
+    pool_args = {
+        'pool_pre_ping': True,    # Verifica se a conexão está viva antes de usar
+        'pool_recycle': 1800,     # Recicla conexões a cada 30 minutos
+        'pool_size': 5,           # Número de conexões permanentes
+        'max_overflow': 10,       # Margem para picos de acesso
+        'pool_timeout': 30,       # Tempo de espera por conexão livre antes de erro
+    }
+
+    # Configurações de SSL para bancos gerenciados (Supabase/Render/AWS)
+    connect_args = {}
+    if any(provider in db_url.lower() for provider in ['supabase', 'render', 'amazonaws']):
+        connect_args = {
+            'sslmode': 'require',
+            'connect_timeout': 10,
+            'application_name': 'contacomigo_core'
+        }
+
+    engine = create_engine(
+        db_url, 
+        client_encoding='utf8', 
+        connect_args=connect_args,
+        **pool_args
+    )
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    with engine.connect() as connection:
+        logging.info("✅ Conexão com o banco de dados estabelecida com sucesso (Pool Ativo)!")
 except Exception as e:
     logging.critical(f"❌ ERRO CRÍTICO AO CONFIGURAR O BANCO DE DADOS: {e}")
     engine = None
