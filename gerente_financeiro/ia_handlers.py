@@ -20,7 +20,7 @@ from collections import Counter
 from html import escape
 from urllib.parse import quote
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ContextTypes, CommandHandler, ConversationHandler
 from sqlalchemy import and_, extract, func, or_, not_
@@ -1083,17 +1083,14 @@ def _montar_resposta_local_alfredo(texto_usuario: str, texto_normalizado: str, d
 
 
 def _deve_responder_localmente(texto_normalizado: str) -> bool:
-    """Atalho defensivo APENAS para comandos de status super objetivos.
-    Análises, previsões e buscas de compras devem passar pela IA para humanização.
     """
-    # Se o usuário perguntar explicitamente por 'análise', 'previsão' ou 'resumo',
-    # deixamos a IA cuidar para que a resposta seja amigável e estratégica.
-    return any([
-        _intencao_contas(texto_normalizado),
-        _intencao_ultimo_lancamento(texto_normalizado),
-        _intencao_saldo(texto_normalizado),
-        _intencao_metas(texto_normalizado),
-    ])
+    Atalho defensivo para comandos de status super objetivos.
+    DESATIVADO: Agora priorizamos a IA para todas as consultas de saldo, contas e metas
+    para garantir respostas humanizadas e contextuais.
+    O motor local agora serve apenas como fallback de segurança caso a IA falhe.
+    """
+    return False
+
 
 
 def _resumo_contas_local(db, usuario_id: int) -> str:
@@ -2160,6 +2157,9 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         metas_ativas = db.query(Objetivo).filter(Objetivo.id_usuario == usuario_db.id, func.coalesce(Objetivo.valor_atual, 0) < func.coalesce(Objetivo.valor_meta, 0)).all()
         resumo_metas = [f"{m.descricao[:15]}: {int((float(m.valor_atual or 0)/float(m.valor_meta or 0.01))*100)}%" for m in metas_ativas if m.valor_meta and m.valor_meta > 0]
 
+        # --- BREAKDOWN CATEGORIAS (MÊS ATUAL) ---
+        breakdown_atual = _resumo_categoria_gastos_por_lancamentos(lanc_mes, ignore_ids=ignore_ids, limite=5)
+
         contexto_financeiro_str = json.dumps(
             {
                 "data_hoje": hoje.strftime("%Y-%m-%d"),
@@ -2170,7 +2170,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                     "resultado_liquido_mes": round(ent_mes - sai_mes, 2),
                     "gastos_hoje": sai_hoje,
                     "gastos_ontem": sai_ontem,
-                    "gastos_semana": sai_semana
+                    "gastos_semana": sai_semana,
+                    "distribuicao_categorias": [{"cat": c, "v": round(v, 2)} for c, v in breakdown_atual]
                 },
                 "mes_anterior": {
                     "nome": mes_anterior_inicio.strftime("%B"),
