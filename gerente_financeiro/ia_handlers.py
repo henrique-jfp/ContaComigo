@@ -2113,14 +2113,24 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         # Hoje
         inicio_hoje = hoje.replace(hour=0, minute=0, second=0, microsecond=0)
         lanc_hoje = [l for l in lanc_mes if l.data_transacao >= inicio_hoje]
-        _, sai_hoje = _sum_consistente(lanc_hoje)
         
         # Ontem
         ontem = hoje - timedelta(days=1)
         inicio_ontem = ontem.replace(hour=0, minute=0, second=0, microsecond=0)
         fim_ontem = ontem.replace(hour=23, minute=59, second=59, microsecond=999999)
         lanc_ontem = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id, Lancamento.data_transacao >= inicio_ontem, Lancamento.data_transacao <= fim_ontem).all()
-        _, sai_ontem = _sum_consistente(lanc_ontem)
+
+        # Soma total (incluindo transferências) para o resumo diário de ontem/hoje para evitar 'zero' em dias de Pix
+        def _sum_bruta(lista):
+            s = 0.0
+            for l in lista:
+                tipo = str(l.tipo).lower()
+                if tipo.startswith(("desp", "saida", "saída", "pago", "enviado", "transf")):
+                    s += abs(float(l.valor or 0))
+            return round(s, 2)
+
+        sai_hoje_bruto = _sum_bruta(lanc_hoje)
+        sai_ontem_bruto = _sum_bruta(lanc_ontem)
 
         # Semana
         inicio_semana = hoje.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=hoje.weekday())
@@ -2129,18 +2139,24 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
 
         # --- ÚLTIMOS LANÇAMENTOS (SUPER TRUNCADOS) ---
         limit_lanc = 5
-        base_lanc = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id).order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc()).limit(limit_lanc * 5).all()
+        base_lanc = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id).order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc()).limit(limit_lanc * 3).all()
         
         def _fmt_l(l):
-            return {"d": l.data_transacao.strftime('%Y-%m-%d'), "desc": (l.descricao[:20] + '...') if l.descricao and len(l.descricao) > 20 else l.descricao, "v": float(l.valor or 0), "t": "Entrada" if str(l.tipo).lower().startswith(('entr', 'recei')) else "Saída", "cat": (l.categoria.nome[:15]) if l.categoria else "Outros"}
+            # Incluímos o final do ID para a IA não achar que é duplicado se os valores forem iguais
+            id_curto = str(l.id)[-3:]
+            return {
+                "id": id_curto,
+                "d": l.data_transacao.strftime('%d/%m'), 
+                "desc": (l.descricao[:15] + '..') if l.descricao and len(l.descricao) > 15 else l.descricao, 
+                "v": float(l.valor or 0), 
+                "cat": (l.categoria.nome[:12]) if l.categoria else "Outros"
+            }
 
         # Filtro de transações reais (Sincronizado com os totais)
         def _is_real_transacao(l):
             t = str(l.tipo).lower()
-            # Pix com categoria (ex: Alimentação) é Gasto Real, não transferência interna
-            is_transf = t in ["transferencia", "transferência", "transfer"]
-            has_cat = l.id_categoria is not None or l.id_subcategoria is not None
-            if is_transf and not has_cat: return False
+            if t in ["transferencia", "transferência", "transfer"] and (l.id_categoria is None and l.id_subcategoria is None): 
+                return False
             return True
 
         ultimas_receitas = [_fmt_l(l) for l in base_lanc if str(l.tipo).lower().startswith(('entr', 'recei')) and _is_real_transacao(l)][:3]
@@ -2155,7 +2171,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
 
         # --- METAS ---
         metas_ativas = db.query(Objetivo).filter(Objetivo.id_usuario == usuario_db.id, func.coalesce(Objetivo.valor_atual, 0) < func.coalesce(Objetivo.valor_meta, 0)).all()
-        resumo_metas = [f"{m.descricao[:15]}: {int((float(m.valor_atual or 0)/float(m.valor_meta or 0.01))*100)}%" for m in metas_ativas if m.valor_meta and m.valor_meta > 0]
+        resumo_metas = [f"{m.descricao[:12]}: {int((float(m.valor_atual or 0)/float(m.valor_meta or 0.01))*100)}%" for m in metas_ativas if m.valor_meta and m.valor_meta > 0]
 
         # --- BREAKDOWN CATEGORIAS (MÊS ATUAL) ---
         breakdown_atual = _resumo_categoria_gastos_por_lancamentos(lanc_mes, ignore_ids=ignore_ids, limite=5)
@@ -2164,25 +2180,20 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             {
                 "data_hoje": hoje.strftime("%Y-%m-%d"),
                 "mes_atual": {
-                    "nome": hoje.strftime("%B"),
-                    "receitas_total": ent_mes,
-                    "gastos_total": sai_mes,
-                    "resultado_liquido_mes": round(ent_mes - sai_mes, 2),
-                    "gastos_hoje": sai_hoje,
-                    "gastos_ontem": sai_ontem,
-                    "gastos_semana": sai_semana,
-                    "distribuicao_categorias": [{"cat": c, "v": round(v, 2)} for c, v in breakdown_atual]
+                    "receitas": ent_mes,
+                    "gastos": sai_mes,
+                    "hoje": sai_hoje_bruto,
+                    "ontem": sai_ontem_bruto,
+                    "categorias": [{"c": c, "v": round(v, 2)} for c, v in breakdown_atual]
                 },
                 "mes_anterior": {
-                    "nome": mes_anterior_inicio.strftime("%B"),
                     "receitas": ent_anterior,
                     "gastos": sai_anterior,
-                    "principais_gastos": [{"cat": c, "v": round(v, 2)} for c, v in breakdown_anterior]
+                    "top_cats": [{"c": c, "v": round(v, 2)} for c, v in breakdown_anterior]
                 },
-                "ultimas_receitas": ultimas_receitas,
-                "ultimas_despesas": ultimas_despesas,
+                "ultimas_desp": ultimas_despesas,
                 "metas": resumo_metas,
-                "patrimonio_total_acumulado": saldo
+                "saldo": saldo
             },
             ensure_ascii=False
         )
