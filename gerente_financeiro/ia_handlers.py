@@ -2140,7 +2140,11 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         # Filtro de transações reais (Sincronizado com os totais)
         def _is_real_transacao(l):
             t = str(l.tipo).lower()
-            return t not in ["transferencia", "transferência", "transfer"]
+            # Pix com categoria (ex: Alimentação) é Gasto Real, não transferência interna
+            is_transf = t in ["transferencia", "transferência", "transfer"]
+            has_cat = l.id_categoria is not None or l.id_subcategoria is not None
+            if is_transf and not has_cat: return False
+            return True
 
         ultimas_receitas = [_fmt_l(l) for l in base_lanc if str(l.tipo).lower().startswith(('entr', 'recei')) and _is_real_transacao(l)][:3]
         ultimas_despesas = [_fmt_l(l) for l in base_lanc if not str(l.tipo).lower().startswith(('entr', 'recei')) and _is_real_transacao(l) and l.id_subcategoria not in ignore_ids][:5]
@@ -2150,6 +2154,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         mes_anterior_fim = inicio_mes - timedelta(microseconds=1)
         lanc_anterior = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id, Lancamento.data_transacao >= mes_anterior_inicio, Lancamento.data_transacao <= mes_anterior_fim).all()
         ent_anterior, sai_anterior = _sum_consistente(lanc_anterior)
+        breakdown_anterior = _resumo_categoria_gastos_por_lancamentos(lanc_anterior, ignore_ids=ignore_ids, limite=3)
 
         # --- METAS ---
         metas_ativas = db.query(Objetivo).filter(Objetivo.id_usuario == usuario_db.id, func.coalesce(Objetivo.valor_atual, 0) < func.coalesce(Objetivo.valor_meta, 0)).all()
@@ -2170,7 +2175,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 "mes_anterior": {
                     "nome": mes_anterior_inicio.strftime("%B"),
                     "receitas": ent_anterior,
-                    "gastos": sai_anterior
+                    "gastos": sai_anterior,
+                    "principais_gastos": [{"cat": c, "v": round(v, 2)} for c, v in breakdown_anterior]
                 },
                 "ultimas_receitas": ultimas_receitas,
                 "ultimas_despesas": ultimas_despesas,
@@ -2429,15 +2435,14 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             Você é o Alfredo, o braço direito financeiro do {usuario_db.nome_completo}.
             
             DIRETRIZES DE OURO:
-            1. Use emojis (💰, 🚀, ⚠️) de forma parceira.
-            2. TRADUZA CONCEITOS: 
-               - "Besteira" ou "Lanche" -> Analise categorias de Lazer, Alimentação Fora ou Outros.
-               - "Impulso" -> Procure por gastos pequenos e frequentes não planejados.
-               - "Mudança" -> Compare os pesos das categorias deste mês vs mês passado.
-            3. CATEGORIAS REAIS: Nunca diga "Sua categoria Pix enviado pesa mais". Pix é a FORMA. A categoria é o MOTIVO (ex: Alimentação, Transporte). Use o campo 'cat' dos dados.
-            4. DATA HOJE: {hoje_str}
+            1. Use emojis de forma parceira. Varie o formato das respostas (não use sempre a mesma lista de tópicos).
+            2. TRADUZA CONCEITOS: "Besteira/Lanche" -> Lazer/Snacks. "Impulso" -> Gastos não planejados.
+            3. COMPARATIVO REAL: Use 'principais_gastos' do 'mes_anterior' para comparar. NUNCA invente números que não estão no JSON.
+            4. CATEGORIAS: Use o campo 'cat' dos dados (ex: Alimentação).
+            5. ESTILO: Seja direto. Se o usuário perguntou algo simples, responda em 1 parágrafo humano.
+            6. DATA HOJE: {hoje_str}
             
-            DADOS REAIS DO BANCO PARA ANALISAR:
+            DADOS REAIS DO BANCO:
             {res_str}
             """
             

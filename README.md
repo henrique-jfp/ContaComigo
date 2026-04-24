@@ -47,93 +47,40 @@ ContaComigo é uma plataforma financeira inovadora que combina a conveniência d
     *   Envio de faturas em PDF por mensagem para extração automática de dados via OCR (Google Vision) e IA.
     *   Categorização automática de despesas e sugestões de melhorias.
 
-## 🏗️ Arquitetura
+## 🏗️ Arquitetura de Infraestrutura
 
-ContaComigo opera em um **único processo orquestrado** (`launcher.py`), garantindo eficiência e escalabilidade, com uma separação clara de responsabilidades:
+Atualmente, o ContaComigo opera em um modelo de **Servidor Local Híbrido** (HP Pavilion X360) para máxima performance com baixo custo operacional:
 
-1.  **Thread do Bot (Telegram):** Responsável por interagir com o usuário via Telegram, processar comandos, gerenciar conversas (incluindo OCR e IA com Gemini), e executar ações em tempo real. Utiliza `python-telegram-bot`.
-2.  **Thread Principal (Flask API):** Hospeda a API do MiniApp (`/api/miniapp/*`) e o Dashboard Web (definido em `analytics.dashboard_app`). Gerencia as requisições HTTP, serve a interface do usuário e se comunica com o backend.
-3.  **Processos de Background/Jobs:** Tarefas agendadas para sincronização bancária (via Pierre API), geração de relatórios, e outras operações assíncronas.
-
-O estado da aplicação e a sincronia são mantidos através de um banco de dados **PostgreSQL**. Sessões do MiniApp são stateless, utilizando HMAC para segurança.
+*   **Servidor:** Ubuntu Server 24.04 LTS hospedado localmente.
+*   **Conectividade:** Exposto via **Cloudflare Tunnel** para o domínio `alfredo.henriquedejesus.dev`.
+*   **Deploy Contínuo (CD):** Automatizado via **GitHub Webhooks**. O servidor detecta novos `push` no branch `main`, realiza o `pull` e reinicia o serviço automaticamente.
+*   **Gerenciamento de Processos:** Controlado via `systemd` (`contacomigo.service`).
 
 ## 🛠️ Stack Técnica
 
-*   **Linguagem Principal:** Python 3.11+
+*   **Linguagem Principal:** Python 3.12+
 *   **Framework Web:** Flask
 *   **API do Telegram:** `python-telegram-bot`
-*   **Banco de Dados:** PostgreSQL (com SQLAlchemy)
-*   **IA & OCR:** Google Gemini API, Google Cloud Vision
+*   **Banco de Dados:** PostgreSQL (Supabase Managed)
+*   **IA & OCR:** Google Gemini API, Groq, Cerebras, Google Cloud Vision.
 *   **Integração Bancária:** Pierre API Client (`pierre_finance/client.py`)
-*   **Frontend (Dashboard):** HTML, CSS (incluindo `dashboard.css` e `dashboard_cyberpunk.css`), JavaScript.
-*   **Frontend (MiniApp):** Renderizado via `templates/miniapp.html`.
-*   **Gerenciamento de Dependências:** Pip (`requirements.txt`)
-*   **Orquestração:** Gunicorn (produção), Launcher script (`launcher.py` para desenvolvimento/execução híbrida).
+*   **Frontend (MiniApp):** Flask Templates + Tailwind CSS + Chart.js.
 
-## 🚀 Guia de Setup
+## 🚀 Guia de Operação (Servidor Local)
 
-Siga os passos abaixo para configurar e executar o ContaComigo em seu ambiente:
-
-### 1. Pré-requisitos
-
-*   Python 3.11 ou superior instalado.
-*   Git instalado.
-*   Um ambiente de banco de dados PostgreSQL acessível.
-*   Credenciais para a API do Gemini e Google Cloud Vision.
-*   Credenciais para a Pierre API.
-*   Token para o Bot do Telegram.
-
-### 2. Clonar o Repositório
+### Gerenciamento do Serviço
+O sistema é gerenciado via comandos padrão de Linux no servidor:
 
 ```bash
-git clone https://github.com/your-repo-url/ContaComigo.git
-cd ContaComigo
+sudo systemctl status contacomigo   # Ver status
+sudo systemctl restart contacomigo  # Reiniciar manualmente
+sudo journalctl -u contacomigo -f   # Ver logs em tempo real
 ```
 
-### 3. Instalar Dependências
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configurar Variáveis de Ambiente
-
-Crie um arquivo `.env` na raiz do projeto com as seguintes variáveis:
-
-```dotenv
-TELEGRAM_TOKEN="SEU_TELEGRAM_BOT_TOKEN"
-DATABASE_URL="postgresql://user:password@host:port/dbname"
-GEMINI_API_KEY="SUA_GEMINI_API_KEY"
-GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/google/credentials.json" # Ou outra forma de credencial GCV
-PIERRE_API_KEY="SUA_PIERRE_API_KEY"
-
-# Opcional: Para desenvolvimento
-PORT=10000
-DEBUG=True
-```
-
-**Nota:** Para ambientes de produção (Render, Railway), configure estas variáveis através das configurações da plataforma.
-
-### 5. Executar a Aplicação
-
-*   **Modo Híbrido (Bot + Dashboard) - Desenvolvimento Local:**
-    ```bash
-    python launcher.py
-    ```
-    Ou, definindo o modo explicitamente:
-    ```bash
-    CONTACOMIGO_MODE=LOCAL_DEV python launcher.py
-    ```
-
-*   **Apenas Bot do Telegram:**
-    ```bash
-    CONTACOMIGO_MODE=BOT python launcher.py
-    ```
-
-*   **Apenas Dashboard Web:**
-    ```bash
-    CONTACOMIGO_MODE=DASHBOARD python launcher.py
-    ```
+### Automação de Deploy
+Para configurar o deploy automático:
+1.  Configure o endpoint `/api/deploy/webhook` nas configurações do seu repositório no GitHub.
+2.  Defina o `GITHUB_WEBHOOK_SECRET` no arquivo `.env` do servidor.
 
 ## 🤝 Contribuição
 

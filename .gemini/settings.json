@@ -4,13 +4,6 @@
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://postgres.lauwbfsdgdthzwwufrjy:SenhaForte12345@aws-1-us-east-2.pooler.supabase.com:5432/postgres"]
     },
-    "render": {
-      "url": "https://mcp.render.com/mcp",
-      "type": "http",
-      "headers": {
-        "Authorization": "Bearer rnd_DrXNDucb2NGaLXfx9uPi5xYIf8pG"
-      }
-    },
     "telegram": {
       "command": "npx",
       "args": ["-y", "@overpod/mcp-telegram"],
@@ -41,6 +34,14 @@
         "GITHUB_PERSONAL_ACCESS_TOKEN": "$GITHUB_PERSONAL_ACCESS_TOKEN"
       }
     },
+    "pavillion": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-ssh",
+        "pvserver@192.168.1.23"
+      ]
+    },
     "pierre-finance": {
       "command": "npx",
       "args": [
@@ -55,5 +56,4 @@
       }
     }
   }
-
 }
