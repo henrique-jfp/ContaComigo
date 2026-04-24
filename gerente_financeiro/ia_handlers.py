@@ -212,7 +212,7 @@ _ALFREDO_TOOLS = [
         "type": "function",
         "function": {
             "name": "registrar_lancamento",
-            "description": "Registra um lançamento financeiro NOVO (entrada ou saída). Use APENAS quando o usuário der uma ordem direta de registro (ex: 'gastei 50', 'recebi 100'). PROIBIDO usar para perguntas de histórico (ex: 'qual meu último lançamento?'), consultas de saldo ou dúvidas gerais.",
+            "description": "Registra um lançamento financeiro NOVO. Use APENAS quando o usuário der uma ORDEM DIRETA de registro (ex: 'gastei 50', 'recebi 100'). PROIBIDO usar para perguntas que começam com 'Quanto', 'Qual', 'Me mostra' ou 'Busque', que são consultas ao histórico.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -2237,10 +2237,10 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 "mes_atual": {
                     "receitas": ent_mes,
                     "gastos": sai_mes,
-                    "gastos_semana": sai_semana,
+                    "gastos_semana_total_bruto": sai_semana,
                     "hoje": sai_hoje_bruto,
                     "ontem": sai_ontem_bruto,
-                    "categorias": [{"c": c, "v": round(v, 2)} for c, v in breakdown_atual]
+                    "categorias_RESUMO_MES_INTEIRO": [{"c": c, "v": round(v, 2)} for c, v in breakdown_atual]
                 },
                 "mes_anterior": {
                     "receitas": ent_anterior,
