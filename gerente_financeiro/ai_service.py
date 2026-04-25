@@ -73,8 +73,8 @@ async def _gemini_chat_completion_async(messages: list[dict], tools: list[dict] 
     max_retries = 1
     for attempt in range(max_retries + 1):
         try:
-            # FORÇADO: Modelo sugerido pelo usuário para 2026
-            model_name = "gemini-2.0-flash-lite"
+            # FORÇADO: gemini-1.5-flash para cota ilimitada (15 RPM / 1M TPM)
+            model_name = "gemini-1.5-flash"
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel(model_name)
             
@@ -152,8 +152,8 @@ async def _cerebras_chat_completion_async(messages: list[dict], tools: list[dict
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _call)
 
-async def _openrouter_chat_completion_async(messages: list[dict]) -> str | None:
-    """Acesso ao OpenRouter para modelos gratuitos e triagem."""
+async def _openrouter_chat_completion_async(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> str | dict | None:
+    """Acesso ao OpenRouter para modelos gratuitos e triagem, suportando Tool Calling."""
     if not config.OPENROUTER_API_KEY:
         return None
 
@@ -168,6 +168,11 @@ async def _openrouter_chat_completion_async(messages: list[dict]) -> str | None:
         "max_tokens": 500,
     }
     
+    if tools:
+        payload["tools"] = tools
+        if tool_choice:
+            payload["tool_choice"] = tool_choice
+            
     def _call():
         # URL sem espaços ou caracteres ocultos
         target_url = "https://openrouter.ai/api/v1/chat/completions".strip()
@@ -190,7 +195,13 @@ async def _openrouter_chat_completion_async(messages: list[dict]) -> str | None:
     try:
         loop = asyncio.get_running_loop()
         resp = await loop.run_in_executor(None, _call)
-        return resp["choices"][0]["message"]["content"]
+        
+        # Se retornou uma chamada de ferramenta, retorna o dicionário inteiro para o orquestrador
+        message = resp["choices"][0]["message"]
+        if message.get("tool_calls"):
+            return resp
+            
+        return message.get("content")
     except Exception as e:
         logger.error(f"❌ [OpenRouter] Falha: {e}")
         return None
@@ -209,18 +220,20 @@ async def _openrouter_triagem_rapida_async(texto_usuario: str) -> str | None:
         res = await _openrouter_chat_completion_async(messages)
         if res:
             logger.info(f"📥 [OpenRouter] Resposta: '{res[:100]}'")
-            res_limpo = res.replace("```json", "").replace("```", "").strip()
-            if "valor" in res_limpo.lower() and "descricao" in res_limpo.lower():
-                return f'{{"function": {{"name": "registrar_lancamento", "arguments": {res_limpo}}}}}'
-            return "COMPLEXO"
+            # Se for string (resposta de texto), limpa e trata
+            if isinstance(res, str):
+                res_limpo = res.replace("```json", "").replace("```", "").strip()
+                if "valor" in res_limpo.lower() and "descricao" in res_limpo.lower():
+                    return f'{{"function": {{"name": "registrar_lancamento", "arguments": {res_limpo}}}}}'
+                return "COMPLEXO"
     except Exception as e:
         logger.warning(f"⚠️ Triagem OpenRouter falhou: {e}")
     return None
 
 async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> dict | str | None:
     """
-    Orquestrador Inteligente.
-    Nova Ordem: OpenRouter Free -> Cerebras -> Groq -> Gemini
+    Orquestrador Inteligente de Provedores.
+    Ordem de Estabilidade: Gemini (Cota Alta) -> Cerebras (Velocidade) -> Groq (Resiliência) -> OpenRouter (Fallback)
     """
     def _truncar_mensagens(msgs):
         new_msgs = [m.copy() for m in msgs]
@@ -232,10 +245,23 @@ async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | N
         return new_msgs
 
     providers = []
-    # OpenRouter agora é o ÚNICO provedor para evitar conflitos de cota
+    
+    # 1. GEMINI (O Porto Seguro - Cota de 15 requisições por MINUTO)
+    if config.GEMINI_API_KEY:
+        providers.append(("GEMINI", _gemini_chat_completion_async))
+
+    # 2. CEREBRAS (O Raio - Resposta em < 0.5s)
+    if config.CEREBRAS_API_KEY:
+        providers.append(("CEREBRAS", _cerebras_chat_completion_async))
+
+    # 3. GROQ (O Tanque - Extremamente resiliente)
+    if config.GROQ_API_KEY:
+        providers.append(("GROQ", _groq_chat_completion_async))
+
+    # 4. OPENROUTER (O Estepe - Usado apenas se tudo mais falhar)
     if config.OPENROUTER_API_KEY:
         async def _call_or(msgs, t, tc):
-            return await _openrouter_chat_completion_async(msgs)
+            return await _openrouter_chat_completion_async(msgs, tools=t, tool_choice=tc)
         providers.append(("OPENROUTER", _call_or))
 
     last_error = None
