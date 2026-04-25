@@ -2113,7 +2113,12 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         # --- NOVA CAMADA: TRIAGEM OPENROUTER (ROTEAMENTO ZEROCUSTO) ---
         if texto_usuario and not update.message.voice:
             from gerente_financeiro.ai_service import _openrouter_triagem_rapida_async
-            resultado_triagem = await _openrouter_triagem_rapida_async(texto_usuario)
+            
+            if not config.OPENROUTER_API_KEY:
+                logger.info("ℹ️ [ALFREDO] Triagem OpenRouter pulada: Chave OPENROUTER_API_KEY não encontrada no config.")
+            else:
+                logger.info(f"🛡️ [ALFREDO] Iniciando triagem via OpenRouter para: '{texto_usuario[:30]}...'")
+                resultado_triagem = await _openrouter_triagem_rapida_async(texto_usuario)
             
             if resultado_triagem and "registrar_lancamento" in resultado_triagem:
                 logger.info("🛡️ [ALFREDO] Triagem OpenRouter resolveu registro simples.")
