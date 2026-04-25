@@ -49,7 +49,7 @@ CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
 CEREBRAS_MODEL_NAME = os.getenv("CEREBRAS_MODEL_NAME", "llama-3.3-70b") # Atualizado para o novo modelo de ponta
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-OPENROUTER_MODEL_NAME = os.getenv("OPENROUTER_MODEL_NAME", "meta-llama/llama-3.1-8b-instruct:free") # Triagem gratuita estável
+OPENROUTER_MODEL_NAME = os.getenv("OPENROUTER_MODEL_NAME", "google/gemma-4-31b-it:free") # Modelo potente e gratuito
 
 # GEMINI MODEL NAME com validação e fallback automático
 _model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
