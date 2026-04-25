@@ -219,12 +219,12 @@ RESPOSTA:"""
 
     messages = [{"role": "user", "content": prompt_triagem}]
     
-    # Lista de ELITE Free de 2026 (Fornecida pelo usuário)
+    # Lista de ELITE Free REAL de 2026 (Modelos que realmente estão online na API do OpenRouter)
     modelos_elite_2026 = [
-        "deepseek/deepseek-chat-v3-0324:free",
-        "meta-llama/llama-4-maverick:free",
-        "deepseek/deepseek-r1:free",
-        "qwen/qwen3-235b-a22b:free",
+        "nousresearch/hermes-3-llama-3.1-405b:free", # O modelo mais inteligente gratuito (405B)
+        "meta-llama/llama-3.3-70b-instruct:free",   # Modelo de elite da Meta
+        "nvidia/nemotron-3-super-120b-a12b:free",   # Modelo de 120B da Nvidia
+        "qwen/qwen3-next-80b-a3b-instruct:free",    # Qwen 80B Instruct
         "openrouter/free" # Fallback final automático
     ]
     
