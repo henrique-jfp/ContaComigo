@@ -179,7 +179,7 @@ async def _openrouter_chat_completion_async(messages: list[dict]) -> str | None:
                 "X-OpenRouter-Title": "ContaComigo Alfredo"
             },
             json=payload,
-            timeout=15
+            timeout=25
         )
         if response.status_code != 200:
             logger.error(f"❌ [OpenRouter] Erro {response.status_code}: {response.text}")
@@ -219,10 +219,12 @@ RESPOSTA:"""
 
     messages = [{"role": "user", "content": prompt_triagem}]
     
-    # Lista de ELITE Free solicitada pelo usuário para teste de estabilidade
+    # Lista de ELITE Free REAL de 2026 (Focada em VELOCIDADE para evitar timeout)
     modelos_elite_2026 = [
-        "nvidia/nemotron-3-super-120b-a12b:free", # Teste exclusivo solicitado pelo usuário
-        "openrouter/free" # Fallback final automático
+        "liquid/lfm-2.5-1.2b-instruct:free", # Ultra-rápido, ideal para triagem
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "openrouter/free" 
     ]
     
     for model in modelos_elite_2026:
