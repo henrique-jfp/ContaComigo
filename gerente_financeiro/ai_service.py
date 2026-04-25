@@ -221,11 +221,10 @@ RESPOSTA (JSON ou COMPLEXO):"""
 
     messages = [{"role": "user", "content": prompt_triagem}]
     
-    # Lista de ELITE Free REAL de 2026 (Modelos potentes para evitar falsos 'COMPLEXO')
+    # Lista de ELITE Free REAL de 2026 (Focada em DISPONIBILIDADE TOTAL)
     modelos_elite_2026 = [
-        "cognitivecomputations/dolphin-mistral-24b-venice-edition:free", # Inteligente e sem filtro
-        "nousresearch/hermes-3-llama-3.1-405b:free",
-        "meta-llama/llama-3.3-70b-instruct:free",
+        "meta-llama/llama-3.2-3b-instruct:free", # O modelo mais estável e disponível do OpenRouter
+        "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
         "openrouter/free" 
     ]
     
