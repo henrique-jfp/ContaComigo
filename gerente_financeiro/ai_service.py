@@ -216,7 +216,32 @@ FRASE: "{texto_usuario}"
 RESPOSTA:"""
 
     messages = [{"role": "user", "content": prompt_triagem}]
-    return await _openrouter_chat_completion_async(messages)
+    
+    # Rotação de modelos gratuitos para evitar Rate Limit (429)
+    modelos_free = [
+        config.OPENROUTER_MODEL_NAME, # Gemma 4 31B (atual)
+        "meta-llama/llama-3.1-8b-instruct:free",
+        "mistralai/mistral-7b-instruct:free",
+        "microsoft/phi-3-mini-128k-instruct:free"
+    ]
+    
+    for model in modelos_free:
+        # Temporariamente sobrescreve o modelo para a tentativa
+        orig_model = config.OPENROUTER_MODEL_NAME
+        try:
+            config.OPENROUTER_MODEL_NAME = model
+            res = await _openrouter_chat_completion_async(messages)
+            if res:
+                return res
+        except Exception as e:
+            if "429" in str(e):
+                logger.warning(f"⚠️ Modelo {model} em rate limit. Tentando próximo...")
+                continue
+            break
+        finally:
+            config.OPENROUTER_MODEL_NAME = orig_model
+            
+    return None
 
 async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> dict | str | None:
     """
