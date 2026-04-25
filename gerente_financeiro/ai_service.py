@@ -196,7 +196,7 @@ async def _openrouter_chat_completion_async(messages: list[dict]) -> str | None:
 
 async def _openrouter_triagem_rapida_async(texto_usuario: str) -> str | None:
     """
-    Atua como o 'Porteiro' do Alfredo usando o roteador automático do OpenRouter.
+    Atua como o 'Porteiro' do Alfredo usando modelos de elite gratuitos de 2026.
     Retorna JSON de ferramenta ou 'COMPLEXO'.
     """
     if not config.OPENROUTER_API_KEY:
@@ -219,15 +219,33 @@ RESPOSTA:"""
 
     messages = [{"role": "user", "content": prompt_triagem}]
     
-    try:
-        # Usamos o roteador automático 'openrouter/free' configurado no config.py
-        # Ele gerencia internamente qual modelo free está online e sem rate limit.
-        return await _openrouter_chat_completion_async(messages)
-    except Exception as e:
-        # Se o roteador automático também falhar (muito raro), 
-        # retornamos None para o bot seguir com o fluxo normal (IA principal).
-        logger.warning(f"⚠️ Triagem OpenRouter falhou (silencioso): {e}")
-        return None
+    # Lista de ELITE Free de 2026 (Fornecida pelo usuário)
+    modelos_elite_2026 = [
+        "deepseek/deepseek-chat-v3-0324:free",
+        "meta-llama/llama-4-maverick:free",
+        "deepseek/deepseek-r1:free",
+        "qwen/qwen3-235b-a22b:free",
+        "openrouter/free" # Fallback final automático
+    ]
+    
+    for model in modelos_elite_2026:
+        # Armazena o modelo original para restaurar depois
+        orig_model = config.OPENROUTER_MODEL_NAME
+        try:
+            config.OPENROUTER_MODEL_NAME = model
+            res = await _openrouter_chat_completion_async(messages)
+            if res and ("registrar_lancamento" in res or "COMPLEXO" in res):
+                return res
+        except Exception as e:
+            # Se der 404 (endpoint sumiu) ou 429 (cota), tenta o próximo modelo de elite
+            if "404" in str(e) or "429" in str(e):
+                logger.warning(f"⚠️ Modelo {model} indisponível no OpenRouter. Tentando próximo da elite...")
+                continue
+            break
+        finally:
+            config.OPENROUTER_MODEL_NAME = orig_model
+            
+    return None
 
 async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> dict | str | None:
     """
