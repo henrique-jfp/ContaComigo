@@ -213,15 +213,23 @@ async def _openrouter_triagem_rapida_async(texto_usuario: str) -> str | None:
     if not config.OPENROUTER_API_KEY:
         return None
 
-    # Prompt refinado para evitar falsos positivos em lembretes e agendamentos
-    prompt_triagem = f"""Você é o Porteiro do Alfredo. Sua função é separar REGISTROS DE GASTOS de outros pedidos.
+    # Prompt mestre de triagem com as 5 funções vitais do ContaComigo
+    prompt_triagem = f"""Você é o Porteiro do Alfredo. Sua função é classificar o pedido do usuário.
 
-REGRA DE DECISÃO:
-1. Se o usuário estiver informando um gasto ou receita que JÁ OCORREU (ex: "almoço 30", "gastei 50 no mercado", "pix 10 pra joão"), responda APENAS o JSON: {{"valor": 30.0, "descricao": "Descrição", "categoria": "Categoria"}}
-2. Se o usuário pedir para LEMBRAR, AGENDAR, criar META, definir LIMITE ou se for uma PERGUNTA/ANÁLISE, responda APENAS: COMPLEXO
+    AS 5 FUNÇÕES DO SISTEMA:
+    1. REGISTRAR LANÇAMENTO: Gastos ou receitas que JÁ OCORRERAM (ex: "almoço 30", "recebi 200").
+    2. LEMBRETE: Pedidos para avisar algo no futuro (ex: "me lembre de...", "me avise...").
+    3. METAS: Criação de objetivos de economia (ex: "quero economizar 1000", "criar meta...").
+    4. AGENDAMENTOS: Despesas ou receitas fixas/futuras (ex: "agende o aluguel", "todo mês pague...").
+    5. LIMITES: Definição de teto de gastos (ex: "meu limite de lazer é 500").
 
-Texto do usuário: "{texto_usuario}"
-Resposta:"""
+    REGRA DE OURO:
+    - Se for a FUNÇÃO 1 (LANÇAMENTO), responda APENAS o JSON: {{"valor": 30.0, "descricao": "Item", "categoria": "Categoria"}}
+    - Para QUALQUER outra função (2, 3, 4 ou 5) ou se for uma PERGUNTA, responda APENAS: COMPLEXO
+
+    Texto do usuário: "{texto_usuario}"
+    Resposta:"""
+
     messages = [{"role": "user", "content": prompt_triagem}]
     
     try:

@@ -15,28 +15,30 @@ O sistema roda de forma híbrida para máxima performance no hardware limitado:
 2.  **Bibliotecas Pesadas:** Instaladas via `apt` no sistema (Pandas, Numpy, OpenCV, Psycopg2) e compartilhadas com o venv via `--system-site-packages`.
 3.  **Persistência:** O sistema é gerenciado pelo `systemd`, garantindo auto-restart.
 4.  **Acesso Externo:** Cloudflare Tunnel expondo a porta `10000` para o domínio `alfredo.henriquedejesus.dev`.
+5.  **Segurança e Adblock:** AdGuard Home atuando como Sinkhole de DNS para bloquear anúncios em toda a rede local.
 
 ---
 
 ## 🛠️ Comandos de Gestão (O Painel de Controle)
 
-### 1. Monitorar o Alfredo (Logs em tempo real)
-Use este comando para ver o que o bot está processando (mensagens, OCR, erros):
+### 1. Monitorar o Alfredo e Adblocker (Logs)
 ```bash
-sudo journalctl -u contacomigo -f
+sudo journalctl -u contacomigo -f      # Logs do Bot
+sudo journalctl -u AdGuardHome -f      # Logs do Adblocker
 ```
 
 ### 2. Status dos Serviços
-Verifique se o sistema e o túnel de internet estão vivos:
+Verifique se o sistema, o túnel e o adblocker estão vivos:
 ```bash
 sudo systemctl status contacomigo   # O Cérebro (Python/Flask)
+sudo systemctl status AdGuardHome   # O Bloqueador de Anúncios
 sudo systemctl status cloudflared  # O Túnel (Internet/HTTPS)
 ```
 
-### 3. Reiniciar o Sistema
-Se você alterou o código ou o arquivo `.env`:
+### 3. Reiniciar os Serviços
 ```bash
 sudo systemctl restart contacomigo
+sudo systemctl restart AdGuardHome
 ```
 
 ### 4. Ver Saúde do Hardware
@@ -48,9 +50,10 @@ btop
 ---
 
 ## 🌐 Configuração de Rede & Portas
-*   **Porta Local:** `10000` (Padrão herdado do Render).
+*   **Porta Local:** `10000` (Padrão Alfredo).
+*   **DNS Adblocker:** Porta `53` (UDP/TCP).
+*   **Painel AdGuard:** `http://192.168.1.23` (Porta 80).
 *   **Túnel Cloudflare:** Encaminha tráfego de `https://alfredo.henriquedejesus.dev` -> `http://localhost:10000`.
-*   **Configuração do Túnel:** Localizada em `/etc/cloudflared/config.yml`.
 
 ---
 
@@ -70,6 +73,7 @@ btop
 
 ## 📁 Estrutura de Pastas Críticas
 *   `~/contacomigo`: Pasta raiz do projeto.
+*   `/opt/AdGuardHome`: Binários e dados do Adblocker.
 *   `~/contacomigo/venv`: Ambiente virtual Python.
 *   `/etc/systemd/system/contacomigo.service`: Script de inicialização automática.
 *   `/etc/cloudflared/`: Credenciais e configuração do túnel HTTPS.
