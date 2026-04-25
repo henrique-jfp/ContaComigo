@@ -221,12 +221,8 @@ RESPOSTA:"""
     
     # Lista de ELITE Free solicitada pelo usuário para teste de estabilidade
     modelos_elite_2026 = [
-        "nvidia/nemotron-3-super-120b-a12b:free",
-        "google/gemma-4-26b-a4b-it:free",
-        "nvidia/nemotron-3-nano-30b-a3b:free",
-        "minimax/minimax-m2.5:free",
-        "google/gemma-3-4b-it:free",
-        "openrouter/free" # Fallback final
+        "nvidia/nemotron-3-super-120b-a12b:free", # Teste exclusivo solicitado pelo usuário
+        "openrouter/free" # Fallback final automático
     ]
     
     for model in modelos_elite_2026:
