@@ -64,7 +64,7 @@ async def _groq_chat_completion_async(messages: list[dict], tools: list[dict] | 
             raise
 
 async def _gemini_chat_completion_async(messages: list[dict], tools: list[dict] | None = None) -> str | None:
-    """Fallback para análise usando Gemini se o Groq/Cerebras falharem."""
+    """Fallback para análise usando Gemini."""
     if not config.GEMINI_API_KEY:
         return None
     
@@ -73,7 +73,8 @@ async def _gemini_chat_completion_async(messages: list[dict], tools: list[dict] 
     max_retries = 1
     for attempt in range(max_retries + 1):
         try:
-            model_name = config.GEMINI_MODEL_NAME or "gemini-1.5-flash"
+            # FORÇADO: gemini-1.5-flash para estabilidade total
+            model_name = "gemini-1.5-flash"
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel(model_name)
             
@@ -219,28 +220,28 @@ RESPOSTA:"""
 
     messages = [{"role": "user", "content": prompt_triagem}]
     
-    # Lista de ELITE Free REAL de 2026 (Focada em VELOCIDADE para evitar timeout)
+    # Lista de ELITE Free REAL de 2026
     modelos_elite_2026 = [
-        "liquid/lfm-2.5-1.2b-instruct:free", # Ultra-rápido, ideal para triagem
+        "liquid/lfm-2.5-1.2b-instruct:free",
         "nvidia/nemotron-3-super-120b-a12b:free",
         "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemma-3-27b-it:free",
         "openrouter/free" 
     ]
     
     for model in modelos_elite_2026:
-        # Armazena o modelo original para restaurar depois
         orig_model = config.OPENROUTER_MODEL_NAME
         try:
+            logger.info(f"🔎 [OpenRouter] Tentando triagem com {model}...")
             config.OPENROUTER_MODEL_NAME = model
             res = await _openrouter_chat_completion_async(messages)
             if res and ("registrar_lancamento" in res or "COMPLEXO" in res):
+                logger.info(f"✅ [OpenRouter] Modelo {model} respondeu com sucesso.")
                 return res
+            logger.warning(f"⚠️ [OpenRouter] Modelo {model} deu resposta inválida. Pulando...")
         except Exception as e:
-            # Se der 404 (endpoint sumiu) ou 429 (cota), tenta o próximo modelo de elite
-            if "404" in str(e) or "429" in str(e):
-                logger.warning(f"⚠️ Modelo {model} indisponível no OpenRouter. Tentando próximo da elite...")
-                continue
-            break
+            logger.warning(f"❌ [OpenRouter] Modelo {model} falhou: {str(e)[:50]}. Pulando...")
+            continue
         finally:
             config.OPENROUTER_MODEL_NAME = orig_model
             
