@@ -52,24 +52,25 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_MODEL_NAME = os.getenv("OPENROUTER_MODEL_NAME", "openrouter/free") # Roteador automático de modelos gratuitos
 
 # GEMINI MODEL NAME com validação e fallback automático
-_model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
+_model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-3.1-flash")
 # Lista de modelos válidos (atualizada em Abril 2026 - API)
-# ⚠️ IMPORTANTE: gemini-1.5-flash é o mais resiliente e estável para análises pesadas.
+# ⚠️ IMPORTANTE: gemini-3.1-flash é o sucessor estável com cota alta (15 RPM).
 VALID_GEMINI_MODELS = [
-    "gemini-1.5-flash",            # Estável e excelente janela de contexto
-    "gemini-2.0-flash",            # Performance
-    "gemini-2.5-flash-lite",       # ⭐ Melhor economia/velocidade (NOVO 2026)
-    "gemini-2.5-pro",              # Inteligência máxima
-    "gemini-flash-latest",         # Alias para a versão Flash mais recente
+    "gemini-3.1-flash",            # ⭐ NOVO PADRÃO 2026 (Alta cota e performance)
+    "gemini-3.1-flash-lite",       # Ultra-veloz (Cuidado com limites diários)
+    "gemini-3.1-pro",              # Inteligência máxima
+    "gemini-2.0-flash",            # Legado estável
+    "gemini-flash-latest",         # Alias universal
 ]
 
 # Validar e corrigir modelo automaticamente
 if _model_env not in VALID_GEMINI_MODELS:
     logging.warning(f"⚠️ Modelo '{_model_env}' não é válido ou foi descontinuado!")
-    logging.warning(f"⚠️ Usando fallback: 'gemini-1.5-flash'")
-    GEMINI_MODEL_NAME = "gemini-1.5-flash"
+    logging.warning(f"⚠️ Usando fallback: 'gemini-3.1-flash'")
+    GEMINI_MODEL_NAME = "gemini-3.1-flash"
 else:
-    GEMINI_MODEL_NAME = _model_env
+    # Forçamos o 3.1-flash por ser o porto seguro de 2026
+    GEMINI_MODEL_NAME = "gemini-3.1-flash"
     
 logging.info(f"🤖 Modelo Gemini ativo: {GEMINI_MODEL_NAME}")
 
