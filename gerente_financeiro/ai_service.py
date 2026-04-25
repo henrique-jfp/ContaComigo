@@ -73,8 +73,8 @@ async def _gemini_chat_completion_async(messages: list[dict], tools: list[dict] 
     max_retries = 1
     for attempt in range(max_retries + 1):
         try:
-            # FORÇADO: ID mais compatível para evitar erro 404
-            model_name = "gemini-1.5-flash-latest"
+            # FORÇADO: Modelo sugerido pelo usuário para 2026
+            model_name = "gemini-2.0-flash-lite"
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel(model_name)
             

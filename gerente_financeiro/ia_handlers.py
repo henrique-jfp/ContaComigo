@@ -2110,39 +2110,26 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         usuario_db, saldo, entradas, saidas = _usuario_e_saldo(db, update.effective_user)
         ensure_user_plan_state(db, usuario_db, commit=True)
 
+        tool_calls = []
+        completion = None
+
         # --- NOVA CAMADA: TRIAGEM OPENROUTER (ROTEAMENTO ZEROCUSTO) ---
         if texto_usuario and not update.message.voice:
             from gerente_financeiro.ai_service import _openrouter_triagem_rapida_async
             
-            if not config.OPENROUTER_API_KEY:
-                logger.info("ℹ️ [ALFREDO] Triagem OpenRouter pulada: Chave OPENROUTER_API_KEY não encontrada no config.")
-            else:
+            if config.OPENROUTER_API_KEY:
                 logger.info(f"🛡️ [ALFREDO] Iniciando triagem via OpenRouter para: '{texto_usuario[:30]}...'")
                 resultado_triagem = await _openrouter_triagem_rapida_async(texto_usuario)
             
-            if resultado_triagem and "registrar_lancamento" in resultado_triagem:
-                logger.info("🛡️ [ALFREDO] Triagem OpenRouter resolveu registro simples.")
-                # Tenta extrair e tratar como uma tool call imediata
-                try:
-                    # Forçamos o formato esperado pelo orquestrador legado
-                    tool_calls = _extrair_tool_calls_do_texto(resultado_triagem)
-                    if tool_calls:
-                        # Pula a chamada principal e vai direto pro processamento de tool
-                        completion = {"choices": [{"message": {"tool_calls": tool_calls}}]}
-                        # Definimos tool_calls para o fluxo abaixo
-                    else:
-                        completion = None
+                if resultado_triagem and "registrar_lancamento" in resultado_triagem:
+                    logger.info("🛡️ [ALFREDO] Triagem OpenRouter resolveu registro simples.")
+                    try:
+                        tool_calls = _extrair_tool_calls_do_texto(resultado_triagem)
+                        if tool_calls:
+                            completion = {"choices": [{"message": {"tool_calls": tool_calls}}]}
+                    except Exception as e:
+                        logger.warning(f"Falha ao parsear triagem: {e}")
                         tool_calls = []
-                except Exception as e:
-                    logger.warning(f"Falha ao parsear triagem: {e}")
-                    completion = None
-                    tool_calls = []
-            else:
-                completion = None
-                tool_calls = []
-        else:
-            completion = None
-            tool_calls = []
 
         # --- FLUXO NORMAL (Se a triagem não resolveu ou se for áudio/análise) ---
         if not tool_calls:
