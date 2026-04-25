@@ -73,8 +73,8 @@ async def _gemini_chat_completion_async(messages: list[dict], tools: list[dict] 
     max_retries = 1
     for attempt in range(max_retries + 1):
         try:
-            # FORÇADO: identificador estável para a SDK do Google
-            model_name = "gemini-1.5-flash"
+            # FORÇADO: ID mais compatível para evitar erro 404
+            model_name = "gemini-1.5-flash-latest"
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel(model_name)
             
@@ -236,11 +236,20 @@ RESPOSTA (JSON ou COMPLEXO):"""
             config.OPENROUTER_MODEL_NAME = model
             res = await _openrouter_chat_completion_async(messages)
             if res:
-                logger.info(f"📥 [OpenRouter] Resposta do modelo {model}: '{res[:100]}'")
-                if "registrar_lancamento" in res or "COMPLEXO" in res:
-                    logger.info(f"✅ [OpenRouter] Modelo {model} validado.")
+                logger.info(f"📥 [OpenRouter] Resposta: '{res[:100]}'")
+                # Validação ultra-flexível: se tem valor e descrição, é um registro!
+                if "valor" in res.lower() and "descricao" in res.lower():
+                    logger.info(f"✅ [OpenRouter] Gasto extraído com sucesso.")
+                    # Se a IA mandou apenas o JSON interno, nós envolvemos no formato de tool call
+                    if "registrar_lancamento" not in res:
+                        # Limpa possíveis markdown de bloco de código
+                        res_limpo = res.replace("```json", "").replace("```", "").strip()
+                        res = f'{{"function": {{"name": "registrar_lancamento", "arguments": {res_limpo}}}}}'
                     return res
-            logger.warning(f"⚠️ [OpenRouter] Modelo {model} deu resposta inválida. Pulando...")
+                elif "COMPLEXO" in res:
+                    logger.info(f"✅ [OpenRouter] Pergunta complexa detectada.")
+                    return "COMPLEXO"
+            logger.warning(f"⚠️ [OpenRouter] Modelo {model} não extraiu dados úteis.")
         except Exception as e:
             logger.warning(f"❌ [OpenRouter] Modelo {model} falhou: {str(e)[:50]}. Pulando...")
             continue
