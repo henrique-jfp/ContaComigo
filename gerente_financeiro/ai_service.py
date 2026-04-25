@@ -73,8 +73,8 @@ async def _gemini_chat_completion_async(messages: list[dict], tools: list[dict] 
     max_retries = 1
     for attempt in range(max_retries + 1):
         try:
-            # FORÇADO: identificador correto para a SDK do Google
-            model_name = "models/gemini-1.5-flash"
+            # FORÇADO: identificador estável para a SDK do Google
+            model_name = "gemini-1.5-flash"
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel(model_name)
             
@@ -203,11 +203,12 @@ async def _openrouter_triagem_rapida_async(texto_usuario: str) -> str | None:
     if not config.OPENROUTER_API_KEY:
         return None
 
-    prompt_triagem = f"""Você é o classificador do Alfredo. Analise a frase do usuário.
+    prompt_triagem = f"""Você é o extrator de dados do Alfredo. Sua missão é identificar registros financeiros.
 
-OBJETIVO:
-1. Se for um REGISTRO de gasto ou receita simples (ex: "almoço 35", "gasolina 100", "recebi 200"), extraia os dados e responda EXATAMENTE um JSON de ferramenta registrar_lancamento.
-2. Se for uma pergunta, dúvida, pedido de análise ou algo que exija olhar o histórico, responda APENAS a palavra: COMPLEXO
+REGRA DE OURO:
+- Se o usuário citou um VALOR (ex: 30, R$ 50, dez reais) e um ITEM (ex: mercado, pão, gasolina), você DEVE extrair os dados.
+- Responda EXATAMENTE um JSON de ferramenta registrar_lancamento.
+- APENAS se for uma pergunta filosófica, dúvida de histórico ou análise comparativa, responda: COMPLEXO
 
 REGRAS JSON:
 - descricao: o que foi comprado (Capitalize)
@@ -215,17 +216,16 @@ REGRAS JSON:
 - categoria: Alimentação, Transporte, Lazer, Saúde ou Outros.
 - forma_pagamento: Pix, Crédito ou Nao_informado.
 
-FRASE: "{texto_usuario}"
-RESPOSTA:"""
+FRASE DO USUÁRIO: "{texto_usuario}"
+RESPOSTA (JSON ou COMPLEXO):"""
 
     messages = [{"role": "user", "content": prompt_triagem}]
     
-    # Lista de ELITE Free REAL de 2026
+    # Lista de ELITE Free REAL de 2026 (Modelos potentes para evitar falsos 'COMPLEXO')
     modelos_elite_2026 = [
-        "liquid/lfm-2.5-1.2b-instruct:free",
-        "nvidia/nemotron-3-super-120b-a12b:free",
+        "cognitivecomputations/dolphin-mistral-24b-venice-edition:free", # Inteligente e sem filtro
+        "nousresearch/hermes-3-llama-3.1-405b:free",
         "meta-llama/llama-3.3-70b-instruct:free",
-        "google/gemma-3-27b-it:free",
         "openrouter/free" 
     ]
     
