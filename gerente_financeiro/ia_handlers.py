@@ -2114,7 +2114,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         completion = None
 
         # --- NOVA CAMADA: TRIAGEM OPENROUTER (ROTEAMENTO ZEROCUSTO) ---
-        if texto_usuario and not update.message.voice:
+        if texto_usuario:
             from gerente_financeiro.ai_service import _openrouter_triagem_rapida_async
             
             if config.OPENROUTER_API_KEY:

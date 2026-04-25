@@ -246,17 +246,17 @@ async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | N
 
     providers = []
     
-    # 1. GEMINI (O Porto Seguro - Cota de 15 requisições por MINUTO)
-    if config.GEMINI_API_KEY:
-        providers.append(("GEMINI", _gemini_chat_completion_async))
-
-    # 2. CEREBRAS (O Raio - Resposta em < 0.5s)
+    # 1. CEREBRAS (O Raio - Resposta em < 0.5s)
     if config.CEREBRAS_API_KEY:
         providers.append(("CEREBRAS", _cerebras_chat_completion_async))
 
-    # 3. GROQ (O Tanque - Extremamente resiliente)
+    # 2. GROQ (O Tanque e Rápido - Llama 3.1 8B Instant)
     if config.GROQ_API_KEY:
         providers.append(("GROQ", _groq_chat_completion_async))
+
+    # 3. GEMINI (O Porto Seguro - Cota Alta, mas a versão Preview está muito lenta)
+    if config.GEMINI_API_KEY:
+        providers.append(("GEMINI", _gemini_chat_completion_async))
 
     # 4. OPENROUTER (O Estepe - Usado apenas se tudo mais falhar)
     if config.OPENROUTER_API_KEY:
