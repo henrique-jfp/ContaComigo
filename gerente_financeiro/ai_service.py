@@ -219,13 +219,14 @@ RESPOSTA:"""
 
     messages = [{"role": "user", "content": prompt_triagem}]
     
-    # Lista de ELITE Free REAL de 2026 (Modelos que realmente estão online na API do OpenRouter)
+    # Lista de ELITE Free solicitada pelo usuário para teste de estabilidade
     modelos_elite_2026 = [
-        "nousresearch/hermes-3-llama-3.1-405b:free", # O modelo mais inteligente gratuito (405B)
-        "meta-llama/llama-3.3-70b-instruct:free",   # Modelo de elite da Meta
-        "nvidia/nemotron-3-super-120b-a12b:free",   # Modelo de 120B da Nvidia
-        "qwen/qwen3-next-80b-a3b-instruct:free",    # Qwen 80B Instruct
-        "openrouter/free" # Fallback final automático
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "google/gemma-4-26b-a4b-it:free",
+        "nvidia/nemotron-3-nano-30b-a3b:free",
+        "minimax/minimax-m2.5:free",
+        "google/gemma-3-4b-it:free",
+        "openrouter/free" # Fallback final
     ]
     
     for model in modelos_elite_2026:
