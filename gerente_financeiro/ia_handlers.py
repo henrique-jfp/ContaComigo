@@ -2112,6 +2112,7 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
 
         tool_calls = []
         completion = None
+        texto_normalizado = texto_usuario.strip().lower()
 
         # --- NOVA CAMADA: TRIAGEM OPENROUTER (ROTEAMENTO ZEROCUSTO) ---
         if texto_usuario:
@@ -2146,8 +2147,6 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 return ConversationHandler.END
 
             consume_feature_quota(db, usuario_db, "ia_questions", amount=1)
-
-            texto_normalizado = texto_usuario.strip().lower()
 
             # --- NOVO: INTERCEPTOR DE AÇÃO DIRETA (ZERO ATRITO) ---
             acao_direta = _detectar_e_extrair_acao_direta(texto_usuario)
