@@ -213,7 +213,15 @@ async def _openrouter_triagem_rapida_async(texto_usuario: str) -> str | None:
     if not config.OPENROUTER_API_KEY:
         return None
 
-    prompt_triagem = f"Responda apenas JSON se for registro de gasto: {{\"valor\": 0.0, \"descricao\": \"...\", \"categoria\": \"...\"}}. Se for pergunta ou análise, responda: COMPLEXO. Texto: {texto_usuario}"
+    # Prompt refinado para evitar falsos positivos em lembretes e agendamentos
+    prompt_triagem = f"""Você é o Porteiro do Alfredo. Sua função é separar REGISTROS DE GASTOS de outros pedidos.
+
+REGRA DE DECISÃO:
+1. Se o usuário estiver informando um gasto ou receita que JÁ OCORREU (ex: "almoço 30", "gastei 50 no mercado", "pix 10 pra joão"), responda APENAS o JSON: {{"valor": 30.0, "descricao": "Descrição", "categoria": "Categoria"}}
+2. Se o usuário pedir para LEMBRAR, AGENDAR, criar META, definir LIMITE ou se for uma PERGUNTA/ANÁLISE, responda APENAS: COMPLEXO
+
+Texto do usuário: "{texto_usuario}"
+Resposta:"""
     messages = [{"role": "user", "content": prompt_triagem}]
     
     try:

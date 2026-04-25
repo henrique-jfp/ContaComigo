@@ -2117,7 +2117,11 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         if texto_usuario:
             from gerente_financeiro.ai_service import _openrouter_triagem_rapida_async
             
-            if config.OPENROUTER_API_KEY:
+            # Trava de Segurança: Se contém palavras de comando futuro, pula a triagem e vai pro cérebro completo
+            palavras_comando = {"lembre", "lembrar", "agende", "agendar", "meta", "limite", "pague", "pagar"}
+            contem_comando = any(p in texto_normalizado for p in palavras_comando)
+            
+            if config.OPENROUTER_API_KEY and not contem_comando:
                 logger.info(f"🛡️ [ALFREDO] Iniciando triagem via OpenRouter para: '{texto_usuario[:30]}...'")
                 resultado_triagem = await _openrouter_triagem_rapida_async(texto_usuario)
             
