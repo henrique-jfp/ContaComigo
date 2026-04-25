@@ -2266,18 +2266,8 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                 "mes_atual": {
                     "receitas": ent_mes,
                     "gastos": sai_mes,
-                    "gastos_semana_total_bruto": sai_semana,
-                    "hoje": sai_hoje_bruto,
-                    "ontem": sai_ontem_bruto,
-                    "categorias_RESUMO_MES_INTEIRO": [{"c": c, "v": round(v, 2)} for c, v in breakdown_atual]
+                    "categorias": [{"c": c, "v": round(v, 2)} for c, v in breakdown_atual]
                 },
-                "mes_anterior": {
-                    "receitas": ent_anterior,
-                    "gastos": sai_anterior,
-                    "top_cats": [{"c": c, "v": round(v, 2)} for c, v in breakdown_anterior]
-                },
-                "ultimas_desp": ultimas_despesas,
-                "metas": resumo_metas,
                 "saldo": saldo
             },
             ensure_ascii=False
