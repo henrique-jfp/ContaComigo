@@ -2142,22 +2142,23 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         # --- FLUXO NORMAL (Se a triagem não resolveu ou se for áudio/análise) ---
         if not tool_calls:
             gate_ia = plan_allows_feature(db, usuario_db, "ia_questions")
-        if not gate_ia.allowed:
-            text, keyboard = upgrade_prompt_for_feature("ia_questions")
-            await _enviar_resposta_html_segura(update.message, text, reply_markup=keyboard)
-            return ConversationHandler.END
+            if not gate_ia.allowed:
+                text, keyboard = upgrade_prompt_for_feature("ia_questions")
+                await _enviar_resposta_html_segura(update.message, text, reply_markup=keyboard)
+                return ConversationHandler.END
 
-        consume_feature_quota(db, usuario_db, "ia_questions", amount=1)
+            consume_feature_quota(db, usuario_db, "ia_questions", amount=1)
 
         texto_normalizado = texto_usuario.strip().lower()
 
         # --- NOVO: INTERCEPTOR DE AÇÃO DIRETA (ZERO ATRITO) ---
-        acao_direta = _detectar_e_extrair_acao_direta(texto_usuario)
-        tool_calls = []
-        if acao_direta:
-            fn_name, args = acao_direta
-            tool_calls = [{"type": "function", "function": {"name": fn_name, "arguments": json.dumps(args)}}]
-            logger.info(f"⚡ [ALFREDO] Interceptação direta: {fn_name}")
+        # Só tentamos se ainda não tivermos tool_calls da triagem
+        if not tool_calls:
+            acao_direta = _detectar_e_extrair_acao_direta(texto_usuario)
+            if acao_direta:
+                fn_name, args = acao_direta
+                tool_calls = [{"type": "function", "function": {"name": fn_name, "arguments": json.dumps(args)}}]
+                logger.info(f"⚡ [ALFREDO] Interceptação direta: {fn_name}")
 
         # Interceptações que são comandos funcionais ou fora do escopo da IA de análise direta
         if not tool_calls and _intencao_categorizar_sem_categoria(texto_normalizado):
