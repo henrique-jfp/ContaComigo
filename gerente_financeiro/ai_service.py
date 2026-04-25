@@ -73,8 +73,8 @@ async def _gemini_chat_completion_async(messages: list[dict], tools: list[dict] 
     max_retries = 1
     for attempt in range(max_retries + 1):
         try:
-            # FORÇADO: gemini-3.1-flash para cota ilimitada (15 RPM / 1M TPM)
-            model_name = "gemini-3.1-flash"
+            # FORÇADO: gemini-3.1-flash-lite-preview conforme solicitação
+            model_name = "gemini-3.1-flash-lite-preview"
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel(model_name)
             
