@@ -32,14 +32,23 @@ try:
     db_url = config.DATABASE_URL
     if db_url.startswith('postgres://'):
         db_url = db_url.replace('postgres://', 'postgresql://', 1)
+    
+    # FORÇAR PORTA DO POOLER (6543) PARA SUPABASE
+    # A porta 5432 tem limite baixo de conexões. A 6543 aguenta centenas via Transaction Mode.
+    if 'supabase.com' in db_url and ':5432/' in db_url:
+        db_url = db_url.replace(':5432/', ':6543/')
+        if '?' in db_url:
+            db_url += '&pgbouncer=true'
+        else:
+            db_url += '?pgbouncer=true'
 
-    # Configuração de Connection Pool Robusta (Resolução de erro FATAL: Max client connections reached)
+    # Configuração de Connection Pool OTIMIZADA para evitar "Max client connections reached"
     pool_args = {
         'pool_pre_ping': True,    # Verifica se a conexão está viva antes de usar
-        'pool_recycle': 1800,     # Recicla conexões a cada 30 minutos
-        'pool_size': 5,           # Número de conexões permanentes
-        'max_overflow': 10,       # Margem para picos de acesso
-        'pool_timeout': 30,       # Tempo de espera por conexão livre antes de erro
+        'pool_recycle': 300,      # Recicla conexões a cada 5 minutos (evita zumbis)
+        'pool_size': 3,           # Reduzido para economizar slots no Supabase
+        'max_overflow': 5,        # Margem pequena para picos
+        'pool_timeout': 30,       
     }
 
     # Configurações de SSL para bancos gerenciados (Supabase/Render/AWS)
