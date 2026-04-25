@@ -197,90 +197,46 @@ async def _openrouter_chat_completion_async(messages: list[dict]) -> str | None:
 
 async def _openrouter_triagem_rapida_async(texto_usuario: str) -> str | None:
     """
-    Atua como o 'Porteiro' do Alfredo usando modelos de elite gratuitos de 2026.
-    Retorna JSON de ferramenta ou 'COMPLEXO'.
+    Atua como o 'Porteiro' do Alfredo usando o roteador automático do OpenRouter.
     """
     if not config.OPENROUTER_API_KEY:
         return None
 
-    prompt_triagem = f"""Você é o extrator de dados do Alfredo. Sua missão é identificar registros financeiros.
-
-REGRA DE OURO:
-- Se o usuário citou um VALOR (ex: 30, R$ 50, dez reais) e um ITEM (ex: mercado, pão, gasolina), você DEVE extrair os dados.
-- Responda EXATAMENTE um JSON de ferramenta registrar_lancamento.
-- APENAS se for uma pergunta filosófica, dúvida de histórico ou análise comparativa, responda: COMPLEXO
-
-REGRAS JSON:
-- descricao: o que foi comprado (Capitalize)
-- valor: numero (ex: 35.50)
-- categoria: Alimentação, Transporte, Lazer, Saúde ou Outros.
-- forma_pagamento: Pix, Crédito ou Nao_informado.
-
-FRASE DO USUÁRIO: "{texto_usuario}"
-RESPOSTA (JSON ou COMPLEXO):"""
-
+    prompt_triagem = f"Responda apenas JSON se for registro de gasto: {{\"valor\": 0.0, \"descricao\": \"...\", \"categoria\": \"...\"}}. Se for pergunta ou análise, responda: COMPLEXO. Texto: {texto_usuario}"
     messages = [{"role": "user", "content": prompt_triagem}]
     
-    # Lista de ELITE Free REAL de 2026 (Focada em DISPONIBILIDADE TOTAL)
-    modelos_elite_2026 = [
-        "meta-llama/llama-3.2-3b-instruct:free", # O modelo mais estável e disponível do OpenRouter
-        "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-        "openrouter/free" 
-    ]
-    
-    for model in modelos_elite_2026:
-        orig_model = config.OPENROUTER_MODEL_NAME
-        try:
-            logger.info(f"🔎 [OpenRouter] Tentando triagem com {model}...")
-            config.OPENROUTER_MODEL_NAME = model
-            res = await _openrouter_chat_completion_async(messages)
-            if res:
-                logger.info(f"📥 [OpenRouter] Resposta: '{res[:100]}'")
-                # Validação ultra-flexível: se tem valor e descrição, é um registro!
-                if "valor" in res.lower() and "descricao" in res.lower():
-                    logger.info(f"✅ [OpenRouter] Gasto extraído com sucesso.")
-                    # Se a IA mandou apenas o JSON interno, nós envolvemos no formato de tool call
-                    if "registrar_lancamento" not in res:
-                        # Limpa possíveis markdown de bloco de código
-                        res_limpo = res.replace("```json", "").replace("```", "").strip()
-                        res = f'{{"function": {{"name": "registrar_lancamento", "arguments": {res_limpo}}}}}'
-                    return res
-                elif "COMPLEXO" in res:
-                    logger.info(f"✅ [OpenRouter] Pergunta complexa detectada.")
-                    return "COMPLEXO"
-            logger.warning(f"⚠️ [OpenRouter] Modelo {model} não extraiu dados úteis.")
-        except Exception as e:
-            logger.warning(f"❌ [OpenRouter] Modelo {model} falhou: {str(e)[:50]}. Pulando...")
-            continue
-        finally:
-            config.OPENROUTER_MODEL_NAME = orig_model
-            
+    try:
+        res = await _openrouter_chat_completion_async(messages)
+        if res:
+            logger.info(f"📥 [OpenRouter] Resposta: '{res[:100]}'")
+            res_limpo = res.replace("```json", "").replace("```", "").strip()
+            if "valor" in res_limpo.lower() and "descricao" in res_limpo.lower():
+                return f'{{"function": {{"name": "registrar_lancamento", "arguments": {res_limpo}}}}}'
+            return "COMPLEXO"
+    except Exception as e:
+        logger.warning(f"⚠️ Triagem OpenRouter falhou: {e}")
     return None
 
 async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> dict | str | None:
     """
-    Orquestrador Inteligente de Provedores de IA com Backoff.
-    Ordem: Cerebras (Velocidade) -> Groq (Resiliência) -> Gemini (Fallback)
+    Orquestrador Inteligente.
+    Nova Ordem: OpenRouter Free -> Cerebras -> Groq -> Gemini
     """
     def _truncar_mensagens(msgs):
         new_msgs = [m.copy() for m in msgs]
         for m in new_msgs:
-            # Cerebras/Groq têm limites entre 6k-8k. Truncamos agressivamente se falhar.
             if m.get("role") == "system" and len(m.get("content", "")) > 5000:
                 m["content"] = m["content"][:5000] + "... [Contexto truncado]"
             if m.get("role") == "tool" and len(m.get("content", "")) > 8000:
                 m["content"] = m["content"][:8000] + "... [Dados truncados]"
-            if m.get("role") == "user" and len(m.get("content", "")) > 2000:
-                m["content"] = m["content"][:2000] + "... [Msg truncada]"
         return new_msgs
 
     providers = []
-    if config.GEMINI_API_KEY:
-        providers.append(("GEMINI", _gemini_chat_completion_async))
-    if config.CEREBRAS_API_KEY:
-        providers.append(("CEREBRAS", _cerebras_chat_completion_async))
-    if config.GROQ_API_KEY:
-        providers.append(("GROQ", _groq_chat_completion_async))
+    # OpenRouter agora é o ÚNICO provedor para evitar conflitos de cota
+    if config.OPENROUTER_API_KEY:
+        async def _call_or(msgs, t, tc):
+            return await _openrouter_chat_completion_async(msgs)
+        providers.append(("OPENROUTER", _call_or))
 
     last_error = None
     for attempt, (name, fn) in enumerate(providers):

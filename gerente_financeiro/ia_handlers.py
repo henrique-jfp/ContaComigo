@@ -2126,7 +2126,9 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                     try:
                         tool_calls = _extrair_tool_calls_do_texto(resultado_triagem)
                         if tool_calls:
+                            # Preenche o completion simulado para que o orquestrador siga para execução da tool
                             completion = {"choices": [{"message": {"tool_calls": tool_calls}}]}
+                            # IMPORTANTE: Definimos como resolvido
                     except Exception as e:
                         logger.warning(f"Falha ao parsear triagem: {e}")
                         tool_calls = []
@@ -2141,16 +2143,16 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
 
             consume_feature_quota(db, usuario_db, "ia_questions", amount=1)
 
-        texto_normalizado = texto_usuario.strip().lower()
+            texto_normalizado = texto_usuario.strip().lower()
 
-        # --- NOVO: INTERCEPTOR DE AÇÃO DIRETA (ZERO ATRITO) ---
-        # Só tentamos se ainda não tivermos tool_calls da triagem
-        if not tool_calls:
+            # --- NOVO: INTERCEPTOR DE AÇÃO DIRETA (ZERO ATRITO) ---
             acao_direta = _detectar_e_extrair_acao_direta(texto_usuario)
             if acao_direta:
                 fn_name, args = acao_direta
                 tool_calls = [{"type": "function", "function": {"name": fn_name, "arguments": json.dumps(args)}}]
                 logger.info(f"⚡ [ALFREDO] Interceptação direta: {fn_name}")
+                # Forçamos o completion para pular o Gemini
+                completion = {"choices": [{"message": {"tool_calls": tool_calls}}]}
 
         # Interceptações que são comandos funcionais ou fora do escopo da IA de análise direta
         if not tool_calls and _intencao_categorizar_sem_categoria(texto_normalizado):
@@ -2620,10 +2622,6 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
             messages_human = [{"role": "system", "content": prompt_humanizar}, {"role": "user", "content": texto_usuario}]
             completion_h = await _smart_ai_completion_async(messages_human)
             
-            if not completion_h:
-                from gerente_financeiro.ai_service import _gemini_chat_completion_async
-                completion_h = await _gemini_chat_completion_async(messages_human)
-
             if completion_h:
                 if isinstance(completion_h, str): final_text = completion_h
                 else: final_text = (((completion_h or {}).get("choices") or [{}])[0].get("message") or {}).get("content")
