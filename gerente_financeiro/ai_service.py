@@ -73,8 +73,8 @@ async def _gemini_chat_completion_async(messages: list[dict], tools: list[dict] 
     max_retries = 1
     for attempt in range(max_retries + 1):
         try:
-            # FORÇADO: gemini-1.5-flash para estabilidade total
-            model_name = "gemini-1.5-flash"
+            # FORÇADO: identificador correto para a SDK do Google
+            model_name = "models/gemini-1.5-flash"
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel(model_name)
             
@@ -235,9 +235,11 @@ RESPOSTA:"""
             logger.info(f"🔎 [OpenRouter] Tentando triagem com {model}...")
             config.OPENROUTER_MODEL_NAME = model
             res = await _openrouter_chat_completion_async(messages)
-            if res and ("registrar_lancamento" in res or "COMPLEXO" in res):
-                logger.info(f"✅ [OpenRouter] Modelo {model} respondeu com sucesso.")
-                return res
+            if res:
+                logger.info(f"📥 [OpenRouter] Resposta do modelo {model}: '{res[:100]}'")
+                if "registrar_lancamento" in res or "COMPLEXO" in res:
+                    logger.info(f"✅ [OpenRouter] Modelo {model} validado.")
+                    return res
             logger.warning(f"⚠️ [OpenRouter] Modelo {model} deu resposta inválida. Pulando...")
         except Exception as e:
             logger.warning(f"❌ [OpenRouter] Modelo {model} falhou: {str(e)[:50]}. Pulando...")
