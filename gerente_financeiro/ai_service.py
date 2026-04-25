@@ -151,6 +151,66 @@ async def _cerebras_chat_completion_async(messages: list[dict], tools: list[dict
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _call)
 
+async def _openrouter_chat_completion_async(messages: list[dict]) -> str | None:
+    """Acesso ao OpenRouter para modelos gratuitos e triagem."""
+    if not config.OPENROUTER_API_KEY:
+        return None
+
+    api_key = str(config.OPENROUTER_API_KEY).strip().strip("'\"").strip()
+    payload = {
+        "model": config.OPENROUTER_MODEL_NAME,
+        "messages": messages,
+        "temperature": 0.1,
+        "max_tokens": 500,
+    }
+    
+    def _call():
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://contacomigo.henriquedejesus.dev",
+                "X-Title": "ContaComigo Alfredo"
+            },
+            json=payload,
+            timeout=15
+        )
+        response.raise_for_status()
+        return response.json()
+
+    try:
+        loop = asyncio.get_running_loop()
+        resp = await loop.run_in_executor(None, _call)
+        return resp["choices"][0]["message"]["content"]
+    except Exception as e:
+        logger.error(f"❌ [OpenRouter] Falha: {e}")
+        return None
+
+async def _openrouter_triagem_rapida_async(texto_usuario: str) -> str | None:
+    """
+    Atua como o 'Porteiro' do Alfredo. 
+    Tenta resolver registros simples de gastos usando modelos gratuitos do OpenRouter.
+    Retorna JSON de ferramenta ou 'COMPLEXO'.
+    """
+    prompt_triagem = f"""Você é o classificador do Alfredo. Analise a frase do usuário.
+
+OBJETIVO:
+1. Se for um REGISTRO de gasto ou receita simples (ex: "almoço 35", "gasolina 100", "recebi 200"), extraia os dados e responda EXATAMENTE um JSON de ferramenta registrar_lancamento.
+2. Se for uma pergunta, dúvida, pedido de análise ou algo que exija olhar o histórico, responda APENAS a palavra: COMPLEXO
+
+REGRAS JSON:
+- descricao: o que foi comprado (Capitalize)
+- valor: numero (ex: 35.50)
+- categoria: Alimentação, Transporte, Lazer, Saúde ou Outros.
+- forma_pagamento: Pix, Crédito ou Nao_informado.
+
+FRASE: "{texto_usuario}"
+RESPOSTA:"""
+
+    messages = [{"role": "user", "content": prompt_triagem}]
+    return await _openrouter_chat_completion_async(messages)
+
 async def _smart_ai_completion_async(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None) -> dict | str | None:
     """
     Orquestrador Inteligente de Provedores de IA com Backoff.

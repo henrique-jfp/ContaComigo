@@ -2110,7 +2110,38 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         usuario_db, saldo, entradas, saidas = _usuario_e_saldo(db, update.effective_user)
         ensure_user_plan_state(db, usuario_db, commit=True)
 
-        gate_ia = plan_allows_feature(db, usuario_db, "ia_questions")
+        # --- NOVA CAMADA: TRIAGEM OPENROUTER (ROTEAMENTO ZEROCUSTO) ---
+        if texto_usuario and not update.message.voice:
+            from gerente_financeiro.ai_service import _openrouter_triagem_rapida_async
+            resultado_triagem = await _openrouter_triagem_rapida_async(texto_usuario)
+            
+            if resultado_triagem and "registrar_lancamento" in resultado_triagem:
+                logger.info("🛡️ [ALFREDO] Triagem OpenRouter resolveu registro simples.")
+                # Tenta extrair e tratar como uma tool call imediata
+                try:
+                    # Forçamos o formato esperado pelo orquestrador legado
+                    tool_calls = _extrair_tool_calls_do_texto(resultado_triagem)
+                    if tool_calls:
+                        # Pula a chamada principal e vai direto pro processamento de tool
+                        completion = {"choices": [{"message": {"tool_calls": tool_calls}}]}
+                        # Definimos tool_calls para o fluxo abaixo
+                    else:
+                        completion = None
+                        tool_calls = []
+                except Exception as e:
+                    logger.warning(f"Falha ao parsear triagem: {e}")
+                    completion = None
+                    tool_calls = []
+            else:
+                completion = None
+                tool_calls = []
+        else:
+            completion = None
+            tool_calls = []
+
+        # --- FLUXO NORMAL (Se a triagem não resolveu ou se for áudio/análise) ---
+        if not tool_calls:
+            gate_ia = plan_allows_feature(db, usuario_db, "ia_questions")
         if not gate_ia.allowed:
             text, keyboard = upgrade_prompt_for_feature("ia_questions")
             await _enviar_resposta_html_segura(update.message, text, reply_markup=keyboard)

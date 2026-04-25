@@ -46,25 +46,28 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL_NAME = os.getenv("GROQ_MODEL_NAME", "llama-3.1-8b-instant")
 
 CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
-CEREBRAS_MODEL_NAME = os.getenv("CEREBRAS_MODEL_NAME", "llama3.1-8b") # Revertido para estabilidade
+CEREBRAS_MODEL_NAME = os.getenv("CEREBRAS_MODEL_NAME", "llama-3.3-70b") # Atualizado para o novo modelo de ponta
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_MODEL_NAME = os.getenv("OPENROUTER_MODEL_NAME", "google/gemma-2-9b-it:free") # Triagem gratuita
 
 # GEMINI MODEL NAME com validação e fallback automático
-_model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash-lite")
+_model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
 # Lista de modelos válidos (atualizada em Abril 2026 - API)
-# ⚠️ IMPORTANTE: gemini-2.5-flash-lite é o melhor para extração e economia.
+# ⚠️ IMPORTANTE: gemini-1.5-flash é o mais resiliente e estável para análises pesadas.
 VALID_GEMINI_MODELS = [
+    "gemini-1.5-flash",            # Estável e excelente janela de contexto
+    "gemini-2.0-flash",            # Performance
     "gemini-2.5-flash-lite",       # ⭐ Melhor economia/velocidade (NOVO 2026)
     "gemini-2.5-pro",              # Inteligência máxima
-    "gemini-2.0-flash",            # Estável
-    "gemini-1.5-flash",            # Legado (Alta compatibilidade)
     "gemini-flash-latest",         # Alias para a versão Flash mais recente
 ]
 
 # Validar e corrigir modelo automaticamente
 if _model_env not in VALID_GEMINI_MODELS:
     logging.warning(f"⚠️ Modelo '{_model_env}' não é válido ou foi descontinuado!")
-    logging.warning(f"⚠️ Usando fallback: 'gemini-2.5-flash-lite'")
-    GEMINI_MODEL_NAME = "gemini-2.5-flash-lite"
+    logging.warning(f"⚠️ Usando fallback: 'gemini-1.5-flash'")
+    GEMINI_MODEL_NAME = "gemini-1.5-flash"
 else:
     GEMINI_MODEL_NAME = _model_env
     
