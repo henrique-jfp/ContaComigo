@@ -157,25 +157,32 @@ async def _openrouter_chat_completion_async(messages: list[dict]) -> str | None:
         return None
 
     api_key = str(config.OPENROUTER_API_KEY).strip().strip("'\"").strip()
+    # Forçamos o uso de um modelo gratuito altamente disponível se o config estiver no padrão antigo
+    model = config.OPENROUTER_MODEL_NAME or "meta-llama/llama-3.1-8b-instruct:free"
+    
     payload = {
-        "model": config.OPENROUTER_MODEL_NAME,
+        "model": model,
         "messages": messages,
         "temperature": 0.1,
         "max_tokens": 500,
     }
     
     def _call():
+        # URL sem espaços ou caracteres ocultos
+        target_url = "https://openrouter.ai/api/v1/chat/completions".strip()
         response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
+            target_url,
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
                 "HTTP-Referer": "https://contacomigo.henriquedejesus.dev",
-                "X-Title": "ContaComigo Alfredo"
+                "X-OpenRouter-Title": "ContaComigo Alfredo"
             },
             json=payload,
             timeout=15
         )
+        if response.status_code != 200:
+            logger.error(f"❌ [OpenRouter] Erro {response.status_code}: {response.text}")
         response.raise_for_status()
         return response.json()
 
