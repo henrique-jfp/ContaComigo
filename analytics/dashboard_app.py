@@ -1427,13 +1427,16 @@ def miniapp_modo_deus():
             minhas_contas_list = []
 
             # Otimização: Agrupar variações de saldo por conta em uma única query
+            # Filtramos pelos últimos 90 dias por segurança para não pesar o histórico
+            limit_date = datetime.now() - timedelta(days=90)
             variacoes = db.query(
                 Lancamento.id_conta,
                 func.sum(case((Lancamento.tipo.in_(['Entrada', 'Receita']), Lancamento.valor), else_=0)).label('ent'),
                 func.sum(case((Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida']), Lancamento.valor), else_=0)).label('sai')
             ).filter(
                 Lancamento.id_usuario == user_id,
-                Lancamento.id_conta != None
+                Lancamento.id_conta != None,
+                Lancamento.data_transacao >= limit_date
             ).group_by(Lancamento.id_conta).all()
             
             var_map = {v.id_conta: (float(v.ent or 0), float(v.sai or 0)) for v in variacoes}

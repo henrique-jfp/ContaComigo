@@ -49,8 +49,10 @@ tunnel: alfredo-server
     credentials-file: /etc/cloudflared/970ddca7-a0a3-4708-a15c-b56f07e792c4.json
    
     ingress:
-      - hostname: alfredo.seudominio.com
-        service: http://localhost:5000
+      - hostname: alfredo.henriquedejesus.dev
+        service: http://localhost:10000
+      - hostname: mcp.henriquedejesus.dev
+        service: http://localhost:10001
       - service: http_status:404
 
 

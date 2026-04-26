@@ -1,12 +1,15 @@
 {
   "mcpServers": {
     "supabase": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://postgres.lauwbfsdgdthzwwufrjy:SenhaForte12345@aws-1-us-east-2.pooler.supabase.com:5432/postgres"]
+      "url": "https://mcp.supabase.com/mcp",
+      "type": "http"
     },
     "telegram": {
       "command": "npx",
-      "args": ["-y", "@overpod/mcp-telegram"],
+      "args": [
+        "-y",
+        "@overpod/mcp-telegram"
+      ],
       "env": {
         "TELEGRAM_API_ID": "36775136",
         "TELEGRAM_API_HASH": "35bba3e8501aa6c323f78a05f95c8dbf"
@@ -29,18 +32,13 @@
     },
     "github": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "$GITHUB_PERSONAL_ACCESS_TOKEN"
       }
-    },
-    "pavillion": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-ssh",
-        "pvserver@192.168.1.23"
-      ]
     },
     "pierre-finance": {
       "command": "npx",
@@ -62,6 +60,12 @@
         "@modelcontextprotocol/server-filesystem",
         "C:\\Projetos Pessoais\\ContaComigo"
       ]
+    },
+    "alfredo-ops": {
+      "url": "https://mcp.henriquedejesus.dev/sse",
+      "headers": {
+        "Authorization": "Bearer AlfredoOps_Seguro_2026_!"
+      }
     }
   }
 }

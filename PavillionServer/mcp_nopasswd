@@ -1,0 +1,5 @@
+# Permite que o usuário pvserver execute comandos de gestão sem senha para o MCP
+pvserver ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart contacomigo
+pvserver ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart AdGuardHome
+pvserver ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart alfredo-mcp
+pvserver ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u *

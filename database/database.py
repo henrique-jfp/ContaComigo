@@ -42,8 +42,8 @@ try:
     pool_args = {
         'pool_pre_ping': True,    # Verifica se a conexão está viva antes de usar
         'pool_recycle': 300,      # Recicla conexões a cada 5 minutos (evita zumbis)
-        'pool_size': 3,           # Reduzido para economizar slots no Supabase
-        'max_overflow': 5,        # Margem pequena para picos
+        'pool_size': 10,          # Aumentado para suportar concorrência do MiniApp
+        'max_overflow': 20,       # Margem maior para picos de acesso
         'pool_timeout': 30,       
     }
 
