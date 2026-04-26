@@ -1429,8 +1429,8 @@ def miniapp_modo_deus():
             # Otimização: Agrupar variações de saldo por conta em uma única query
             variacoes = db.query(
                 Lancamento.id_conta,
-                func.sum(case((or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')), Lancamento.valor), else_=0)).label('ent'),
-                func.sum(case((or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%')), Lancamento.valor), else_=0)).label('sai')
+                func.sum(case((Lancamento.tipo.in_(['Entrada', 'Receita']), Lancamento.valor), else_=0)).label('ent'),
+                func.sum(case((Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida']), Lancamento.valor), else_=0)).label('sai')
             ).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.id_conta != None
@@ -1438,11 +1438,19 @@ def miniapp_modo_deus():
             
             var_map = {v.id_conta: (float(v.ent or 0), float(v.sai or 0)) for v in variacoes}
 
+            # Otimização: Buscar últimos snapshots de todas as contas em uma única query (Elimina N+1)
+            subq_snaps = db.query(
+                SaldoConta.id_conta,
+                func.max(SaldoConta.capturado_em).label('max_cap')
+            ).filter(SaldoConta.id_conta.in_([c.id for c in contas])).group_by(SaldoConta.id_conta).subquery()
+
+            snapshots = db.query(SaldoConta).join(
+                subq_snaps, and_(SaldoConta.id_conta == subq_snaps.c.id_conta, SaldoConta.capturado_em == subq_snaps.c.max_cap)
+            ).all()
+            snap_map = {s.id_conta: s for s in snapshots}
+
             for c in contas:
-                ultimo_snapshot = db.query(SaldoConta).filter(
-                    SaldoConta.id_conta == c.id
-                ).order_by(SaldoConta.capturado_em.desc()).first()
-                
+                ultimo_snapshot = snap_map.get(c.id)
                 base_balance = float(ultimo_snapshot.saldo or 0) if ultimo_snapshot else 0.0
                 
                 # Usar os valores pré-calculados ou 0
@@ -1745,14 +1753,29 @@ def miniapp_modo_deus():
         # --- SEÇÃO 7: ORÇAMENTOS ---
         try:
             orcs = db.query(OrcamentoCategoria).filter(OrcamentoCategoria.id_usuario == user_id).all()
+            
+            # Otimização: Buscar gastos de todas as categorias em uma única query (Elimina N+1)
+            cat_ids_orc = [o.id_categoria for o in orcs if o.id_categoria]
+            spent_stats = db.query(
+                Lancamento.id_categoria,
+                func.sum(Lancamento.valor).label('total')
+            ).filter(
+                Lancamento.id_usuario == user_id,
+                Lancamento.id_categoria.in_(cat_ids_orc),
+                Lancamento.tipo.in_(['Saída', 'Despesa']),
+                Lancamento.data_transacao >= datetime.combine(start_month, time.min)
+            ).group_by(Lancamento.id_categoria).all()
+            
+            spent_map = {int(s.id_categoria): abs(float(s.total or 0)) for s in spent_stats}
+
             lista_o = []
             for o in orcs:
-                gasto = db.query(func.sum(Lancamento.valor)).filter(Lancamento.id_usuario == user_id, Lancamento.id_categoria == o.id_categoria, Lancamento.tipo.in_(['Saída', 'Despesa']), Lancamento.data_transacao >= datetime.combine(start_month, time.min)).scalar() or 0
-                gasto = abs(float(gasto))
+                gasto = spent_map.get(int(o.id_categoria), 0.0) if o.id_categoria else 0.0
                 perc = (gasto / float(o.valor_limite) * 100) if o.valor_limite > 0 else 0
                 lista_o.append({"categoria": o.categoria.nome if o.categoria else "Outros", "percentual_usado": perc, "status": "estourado" if perc > 100 else ("atencao" if perc > 75 else "ok")})
             result['orcamentos'] = lista_o
         except Exception as e:
+            logger.error(f"Erro Modo Deus (orcamentos): {e}")
             result['orcamentos'] = []
 
         # --- SEÇÃO 8: FIIS ---
@@ -1855,6 +1878,17 @@ def miniapp_overview():
     if not session:
         return jsonify({"ok": False, "error": "unauthorized"}), 401
 
+    user_id_telegram = session["user_id"]
+    period = request.args.get("period", "monthly")
+    
+    # Cache manual de 60 segundos para performance instantânea
+    cache_key_val = f"overview_{user_id_telegram}_{period}"
+    now_ts = datetime.now().timestamp()
+    if cache_key_val in _cache:
+        cached_val, ts = _cache[cache_key_val]
+        if now_ts - ts < 60:
+            return jsonify(cached_val)
+
     db = next(get_db())
     try:
         usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
@@ -1875,24 +1909,9 @@ def miniapp_overview():
             start_date, end_date = _month_bounds()
         
         # --- OTIMIZAÇÃO MASSIVA: Agregações do Mês Atual (Gargalo de 11s resolvido) ---
-        # 1. Totais de Receita e Despesa (Usa tipos exatos para bater no índice idx_lancamentos_usuario_tipo_data)
-        totais_mes = db.query(
-            func.sum(case((Lancamento.tipo.in_(['Entrada', 'Receita']), func.abs(Lancamento.valor)), else_=0)).label('rec'),
-            func.sum(case((Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida']), func.abs(Lancamento.valor)), else_=0)).label('des')
-        ).filter(
-            Lancamento.id_usuario == usuario.id,
-            Lancamento.data_transacao >= datetime.combine(start_date, datetime.min.time()),
-            Lancamento.data_transacao <= datetime.combine(end_date, datetime.max.time()),
-            not_(Lancamento.tipo.ilike('transfer%'))
-        ).first()
-
-        receita = float(totais_mes.rec or 0)
-        despesa = float(totais_mes.des or 0)
-        balance = receita - despesa
-
-        # 2. Fluxo de Caixa Diário via SQL
+        # 1. Fluxo de Caixa Diário via SQL (Substitui totais_mes e garante agrupamento correto)
         cashflow_daily_stats = db.query(
-            extract('day', Lancamento.data_transacao).label('dia'),
+            func.date(Lancamento.data_transacao).label('dt'),
             func.sum(case((Lancamento.tipo.in_(['Entrada', 'Receita']), func.abs(Lancamento.valor)), else_=0)).label('ent'),
             func.sum(case((Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida']), func.abs(Lancamento.valor)), else_=0)).label('sai'),
             func.count(case((Lancamento.tipo.in_(['Entrada', 'Receita']), 1))).label('ent_c'),
@@ -1902,20 +1921,29 @@ def miniapp_overview():
             Lancamento.data_transacao >= datetime.combine(start_date, datetime.min.time()),
             Lancamento.data_transacao <= datetime.combine(end_date, datetime.max.time()),
             not_(Lancamento.tipo.ilike('transfer%'))
-        ).group_by('dia').all()
+        ).group_by('dt').all()
 
-        # Montar Mapa de Calor e Cashflow a partir das stats
+        # Montar totais, Mapa de Calor e Cashflow a partir das stats
+        receita = 0.0
+        despesa = 0.0
         days_in_period = (end_date - start_date).days + 1
         cashflow = []
         heatmap_daily = {}
         
-        # Mapa auxiliar para busca rápida
-        stats_map = {int(s.dia): s for s in cashflow_daily_stats}
-        
+        # Mapa auxiliar para busca rápida (converte data para string ou date conforme o dialeto do DB)
+        stats_map = {}
+        for s in cashflow_daily_stats:
+            d_key = s.dt.strftime("%Y-%m-%d") if hasattr(s.dt, "strftime") else str(s.dt)
+            stats_map[d_key] = s
+            receita += float(s.ent or 0)
+            despesa += float(s.sai or 0)
+
+        balance = receita - despesa
+
         for i in range(days_in_period):
             curr_d = start_date + timedelta(days=i)
-            dia_num = curr_d.day
-            s = stats_map.get(dia_num)
+            d_key = curr_d.strftime("%Y-%m-%d")
+            s = stats_map.get(d_key)
             
             label = curr_d.strftime("%d/%m")
             ent_v = float(s.ent or 0) if s else 0.0
@@ -1924,7 +1952,7 @@ def miniapp_overview():
             cashflow.append({"label": label, "entrada": round(ent_v, 2), "saida": round(sai_v, 2)})
             
             if s:
-                heatmap_daily[dia_num] = {
+                heatmap_daily[curr_d.day] = {
                     "incT": ent_v, "expT": sai_v, 
                     "incC": int(s.ent_c or 0), "expC": int(s.sai_c or 0)
                 }
@@ -1953,7 +1981,7 @@ def miniapp_overview():
             })
 
         # 4. Orçamento vs realizado (Otimizado: Query Única para o Insight usar)
-        orcamentos_reais = db.query(OrcamentoCategoria).filter(
+        orcamentos_reais = db.query(OrcamentoCategoria).options(joinedload(OrcamentoCategoria.categoria)).filter(
             OrcamentoCategoria.id_usuario == usuario.id,
             OrcamentoCategoria.ativo == True
         ).all()
@@ -2264,7 +2292,7 @@ def miniapp_overview():
         # Garantir que insight nunca seja None para o JSON
         final_insight = insight or "O Alfredo está analisando seus dados..."
 
-        return jsonify({
+        result = {
             "ok": True,
             "summary": {
                 "balance": round(float(balance), 2),
@@ -2293,7 +2321,10 @@ def miniapp_overview():
                 "cards": cards_summary or [],
                 "installments": installments_summary or [],
             }
-        })
+        }
+        
+        _cache[cache_key_val] = (result, now_ts)
+        return jsonify(result)
     finally:
         db.close()
 

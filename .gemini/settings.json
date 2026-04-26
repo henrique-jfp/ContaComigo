@@ -54,6 +54,14 @@
       "env": {
         "TOKEN": "sk-ueZlVRGjhNChMD7EyGq7ZoMPnQETLLWB"
       }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:\\Projetos Pessoais\\ContaComigo"
+      ]
     }
   }
 }

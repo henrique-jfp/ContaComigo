@@ -15,7 +15,7 @@ O sistema roda em um único processo (`launcher.py`), mas com separação estrit
 3.  **Estado e Sincronia:** Compartilham o banco PostgreSQL (SQLAlchemy). Sessões do MiniApp são stateless (assinadas via HMAC). ZERO sessões em memória do Flask.
 
 ## 3. 🛠️ PROTOCOLO DE USO DE MCPs (OBRIGATÓRIO)
-Você possui servidores MCP configurados (`Supabase`, `Render`, `Telegram`, `Browser`, `GitHub`). **É PROIBIDO adivinhar o estado do sistema se você pode consultá-lo.**
+Você possui servidores MCP configurados (`Supabase`, `Render`, `Telegram`, `Browser`, `GitHub`, `Playwright`, `filesystem`, `contenxt7`). **É PROIBIDO adivinhar o estado do sistema se você pode consultá-lo.**
 - **Banco de Dados:** Se a tarefa envolve esquema ou dados, USE O MCP DO SUPABASE proativamente para inspecionar tabelas antes de sugerir queries.
 - **Deploy/Logs:** Se houver erro de produção, USE O MCP DO RENDER para checar status e logs.
 - **Integração Web/Testes:** Se precisar validar o MiniApp ou o Dashboard, USE O MCP DO BROWSER (Playwright) em vez de apenas sugerir que o humano teste.
