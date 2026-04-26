@@ -1920,6 +1920,12 @@ def _resumo_categoria_gastos_por_lancamentos(lancamentos: list[Lancamento], igno
             continue
             
         nome = lanc.categoria.nome if getattr(lanc, "categoria", None) and lanc.categoria else "Sem categoria"
+        
+        # FILTRO DE CATEGORIAS DE MOVIMENTAÇÃO INTERNA
+        # Ignoramos Transferências e Cartão de Crédito do 'Top Gastos' para focar em consumo real
+        if nome.lower() in ["transferência", "transferências", "cartão de crédito", "pagamento de fatura"]:
+            continue
+
         categorias[nome] = categorias.get(nome, 0.0) + abs(float(lanc.valor or 0))
     return sorted(categorias.items(), key=lambda x: x[1], reverse=True)[:limite]
 
@@ -2260,6 +2266,13 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
         # --- BREAKDOWN CATEGORIAS (MÊS ATUAL) ---
         breakdown_atual = _resumo_categoria_gastos_por_lancamentos(lanc_mes, ignore_ids=ignore_ids, limite=5)
 
+        # --- MEMÓRIA HISTÓRICA (MÊS ANTERIOR) ---
+        # Mantemos os totais do mês passado para a IA ter uma âncora de realidade e não inventar números.
+        mes_anterior_inicio = (inicio_mes - timedelta(days=1)).replace(day=1)
+        mes_anterior_fim = inicio_mes - timedelta(microseconds=1)
+        lanc_anterior = db.query(Lancamento).filter(Lancamento.id_usuario == usuario_db.id, Lancamento.data_transacao >= mes_anterior_inicio, Lancamento.data_transacao <= mes_anterior_fim).all()
+        ent_anterior, sai_anterior = _sum_consistente(lanc_anterior)
+
         contexto_financeiro_str = json.dumps(
             {
                 "data_hoje": hoje.strftime("%Y-%m-%d"),
@@ -2267,6 +2280,11 @@ async def processar_mensagem_com_alfredo(update: Update, context: ContextTypes.D
                     "receitas": ent_mes,
                     "gastos": sai_mes,
                     "categorias": [{"c": c, "v": round(v, 2)} for c, v in breakdown_atual]
+                },
+                "mes_anterior": {
+                    "nome": mes_anterior_inicio.strftime("%B"),
+                    "receitas": ent_anterior,
+                    "gastos": sai_anterior
                 },
                 "saldo": saldo
             },
