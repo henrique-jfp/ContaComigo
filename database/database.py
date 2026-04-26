@@ -37,10 +37,6 @@ try:
     # A porta 5432 tem limite baixo de conexões. A 6543 aguenta centenas via Transaction Mode.
     if 'supabase.com' in db_url and ':5432/' in db_url:
         db_url = db_url.replace(':5432/', ':6543/')
-        if '?' in db_url:
-            db_url += '&pgbouncer=true'
-        else:
-            db_url += '?pgbouncer=true'
 
     # Configuração de Connection Pool OTIMIZADA para evitar "Max client connections reached"
     pool_args = {
