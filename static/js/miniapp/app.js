@@ -4294,6 +4294,13 @@ lucide.createIcons();
       }
 
       const mdComprometido = document.getElementById('mdComprometido');
+      if (mdComprometido) {
+          const val = (vg.comprometimento_faturas || 0) + (vg.comprometimento_agendamentos || 0);
+          mdComprometido.textContent = fmt.format(val);
+      }
+
+      // VAZAMENTOS
+      const vValEl = document.getElementById('mdVazamentosValor');
       if (vValEl) vValEl.textContent = fmt.format(vg.vazamentos_financeiros || 0);
 
       const rMes = vg.resultado_mes || 0;

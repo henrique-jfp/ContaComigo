@@ -1415,15 +1415,13 @@ def miniapp_livro_caixa_download():
         if not usuario:
             return jsonify({"ok": False, "error": "user_not_found"}), 404
 
-        # Busca todos os lançamentos syncados via Open Finance (ou todos se preferir)
-        # Ordenados por data decrescente
+        # Busca todos os lançamentos syncados
         lancamentos = db.query(Lancamento).options(
             joinedload(Lancamento.categoria),
             joinedload(Lancamento.subcategoria),
             joinedload(Lancamento.conta)
         ).filter(
-            Lancamento.id_usuario == usuario.id,
-            Lancamento.origem == 'open_finance'
+            Lancamento.id_usuario == usuario.id
         ).order_by(Lancamento.data_transacao.desc()).limit(1000).all()
 
         mes_ano_str = datetime.now().strftime('%m/%Y')
@@ -1789,11 +1787,14 @@ def miniapp_modo_deus():
             parcelas = db.query(ParcelamentoItem).filter(ParcelamentoItem.id_usuario == user_id).all()
             ativos = []; vencidos = []
             termos_juros = ['juros', 'encargo', 'iof', 'multa', 'tarifa']
+            juros_parcelas_mes = 0.0
             
             for p in parcelas:
                 desc_lower = (p.descricao or "").lower()
-                # Filtrar se for apenas juros/encargo (não é um consumo parcelado real)
+                # Se for juros/encargo, somar aos vazamentos do mês se estiver ativo
                 if any(t in desc_lower for t in termos_juros):
+                    if p.parcela_atual < p.total_parcelas:
+                        juros_parcelas_mes += float(p.valor_parcela)
                     continue
                     
                 item = {
@@ -1809,16 +1810,53 @@ def miniapp_modo_deus():
                 "ativos": ativos, "vencidos": vencidos,
                 "total_mensal_parcelas": total_mensal_parcelas
             }
-            # Adicionar parcelas ao comprometimento na visão geral
+            # Adicionar parcelas ao comprometimento e juros aos vazamentos
             if 'visao_geral' in result:
                 result['visao_geral']['comprometimento_faturas'] += total_mensal_parcelas
+                result['visao_geral']['vazamentos_financeiros'] += juros_parcelas_mes
                 
         except Exception as e:
             logger.error(f"Erro Modo Deus (parcelamentos): {e}", exc_info=True)
             result['parcelamentos'] = {"ativos": [], "vencidos": [], "total_mensal_parcelas": 0}
 
         # --- SEÇÃO 5: CARTÕES E VENCIMENTOS ---
-        # ... (mantém lógica de faturas e agendamentos) ...
+        try:
+            v_limit = today + timedelta(days=30)
+            faturas = db.query(FaturaCartao).join(Conta).filter(
+                FaturaCartao.id_usuario == user_id,
+                or_(FaturaCartao.status != 'paga', FaturaCartao.data_vencimento >= (today - timedelta(days=1)))
+            ).order_by(FaturaCartao.data_vencimento.asc()).all()
+            
+            lista_c = []
+            seen_accs = set()
+            for f in faturas:
+                if f.id_conta in seen_accs: continue
+                seen_accs.add(f.id_conta)
+                lista_c.append({
+                    "nome_conta": f.conta.nome, "valor_total": float(f.valor_total),
+                    "data_vencimento": f.data_vencimento.isoformat() if f.data_vencimento else None,
+                    "status": f.status, "limite_cartao": float(f.conta.limite_cartao or 0)
+                })
+            result['cartoes'] = lista_c
+
+            # Próximos Vencimentos: Inclui faturas fechadas E faturas em aberto que tenham data de vencimento próxima
+            lista_v = []
+            for f in faturas:
+                if f.data_vencimento and f.data_vencimento <= v_limit and f.status != 'paga':
+                    lista_v.append({
+                        "descricao": f"Fatura {f.conta.nome} ({f.status.replace('_', ' ')})", 
+                        "valor": float(f.valor_total), 
+                        "data": f.data_vencimento.isoformat(), 
+                        "cor": "#82293e"
+                    })
+
+            agend_v = db.query(Agendamento).filter(Agendamento.id_usuario == user_id, Agendamento.ativo == True, Agendamento.proxima_data_execucao <= v_limit).all()
+            lista_v += [{"descricao": a.descricao, "valor": float(a.valor), "data": a.proxima_data_execucao.isoformat(), "cor": "#378ADD"} for a in agend_v]
+            result['proximos_vencimentos'] = sorted(lista_v, key=lambda x: x['data'])
+            
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (cartoes/vencimentos): {e}", exc_info=True)
+            result['cartoes'] = []; result['proximos_vencimentos'] = []
 
         # --- SEÇÃO 8: SCORE E ALERTAS (Análise Comportamental e Rigor) ---
         try:
