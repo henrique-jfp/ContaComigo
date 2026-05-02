@@ -6,6 +6,7 @@ Interface web limpa para visualizar métricas e estatísticas
 
 import os
 import sys
+import io
 import logging
 import json
 import hmac
@@ -1445,6 +1446,65 @@ def miniapp_livro_caixa_download():
         db.close()
 
 
+@app.route('/api/miniapp/livro_caixa/send')
+def miniapp_livro_caixa_send():
+    """Gera o PDF do Livro Caixa e envia diretamente no chat do Telegram."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    periodo = request.args.get("periodo", "mes").strip().lower() # 'mes' ou 'ano'
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        today = datetime.now(timezone.utc).date()
+        if periodo == "ano":
+            start_date = today.replace(month=1, day=1)
+            period_label = f"Ano {today.year}"
+        else:
+            start_date = today.replace(day=1)
+            period_label = _month_label_pt(start_date)
+
+        # Busca lançamentos do período
+        lancamentos = db.query(Lancamento).options(
+            joinedload(Lancamento.categoria),
+            joinedload(Lancamento.subcategoria),
+            joinedload(Lancamento.conta)
+        ).filter(
+            Lancamento.id_usuario == usuario.id,
+            Lancamento.data_transacao >= datetime.combine(start_date, time.min),
+            Lancamento.origem == 'open_finance'
+        ).order_by(Lancamento.data_transacao.desc()).all()
+
+        if not lancamentos:
+            return jsonify({"ok": False, "error": "no_data_found"}), 400
+
+        pdf_bytes = generate_livro_caixa_pdf(
+            user_name=usuario.nome_completo or "Usuário",
+            lancamentos=lancamentos,
+            mes_ano_str=period_label
+        )
+
+        filename = f"Livro_Caixa_{periodo}_{usuario.id}_{datetime.now().strftime('%Y%m%d')}.pdf"
+        caption = f"📄 Aqui está o seu <b>Livro Caixa ({period_label})</b> gerado via MiniApp."
+        
+        success = _send_telegram_document(usuario.telegram_id, pdf_bytes, filename, caption)
+        
+        if success:
+            return jsonify({"ok": True})
+        else:
+            return jsonify({"ok": False, "error": "telegram_send_failed"}), 500
+
+    except Exception as e:
+        logger.error(f"Erro ao enviar livro caixa via telegram: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
 @app.route('/api/miniapp/history')
 def miniapp_history():
     """Lista os ultimos lancamentos para o miniapp"""
@@ -1513,12 +1573,12 @@ def miniapp_modo_deus():
 
     user_id_telegram = session["user_id"]
     
-    # Cache manual de 60 segundos para maior precisão em tempo real
+    # Cache manual de 30 segundos para maior precisão em tempo real
     cache_key_val = f"modo_deus_{user_id_telegram}"
     now_ts = datetime.now().timestamp()
     if cache_key_val in _cache:
         cached_val, ts = _cache[cache_key_val]
-        if now_ts - ts < 60:
+        if now_ts - ts < 30:
             return jsonify(cached_val)
 
     db = next(get_db())
@@ -1537,17 +1597,8 @@ def miniapp_modo_deus():
         
         # --- SEÇÃO 1: VISÃO GERAL (Cálculo Dinâmico e Tempo Real) ---
         try:
-            # 1. Busca todas as contas do usuário
             contas = db.query(Conta).filter(Conta.id_usuario == user_id).all()
-            total_patrimonio_contas = 0.0
-            saldo_disponivel = 0.0
-            divida_cartoes = 0.0
             
-            min_date_aware = datetime(1970, 1, 1, tzinfo=timezone.utc)
-            minhas_contas_list = []
-
-            # Otimização: Agrupar variações de saldo por conta em uma única query
-            # Filtramos pelos últimos 90 dias por segurança para não pesar o histórico
             limit_date = datetime.now() - timedelta(days=90)
             variacoes = db.query(
                 Lancamento.id_conta,
@@ -1561,7 +1612,6 @@ def miniapp_modo_deus():
             
             var_map = {v.id_conta: (float(v.ent or 0), float(v.sai or 0)) for v in variacoes}
 
-            # Otimização: Buscar últimos snapshots de todas as contas em uma única query (Elimina N+1)
             subq_snaps = db.query(
                 SaldoConta.id_conta,
                 func.max(SaldoConta.capturado_em).label('max_cap')
@@ -1572,37 +1622,70 @@ def miniapp_modo_deus():
             ).all()
             snap_map = {s.id_conta: s for s in snapshots}
 
+            minhas_contas_list = []
             saldo_bancario_puro = 0.0
             for c in contas:
                 ultimo_snapshot = snap_map.get(c.id)
                 base_balance = float(ultimo_snapshot.saldo or 0) if ultimo_snapshot else 0.0
-                
-                # Usar os valores pré-calculados ou 0
                 ent, sai = var_map.get(c.id, (0.0, 0.0))
                 current_acc_balance = base_balance + ent - abs(sai)
                 
-                # Adiciona à lista de contas individuais para a UI (excluindo a interna)
                 if c.nome != "ContaComigo Digital":
                     minhas_contas_list.append({
-                        "id": c.id,
-                        "nome": c.nome,
-                        "tipo": c.tipo,
+                        "id": c.id, "nome": c.nome, "tipo": c.tipo,
                         "saldo": current_acc_balance,
                         "saldo_disponivel": float(ultimo_snapshot.saldo_disponivel or 0) if ultimo_snapshot else 0.0,
                         "limite": float(c.limite_cartao or 0) if c.tipo == "Cartão de Crédito" else None
                     })
 
-                if c.tipo != "Cartão de Crédito":
-                    if c.tipo in ["Conta Corrente", "Carteira Digital", "Conta Poupança"]:
-                        saldo_bancario_puro += current_acc_balance
+                if c.tipo != "Cartão de Crédito" and c.tipo in ["Conta Corrente", "Carteira Digital", "Conta Poupança"]:
+                    saldo_bancario_puro += current_acc_balance
 
-            # 2. Busca Faturas em Aberto/Atrasadas (Comprometimento de Cartão)
+            # --- CÁLCULO DE FLUXO ANUAL E MENSAL (LIVRO CAIXA REAL) ---
+            start_year = today.replace(month=1, day=1)
+            lancamentos_reais = db.query(Lancamento).options(
+                joinedload(Lancamento.categoria),
+                joinedload(Lancamento.subcategoria)
+            ).filter(
+                Lancamento.id_usuario == user_id,
+                Lancamento.data_transacao >= datetime.combine(start_year, time.min),
+                not_(Lancamento.tipo.ilike('transfer%')),
+                not_(func.lower(Lancamento.descricao).like('%fatura%'))
+            ).all()
+
+            entradas_ano = 0.0; saidas_ano = 0.0
+            entradas_mes = 0.0; saidas_mes = 0.0
+            vazamentos_valor = 0.0
+            lancamentos_saida_mes = []
+
+            for l in lancamentos_reais:
+                if l.id_subcategoria == 584: continue
+                if l.subcategoria and "transfer" in l.subcategoria.nome.lower(): continue
+                
+                val = float(l.valor or 0)
+                is_cur_month = l.data_transacao >= datetime.combine(start_month, time.min)
+
+                if val > 0:
+                    entradas_ano += val
+                    if is_cur_month: entradas_mes += val
+                else:
+                    saidas_ano += abs(val)
+                    if is_cur_month:
+                        saidas_mes += abs(val)
+                        lancamentos_saida_mes.append(l)
+                        if any(term in (l.descricao or "").lower() for term in ['juros', 'multa', 'encargo', 'iof', 'tarifa', 'anuidade', 'cesta serv']):
+                            vazamentos_valor += abs(val)
+
+            patrimonio_anual = entradas_ano - saidas_ano
+            resultado_mes = entradas_mes - saidas_mes
+            dias_restantes = (end_month - today).days + 1
+            limite_diario = (resultado_mes / dias_restantes) if (dias_restantes > 0 and resultado_mes > 0) else 0
+            
             faturas_pendentes_valor = db.query(func.sum(FaturaCartao.valor_total)).filter(
                 FaturaCartao.id_usuario == user_id,
                 FaturaCartao.status != 'paga'
             ).scalar() or 0.0
 
-            # 3. Busca Lembretes/Agendamentos do mês (Comprometimento de Boletos)
             agendamentos_mes_valor = db.query(func.sum(Agendamento.valor)).filter(
                 Agendamento.id_usuario == user_id,
                 Agendamento.ativo == True,
@@ -1610,76 +1693,16 @@ def miniapp_modo_deus():
                 Agendamento.proxima_data_execucao <= end_month
             ).scalar() or 0.0
 
-            # CÁLCULO MESTRE: Saldo Disponível Real (O que sobra depois de pagar tudo do mês)
-            saldo_disponivel_real = float(saldo_bancario_puro) - float(faturas_pendentes_valor) - float(agendamentos_mes_valor)
-
-            # --- VAZAMENTOS FINANCEIROS (Tarifas, Juros, IOF) ---
-            vazamentos_valor = abs(float(db.query(func.sum(Lancamento.valor)).filter(
-                Lancamento.id_usuario == user_id,
-                _expense_type_condition(),
-                Lancamento.data_transacao >= datetime.combine(start_month, time.min),
-                func.lower(Lancamento.descricao).op('~')('juros|multa|encargo|iof|tarifa|anuidade|cesta serv|manutencao conta')
-            ).scalar() or 0))
-
-            # --- LÓGICA DE PATRIMÔNIO HISTÓRICO (Lucro/Prejuízo Total) ---
-            # Filtro para ignorar APENAS Faturas (ID Subcat 584) nos totais de Receita/Despesa.
-            total_receitas_hist = db.query(func.sum(Lancamento.valor)).filter(
-                Lancamento.id_usuario == user_id,
-                _income_type_condition(),
-                Lancamento.id_subcategoria != 584
-            ).scalar() or 0
-            
-            total_despesas_hist = db.query(func.sum(Lancamento.valor)).filter(
-                Lancamento.id_usuario == user_id,
-                _expense_type_condition(),
-                Lancamento.id_subcategoria != 584
-            ).scalar() or 0
-            
-            patrimonio_liquido = float(total_receitas_hist) - abs(float(total_despesas_hist))
-            
-            # Fluxo de Caixa Mensal (Cálculo Granular para evitar duplicidade)
-            lancamentos_mes = db.query(Lancamento).options(
-                joinedload(Lancamento.categoria),
-                joinedload(Lancamento.subcategoria)
-            ).filter(
-                Lancamento.id_usuario == user_id,
-                Lancamento.data_transacao >= datetime.combine(start_month, time.min),
-                Lancamento.data_transacao <= datetime.combine(end_month, time.max),
-                Lancamento.is_transferencia_interna == False
-            ).all()
-
-            entradas_mes = 0.0
-            saidas_mes = 0.0
-            lancamentos_saida_mes = []
-
-            for l in lancamentos_mes:
-                val = float(l.valor or 0)
-                if val > 0:
-                    entradas_mes += val
-                else:
-                    saidas_mes += abs(val)
-                    lancamentos_saida_mes.append(l)
-            
-            resultado_mes = float(entradas_mes) - abs(float(saidas_mes))
-            
-            # Limite Diário Seguro (Baseado estritamente no Lucro Mensal)
-            dias_restantes = (end_month - today).days + 1
-            if dias_restantes > 0 and resultado_mes > 0:
-                # O usuário só pode gastar o que sobrou de lucro no mês
-                limite_diario = resultado_mes / dias_restantes
-            else:
-                limite_diario = 0
-            
             result['visao_geral'] = {
-                "patrimonio_liquido": patrimonio_liquido,
-                "saldo_disponivel_real": saldo_disponivel_real,
-                "saldo_bancario_puro": float(saldo_bancario_puro),
+                "patrimonio_liquido": patrimonio_anual,
+                "saldo_disponivel_real": patrimonio_anual, # Mapeado para Patrimônio Anual
+                "saldo_bancario_puro": resultado_mes,    # Mapeado para Resultado do Mês
                 "comprometimento_faturas": float(faturas_pendentes_valor),
                 "comprometimento_agendamentos": float(agendamentos_mes_valor),
                 "vazamentos_financeiros": vazamentos_valor,
                 "resultado_mes": resultado_mes,
-                "entradas_mes": float(entradas_mes),
-                "saidas_mes": abs(float(saidas_mes)),
+                "entradas_mes": entradas_mes,
+                "saidas_mes": saidas_mes,
                 "dias_restantes_mes": dias_restantes,
                 "limite_diario_seguro": limite_diario,
                 "minhas_contas": minhas_contas_list
@@ -1690,33 +1713,13 @@ def miniapp_modo_deus():
 
         # --- SEÇÃO 2: TOP CATEGORIAS ---
         try:
-            # Buscar nomes de contas sincronizadas para filtro inteligente
-            contas_sync_obj = db.query(Conta).filter(Conta.id_usuario == user_id, Conta.external_id != None).all()
-            contas_cartao_sync = [c.nome.lower() for c in contas_sync_obj]
-
-            # Usamos a soma calculada acima para manter a consistência
             total_gastos_real = saidas_mes 
-
-            # Para o gráfico, agrupamos e aplicamos o mesmo filtro inteligente
             cat_totals = {}
             for lanc in lancamentos_saida_mes:
-                cat_nome_display = (lanc.categoria.nome if lanc.categoria else "Outros")
-                cat_nome_lower = cat_nome_display.lower()
-                sub_nome = (lanc.subcategoria.nome if lanc.subcategoria else "").lower()
-                desc_lower = (lanc.descricao or "").lower()
-                contra_lower = (lanc.nome_contraparte or "").lower()
-
-                # Aplicar filtro de duplicidade (Faturas Sync e Transf Interna)
-                if "fatura" in sub_nome or cat_nome_lower == "cartão de crédito":
-                    if any(nome_card in desc_lower or nome_card in contra_lower for nome_card in contas_cartao_sync):
-                        continue
-                if sub_nome == "transferência interna":
-                    continue
-                
-                cat_totals[cat_nome_display] = cat_totals.get(cat_nome_display, 0.0) + abs(float(lanc.valor))
+                cat_nome = (lanc.categoria.nome if lanc.categoria else "Outros")
+                cat_totals[cat_nome] = cat_totals.get(cat_nome, 0.0) + abs(float(lanc.valor))
 
             top_cats_data = sorted(cat_totals.items(), key=lambda x: x[1], reverse=True)[:6]
-            
             top_categorias_list = []
             colors = ["#D85A30","#378ADD","#7F77DD","#888780","#1D9E75","#BA7517"]
             total_mapeado = 0
@@ -1724,45 +1727,25 @@ def miniapp_modo_deus():
                 v_cat = abs(float(total_cat))
                 if v_cat < 0.01: continue
                 total_mapeado += v_cat
-                
-                # Buscar subcategorias para este gráfico também com filtro
                 sub_totals = {}
                 for lanc in lancamentos_saida_mes:
                     if lanc.categoria and lanc.categoria.nome == cat_name:
                         sub_n = (lanc.subcategoria.nome if lanc.subcategoria else "Geral")
-                        sub_n_lower = sub_n.lower()
-                        d_l = (lanc.descricao or "").lower()
-                        c_l = (lanc.nome_contraparte or "").lower()
-                        
-                        # Filtro nas subs também
-                        if "fatura" in sub_n_lower or cat_name.lower() == "cartão de crédito":
-                            if any(nc in d_l or nc in c_l for nc in contas_cartao_sync):
-                                continue
-                        if sub_n_lower == "transferência interna":
-                            continue
-                            
                         sub_totals[sub_n] = sub_totals.get(sub_n, 0.0) + abs(float(lanc.valor))
                 
-                top_sub_list = []
-                for sn, sv in sorted(sub_totals.items(), key=lambda x: x[1], reverse=True):
-                    top_sub_list.append({"nome": sn, "total": sv})
-
                 top_categorias_list.append({
-                    "nome": cat_name,
-                    "total": v_cat,
+                    "nome": cat_name, "total": v_cat,
                     "percentual_do_total_gastos": (v_cat / total_gastos_real * 100) if total_gastos_real > 0 else 0,
                     "cor_hex": colors[i % len(colors)],
-                    "subcategorias": top_sub_list
+                    "subcategorias": [{"nome": sn, "total": sv} for sn, sv in sorted(sub_totals.items(), key=lambda x: x[1], reverse=True)]
                 })
             
             restante = total_gastos_real - total_mapeado
             if restante > 0.01:
                 top_categorias_list.append({
-                    "nome": "Outros",
-                    "total": restante,
+                    "nome": "Outros", "total": restante,
                     "percentual_do_total_gastos": (restante / total_gastos_real * 100) if total_gastos_real > 0 else 0,
-                    "cor_hex": "#94a3b8",
-                    "subcategorias": [{"nome": "Diversos", "total": restante}]
+                    "cor_hex": "#94a3b8", "subcategorias": [{"nome": "Diversos", "total": restante}]
                 })
             result['top_categorias'] = top_categorias_list
         except Exception as e:
@@ -1771,47 +1754,32 @@ def miniapp_modo_deus():
 
         # --- SEÇÃO 3: ASSINATURAS ---
         try:
-            servicos_assinatura = [
-                'netflix', 'spotify', 'amazon', 'disney', 'hbo', 'globoplay', 'youtube',
-                'deezer', 'apple', 'crunchyroll', 'paramount', 'claro', 'vivo', 'tim',
-                'oi', 'net', 'sky', 'starlink', 'gympass', 'totalpass', 'wellhub',
-                'chatgpt', 'openai', 'google one', 'icloud', 'dropbox', 'microsoft 365',
-                'adobe', 'prime video', 'amazon prime', 'youtube premium', 'academia', 'smartfit', 'bluefit'
-            ]
-            termos_recorrentes = ['assinatura', 'subscription', 'plano mensal', 'mensalidade', 'recorrente']
-            termos_excluir = ['juros', 'multa', 'encargo', 'iof', 'rotativo', 'pix enviado', 'pix recebido', 'bar ', 'lanchonete', 'restaurante', 'uber', '99app', '99food', 'ifood', 'rappi', 'ecovias', 'ponte', 'seguro cartão', 'seguro cartao']
-            
+            servicos_assinatura = ['netflix', 'spotify', 'amazon', 'disney', 'hbo', 'globoplay', 'youtube', 'deezer', 'apple', 'claro', 'vivo', 'tim', 'sky', 'chatgpt', 'openai', 'google one', 'icloud', 'smartfit']
+            termos_recorrentes = ['assinatura', 'subscription', 'plano mensal', 'mensalidade']
             regex_servicos = '|'.join(servicos_assinatura)
             regex_recorrentes = '|'.join(termos_recorrentes)
-            regex_excluir = '|'.join(termos_excluir)
-            
-            start_assinaturas = datetime.combine(today - timedelta(days=90), time.min)
-            cat_ass_ids = [r[0] for r in db.query(Categoria.id).filter(or_(func.lower(Categoria.nome).like('%assinatura%'), func.lower(Categoria.nome).like('%serviços e assinaturas%'))).all()]
             
             lanc_ass = db.query(Lancamento).filter(
                 Lancamento.id_usuario == user_id, _expense_type_condition(),
-                Lancamento.data_transacao >= start_assinaturas,
-                or_(Lancamento.id_categoria.in_(cat_ass_ids), func.lower(Lancamento.descricao).op('~')(regex_servicos), func.lower(Lancamento.descricao).op('~')(regex_recorrentes)),
-                func.lower(Lancamento.descricao).op('!~')(regex_excluir)
+                Lancamento.data_transacao >= (today - timedelta(days=90)),
+                or_(func.lower(Lancamento.descricao).op('~')(regex_servicos), func.lower(Lancamento.descricao).op('~')(regex_recorrentes))
             ).all()
 
-            agend_ass = db.query(Agendamento).filter(Agendamento.id_usuario == user_id, Agendamento.ativo == True, Agendamento.frequencia == 'mensal', func.lower(Agendamento.descricao).op('!~')(regex_excluir)).all()            
+            agend_ass = db.query(Agendamento).filter(Agendamento.id_usuario == user_id, Agendamento.ativo == True, Agendamento.frequencia == 'mensal').all()            
             
-            from pierre_finance.categorizador import limpar_descricao
             lista_ass = []
             seen = set()
             for l in lanc_ass:
-                nome_base = limpar_descricao(l.descricao or "").split()[0].lower()
-                if nome_base and nome_base not in seen:
-                    lista_ass.append({"descricao": l.descricao, "valor": abs(float(l.valor)), "proxima_data": None})
-                    seen.add(nome_base)
+                desc = (l.descricao or "").split()[0].lower()
+                if desc and desc not in seen:
+                    lista_ass.append({"descricao": l.descricao, "valor": abs(float(l.valor))})
+                    seen.add(desc)
             for a in agend_ass:
-                nome_base = limpar_descricao(a.descricao or "").split()[0].lower()
-                if nome_base and nome_base not in seen:
-                    lista_ass.append({"descricao": a.descricao, "valor": float(a.valor), "proxima_data": a.proxima_data_execucao.isoformat() if a.proxima_data_execucao else None})
-                    seen.add(nome_base)
+                desc = (a.descricao or "").split()[0].lower()
+                if desc and desc not in seen:
+                    lista_ass.append({"descricao": a.descricao, "valor": float(a.valor)})
+                    seen.add(desc)
             
-            lista_ass.sort(key=lambda x: x['valor'], reverse=True)
             result['assinaturas'] = {"lista": lista_ass, "total_mensal": sum(x['valor'] for x in lista_ass)}
         except Exception as e:
             logger.error(f"Erro Modo Deus (assinaturas): {e}", exc_info=True)
@@ -1819,221 +1787,83 @@ def miniapp_modo_deus():
 
         # --- SEÇÃO 4: PARCELAMENTOS ---
         try:
-            parcelas = db.query(ParcelamentoItem).filter(
-                ParcelamentoItem.id_usuario == user_id,
-                or_(ParcelamentoItem.data_proxima_parcela.is_(None), ParcelamentoItem.data_proxima_parcela >= (today - timedelta(days=5)))
-            ).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(30).all()
-            
-            lista_p_ativos = []
-            lista_p_vencidos = []
-            
+            parcelas = db.query(ParcelamentoItem).filter(ParcelamentoItem.id_usuario == user_id).all()
+            ativos = []; vencidos = []
             for p in parcelas:
-                is_active = p.parcela_atual < p.total_parcelas
                 item = {
-                    "descricao": p.descricao,
-                    "valor_parcela": float(p.valor_parcela),
-                    "parcela_atual": p.parcela_atual,
-                    "total_parcelas": p.total_parcelas,
-                    "data_proxima_parcela": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None,
-                    "percentual_concluido": (p.parcela_atual / p.total_parcelas * 100) if p.total_parcelas > 0 else 0
+                    "descricao": p.descricao, "valor_parcela": float(p.valor_parcela),
+                    "parcela_atual": p.parcela_atual, "total_parcelas": p.total_parcelas,
+                    "data_proxima_parcela": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None
                 }
-                if is_active:
-                    lista_p_ativos.append(item)
-                else:
-                    lista_p_vencidos.append(item)
+                if p.parcela_atual < p.total_parcelas: ativos.append(item)
+                else: vencidos.append(item)
                     
             result['parcelamentos'] = {
-                "ativos": lista_p_ativos,
-                "vencidos": lista_p_vencidos,
-                "total_mensal_parcelas": sum(float(p.valor_parcela) for p in parcelas if p.parcela_atual < p.total_parcelas)
+                "ativos": ativos, "vencidos": vencidos,
+                "total_mensal_parcelas": sum(x['valor_parcela'] for x in ativos)
             }
         except Exception as e:
             logger.error(f"Erro Modo Deus (parcelamentos): {e}", exc_info=True)
             result['parcelamentos'] = {"ativos": [], "vencidos": [], "total_mensal_parcelas": 0}
 
-        # --- SEÇÃO 5: CARTÕES ---
+        # --- SEÇÃO 5: CARTÕES E VENCIMENTOS ---
         try:
-            v_limit_cards = today + timedelta(days=45)
+            v_limit = today + timedelta(days=30)
             faturas = db.query(FaturaCartao).join(Conta).filter(
                 FaturaCartao.id_usuario == user_id,
-                or_(FaturaCartao.status.in_(['em_aberto', 'aberta', 'aberto', 'PENDING']), and_(FaturaCartao.data_vencimento >= (today - timedelta(days=2)), FaturaCartao.data_vencimento <= v_limit_cards))
+                or_(FaturaCartao.status != 'paga', FaturaCartao.data_vencimento >= (today - timedelta(days=1)))
             ).order_by(FaturaCartao.data_vencimento.asc()).all()
             
-            colors_c = ["#82293e","#378ADD","#1D9E75","#D85A30"]
             lista_c = []
-            seen_accounts = set()
-            for i, f in enumerate(faturas):
-                if f.id_conta in seen_accounts: continue
-                seen_accounts.add(f.id_conta)
-                limite = float(f.conta.limite_cartao or 0)
+            seen_accs = set()
+            for f in faturas:
+                if f.id_conta in seen_accs: continue
+                seen_accs.add(f.id_conta)
                 lista_c.append({
                     "nome_conta": f.conta.nome, "valor_total": float(f.valor_total),
                     "data_vencimento": f.data_vencimento.isoformat() if f.data_vencimento else None,
-                    "status": f.status, "limite_cartao": limite, "cor_hex": colors_c[i % len(colors_c)],
-                    "dias_para_vencer": (f.data_vencimento - today).days if f.data_vencimento else None
+                    "status": f.status, "limite_cartao": float(f.conta.limite_cartao or 0)
                 })
             result['cartoes'] = lista_c
 
-            # --- NOVO: HISTÓRICO DE FATURAS PAGAS ---
-            try:
-                faturas_pagas = db.query(FaturaCartao).options(joinedload(FaturaCartao.conta)).filter(
-                    FaturaCartao.id_usuario == user_id,
-                    FaturaCartao.status == 'paga'
-                ).order_by(FaturaCartao.data_vencimento.desc()).limit(6).all()
-                
-                lista_h = []
-                for f in faturas_pagas:
-                    lista_h.append({
-                        "nome_conta": f.conta.nome,
-                        "valor_total": float(f.valor_total),
-                        "data_vencimento": f.data_vencimento.isoformat() if f.data_vencimento else None,
-                        "status": "paga"
-                    })
-                result['faturas_historico'] = lista_h
-            except Exception as e:
-                logger.error(f"Erro ao buscar histórico de faturas: {e}")
-                result['faturas_historico'] = []
-
-        except Exception as e:
-            logger.error(f"Erro Modo Deus (cartoes): {e}", exc_info=True)
-            result['cartoes'] = []
-            result['faturas_historico'] = []
-
-        # --- SEÇÃO 6: METAS ---
-        try:
-            metas = db.query(Objetivo).filter(Objetivo.id_usuario == user_id, Objetivo.valor_atual < Objetivo.valor_meta).all()
-            result['metas'] = [{
-                "descricao": m.descricao, "valor_meta": float(m.valor_meta), "valor_atual": float(m.valor_atual or 0),
-                "percentual": (float(m.valor_atual or 0) / float(m.valor_meta) * 100) if m.valor_meta > 0 else 0
-            } for m in metas]
-        except Exception as e:
-            result['metas'] = []
-
-        # --- SEÇÃO 7: ORÇAMENTOS ---
-        try:
-            orcs = db.query(OrcamentoCategoria).filter(OrcamentoCategoria.id_usuario == user_id).all()
+            lista_v = [{"descricao": f"Fatura {f.conta.nome}", "valor": float(f.valor_total), "data": f.data_vencimento.isoformat(), "cor": "#82293e"} for f in faturas if f.data_vencimento and f.data_vencimento <= v_limit and f.status != 'paga']
+            agend_v = db.query(Agendamento).filter(Agendamento.id_usuario == user_id, Agendamento.ativo == True, Agendamento.proxima_data_execucao <= v_limit).all()
+            lista_v += [{"descricao": a.descricao, "valor": float(a.valor), "data": a.proxima_data_execucao.isoformat(), "cor": "#378ADD"} for a in agend_v]
+            result['proximos_vencimentos'] = sorted(lista_v, key=lambda x: x['data'])
             
-            # Otimização: Buscar gastos de todas as categorias em uma única query (Elimina N+1)
-            cat_ids_orc = [o.id_categoria for o in orcs if o.id_categoria]
-            spent_stats = db.query(
-                Lancamento.id_categoria,
-                func.sum(Lancamento.valor).label('total')
-            ).filter(
-                Lancamento.id_usuario == user_id,
-                Lancamento.id_categoria.in_(cat_ids_orc),
-                _expense_type_condition(),
-                Lancamento.data_transacao >= datetime.combine(start_month, time.min)
-            ).group_by(Lancamento.id_categoria).all()
-            
-            spent_map = {int(s.id_categoria): abs(float(s.total or 0)) for s in spent_stats}
-
-            lista_o = []
-            for o in orcs:
-                gasto = spent_map.get(int(o.id_categoria), 0.0) if o.id_categoria else 0.0
-                perc = (gasto / float(o.valor_limite) * 100) if o.valor_limite > 0 else 0
-                lista_o.append({"categoria": o.categoria.nome if o.categoria else "Outros", "percentual_usado": perc, "status": "estourado" if perc > 100 else ("atencao" if perc > 75 else "ok")})
-            result['orcamentos'] = lista_o
         except Exception as e:
-            logger.error(f"Erro Modo Deus (orcamentos): {e}", exc_info=True)
-            result['orcamentos'] = []
+            logger.error(f"Erro Modo Deus (cartoes/vencimentos): {e}", exc_info=True)
+            result['cartoes'] = []; result['proximos_vencimentos'] = []
 
-        # --- SEÇÃO 8: SCORE E ALERTAS (LÓGICA RIGOROSA) ---
+        # --- SEÇÃO 8: SCORE E ALERTAS ---
         try:
-            alertas = []
-            score = 100
-            
+            score = 100; alertas = []
             vg = result.get('visao_geral', {})
-            
-            # Penalidade 1: Saldo Disponível Real Negativo (Grave)
-            sdr = vg.get('saldo_disponivel_real', 0)
-            if sdr < 0:
+            if vg.get('resultado_mes', 0) < 0:
                 score -= 40
-                alertas.append({"tipo": "critico", "titulo": "Cuidado! Saldo Insuficiente", "detalhe": f"Você terá um déficit de R$ {abs(sdr):.2f} após pagar as faturas/boletos.", "data": datetime.now().isoformat()})
-            
-            # Penalidade 2: Mês no Vermelho (Receitas < Despesas)
-            res_mes = vg.get('resultado_mes', 0)
-            if res_mes < 0:
-                score -= 25
-                alertas.append({"tipo": "critico", "titulo": "Mês no Vermelho", "detalhe": f"Você está gastando R$ {abs(res_mes):.2f} a mais do que recebeu.", "data": datetime.now().isoformat()})
-            
-            # Penalidade 3: Vazamentos (Juros/Multas)
-            juros_atual = vg.get('vazamentos_financeiros', 0)
-            if juros_atual > 0: 
+                alertas.append({"tipo": "critico", "titulo": "Cuidado! Déficit Mensal", "detalhe": f"Você gastou R$ {abs(vg['resultado_mes']):.2f} a mais do que recebeu."})
+            if vazamentos_valor > 0:
                 score -= 15
-                alertas.append({"tipo": "critico", "titulo": "Dreno de Juros", "detalhe": f"Você já perdeu R$ {juros_atual:.2f} com taxas e encargos este mês.", "data": datetime.now().isoformat()})
-            
-            # Penalidade 4: Orçamentos Estourados
-            orc_estourados = [o for o in result.get('orcamentos', []) if o['status'] == 'estourado']
-            if orc_estourados:
-                score -= (len(orc_estourados) * 5)
-                alertas.append({"tipo": "aviso", "titulo": f"{len(orc_estourados)} Orçamentos Estourados", "detalhe": "Reveja seus limites para evitar dívidas."})
-            
-            # Penalidade 5: Patrimônio Líquido (Geral)
-            if vg.get('patrimonio_liquido', 0) < 0:
-                score -= 10
+                alertas.append({"tipo": "aviso", "titulo": "Dreno de Juros/Taxas", "detalhe": f"Você já perdeu R$ {vazamentos_valor:.2f} este mês."})
             
             score = max(0, score)
-            label_score = "Excelente"
-            if score < 40: label_score = "Crítico"
-            elif score < 70: label_score = "Atenção"
-            elif score < 90: label_score = "Bom"
-            
-            result['health'] = {"score": score, "label": label_score}
-            result['alertas'] = alertas[:6]
-        except Exception as e:
-            logger.error(f"Erro Modo Deus (alertas/score): {e}", exc_info=True)
-            result['health'] = {"score": 50, "label": "Erro ao calcular"}
+            label = "Excelente" if score >= 90 else ("Bom" if score >= 70 else ("Atenção" if score >= 40 else "Crítico"))
+            result['health'] = {"score": score, "label": label}
+            result['alertas'] = alertas
+        except:
+            result['health'] = {"score": 100, "label": "Erro"}
 
-        # --- SEÇÃO 10: VENCIMENTOS (Próximos 30 dias) ---
+        # --- SEÇÃO FINAL: EVOLUÇÃO ---
         try:
-            v_limit = today + timedelta(days=30)
-            lista_v = [{"descricao": a.descricao, "valor": float(a.valor), "data": a.proxima_data_execucao.isoformat(), "cor_hex": "#378ADD"} for a in db.query(Agendamento).filter(Agendamento.id_usuario == user_id, Agendamento.ativo == True, Agendamento.proxima_data_execucao <= v_limit).all()]
-            
-            # Buscar faturas que ainda não foram pagas e vencem nos próximos 30 dias
-            faturas_prox = db.query(FaturaCartao).join(Conta).filter(
-                FaturaCartao.id_usuario == user_id,
-                FaturaCartao.data_vencimento <= v_limit,
-                FaturaCartao.status != 'paga'
-            ).all()
-            
-            lista_v += [{"descricao": f"Fatura {f.conta.nome}", "valor": float(f.valor_total), "data": f.data_vencimento.isoformat(), "cor_hex": "#82293e"} for f in faturas_prox]
-            
-            result['proximos_vencimentos'] = sorted(lista_v, key=lambda x: x['data'])[:8]
-        except Exception as e:
-            logger.error(f"Erro Modo Deus (vencimentos): {e}", exc_info=True)
-            result['proximos_vencimentos'] = []
-
-        # --- SEÇÃO FINAL: PERFIL IA E EVOLUÇÃO ---
-        result['perfil_ia'] = usuario.perfil_ia
-        try:
-            f_evolucao = db.query(
+            f_evol = db.query(
                 extract('month', FaturaCartao.data_vencimento).label('mes'),
                 extract('year', FaturaCartao.data_vencimento).label('ano'),
                 func.sum(FaturaCartao.valor_total).label('total')
-            ).filter(
-                FaturaCartao.id_usuario == user_id,
-                FaturaCartao.data_vencimento >= (today - timedelta(days=210))
-            ).group_by('ano', 'mes').order_by('ano', 'mes').all()
-            
-            result['faturas_evolucao'] = {
-                "labels": [f"{int(f.mes):02d}/{str(int(f.ano))[2:]}" for f in f_evolucao],
-                "data": [float(f.total) for f in f_evolucao]
-            }
-        except Exception as e:
-            logger.error(f"Erro Evolução Faturas: {e}", exc_info=True)
-            result['faturas_evolucao'] = {"labels": [], "data": []}
+            ).filter(FaturaCartao.id_usuario == user_id, FaturaCartao.data_vencimento >= (today - timedelta(days=180))).group_by('ano', 'mes').order_by('ano', 'mes').all()
+            result['faturas_evolucao'] = {"labels": [f"{int(f.mes):02d}/{str(int(f.ano))[2:]}" for f in f_evol], "data": [float(f.total) for f in f_evol]}
+        except: result['faturas_evolucao'] = {"labels": [], "data": []}
 
-        # --- SEÇÃO 11: INSIGHTS RÁPIDOS ---
-        try:
-            ins = []
-            vg = result.get('visao_geral', {})
-            if vg.get('resultado_mes', 0) < 0: ins.append(f"O mês está fechando no vermelho em R$ {abs(vg['resultado_mes']):.2f}")
-            
-            if result.get('top_categorias') and result['top_categorias'][0]['percentual_do_total_gastos'] > 40: ins.append(f"{result['top_categorias'][0]['nome']} consome {result['top_categorias'][0]['percentual_do_total_gastos']:.0f}% dos gastos.")
-            result['insights_rapidos'] = ins[:3]
-        except Exception as e:
-            result['insights_rapidos'] = []
-
+        result['perfil_ia'] = usuario.perfil_ia
         _cache[cache_key_val] = (result, now_ts)
         return jsonify(result)
     finally:
@@ -4275,7 +4105,9 @@ def webhook_mercadopago():
     logging.info(f"✅ Usuário {user_id} ativado no plano {plano} via Mercado Pago!")
     return {"status": "ok", "user_id": user_id, "plan": plano}
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
+
     # Configurar servidor
     port = int(os.environ.get('PORT', 5000))
     debug_mode = not is_render

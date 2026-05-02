@@ -4101,23 +4101,28 @@ lucide.createIcons();
       return `<div class="w-6 h-6 shrink-0 rounded-full overflow-hidden bg-brand/10 flex items-center justify-center shadow-sm border border-brand/20"><i data-lucide="tag" class="w-3 h-3 text-brand"></i></div>`;
     }
 
-    async function downloadLivroCaixa() {
+    async function sendLivroCaixa(periodo) {
       try {
         if (!sessionId) {
             showToast('Sessão expirada', 'error');
             return;
         }
-        showToast('Gerando seu Livro Caixa...', 'info');
+        showToast('Enviando seu Livro Caixa no Telegram...', 'info');
         
-        // Abre o PDF em uma nova aba passando o sessionId
-        const url = `/api/miniapp/livro_caixa/download?session_id=${encodeURIComponent(sessionId)}`;
-        window.open(url, '_blank');
+        const res = await fetch(`/api/miniapp/livro_caixa/send?session_id=${encodeURIComponent(sessionId)}&periodo=${periodo}`);
+        const data = await res.json();
+        
+        if (data.ok) {
+            showToast('Relatório enviado com sucesso!', 'success');
+        } else {
+            showToast(data.error === 'no_data_found' ? 'Sem dados no período' : 'Erro ao enviar relatório', 'error');
+        }
       } catch (err) {
-        console.error('Erro ao baixar Livro Caixa:', err);
-        showToast('Erro ao baixar relatório', 'error');
+        console.error('Erro ao enviar Livro Caixa:', err);
+        showToast('Erro de conexão', 'error');
       }
     }
-    window.downloadLivroCaixa = downloadLivroCaixa;
+    window.sendLivroCaixa = sendLivroCaixa;
 
     let lastModoDeusData = null;
     let currentParcTab = 'ativos';
@@ -4266,21 +4271,42 @@ lucide.createIcons();
         lEl.className = `text-[10px] font-bold px-2 py-0.5 rounded-full ${score >= 80 ? 'bg-emerald-100 text-emerald-700' : (score >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700')}`;
       }
 
-      // MÉTRICAS TOPO: Saldo Disponível Real
+      // MÉTRICAS TOPO: Patrimônio Anual
       const mdSaldoLivre = document.getElementById('mdSaldoLivre');
       if (mdSaldoLivre) {
-          const val = vg.saldo_disponivel_real || 0;
+          const val = vg.patrimonio_liquido || 0;
           mdSaldoLivre.textContent = fmt.format(val);
           mdSaldoLivre.className = `text-3xl font-black truncate font-financial ${val >= 0 ? 'text-telegram-text' : 'text-rose-500'}`;
       }
 
       const mdCaixaPuro = document.getElementById('mdCaixaPuro');
-      if (mdCaixaPuro) mdCaixaPuro.textContent = fmt.format(vg.saldo_bancario_puro || 0);
+      if (mdCaixaPuro) mdCaixaPuro.textContent = fmt.format(vg.resultado_mes || 0);
 
       const mdComprometido = document.getElementById('mdComprometido');
       if (mdComprometido) {
           const val = (vg.comprometimento_faturas || 0) + (vg.comprometimento_agendamentos || 0);
           mdComprometido.textContent = fmt.format(val);
+      }
+
+      // 2.5 Limite Diário Seguro ou Bloqueio
+      const mdLimiteDiario = document.getElementById('mdLimiteDiario');
+      const mdLimiteDiarioSub = document.getElementById('mdLimiteDiarioSub');
+      if (mdLimiteDiario) {
+          if (vg.resultado_mes <= 0) {
+              mdLimiteDiario.textContent = "🛑 BLOQUEIO";
+              mdLimiteDiario.className = "text-2xl font-black text-rose-500 animate-pulse";
+              if (mdLimiteDiarioSub) {
+                  mdLimiteDiarioSub.textContent = "VOCÊ NÃO PODE MAIS GASTAR";
+                  mdLimiteDiarioSub.className = "text-[10px] font-bold text-rose-500 uppercase font-mono";
+              }
+          } else {
+              mdLimiteDiario.textContent = fmt.format(vg.limite_diario_seguro || 0);
+              mdLimiteDiario.className = "text-2xl font-black text-telegram-text font-financial";
+              if (mdLimiteDiarioSub) {
+                  mdLimiteDiarioSub.textContent = "POR DIA";
+                  mdLimiteDiarioSub.className = "text-[10px] font-bold text-emerald-500 uppercase font-mono";
+              }
+          }
       }
 
       // VAZAMENTOS
