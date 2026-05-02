@@ -2039,16 +2039,6 @@ def miniapp_modo_deus():
     finally:
         db.close()
 
-            if result.get('top_categorias') and result['top_categorias'][0]['percentual_do_total_gastos'] > 40: ins.append(f"{result['top_categorias'][0]['nome']} consome {result['top_categorias'][0]['percentual_do_total_gastos']:.0f}% dos gastos.")
-            result['insights_rapidos'] = ins[:3]
-        except Exception as e:
-            result['insights_rapidos'] = []
-
-        _cache[cache_key_val] = (result, now_ts)
-        return jsonify(result)
-    finally:
-        db.close()
-
 
 @app.route('/api/miniapp/overview')
 def miniapp_overview():
