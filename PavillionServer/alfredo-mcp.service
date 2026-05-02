@@ -5,11 +5,9 @@ After=network.target
 [Service]
 User=pvserver
 WorkingDirectory=/home/pvserver/alfredo-ops
-# Ajuste o caminho do venv (estou usando o do projeto principal para facilitar)
-ExecStart=/home/pvserver/contacomigo/venv/bin/python /home/pvserver/alfredo-ops/mcp_server.py
+ExecStart=/home/pvserver/alfredo-ops/venv/bin/python /home/pvserver/alfredo-ops/mcp_server.py
 Restart=always
 RestartSec=5
-# Define um token de segurança para o SSE (opcional, mas recomendado)
 Environment=MCP_AUTH_TOKEN=AlfredoOps_Seguro_2026_!
 Environment=PYTHONUNBUFFERED=1
 

@@ -1,0 +1,9 @@
+tunnel: alfredo-server
+credentials-file: /home/pvserver/.cloudflared/cert.json
+
+ingress:
+  - hostname: alfredo.henriquedejesus.dev
+    service: http://localhost:5000
+  - hostname: mcp.henriquedejesus.dev
+    service: http://localhost:10001
+  - service: http_status:404

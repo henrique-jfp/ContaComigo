@@ -62,10 +62,8 @@
       ]
     },
     "alfredo-ops": {
-      "url": "https://mcp.henriquedejesus.dev/sse",
-      "headers": {
-        "Authorization": "Bearer AlfredoOps_Seguro_2026_!"
-      }
+      "command": "/home/pvserver/alfredo-ops/venv/bin/python",
+      "args": ["/home/pvserver/alfredo-ops/mcp_server.py"]
     }
   }
 }
