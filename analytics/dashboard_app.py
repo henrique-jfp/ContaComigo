@@ -17,7 +17,7 @@ import re
 import requests
 from urllib.parse import parse_qsl
 from functools import wraps
-from sqlalchemy import and_, func, desc, or_, extract, case, not_
+from sqlalchemy import and_, func, desc, or_, extract, case, not_, text
 from flask import Flask, render_template, jsonify, request, g, make_response
 from sqlalchemy.orm import joinedload
 from datetime import datetime, timedelta, date, timezone, time
@@ -1782,16 +1782,19 @@ def miniapp_modo_deus():
             logger.error(f"Erro Modo Deus (assinaturas): {e}", exc_info=True)
             result['assinaturas'] = {"lista": [], "total_mensal": 0}
 
-        # --- SEÇÃO 4: PARCELAMENTOS (Filtrando Juros e Encargos) ---
+        # --- SEÇÃO 4: PARCELAMENTOS (Apenas ativos no mês atual) ---
         try:
             parcelas = db.query(ParcelamentoItem).filter(ParcelamentoItem.id_usuario == user_id).all()
             ativos = []; vencidos = []
             termos_juros = ['juros', 'encargo', 'iof', 'multa', 'tarifa']
             juros_parcelas_mes = 0.0
             
+            # Mês e ano atual para filtro de "Ativos no mês"
+            mes_atual = today.month
+            ano_atual = today.year
+
             for p in parcelas:
                 desc_lower = (p.descricao or "").lower()
-                # Se for juros/encargo, somar aos vazamentos do mês se estiver ativo
                 if any(t in desc_lower for t in termos_juros):
                     if p.parcela_atual < p.total_parcelas:
                         juros_parcelas_mes += float(p.valor_parcela)
@@ -1802,15 +1805,27 @@ def miniapp_modo_deus():
                     "parcela_atual": p.parcela_atual, "total_parcelas": p.total_parcelas,
                     "data_proxima_parcela": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None
                 }
-                if p.parcela_atual < p.total_parcelas: ativos.append(item)
-                else: vencidos.append(item)
+                
+                # Regra: Ativo se não terminou E a próxima parcela é este mês (ou está atrasada mas o user considera ativa)
+                # O usuário pediu "ativos no mês atual".
+                is_this_month = False
+                if p.data_proxima_parcela:
+                    if p.data_proxima_parcela.year == ano_atual and p.data_proxima_parcela.month == mes_atual:
+                        is_this_month = True
+                    # Se estiver atrasada (meses anteriores) e não terminou, também é uma obrigação "ativa"
+                    elif p.data_proxima_parcela < today.date() and p.parcela_atual < p.total_parcelas:
+                        is_this_month = True
+
+                if p.parcela_atual < p.total_parcelas and is_this_month:
+                    ativos.append(item)
+                else:
+                    vencidos.append(item)
             
             total_mensal_parcelas = sum(x['valor_parcela'] for x in ativos)
             result['parcelamentos'] = {
                 "ativos": ativos, "vencidos": vencidos,
                 "total_mensal_parcelas": total_mensal_parcelas
             }
-            # Adicionar parcelas ao comprometimento e juros aos vazamentos
             if 'visao_geral' in result:
                 result['visao_geral']['comprometimento_faturas'] += total_mensal_parcelas
                 result['visao_geral']['vazamentos_financeiros'] += juros_parcelas_mes
@@ -1822,9 +1837,13 @@ def miniapp_modo_deus():
         # --- SEÇÃO 5: CARTÕES E VENCIMENTOS ---
         try:
             v_limit = today + timedelta(days=30)
+            # Pegar faturas do mês atual e próximas
             faturas = db.query(FaturaCartao).join(Conta).filter(
                 FaturaCartao.id_usuario == user_id,
-                or_(FaturaCartao.status != 'paga', FaturaCartao.data_vencimento >= (today - timedelta(days=1)))
+                or_(
+                    FaturaCartao.status != 'paga',
+                    and_(FaturaCartao.data_vencimento >= start_month, FaturaCartao.data_vencimento <= v_limit)
+                )
             ).order_by(FaturaCartao.data_vencimento.asc()).all()
             
             lista_c = []
@@ -1839,16 +1858,18 @@ def miniapp_modo_deus():
                 })
             result['cartoes'] = lista_c
 
-            # Próximos Vencimentos: Inclui faturas fechadas E faturas em aberto que tenham data de vencimento próxima
             lista_v = []
             for f in faturas:
-                if f.data_vencimento and f.data_vencimento <= v_limit and f.status != 'paga':
-                    lista_v.append({
-                        "descricao": f"Fatura {f.conta.nome} ({f.status.replace('_', ' ')})", 
-                        "valor": float(f.valor_total), 
-                        "data": f.data_vencimento.isoformat(), 
-                        "cor": "#82293e"
-                    })
+                if f.status != 'paga':
+                    # Fallback para data se não tiver vencimento (usa hoje + 5 dias)
+                    dt_venc = f.data_vencimento or (today + timedelta(days=5))
+                    if dt_venc <= v_limit:
+                        lista_v.append({
+                            "descricao": f"Fatura {f.conta.nome} ({f.status})", 
+                            "valor": float(f.valor_total), 
+                            "data": dt_venc.isoformat(), 
+                            "cor": "#82293e"
+                        })
 
             agend_v = db.query(Agendamento).filter(Agendamento.id_usuario == user_id, Agendamento.ativo == True, Agendamento.proxima_data_execucao <= v_limit).all()
             lista_v += [{"descricao": a.descricao, "valor": float(a.valor), "data": a.proxima_data_execucao.isoformat(), "cor": "#378ADD"} for a in agend_v]
@@ -1863,17 +1884,14 @@ def miniapp_modo_deus():
             score = 100; alertas = []
             vg = result.get('visao_geral', {})
             
-            # 1. Déficit Mensal (Impacto Pesado)
             if vg.get('resultado_mes', 0) < 0:
                 score -= 50
                 alertas.append({"tipo": "critico", "titulo": "Cuidado! Déficit Mensal", "detalhe": f"Você gastou R$ {abs(vg['resultado_mes']):.2f} a mais do que recebeu."})
             
-            # 2. Vazamentos (Drenos Silenciosos)
             if vazamentos_valor > 0:
                 score -= 20
                 alertas.append({"tipo": "aviso", "titulo": "Dreno de Juros/Taxas", "detalhe": f"Você já perdeu R$ {vazamentos_valor:.2f} em taxas e juros este mês."})
             
-            # 3. Comprometimento de Renda (Rigoroso)
             receita = vg.get('entradas_mes', 0)
             comprometido = vg.get('comprometimento_faturas', 0) + vg.get('comprometimento_agendamentos', 0)
             if receita > 0:
@@ -1881,22 +1899,18 @@ def miniapp_modo_deus():
                 if perc_comprometido > 50:
                     score -= 30
                     alertas.append({"tipo": "critico", "titulo": "Renda Muito Comprometida", "detalhe": f"{perc_comprometido:.1f}% da sua receita já está reservada para pagar dívidas/contas."})
-                elif perc_comprometido > 30:
-                    score -= 15
-                    alertas.append({"tipo": "aviso", "titulo": "Atenção ao Comprometimento", "detalhe": f"Você já comprometeu {perc_comprometido:.1f}% da sua renda."})
 
-            # 4. Análise Comportamental (Comparação Histórica Simples)
-            # Pegar média de gastos dos últimos 3 meses (excluindo o atual)
+            # 4. Análise Comportamental
             tres_meses_atras = start_month - timedelta(days=90)
-            media_gastos_hist = db.query(func.avg(subq.c.total_mes)).from_statement(
-                text("""
+            media_gastos_hist = db.execute(text("""
+                SELECT AVG(total_mes) FROM (
                     SELECT SUM(ABS(valor)) as total_mes 
                     FROM lancamentos 
                     WHERE id_usuario = :uid AND valor < 0 
                     AND data_transacao >= :inicio AND data_transacao < :fim
                     GROUP BY date_trunc('month', data_transacao)
-                """)
-            ).params(uid=user_id, inicio=tres_meses_atras, fim=start_month).scalar() or 0.0
+                ) as sub
+            """), {"uid": user_id, "inicio": tres_meses_atras, "fim": start_month}).scalar() or 0.0
 
             if media_gastos_hist > 0 and saidas_mes > (media_gastos_hist * 1.2):
                 score -= 10
@@ -1910,8 +1924,10 @@ def miniapp_modo_deus():
             label = "Excelente" if score >= 90 else ("Bom" if score >= 75 else ("Atenção" if score >= 50 else "Crítico"))
             result['health'] = {"score": score, "label": label}
             result['alertas'] = alertas
-        except:
+        except Exception as e:
+            logger.error(f"Erro no Score/Alertas: {e}", exc_info=True)
             result['health'] = {"score": 100, "label": "Erro"}
+            result['alertas'] = []
 
         # --- SEÇÃO FINAL: EVOLUÇÃO ---
         try:

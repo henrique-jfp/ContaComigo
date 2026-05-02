@@ -4187,6 +4187,23 @@ lucide.createIcons();
       const accL = document.getElementById('mdAccountsList');
       if (accL && vg.minhas_contas) {
         accL.innerHTML = '';
+
+        // --- INJEÇÃO DO PATRIMÔNIO TOTAL COMO PRIMEIRO CARD (ALINHADO COM AS CONTAS) ---
+        const pTotal = vg.patrimonio_liquido || 0;
+        accL.innerHTML += `
+          <div class="glass-card p-4 rounded-2xl bg-brand/10 min-w-[150px] flex-shrink-0 border-2 border-brand/20">
+            <div class="flex items-center gap-2 mb-2">
+              <div class="w-6 h-6 rounded-lg bg-brand flex items-center justify-center">
+                <i data-lucide="shield-check" class="w-3 h-3 text-white"></i>
+              </div>
+              <span class="text-[9px] font-black text-brand uppercase truncate">PATRIMÔNIO (ANO)</span>
+            </div>
+            <p class="text-[8px] font-black text-telegram-hint uppercase mb-0.5">Saldo Líquido</p>
+            <div class="text-sm font-black ${pTotal >= 0 ? 'text-telegram-text' : 'text-rose-500'} font-financial">${fmt.format(pTotal)}</div>
+            <div class="text-[8px] text-brand font-bold mt-1 uppercase">Receita - Despesa</div>
+          </div>
+        `;
+
         vg.minhas_contas.filter(acc => acc.nome !== 'Carteira' || acc.saldo > 0).forEach(acc => {
           const isCard = acc.tipo === 'Cartão de Crédito';
           const icon = isCard ? 'credit-card' : 'landmark';
