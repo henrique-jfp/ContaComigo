@@ -1570,12 +1570,12 @@ def miniapp_modo_deus():
 
     user_id_telegram = session["user_id"]
     
-    # Cache manual de 30 segundos para maior precisão em tempo real
-    cache_key_val = f"modo_deus_{user_id_telegram}"
+    # Cache manual de 10 segundos para maior precisão (v2)
+    cache_key_val = f"modo_deus_v2_{user_id_telegram}"
     now_ts = datetime.now().timestamp()
     if cache_key_val in _cache:
         cached_val, ts = _cache[cache_key_val]
-        if now_ts - ts < 30:
+        if now_ts - ts < 10:
             return jsonify(cached_val)
 
     db = next(get_db())
@@ -1590,11 +1590,23 @@ def miniapp_modo_deus():
         next_month = (start_month + timedelta(days=32)).replace(day=1)
         end_month = next_month - timedelta(days=1)
         
-        result = {}
+        result = {
+            "ok": True,
+            "usuario": {"nome": usuario.nome_completo or usuario.first_name or "Usuário"},
+            "alertas": []
+        }
+        
+        # Inicia variáveis globais da função para evitar UnboundLocalError
+        entradas_ano = 0.0; saidas_ano = 0.0
+        entradas_mes = 0.0; saidas_mes = 0.0
+        vazamentos_valor = 0.0
+        resultado_mes = 0.0
+        lancamentos_saida_mes = []
         
         # --- SEÇÃO 1: VISÃO GERAL (Cálculo Dinâmico e Tempo Real) ---
         try:
             contas = db.query(Conta).filter(Conta.id_usuario == user_id).all()
+            # ... (lógica de contas e snapshots mantida) ...
             
             limit_date = datetime.now() - timedelta(days=90)
             variacoes = db.query(
@@ -1806,20 +1818,19 @@ def miniapp_modo_deus():
                     "data_proxima_parcela": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None
                 }
                 
-                # Regra: Ativo se não terminou E a próxima parcela é este mês (ou está atrasada mas o user considera ativa)
-                # O usuário pediu "ativos no mês atual".
+                # Na aba "Ativos", apenas o que vence NO MÊS ATUAL e ainda não terminou.
                 is_this_month = False
                 if p.data_proxima_parcela:
                     if p.data_proxima_parcela.year == ano_atual and p.data_proxima_parcela.month == mes_atual:
-                        is_this_month = True
-                    # Se estiver atrasada (meses anteriores) e não terminou, também é uma obrigação "ativa"
-                    elif p.data_proxima_parcela < today.date() and p.parcela_atual < p.total_parcelas:
                         is_this_month = True
 
                 if p.parcela_atual < p.total_parcelas and is_this_month:
                     ativos.append(item)
                 else:
                     vencidos.append(item)
+            
+            # Ordenar ativos por data de vencimento
+            ativos = sorted(ativos, key=lambda x: x['data_proxima_parcela'] or "")
             
             total_mensal_parcelas = sum(x['valor_parcela'] for x in ativos)
             result['parcelamentos'] = {

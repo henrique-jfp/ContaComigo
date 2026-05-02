@@ -19,6 +19,7 @@ from reportlab.graphics.shapes import Drawing, Rect, String, Line, Circle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.colors import HexColor, Color
+from reportlab.lib import colors
 
 # ── Paleta de Cores ─────────────────────────────────────────
 C_NAVY      = HexColor('#0B1220')

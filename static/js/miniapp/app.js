@@ -4421,8 +4421,9 @@ lucide.createIcons();
                 </div>
                 <span class="text-[10px] text-rose-500 font-black whitespace-nowrap">${fmt.format(a.valor)}</span>
               </div>`;
-          });
-        } else if (assBlock) {
+              });
+              if (window.lucide) lucide.createIcons();
+              } else if (assBlock) {
           assBlock.classList.add('hidden');
         }
       }
