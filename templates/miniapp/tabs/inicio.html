@@ -459,14 +459,17 @@
           <!-- Alfredo Insights (Versão Desktop Esticada / Mobile Hidden) -->
           <div class="hidden md:block glass-card alfredo-card home-reveal rounded-3xl p-8 mt-6" style="--delay: 200ms">
             <div class="flex items-start gap-6">
-               <div class="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center shrink-0">
-                  <i data-lucide="sparkles" class="h-8 w-8 text-white"></i>
+               <div class="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center shrink-0 overflow-hidden">
+                  <img src="/static/img/alfredo.png" alt="Alfredo" class="h-full w-full object-cover" onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden');">
+                  <span class="hidden text-2xl font-black text-white">A</span>
                </div>
-               <div>
+               <div class="min-w-0 flex-1">
                  <div class="alfredo-kicker mb-2 text-xs font-bold uppercase tracking-[0.24em] opacity-80">
-                   Alfredo em destaque
+                   Alfredo
                  </div>
-                 <p id="homeInsightDesktop" class="alfredo-body text-xl font-semibold leading-relaxed">Carregando análise estratégica do Alfredo...</p>
+                 <div id="homeInsightDesktop" data-insight-carousel class="alfredo-body flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth cursor-grab select-none pb-2">
+                   <article class="min-w-full snap-center text-xl font-semibold leading-relaxed">Carregando análise estratégica do Alfredo...</article>
+                 </div>
                </div>
             </div>
           </div>
@@ -476,11 +479,16 @@
         <div class="space-y-4">
           <!-- Alfredo Mobile Only -->
           <div class="glass-card alfredo-card home-reveal rounded-3xl p-6 md:hidden" style="--delay: 165ms">
-            <div class="alfredo-kicker mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em]">
-              <i data-lucide="sparkles" class="h-4 w-4"></i>
-              Alfredo em destaque
+            <div class="alfredo-kicker mb-3 flex items-center gap-3 text-xs font-bold uppercase tracking-[0.24em]">
+              <span class="h-9 w-9 shrink-0 overflow-hidden rounded-2xl bg-white/10">
+                <img src="/static/img/alfredo.png" alt="Alfredo" class="h-full w-full object-cover" onerror="this.classList.add('hidden');">
+                <span class="inline-flex h-full w-full items-center justify-center text-base font-black text-white">A</span>
+              </span>
+              Alfredo
             </div>
-            <p id="homeInsight" class="alfredo-body text-base font-semibold leading-relaxed">Carregando insight do Alfredo...</p>
+            <div id="homeInsight" data-insight-carousel class="alfredo-body flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-smooth cursor-grab select-none pb-2">
+              <article class="min-w-full snap-center text-base font-semibold leading-relaxed">Carregando insight do Alfredo...</article>
+            </div>
           </div>
 
           <!-- Mapa de Calor Desktop Sidebar -->

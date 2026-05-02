@@ -556,6 +556,59 @@ def _build_miniapp_insight(usuario: Usuario, balance: float, receita: float, des
     return f"Cuidado: suas despesas já passaram as receitas em R$ {abs(balance):.2f}. Vale apertar os vilões do mês."
 
 
+def _build_miniapp_insight_cards(
+    balance: float,
+    receita: float,
+    despesa: float,
+    categories: list[dict],
+    cashflow: list[dict],
+    budget_items: list[dict],
+    period_label: str,
+) -> list[str]:
+    if receita <= 0 and despesa <= 0:
+        return [
+            f"{period_label} ainda não tem fluxo financeiro suficiente para leitura. Registre receitas e despesas para o Alfredo separar padrão de ruído.",
+            "Seu histórico recente existe, mas este período ainda está vazio. A análise mais útil agora é acompanhar os primeiros lançamentos do mês assim que eles entrarem.",
+            f"Curiosidade do mês: {period_label} está tão quieto nas finanças que o Alfredo já conferiu a calculadora duas vezes.",
+        ]
+
+    top_category = categories[0] if categories else None
+    top_label = str(top_category.get("label") or "despesas principais").title() if top_category else "despesas principais"
+    top_value = float(top_category.get("value") or 0) if top_category else 0.0
+    ratio = (despesa / receita * 100) if receita > 0 else 0.0
+    largest_day = max(cashflow or [], key=lambda item: float(item.get("saida") or 0), default=None)
+    largest_day_label = largest_day.get("label") if largest_day else None
+    largest_day_value = float(largest_day.get("saida") or 0) if largest_day else 0.0
+    over_budget = [b for b in (budget_items or []) if float(b.get("realizado") or 0) > float(b.get("orcamento") or 0) > 0]
+
+    if balance < 0:
+        first = f"{period_label} está negativo em R$ {abs(balance):.2f}. O foco imediato é reduzir gastos variáveis antes de criar novas metas."
+    elif receita > 0 and ratio >= 80:
+        first = f"Você ainda está no azul em {period_label}, mas as despesas já consomem {ratio:.0f}% da receita. O mês pede contenção."
+    else:
+        first = f"{period_label} está com saldo positivo de R$ {balance:.2f}. Bom momento para proteger essa folga antes dos próximos vencimentos."
+
+    if over_budget:
+        item = over_budget[0]
+        excesso = float(item.get("realizado") or 0) - float(item.get("orcamento") or 0)
+        second = f"O orçamento de {item.get('label') or 'uma categoria'} passou R$ {excesso:.2f} do limite. Esse é o ajuste mais relevante para atacar agora."
+    elif top_category:
+        second = f"Seu maior peso do mês é {top_label}, com R$ {top_value:.2f}. Se houver corte possível, comece por essa categoria."
+    elif largest_day_value > 0:
+        second = f"O dia {largest_day_label} concentrou R$ {largest_day_value:.2f} em saídas. Vale revisar se foi gasto pontual ou novo padrão."
+    else:
+        second = "As despesas existem, mas ainda não formaram uma categoria dominante. Continue registrando para o Alfredo detectar o padrão certo."
+
+    if top_category:
+        third = f"Curiosidade do mês: {top_label} lidera seus gastos. O Alfredo não julga, mas já deixou essa categoria sentada na primeira fila."
+    elif receita > 0 and despesa <= 0:
+        third = f"Curiosidade do mês: entrou dinheiro e quase nada saiu. O Alfredo chamou isso de evento raro e pediu para emoldurar."
+    else:
+        third = f"Curiosidade do mês: {period_label} tem R$ {despesa:.2f} em despesas mapeadas. O Alfredo leu isso com sobrancelha levantada."
+
+    return [first, second, third]
+
+
 def _serialize_miniapp_lancamento(lanc: Lancamento) -> dict:
     origem_raw = str(lanc.origem or "").strip().lower()
     if origem_raw.startswith("audio"):
@@ -2334,6 +2387,15 @@ def miniapp_overview():
 
         # Garantir que insight nunca seja None para o JSON
         final_insight = insight or "O Alfredo está analisando seus dados..."
+        insight_cards = _build_miniapp_insight_cards(
+            balance=balance,
+            receita=receita,
+            despesa=despesa,
+            categories=categories,
+            cashflow=cashflow,
+            budget_items=budget_items,
+            period_label=period_label,
+        )
 
         result = {
             "ok": True,
@@ -2352,6 +2414,7 @@ def miniapp_overview():
                 "level_title": level_progress.get("title", "Mestre das Finanças"),
                 "level_progress": level_progress,
                 "insight": final_insight,
+                "insights": insight_cards,
                 "badge": _level_badge(level),
                 "badge_svg": _level_badge_svg(level),
                 "cashflow": cashflow or [],

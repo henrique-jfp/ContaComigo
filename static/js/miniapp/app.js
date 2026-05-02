@@ -258,6 +258,7 @@ lucide.createIcons();
     let gameProfileCache = null;
     let gameRankingCache = [];
     let gameRankingRefreshTimer = null;
+    const insightCarouselDragBound = new WeakSet();
     const MINIAPP_SESSION_STORAGE_KEY = 'contacomigo-miniapp-session-id';
     const urlParams = new URLSearchParams(window.location.search);
     const initialTabFromUrl = urlParams.get('tab') || '';
@@ -1313,6 +1314,68 @@ lucide.createIcons();
       homeCharts = {};
     }
 
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function getAlfredoInsights(summary) {
+      const items = Array.isArray(summary?.insights) ? summary.insights : [];
+      const cleaned = items.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 3);
+      const fallback = String(summary?.ai_insight || summary?.insight || 'Continue registrando para que eu possa analisar seu comportamento financeiro.').trim();
+      while (cleaned.length < 3) cleaned.push(fallback);
+      return cleaned.slice(0, 3);
+    }
+
+    function bindInsightCarouselDrag(container) {
+      if (!container || insightCarouselDragBound.has(container)) return;
+      insightCarouselDragBound.add(container);
+      let isDown = false;
+      let startX = 0;
+      let scrollLeft = 0;
+
+      container.addEventListener('pointerdown', (event) => {
+        isDown = true;
+        startX = event.clientX;
+        scrollLeft = container.scrollLeft;
+        container.classList.add('cursor-grabbing');
+        try { container.setPointerCapture(event.pointerId); } catch (_) {}
+      });
+
+      container.addEventListener('pointermove', (event) => {
+        if (!isDown) return;
+        event.preventDefault();
+        container.scrollLeft = scrollLeft - (event.clientX - startX);
+      });
+
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach((eventName) => {
+        container.addEventListener(eventName, () => {
+          isDown = false;
+          container.classList.remove('cursor-grabbing');
+        });
+      });
+    }
+
+    function renderAlfredoInsights(summary) {
+      const insights = getAlfredoInsights(summary);
+      [homeInsight, homeInsightDesktop].forEach((container) => {
+        if (!container) return;
+        const isDesktop = container === homeInsightDesktop;
+        const textClass = isDesktop ? 'text-xl' : 'text-base';
+        container.innerHTML = insights.map((text, index) => `
+          <article class="min-w-full snap-center ${textClass} font-semibold leading-relaxed">
+            <span class="mb-3 inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-white/10 px-2 text-xs font-black">${index + 1}</span>
+            <p>${escapeHtml(text)}</p>
+          </article>
+        `).join('');
+        bindInsightCarouselDrag(container);
+      });
+    }
+
     function updateAquariumVisual(receita, despesa) {
       try {
         const svg = document.getElementById('homeAquariumSVG');
@@ -1444,7 +1507,6 @@ lucide.createIcons();
 
       if (homeReceita) homeReceita.textContent = formatCurrencyBR(receita);
       if (homeDespesa) homeDespesa.textContent = formatCurrencyBR(despesa);
-      if (homeInsight) homeInsight.textContent = summary?.insight || 'Carregando insight do Alfredo...';
       // Badge do usuário (nível)
       const badgeSvg = summary?.badge_svg || summary?.level_progress?.badge_svg;
       if (badgeSvg) {
@@ -1830,10 +1892,7 @@ lucide.createIcons();
         homeHeatmapChartEl.style.display = 'none';
       }
 
-      const insightText = summary?.ai_insight || 'Continue registrando para que eu possa analisar seu comportamento financeiro.';
-      
-      if (homeInsight) homeInsight.innerText = insightText;
-      if (homeInsightDesktop) homeInsightDesktop.innerText = insightText;
+      renderAlfredoInsights(summary);
 
       renderHomeRecent(summary?.recent || []);
       renderHomeRadar(summary);
