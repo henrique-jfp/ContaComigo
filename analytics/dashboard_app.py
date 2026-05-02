@@ -1966,6 +1966,69 @@ def miniapp_modo_deus():
             result['health'] = {"score": 100, "label": "Ok"}
             result['alertas'] = []
 
+        # --- SEÇÃO 9: INSIGHTS E DICAS (Análise Comportamental Direta) ---
+        try:
+            insights = []
+            vg = result.get('visao_geral', {})
+            ent_m = vg.get('entradas_mes', 0)
+            sai_m = vg.get('saidas_mes', 0)
+            
+            if ent_m > 0:
+                taxa_poupanca = ((ent_m - sai_m) / ent_m) * 100
+                if taxa_poupanca > 15:
+                    insights.append(f"Ritmo de mestre! Sua taxa de poupança está em {taxa_poupanca:.1f}%.")
+                elif taxa_poupanca < 0:
+                    insights.append("Sinal Vermelho: Suas saídas superaram as entradas. Alfredo recomenda cortar gastos variáveis imediatamente.")
+            
+            # Análise Comportamental (Comparação Mensal e Histórica)
+            try:
+                # 1. Comparação com o mês passado (mesmo dia do mês)
+                mes_passado_ini = (start_month - timedelta(days=1)).replace(day=1)
+                mes_passado_hoje = mes_passado_ini + (today - start_month)
+                sql_passado = text("SELECT SUM(ABS(valor)) FROM lancamentos WHERE id_usuario = :uid AND valor < 0 AND data_transacao >= :ini AND data_transacao <= :fim")
+                gasto_passado = db.execute(sql_passado, {"uid": user_id, "ini": mes_passado_ini, "fim": mes_passado_hoje}).scalar() or 0.0
+                
+                if gasto_passado > 0:
+                    diff_p = ((sai_m - float(gasto_passado)) / float(gasto_passado)) * 100
+                    if diff_p < -10:
+                        insights.append(f"Economia real! Você está gastando {abs(diff_p):.1f}% menos que no mesmo período do mês passado.")
+                    elif diff_p > 10:
+                        insights.append(f"Atenção comportamental: Seus gastos subiram {diff_p:.1f}% em relação ao mês passado.")
+
+                # 2. Média Histórica (3 meses)
+                tres_meses_atras = start_month - timedelta(days=90)
+                sql_media = text("""
+                    SELECT AVG(total_mes) FROM (
+                        SELECT SUM(ABS(valor)) as total_mes FROM lancamentos 
+                        WHERE id_usuario = :uid AND valor < 0 AND data_transacao >= :inicio AND data_transacao < :fim
+                        GROUP BY date_trunc('month', data_transacao)
+                    ) as sub
+                """)
+                media_val = db.execute(sql_media, {"uid": user_id, "inicio": tres_meses_atras, "fim": start_month}).scalar()
+                if media_val and float(media_val) > 0:
+                    m_hist = float(media_val)
+                    if sai_m < m_hist:
+                        insights.append(f"Você está R$ {m_hist - sai_m:.2f} abaixo da sua média histórica. Ótima disciplina!")
+            except: pass
+
+            # Dica baseada na maior categoria
+            top_cats = result.get('top_categorias', [])
+            if top_cats:
+                top_cat = top_cats[0]
+                insights.append(f"Alvo de economia: Seus gastos com {top_cat['nome']} lideram o mês. Tente reduzir R$ {(top_cat['total'] * 0.1):.2f} semana que vem.")
+            
+            # Adicionar perfil comportamental textual se houver
+            if usuario.perfil_ia:
+                insights.append(f"Perfil Alfredo: {usuario.perfil_ia[:150]}...")
+
+            if not insights:
+                insights.append("Alfredo está monitorando seus dados. Registre mais gastos para análises personalizadas.")
+
+            result['insights_rapidos'] = insights[:5]
+        except Exception as e:
+            logger.error(f"Erro ao gerar insights: {e}")
+            result['insights_rapidos'] = []
+
         # --- SEÇÃO FINAL: EVOLUÇÃO ---
         try:
             f_evol = db.query(
