@@ -395,53 +395,19 @@ def footer_canvas(canvas, doc):
 
 # ── Função principal ─────────────────────────────────────────
 
-def generate_financial_pdf(context: dict) -> bytes:
-    """
-    Gera o relatório financeiro completo em PDF e retorna os bytes.
-
-    Espera as seguintes chaves no contexto (todas opcionais com fallback):
-        usuario_nome, periodo_extenso, mes_ano,
-        total_receitas, total_gastos, saldo_periodo, taxa_poupanca,
-        tendencia_receita_percent, tendencia_despesa_percent,
-        media_receitas_3m, media_despesas_3m, media_saldo_3m,
-        qtd_receitas, qtd_despesas, total_transacoes,
-        gastos_agrupados  [(cat, val), ...],
-        grafico_pizza_png  (bytes PNG),
-        grafico_evolucao_png  (bytes PNG),
-        grafico_heatmap_png   (bytes PNG, opcional),
-        top_gastos  [Lancamento, ...],
-        metas  [dict, ...],
-        analise_ia  (str),
-        insights  [str, ...],
-        score_financeiro  (float 0-100, calculado internamente se ausente),
-        dia_mais_gasto, valor_dia_mais_gasto, categoria_top, valor_categoria_top,
-    """
-    buffer = io.BytesIO()
-
-    # Frames
-    frame_cover = Frame(0, 0, A4[0], A4[1], id='cover',
-                        leftPadding=0, bottomPadding=0,
-                        rightPadding=0, topPadding=0)
-    frame_content = Frame(20*mm, 22*mm, A4[0] - 40*mm, A4[1] - 38*mm, id='content')
-
-    doc = BaseDocTemplate(buffer, pagesize=A4)
-    doc.addPageTemplates([
-        PageTemplate(id='Cover',  frames=[frame_cover]),
-        PageTemplate(id='Normal', frames=[frame_content], onPage=footer_canvas),
-    ])
-
-    elements = []
-
-    # ── Helpers ─────────────────────────────────────────────
+# ── Helpers de Estilo ───────────────────────────────────────
+def get_pdf_style(name, **kw):
     styles = getSampleStyleSheet()
+    defaults = dict(fontName=FONT_REG, fontSize=10,
+                    textColor=C_TEXT, leading=14)
+    defaults.update(kw)
+    return ParagraphStyle(name, parent=styles['Normal'], **defaults)
 
-    def style(name, **kw):
-        defaults = dict(fontName=FONT_REG, fontSize=10,
-                        textColor=C_TEXT, leading=14)
-        defaults.update(kw)
-        return ParagraphStyle(name, parent=styles['Normal'], **defaults)
+# Alias para manter compatibilidade com o código interno
+style = get_pdf_style
 
-    s_body   = style('body')
+
+def generate_financial_pdf(context: dict) -> bytes:
     s_small  = style('small', fontSize=8.5, textColor=C_MUTED)
     s_label  = style('label', fontName=FONT_BOLD, fontSize=8,
                      textColor=C_MUTED, spaceBefore=0, spaceAfter=2)
@@ -841,10 +807,11 @@ def generate_livro_caixa_pdf(user_name: str, lancamentos: list, mes_ano_str: str
     styles = getSampleStyleSheet()
     
     # ── Cabeçalho ─────────────────────────────────────────────
+    safe_name = (user_name or "Usuário").upper()
     elements.append(Paragraph(f"<b>LIVRO CAIXA CONSOLIDADO</b>", 
-                    ParagraphStyle('h1', fontSize=18, textColor=C_NAVY, spaceAfter=5)))
-    elements.append(Paragraph(f"Cliente: {user_name.upper()}  |  Período: {mes_ano_str}", 
-                    ParagraphStyle('sub', fontSize=10, textColor=C_MUTED, spaceAfter=20)))
+                    style('h1', fontSize=18, textColor=C_NAVY, spaceAfter=5)))
+    elements.append(Paragraph(f"Cliente: {safe_name}  |  Período: {mes_ano_str}", 
+                    style('sub', fontSize=10, textColor=C_MUTED, spaceAfter=20)))
 
     # ── Resumo Rápido ─────────────────────────────────────────
     total_ent = sum(float(l.valor) for l in lancamentos if not is_expense_type(l.tipo))

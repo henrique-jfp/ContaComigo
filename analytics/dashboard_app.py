@@ -1848,12 +1848,13 @@ def miniapp_modo_deus():
         # --- SEÇÃO 5: CARTÕES E VENCIMENTOS ---
         try:
             v_limit = today + timedelta(days=30)
-            # Pegar faturas do mês atual e próximas
+            # Query mais inclusiva para faturas: qualquer uma que não seja explicitamente 'paga'
+            # ou que tenha vencimento futuro próximo.
             faturas = db.query(FaturaCartao).join(Conta).filter(
                 FaturaCartao.id_usuario == user_id,
                 or_(
-                    FaturaCartao.status != 'paga',
-                    and_(FaturaCartao.data_vencimento >= start_month, FaturaCartao.data_vencimento <= v_limit)
+                    not_(FaturaCartao.status.ilike('%paga%')),
+                    and_(FaturaCartao.data_vencimento >= today, FaturaCartao.data_vencimento <= v_limit)
                 )
             ).order_by(FaturaCartao.data_vencimento.asc()).all()
             
@@ -1871,19 +1872,28 @@ def miniapp_modo_deus():
 
             lista_v = []
             for f in faturas:
-                if f.status != 'paga':
-                    # Fallback para data se não tiver vencimento (usa hoje + 5 dias)
+                # Mostrar no radar apenas o que de fato precisa de atenção (não paga)
+                if not 'paga' in str(f.status).lower():
                     dt_venc = f.data_vencimento or (today + timedelta(days=5))
                     if dt_venc <= v_limit:
+                        # Limpa o status para exibição (ex: 'em_aberto' -> 'Aberta')
+                        status_label = str(f.status).replace('_', ' ').capitalize()
                         lista_v.append({
-                            "descricao": f"Fatura {f.conta.nome} ({f.status})", 
+                            "descricao": f"Fatura {f.conta.nome} ({status_label})", 
                             "valor": float(f.valor_total), 
                             "data": dt_venc.isoformat(), 
                             "cor": "#82293e"
                         })
 
-            agend_v = db.query(Agendamento).filter(Agendamento.id_usuario == user_id, Agendamento.ativo == True, Agendamento.proxima_data_execucao <= v_limit).all()
+            # Adicionar agendamentos ativos
+            agend_v = db.query(Agendamento).filter(
+                Agendamento.id_usuario == user_id, 
+                Agendamento.ativo == True, 
+                Agendamento.proxima_data_execucao <= v_limit
+            ).all()
             lista_v += [{"descricao": a.descricao, "valor": float(a.valor), "data": a.proxima_data_execucao.isoformat(), "cor": "#378ADD"} for a in agend_v]
+            
+            # Ordenar por data mais próxima
             result['proximos_vencimentos'] = sorted(lista_v, key=lambda x: x['data'])
             
         except Exception as e:
@@ -1892,52 +1902,68 @@ def miniapp_modo_deus():
 
         # --- SEÇÃO 8: SCORE E ALERTAS (Análise Comportamental e Rigor) ---
         try:
-            score = 100; alertas = []
+            score = 100
+            alertas = []
             vg = result.get('visao_geral', {})
             
-            if vg.get('resultado_mes', 0) < 0:
-                score -= 50
-                alertas.append({"tipo": "critico", "titulo": "Cuidado! Déficit Mensal", "detalhe": f"Você gastou R$ {abs(vg['resultado_mes']):.2f} a mais do que recebeu."})
-            
-            if vazamentos_valor > 0:
-                score -= 20
-                alertas.append({"tipo": "aviso", "titulo": "Dreno de Juros/Taxas", "detalhe": f"Você já perdeu R$ {vazamentos_valor:.2f} em taxas e juros este mês."})
-            
-            receita = vg.get('entradas_mes', 0)
-            comprometido = vg.get('comprometimento_faturas', 0) + vg.get('comprometimento_agendamentos', 0)
-            if receita > 0:
-                perc_comprometido = (comprometido / receita) * 100
-                if perc_comprometido > 50:
-                    score -= 30
-                    alertas.append({"tipo": "critico", "titulo": "Renda Muito Comprometida", "detalhe": f"{perc_comprometido:.1f}% da sua receita já está reservada para pagar dívidas/contas."})
-
-            # 4. Análise Comportamental
-            tres_meses_atras = start_month - timedelta(days=90)
-            media_gastos_hist = db.execute(text("""
-                SELECT AVG(total_mes) FROM (
-                    SELECT SUM(ABS(valor)) as total_mes 
-                    FROM lancamentos 
-                    WHERE id_usuario = :uid AND valor < 0 
-                    AND data_transacao >= :inicio AND data_transacao < :fim
-                    GROUP BY date_trunc('month', data_transacao)
-                ) as sub
-            """), {"uid": user_id, "inicio": tres_meses_atras, "fim": start_month}).scalar() or 0.0
-
-            if media_gastos_hist > 0 and saidas_mes > (media_gastos_hist * 1.2):
-                score -= 10
+            # 1. Alerta de Déficit (Sempre mostrar se negativo)
+            res_mes_val = vg.get('resultado_mes', 0)
+            if res_mes_val < 0:
+                score -= 40
                 alertas.append({
-                    "tipo": "aviso", 
-                    "titulo": "Gasto Acima da Média", 
-                    "detalhe": f"Seus gastos atuais estão 20% acima da sua média histórica de R$ {float(media_gastos_hist):.2f}."
+                    "tipo": "critico", 
+                    "titulo": "Alfredo avisa: Déficit Mensal", 
+                    "detalhe": f"Você gastou R$ {abs(res_mes_val):.2f} além do que recebeu este mês."
                 })
             
-            score = max(0, score)
+            # 2. Alerta de Vazamentos
+            vaz_v = vg.get('vazamentos_financeiros', 0)
+            if vaz_v > 0:
+                score -= 10
+                alertas.append({"tipo": "aviso", "titulo": "Cuidado com Vazamentos", "detalhe": f"Você já perdeu R$ {vaz_v:.2f} em taxas e juros."})
+            
+            # 3. Análise Comportamental (Encapsulada para não quebrar o resto)
+            try:
+                tres_meses_atras = start_month - timedelta(days=90)
+                # Query SQL bruta para performance e precisão
+                sql_media = text("""
+                    SELECT AVG(total_mes) FROM (
+                        SELECT SUM(ABS(valor)) as total_mes 
+                        FROM lancamentos 
+                        WHERE id_usuario = :uid AND valor < 0 
+                        AND data_transacao >= :inicio AND data_transacao < :fim
+                        GROUP BY date_trunc('month', data_transacao)
+                    ) as sub
+                """)
+                media_res = db.execute(sql_media, {"uid": user_id, "inicio": tres_meses_atras, "fim": start_month}).scalar()
+                media_gastos_hist = float(media_res) if media_res else 0.0
+                
+                if media_gastos_hist > 0 and saidas_mes > (media_gastos_hist * 1.15):
+                    score -= 10
+                    alertas.append({
+                        "tipo": "aviso", 
+                        "titulo": "Gasto Acima da Média", 
+                        "detalhe": f"Seus gastos estão 15% acima da sua média histórica de R$ {media_gastos_hist:.2f}."
+                    })
+            except Exception as e:
+                logger.warning(f"Falha ao calcular média histórica: {e}")
+
+            # 4. Alerta de Comprometimento
+            receita_mes = vg.get('entradas_mes', 0)
+            if receita_mes > 0:
+                comp = (vg.get('comprometimento_faturas', 0) + vg.get('comprometimento_agendamentos', 0))
+                perc = (comp / receita_mes) * 100
+                if perc > 40:
+                    score -= 15
+                    alertas.append({"tipo": "aviso", "titulo": "Renda Comprometida", "detalhe": f"Você já comprometeu {perc:.1f}% da sua renda mensal."})
+
+            score = max(5, score)
             label = "Excelente" if score >= 90 else ("Bom" if score >= 75 else ("Atenção" if score >= 50 else "Crítico"))
             result['health'] = {"score": score, "label": label}
             result['alertas'] = alertas
         except Exception as e:
-            logger.error(f"Erro no Score/Alertas: {e}", exc_info=True)
-            result['health'] = {"score": 100, "label": "Erro"}
+            logger.error(f"Erro fatal no Score/Alertas: {e}", exc_info=True)
+            result['health'] = {"score": 100, "label": "Ok"}
             result['alertas'] = []
 
         # --- SEÇÃO FINAL: EVOLUÇÃO ---
