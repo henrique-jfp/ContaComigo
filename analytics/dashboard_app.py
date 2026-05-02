@@ -425,6 +425,20 @@ def _month_bounds(reference: date | None = None) -> tuple[date, date]:
     return start, end
 
 
+def _lancamento_tipo_norm_expr():
+    return func.lower(func.trim(func.coalesce(Lancamento.tipo, "")))
+
+
+def _income_type_condition():
+    tipo = _lancamento_tipo_norm_expr()
+    return tipo.in_(["entrada", "receita", "credit", "credito", "crédito"])
+
+
+def _expense_type_condition():
+    tipo = _lancamento_tipo_norm_expr()
+    return tipo.in_(["saida", "saída", "despesa", "debit", "debito", "débito"])
+
+
 def _daily_cashflow(lancamentos: list[Lancamento], start: date, end: date) -> list[dict]:
     days = (end - start).days + 1
     labels = [(start + timedelta(days=i)).strftime("%d/%m") for i in range(days)]
@@ -1067,8 +1081,8 @@ def miniapp_pierre_dashboard():
         # O Saldo Total é a soma histórica de lançamentos (receitas - despesas)
         # Otimizado: Usa tipos exatos para bater no índice idx_lancamentos_usuario_tipo_data
         total_balance = float(db.query(
-            func.sum(case((Lancamento.tipo.in_(['Entrada', 'Receita']), func.abs(Lancamento.valor)), else_=0)) -
-            func.sum(case((Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida']), func.abs(Lancamento.valor)), else_=0))
+            func.coalesce(func.sum(case((_income_type_condition(), func.abs(Lancamento.valor)), else_=0)), 0) -
+            func.coalesce(func.sum(case((_expense_type_condition(), func.abs(Lancamento.valor)), else_=0)), 0)
         ).filter(Lancamento.id_usuario == usuario.id).scalar() or 0.0)
 
         contas = db.query(Conta).filter(Conta.id_usuario == usuario.id).all()
@@ -1110,7 +1124,7 @@ def miniapp_pierre_dashboard():
             func.sum(func.abs(Lancamento.valor))
         ).join(Categoria, Lancamento.id_categoria == Categoria.id, isouter=True).filter(
             Lancamento.id_usuario == usuario.id,
-            Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida']),
+            _expense_type_condition(),
             Lancamento.data_transacao >= noventa_dias_atras
         ).group_by(Categoria.nome).all()
 
@@ -1350,10 +1364,10 @@ def miniapp_history():
             base_query = base_query.filter(Lancamento.descricao.ilike(f"%{query}%"))
         if tipo:
             tipo_norm = tipo.strip().lower()
-            if tipo_norm in {"entrada", "receita"}:
-                base_query = base_query.filter(func.lower(Lancamento.tipo).in_(["entrada", "receita"]))
-            elif tipo_norm in {"saída", "saida", "despesa"}:
-                base_query = base_query.filter(func.lower(Lancamento.tipo).in_(["saída", "saida", "despesa"]))
+            if tipo_norm in {"entrada", "receita", "credit", "credito", "crédito"}:
+                base_query = base_query.filter(_income_type_condition())
+            elif tipo_norm in {"saída", "saida", "despesa", "debit", "debito", "débito"}:
+                base_query = base_query.filter(_expense_type_condition())
             else:
                 base_query = base_query.filter(Lancamento.tipo == tipo)
         if start_date:
@@ -1431,8 +1445,8 @@ def miniapp_modo_deus():
             limit_date = datetime.now() - timedelta(days=90)
             variacoes = db.query(
                 Lancamento.id_conta,
-                func.sum(case((Lancamento.tipo.in_(['Entrada', 'Receita']), Lancamento.valor), else_=0)).label('ent'),
-                func.sum(case((Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida']), Lancamento.valor), else_=0)).label('sai')
+                func.sum(case((_income_type_condition(), Lancamento.valor), else_=0)).label('ent'),
+                func.sum(case((_expense_type_condition(), Lancamento.valor), else_=0)).label('sai')
             ).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.id_conta != None,
@@ -1483,13 +1497,13 @@ def miniapp_modo_deus():
             # Filtro para ignorar APENAS Faturas (ID Subcat 584) nos totais de Receita/Despesa.
             total_receitas_hist = db.query(func.sum(Lancamento.valor)).filter(
                 Lancamento.id_usuario == user_id,
-                Lancamento.tipo.in_(['Entrada', 'Receita']),
+                _income_type_condition(),
                 Lancamento.id_subcategoria != 584
             ).scalar() or 0
             
             total_despesas_hist = db.query(func.sum(Lancamento.valor)).filter(
                 Lancamento.id_usuario == user_id,
-                Lancamento.tipo.in_(['Saída', 'Despesa']),
+                _expense_type_condition(),
                 Lancamento.id_subcategoria != 584
             ).scalar() or 0
             
@@ -1498,7 +1512,7 @@ def miniapp_modo_deus():
             # Fluxo de Caixa Mensal (Cálculo Granular para evitar duplicidade)
             lancamentos_entrada_mes = db.query(Lancamento).options(joinedload(Lancamento.categoria), joinedload(Lancamento.subcategoria)).filter(
                 Lancamento.id_usuario == user_id,
-                Lancamento.tipo.in_(['Entrada', 'Receita']),
+                _income_type_condition(),
                 Lancamento.data_transacao >= datetime.combine(start_month, time.min),
                 Lancamento.data_transacao <= datetime.combine(end_month, time.max)
             ).all()
@@ -1514,7 +1528,7 @@ def miniapp_modo_deus():
             # --- LÓGICA DE DUPLICIDADE DE SAÍDAS ---
             lancamentos_saida_mes = db.query(Lancamento).options(joinedload(Lancamento.categoria), joinedload(Lancamento.subcategoria)).filter(
                 Lancamento.id_usuario == user_id,
-                Lancamento.tipo.in_(['Saída', 'Despesa']),
+                _expense_type_condition(),
                 Lancamento.data_transacao >= datetime.combine(start_month, time.min),
                 Lancamento.data_transacao <= datetime.combine(end_month, time.max)
             ).all()
@@ -1654,7 +1668,7 @@ def miniapp_modo_deus():
             cat_ass_ids = [r[0] for r in db.query(Categoria.id).filter(or_(func.lower(Categoria.nome).like('%assinatura%'), func.lower(Categoria.nome).like('%serviços e assinaturas%'))).all()]
             
             lanc_ass = db.query(Lancamento).filter(
-                Lancamento.id_usuario == user_id, Lancamento.tipo.in_(['Saída', 'Despesa']),
+                Lancamento.id_usuario == user_id, _expense_type_condition(),
                 Lancamento.data_transacao >= start_assinaturas,
                 or_(Lancamento.id_categoria.in_(cat_ass_ids), func.lower(Lancamento.descricao).op('~')(regex_servicos), func.lower(Lancamento.descricao).op('~')(regex_recorrentes)),
                 func.lower(Lancamento.descricao).op('!~')(regex_excluir)
@@ -1765,7 +1779,7 @@ def miniapp_modo_deus():
             ).filter(
                 Lancamento.id_usuario == user_id,
                 Lancamento.id_categoria.in_(cat_ids_orc),
-                Lancamento.tipo.in_(['Saída', 'Despesa']),
+                _expense_type_condition(),
                 Lancamento.data_transacao >= datetime.combine(start_month, time.min)
             ).group_by(Lancamento.id_categoria).all()
             
@@ -1804,7 +1818,7 @@ def miniapp_modo_deus():
                 score -= 50
                 alertas.append({"tipo": "critico", "titulo": "Conta Negativa", "detalhe": "Saldo disponível abaixo de zero.", "data": datetime.now().isoformat()})
 
-            juros_atual = abs(float(db.query(func.sum(Lancamento.valor)).filter(Lancamento.id_usuario == user_id, Lancamento.tipo.in_(['Saída', 'Despesa']), func.lower(Lancamento.descricao).op('~')('juros|multa|encargo|iof'), Lancamento.data_transacao >= datetime.combine(start_month, time.min)).scalar() or 0))
+            juros_atual = abs(float(db.query(func.sum(Lancamento.valor)).filter(Lancamento.id_usuario == user_id, _expense_type_condition(), func.lower(Lancamento.descricao).op('~')('juros|multa|encargo|iof'), Lancamento.data_transacao >= datetime.combine(start_month, time.min)).scalar() or 0))
             if juros_atual > 0: 
                 score -= 20
                 alertas.append({"tipo": "critico", "titulo": "🚨 Gastos com Juros", "detalhe": f"Você pagou R$ {juros_atual:.2f} em juros este mês.", "data": datetime.now().isoformat()})
@@ -1915,10 +1929,10 @@ def miniapp_overview():
         # 1. Fluxo de Caixa Diário via SQL (Substitui totais_mes e garante agrupamento correto)
         cashflow_daily_stats = db.query(
             func.date(Lancamento.data_transacao).label('dt'),
-            func.sum(case((Lancamento.tipo.in_(['Entrada', 'Receita']), func.abs(Lancamento.valor)), else_=0)).label('ent'),
-            func.sum(case((Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida']), func.abs(Lancamento.valor)), else_=0)).label('sai'),
-            func.count(case((Lancamento.tipo.in_(['Entrada', 'Receita']), 1))).label('ent_c'),
-            func.count(case((Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida']), 1))).label('sai_c')
+            func.sum(case((_income_type_condition(), func.abs(Lancamento.valor)), else_=0)).label('ent'),
+            func.sum(case((_expense_type_condition(), func.abs(Lancamento.valor)), else_=0)).label('sai'),
+            func.count(case((_income_type_condition(), 1))).label('ent_c'),
+            func.count(case((_expense_type_condition(), 1))).label('sai_c')
         ).filter(
             Lancamento.id_usuario == usuario.id,
             Lancamento.data_transacao >= datetime.combine(start_date, datetime.min.time()),
@@ -1968,7 +1982,7 @@ def miniapp_overview():
             Lancamento.id_usuario == usuario.id,
             Lancamento.data_transacao >= datetime.combine(start_date, datetime.min.time()),
             Lancamento.data_transacao <= datetime.combine(end_date, datetime.max.time()),
-            Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida'])
+            _expense_type_condition()
         ).group_by(Categoria.nome).order_by(desc('total')).all()
 
         palette = ["#D4AF37", "#2C2C2C", "#064E3B", "#881337", "#1E3A8A", "#451A03"]
@@ -1999,7 +2013,7 @@ def miniapp_overview():
                 Lancamento.id_usuario == usuario.id,
                 Lancamento.id_categoria.in_(cat_ids),
                 Lancamento.data_transacao >= datetime.combine(today.replace(day=1), datetime.min.time()),
-                not_(Lancamento.tipo.in_(['Entrada', 'Receita']))
+                _expense_type_condition()
             ).group_by(Lancamento.id_categoria).all()
             
             realizados_map = {int(r.id_categoria): float(r.total or 0) for r in realizados_stats}
@@ -2062,8 +2076,8 @@ def miniapp_overview():
         cashflow_stats = db.query(
             extract('year', Lancamento.data_transacao).label('year'),
             extract('month', Lancamento.data_transacao).label('month'),
-            func.sum(case((Lancamento.tipo.in_(['Entrada', 'Receita']), func.abs(Lancamento.valor)), else_=0)).label('ent'),
-            func.sum(case((Lancamento.tipo.in_(['Saída', 'Despesa', 'Saida']), func.abs(Lancamento.valor)), else_=0)).label('sai')
+            func.sum(case((_income_type_condition(), func.abs(Lancamento.valor)), else_=0)).label('ent'),
+            func.sum(case((_expense_type_condition(), func.abs(Lancamento.valor)), else_=0)).label('sai')
         ).filter(
             Lancamento.id_usuario == usuario.id,
             Lancamento.data_transacao >= datetime.combine(start_6, datetime.min.time()),
@@ -2110,8 +2124,8 @@ def miniapp_overview():
         prior_balance_res = db.query(
             func.sum(
                 case(
-                    (or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')), func.abs(Lancamento.valor)),
-                    (or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%')), -func.abs(Lancamento.valor)),
+                    (_income_type_condition(), func.abs(Lancamento.valor)),
+                    (_expense_type_condition(), -func.abs(Lancamento.valor)),
                     else_=0
                 )
             )
@@ -2128,8 +2142,8 @@ def miniapp_overview():
             extract('month', Lancamento.data_transacao).label('month'),
             func.sum(
                 case(
-                    (or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')), func.abs(Lancamento.valor)),
-                    (or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%')), -func.abs(Lancamento.valor)),
+                    (_income_type_condition(), func.abs(Lancamento.valor)),
+                    (_expense_type_condition(), -func.abs(Lancamento.valor)),
                     else_=0
                 )
             ).label('net')
@@ -2169,7 +2183,7 @@ def miniapp_overview():
                 Lancamento.id_usuario == usuario.id,
                 Lancamento.id_categoria.in_(cat_ids),
                 Lancamento.data_transacao >= datetime.combine(today.replace(day=1), datetime.min.time()),
-                not_(or_(func.lower(Lancamento.tipo).like('entr%'), func.lower(Lancamento.tipo).like('recei%')))
+                _expense_type_condition()
             ).group_by(Lancamento.id_categoria).all()
             
             realizados_map = {int(r.id_categoria): float(r.total or 0) for r in realizados_stats}
@@ -2263,7 +2277,7 @@ def miniapp_overview():
         ).filter(
             Lancamento.id_usuario == usuario.id,
             Lancamento.data_transacao >= datetime.combine(villains_start, datetime.min.time()),
-            or_(func.lower(Lancamento.tipo).like('desp%'), func.lower(Lancamento.tipo).like('saida%')),
+            _expense_type_condition(),
             Lancamento.id_subcategoria != 584 # Ignora faturas para não duplicar vilões
         ).group_by(Lancamento.descricao).order_by(desc('total')).limit(5).all()
 
@@ -2748,7 +2762,7 @@ def miniapp_orcamentos():
                 gasto = db.query(func.sum(Lancamento.valor)).filter(
                     Lancamento.id_usuario == usuario.id,
                     Lancamento.id_categoria == o.id_categoria,
-                    Lancamento.tipo.in_(['Saída', 'Despesa']),
+                    _expense_type_condition(),
                     Lancamento.data_transacao >= start_date
                 ).scalar() or 0
                 items.append({
