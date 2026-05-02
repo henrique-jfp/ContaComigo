@@ -262,6 +262,7 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 28px 28px 0 0; /* Bottom-sheet */
     padding: 1.5rem;
+    padding-bottom: calc(1.5rem + 80px); /* Espaço extra para os botões ficarem acima da nav bar no mobile */
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
     transform: translateY(100%);
     transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);

@@ -4119,10 +4119,56 @@ lucide.createIcons();
     }
     window.downloadLivroCaixa = downloadLivroCaixa;
 
+    let lastModoDeusData = null;
+    let currentParcTab = 'ativos';
+
+    window.switchParcelamentoTab = function(tab) {
+        currentParcTab = tab;
+        const btnA = document.getElementById('btnParcAtivos');
+        const btnV = document.getElementById('btnParcVencidos');
+        
+        if (btnA && btnV) {
+            if (tab === 'ativos') {
+                btnA.className = "flex-1 py-1.5 text-[10px] font-bold rounded-lg bg-white dark:bg-slate-700 shadow-sm text-telegram-text transition-all";
+                btnV.className = "flex-1 py-1.5 text-[10px] font-bold rounded-lg text-telegram-hint hover:text-telegram-text transition-all";
+            } else {
+                btnV.className = "flex-1 py-1.5 text-[10px] font-bold rounded-lg bg-white dark:bg-slate-700 shadow-sm text-telegram-text transition-all";
+                btnA.className = "flex-1 py-1.5 text-[10px] font-bold rounded-lg text-telegram-hint hover:text-telegram-text transition-all";
+            }
+        }
+        if (lastModoDeusData) renderParcelamentos(lastModoDeusData.parcelamentos);
+    };
+
+    function renderParcelamentos(parcObj) {
+        const parcL = document.getElementById('mdParcelasList');
+        if (!parcL || !parcObj) return;
+        
+        const lista = currentParcTab === 'ativos' ? (parcObj.ativos || []) : (parcObj.vencidos || []);
+        const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+        const dtFmt = (d) => {
+            if (!d) return '--';
+            let dateObj = new Date(d);
+            if (d.length === 10) dateObj = new Date(d + 'T12:00:00');
+            return dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+        };
+
+        if (lista.length > 0) {
+            parcL.innerHTML = lista.map(p => `
+              <div class="flex items-center justify-between">
+                <div class="min-w-0">
+                  <p class="text-[10px] font-bold text-telegram-text truncate">${p.descricao}</p>
+                  <p class="text-[8px] text-telegram-hint uppercase font-mono">${p.parcela_atual}/${p.total_parcelas} • ${p.data_proxima_parcela ? dtFmt(p.data_proxima_parcela) : 'Finalizado'}</p>
+                </div>
+                <span class="text-[10px] font-black ${currentParcTab === 'ativos' ? 'text-amber-600' : 'text-slate-400'} shrink-0 ml-2">${fmt.format(p.valor_parcela)}</span>
+              </div>`).join('');
+        } else {
+            parcL.innerHTML = `<p class="text-[10px] text-telegram-hint italic">Nenhum parcelamento ${currentParcTab === 'ativos' ? 'ativo' : 'encerrado'}.</p>`;
+        }
+    }
+
     function renderModoDeus(data) {
+      lastModoDeusData = data;
       const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-      // Fix bug: datas ISO puro (YYYY-MM-DD) sem hora são interpretadas como Meia Noite UTC, 
-      // o que volta um dia no fuso GMT-3. Forçamos T12:00:00 para evitar isso.
       const dtFmt = (d) => {
           if (!d) return '--';
           let dateObj = new Date(d);
@@ -4131,11 +4177,11 @@ lucide.createIcons();
       };
       const vg = data.visao_geral || {};
 
-      // 0. Minhas Contas (Tempo Real)
+      // 0. Minhas Contas (Filtrando 'Carteira' com R$ 0)
       const accL = document.getElementById('mdAccountsList');
       if (accL && vg.minhas_contas) {
         accL.innerHTML = '';
-        vg.minhas_contas.forEach(acc => {
+        vg.minhas_contas.filter(acc => acc.nome !== 'Carteira' || acc.saldo > 0).forEach(acc => {
           const isCard = acc.tipo === 'Cartão de Crédito';
           const icon = isCard ? 'credit-card' : 'landmark';
           const color = isCard ? 'text-brand' : 'text-emerald-500';
@@ -4203,7 +4249,7 @@ lucide.createIcons();
         mdMonthYear.textContent = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
       }
 
-      // Saúde Financeira (Score e Label vindos do Backend)
+      // Saúde Financeira
       const health = data.health || { score: 0, label: 'Erro' };
       const score = health.score;
       const label = health.label;
@@ -4211,13 +4257,13 @@ lucide.createIcons();
       const sEl = document.getElementById('modoDeusScore');
       if (sEl) {
         sEl.textContent = score;
-        sEl.style.color = score >= 80 ? '#3B6D11' : (score >= 60 ? '#854F0B' : '#A32D2D');
+        sEl.style.color = score >= 80 ? '#10b981' : (score >= 60 ? '#f59e0b' : '#ef4444');
       }
 
       const lEl = document.getElementById('modoDeusScoreLabel');
       if (lEl) {
         lEl.textContent = label;
-        lEl.className = `text-[10px] font-bold px-2 py-0.5 rounded-full ${score >= 80 ? 'bg-green-100 text-green-700' : (score >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700')}`;
+        lEl.className = `text-[10px] font-bold px-2 py-0.5 rounded-full ${score >= 80 ? 'bg-emerald-100 text-emerald-700' : (score >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700')}`;
       }
 
       // MÉTRICAS TOPO: Saldo Disponível Real
@@ -4240,6 +4286,7 @@ lucide.createIcons();
       // VAZAMENTOS
       const vValEl = document.getElementById('mdVazamentosValor');
       if (vValEl) vValEl.textContent = fmt.format(vg.vazamentos_financeiros || 0);
+
       const rMes = vg.resultado_mes || 0;
       const rEl = document.getElementById('mdResultado');
       if (rEl) {
@@ -4348,28 +4395,10 @@ lucide.createIcons();
       }
 
       // PARCELAMENTOS
-      const parcL = document.getElementById('mdParcelasList');
-      const parcBlock = parcL?.closest('.glass-card');
-      if (parcL) {
-        const parcObj = data.parcelamentos || { lista: [], total_mensal_parcelas: 0 };
-        const mdTotalParcelas = document.getElementById('mdTotalParcelas');
-        if (parcObj.lista && parcObj.lista.length > 0) {
-          if (parcBlock) parcBlock.classList.remove('hidden');
-          parcL.innerHTML = '';
-          if (mdTotalParcelas) mdTotalParcelas.textContent = fmt.format(parcObj.total_mensal_parcelas);
-          parcObj.lista.slice(0, 10).forEach(p => {
-            parcL.innerHTML += `
-              <div class="flex items-center justify-between">
-                <div class="min-w-0">
-                  <p class="text-[10px] font-bold text-telegram-text truncate">${p.descricao}</p>
-                  <p class="text-[8px] text-telegram-hint uppercase font-mono">${p.parcela_atual}/${p.total_parcelas} • ${dtFmt(p.data_proxima_parcela)}</p>
-                </div>
-                <span class="text-[10px] font-black text-amber-600 shrink-0 ml-2">${fmt.format(p.valor_parcela)}</span>
-              </div>`;
-          });
-        } else if (parcBlock) {
-          parcBlock.classList.add('hidden');
-        }
+      renderParcelamentos(data.parcelamentos);
+      const mdTotalParcelas = document.getElementById('mdTotalParcelas');
+      if (mdTotalParcelas && data.parcelamentos) {
+          mdTotalParcelas.textContent = fmt.format(data.parcelamentos.total_mensal_parcelas || 0);
       }
 
       // CARTOES / FATURAS
@@ -4403,35 +4432,7 @@ lucide.createIcons();
         }
       }
 
-      // TIMELINE CONSOLIDADA
-      const timeL = document.getElementById('mdTimelineList');
-      if (timeL) {
-        const timeline = data.timeline || [];
-        if (timeline.length > 0) {
-          timeL.innerHTML = timeline.map(tx => {
-            const isRec = tx.tipo === 'Receita';
-            return `
-              <div class="flex items-center justify-between py-2 border-b border-telegram-separator/20 last:border-0">
-                <div class="flex items-center gap-3 min-w-0">
-                  <div class="w-8 h-8 rounded-full ${isRec ? 'bg-emerald-500/10' : 'bg-rose-500/10'} flex items-center justify-center shrink-0">
-                    <i data-lucide="${isRec ? 'arrow-down-left' : 'arrow-up-right'}" class="w-4 h-4 ${isRec ? 'text-emerald-600' : 'text-rose-600'}"></i>
-                  </div>
-                  <div class="min-w-0">
-                    <p class="text-[10px] font-bold text-telegram-text truncate">${tx.descricao}</p>
-                    <p class="text-[8px] text-telegram-hint uppercase font-mono">${dtFmt(tx.data)} • ${tx.conta_nome || 'Conta'}</p>
-                  </div>
-                </div>
-                <span class="text-[10px] font-black ${isRec ? 'text-emerald-600' : 'text-rose-600'} shrink-0 ml-2">
-                  ${isRec ? '+' : '-'} ${fmt.format(Math.abs(tx.valor))}
-                </span>
-              </div>
-            `;
-          }).join('');
-        } else {
-          timeL.innerHTML = '<p class="text-[10px] text-telegram-hint italic text-center py-4">Nenhuma transação recente encontrada.</p>';
-        }
-      }
-
+      // METAS
       const metasL = document.getElementById('mdMetasList');
       const mBlock = metasL?.closest('.glass-card');
       if (metasL) {
@@ -4453,6 +4454,7 @@ lucide.createIcons();
         }
       }
 
+      // ORÇAMENTOS
       const orcL = document.getElementById('mdOrcamentosList');
       const oBlock = orcL?.closest('.glass-card');
       if (orcL) {
@@ -4474,6 +4476,7 @@ lucide.createIcons();
         }
       }
 
+      // ALERTAS ALFREDO
       const alertB = document.getElementById('mdAlertasBlock');
       const alertL = document.getElementById('mdAlertasList');
       if (alertL) {
@@ -4482,7 +4485,7 @@ lucide.createIcons();
           alertB.classList.remove('hidden');
           alertL.innerHTML = alerts.map(a => `
             <div class="flex gap-3">
-              <div class="mt-1 w-1.5 h-1.5 rounded-full bg-brand shrink-0"></div>
+              <div class="mt-1 w-1.5 h-1.5 rounded-full ${a.tipo === 'critico' ? 'bg-red-500' : 'bg-brand'} shrink-0"></div>
               <p class="text-[10px] text-telegram-text leading-tight">${a.titulo || 'Alerta'}: ${a.detalhe || a.detalle || ''}</p>
             </div>
           `).join('');
@@ -4491,6 +4494,7 @@ lucide.createIcons();
         }
       }
 
+      // VENCIMENTOS
       const venL = document.getElementById('mdVencimentosList');
       if (venL) {
         const vens = data.proximos_vencimentos || [];
@@ -4515,6 +4519,7 @@ lucide.createIcons();
         }
       }
 
+      // INSIGHTS
       const insB = document.getElementById('mdInsightsBlock');
       const insL = document.getElementById('mdInsightsList');
       if (insL) {

@@ -58,6 +58,8 @@ def register_fonts():
 FONT_REG, FONT_BOLD, FONT_LIGHT = register_fonts()
 
 
+from finance_utils import is_expense_type
+
 # ── Utilitários de formatação ────────────────────────────────
 def fmt_brl(value) -> str:
     try:
