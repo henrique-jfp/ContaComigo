@@ -1736,50 +1736,63 @@ lucide.createIcons();
       if (homeCategoryChartEl) {
         const hasCategories = categories.length > 0;
         const privatePalette = ["#D4AF37", "#ebe2e2", "#064E3B", "#881337", "#1E3A8A", "#451A03"];
-        
-        if (!hasCategories) {
-          homeCategoryChartEl.parentElement.innerHTML = '<div class="empty-state"><h3>Sem dados de despesas</h3><p>Alfredo está aguardando seus primeiros lançamentos.</p></div>';
+        const categoryChartContainer = homeCategoryChartEl.parentElement;
+        if (!categoryChartContainer) {
+          console.warn('renderHomeOverview: homeCategoryChart sem container no DOM.');
         } else {
-          homeCharts.category = safeChart(homeCategoryChartEl, {
-            type: 'bar',
-            data: {
-              labels: chartData.distroLabels.slice(0, 6),
-              datasets: [{
-                label: 'Gastos por Categoria',
-                data: chartData.distroValues.slice(0, 6),
-                backgroundColor: chartData.distroLabels.slice(0, 6).map((_, idx) => categories[idx]?.color || privatePalette[idx % privatePalette.length]),
-                borderRadius: 8,
-                barThickness: 20
-              }],
-            },
-            options: {
-              indexAxis: 'y',
-              responsive: true,
-              maintainAspectRatio: false,
-              animation: commonAnimation,
-              plugins: {
-                legend: { display: false },
-                tooltip: { 
-                  backgroundColor: '#0A0A0A',
-                  titleColor: '#D4AF37',
-                  callbacks: { label: (ctx) => `${ctx.label}: ${formatCurrencyBR(ctx.raw)}` } 
+          const existingEmptyState = categoryChartContainer.querySelector('[data-home-category-empty]');
+
+          if (!hasCategories) {
+            homeCategoryChartEl.style.display = 'none';
+            if (!existingEmptyState) {
+              categoryChartContainer.insertAdjacentHTML('beforeend', '<div data-home-category-empty class="empty-state"><h3>Sem dados de despesas</h3><p>Alfredo está aguardando seus primeiros lançamentos.</p></div>');
+            }
+            if (homeCategoryValue) homeCategoryValue.textContent = formatCurrencyBR(0);
+            if (homeCategoryLabel) homeCategoryLabel.textContent = 'Sem categoria';
+          } else {
+            homeCategoryChartEl.style.display = '';
+            if (existingEmptyState) existingEmptyState.remove();
+            homeCharts.category = safeChart(homeCategoryChartEl, {
+              type: 'bar',
+              data: {
+                labels: chartData.distroLabels.slice(0, 6),
+                datasets: [{
+                  label: 'Gastos por Categoria',
+                  data: chartData.distroValues.slice(0, 6),
+                  backgroundColor: chartData.distroLabels.slice(0, 6).map((_, idx) => categories[idx]?.color || privatePalette[idx % privatePalette.length]),
+                  borderRadius: 8,
+                  barThickness: 20
+                }],
+              },
+              options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: commonAnimation,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                    backgroundColor: '#0A0A0A',
+                    titleColor: '#D4AF37',
+                    callbacks: { label: (ctx) => `${ctx.label}: ${formatCurrencyBR(ctx.raw)}` }
+                  },
+                },
+                scales: {
+                  x: { display: false },
+                  y: { grid: { display: false }, ticks: { color: '#D4AF37', font: { weight: 'bold' } } }
+                },
+                onClick: (_, elements) => {
+                  if (!elements.length) return;
+                  const index = elements[0].index;
+                  if (homeCategoryValue) homeCategoryValue.textContent = formatCurrencyBR(chartData.distroValues[index] || 0);
+                  if (homeCategoryLabel) homeCategoryLabel.textContent = chartData.distroLabels[index] || 'Categoria';
                 },
               },
-              scales: {
-                x: { display: false },
-                y: { grid: { display: false }, ticks: { color: '#D4AF37', font: { weight: 'bold' } } }
-              },
-              onClick: (_, elements) => {
-                if (!elements.length) return;
-                const index = elements[0].index;
-                homeCategoryValue.textContent = formatCurrencyBR(chartData.distroValues[index] || 0);
-                homeCategoryLabel.textContent = chartData.distroLabels[index] || 'Categoria';
-              },
-            },
-          });
+            });
 
-          homeCategoryValue.textContent = formatCurrencyBR(chartData.distroValues[0] || 0);
-          homeCategoryLabel.textContent = chartData.distroLabels[0] || (hasCategories ? 'Categoria' : 'Sem categoria');
+            if (homeCategoryValue) homeCategoryValue.textContent = formatCurrencyBR(chartData.distroValues[0] || 0);
+            if (homeCategoryLabel) homeCategoryLabel.textContent = chartData.distroLabels[0] || 'Categoria';
+          }
         }
       }
 
