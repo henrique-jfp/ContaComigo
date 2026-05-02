@@ -1096,10 +1096,25 @@ lucide.createIcons();
       });
     }
 
-  async function resolveTelegramInitData(maxRetries = 20, intervalMs = 150) {
+    function getTelegramInitDataFromUrl() {
+      try {
+        const hashParams = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+        const hashInitData = hashParams.get('tgWebAppData');
+        if (hashInitData) return hashInitData;
+
+        const searchParams = new URLSearchParams(window.location.search || '');
+        return searchParams.get('tgWebAppData') || '';
+      } catch (_) {
+        return '';
+      }
+    }
+
+    async function resolveTelegramInitData(maxRetries = 20, intervalMs = 150) {
       for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
         const current = Telegram?.WebApp?.initData;
         if (current) return current;
+        const urlInitData = getTelegramInitDataFromUrl();
+        if (urlInitData) return urlInitData;
         if (attempt < maxRetries) {
           await new Promise((resolve) => setTimeout(resolve, intervalMs));
         }
