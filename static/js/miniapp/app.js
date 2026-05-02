@@ -1252,114 +1252,134 @@ lucide.createIcons();
     function renderSankeyPremium(container, data) {
       if (!container || !data.length) return;
       
-      // Aplicar tema claro específico para este card para match total com a imagem
       const card = container.closest('article');
       if (card) {
-        card.style.background = '#f9fafb';
-        card.style.color = '#111827';
+        card.style.background = '#f8fafc';
+        card.style.color = '#1e293b';
         card.querySelectorAll('h3, p, i').forEach(el => {
-          if (!el.classList.contains('text-brand-soft')) el.style.color = '#111827';
+          if (!el.classList.contains('text-brand-soft')) el.style.color = '#1e293b';
         });
       }
 
       const width = 900; 
-      const height = 600;
+      const height = 650;
       const grena = '#7b1e2d';
       const verde = '#10b981';
-      const ouro = '#D4AF37';
       const textMuted = '#64748b';
       
-      const palette = ['#fbbf24', '#818cf8', '#f472b6', '#fbbf24', '#f43f5e', '#a78bfa'];
-      const fillPalette = ['#fffbeb', '#eef2ff', '#fdf2f8', '#fffbeb', '#fff1f2', '#f5f3ff'];
+      const palette = ['#fbbf24', '#818cf8', '#f472b6', '#34d399', '#f43f5e', '#a78bfa'];
+      const fillPalette = ['#fffbeb', '#eef2ff', '#fdf2f8', '#ecfdf5', '#fff1f2', '#f5f3ff'];
 
-      const totalRec = data.filter(d => d.from === 'Receitas').reduce((a, b) => a + b.flow, 0);
-      const totalExp = data.filter(d => d.from === 'Caixa' && d.to === 'Despesas').reduce((a, b) => a + b.flow, 0);
+      // --- PASSO 1: TRATAMENTO DOS DADOS (MATEMÁTICA) ---
+      const rawRec = data.filter(d => d.from === 'Receitas').reduce((a, b) => a + b.flow, 0) || 0;
       const despesas = data.filter(d => d.from === 'Despesas');
-      const saldoLivre = Math.max(0, totalRec - totalExp);
-      
-      const maxHeight = 480;
-      const scale = maxHeight / Math.max(totalRec, (totalExp + saldoLivre), 1);
-      
-      const col1X = 40;
-      const col1W = 160;
-      const hR = totalRec * scale;
-      const rY = 70 + (maxHeight - hR) / 2;
+      const rawExp = despesas.reduce((a, b) => a + b.flow, 0) || 0;
 
-      const col2X = 350;
-      const col2W = 160;
-      const hExp = totalExp * scale;
+      // Garantia de Lógica: O volume total deve ser o maior entre ganhos e gastos
+      const volumeTotal = Math.max(rawRec, rawExp, 100); 
+      const saldoLivre = Math.max(0, rawRec - rawExp);
+      
+      const maxHeight = 450;
+      const scale = maxHeight / volumeTotal;
+
+      // --- PASSO 2: COORDENADAS DAS COLUNAS ---
+      const col1X = 40; const col1W = 160;
+      const col2X = 350; const col2W = 160;
+      const col3X = 660; const col3W = 220;
+
+      // --- PASSO 3: ALTURAS E POSIÇÕES ---
+      const hCol1 = Math.max(80, volumeTotal * scale);
+      const rY = 100 + (maxHeight - hCol1) / 2;
+
+      const hExp = rawExp * scale;
       const hSaldo = saldoLivre * scale;
-      const gapCol2 = 15;
+      const gapCol2 = saldoLivre > 0 ? 15 : 0;
       const totalH2 = hExp + hSaldo + gapCol2;
-      const startY2 = 70 + (maxHeight - totalH2) / 2;
+      const startY2 = 100 + (maxHeight - totalH2) / 2;
+      
       const expY = startY2;
       const saldoY = startY2 + hExp + gapCol2;
 
-      const col3X = 660;
-      const col3W = 200;
-
       let svgHtml = `<svg viewBox="0 0 900 ${height}" xmlns="http://www.w3.org/2000/svg" style="width:100%; height:auto; overflow:visible; font-family:'Schibsted Grotesk', sans-serif;">
         <defs>
-          <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.05"/>
+          <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feDropShadow dx="0" dy="1" stdDeviation="3" flood-opacity="0.1"/>
           </filter>
           <linearGradient id="grad-main" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="${verde}" stop-opacity="0.2"/>
-            <stop offset="100%" stop-color="${grena}" stop-opacity="0.2"/>
+            <stop offset="0%" stop-color="${verde}" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="${grena}" stop-opacity="0.3"/>
           </linearGradient>
-          <linearGradient id="grad-saldo" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="${verde}" stop-opacity="0.2"/>
-            <stop offset="100%" stop-color="${verde}" stop-opacity="0.15"/>
+          <linearGradient id="grad-saldo-line" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="${verde}" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="${verde}" stop-opacity="0.3"/>
           </linearGradient>
-          ${despesas.map((c, i) => `
-            <linearGradient id="grad-d-${i}" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stop-color="${grena}" stop-opacity="0.15"/>
-              <stop offset="100%" stop-color="${palette[i % palette.length]}" stop-opacity="0.2"/>
-            </linearGradient>
-          `).join('')}
         </defs>
         
-        <text x="${col1X + col1W/2}" y="40" text-anchor="middle" font-size="10" font-weight="800" fill="${textMuted}" style="text-transform:uppercase; letter-spacing:2px">Entradas</text>
-        <text x="${col2X + col2W/2}" y="40" text-anchor="middle" font-size="10" font-weight="800" fill="${textMuted}" style="text-transform:uppercase; letter-spacing:2px">Gestão</text>
-        <text x="${col3X + col3W/2}" y="40" text-anchor="middle" font-size="10" font-weight="800" fill="${textMuted}" style="text-transform:uppercase; letter-spacing:2px">Destinos</text>
+        <text x="${col1X + col1W/2}" y="50" text-anchor="middle" font-size="11" font-weight="900" fill="${textMuted}" style="text-transform:uppercase; letter-spacing:2px">Entradas</text>
+        <text x="${col2X + col2W/2}" y="50" text-anchor="middle" font-size="11" font-weight="900" fill="${textMuted}" style="text-transform:uppercase; letter-spacing:2px">Gestão</text>
+        <text x="${col3X + col3W/2}" y="50" text-anchor="middle" font-size="11" font-weight="900" fill="${textMuted}" style="text-transform:uppercase; letter-spacing:2px">Destinos</text>
 
-        <!-- Fluxos -->
+        <!-- --- LINKS (COL 1 -> COL 2) --- -->
+        <!-- Receitas para Custo Mensal -->
         <path d="M${col1X + col1W},${rY} C${col1X + col1W + 100},${rY} ${col2X - 100},${expY} ${col2X},${expY} L${col2X},${expY + hExp} C${col2X - 100},${expY + hExp} ${col1X + col1W + 100},${rY + hExp} ${col1X + col1W},${rY + hExp} Z" fill="url(#grad-main)" />
-        <path d="M${col1X + col1W},${rY + hExp} C${col1X + col1W + 100},${rY + hExp} ${col2X - 100},${saldoY} ${col2X},${saldoY} L${col2X},${saldoY + hSaldo} C${col2X - 100},${saldoY + hSaldo} ${col1X + col1W + 100},${rY + hExp + hSaldo} ${col1X + col1W},${rY + hExp + hSaldo} Z" fill="url(#grad-saldo)" />
+        
+        <!-- Receitas para Saldo Livre -->
+        ${saldoLivre > 0 ? `
+          <path d="M${col1X + col1W},${rY + hExp} C${col1X + col1W + 100},${rY + hExp} ${col2X - 100},${saldoY} ${col2X},${saldoY} L${col2X},${saldoY + hSaldo} C${col2X - 100},${saldoY + hSaldo} ${col1X + col1W + 100},${rY + hExp + hSaldo} ${col1X + col1W},${rY + hExp + hSaldo} Z" fill="url(#grad-saldo-line)" />
+        ` : ''}
 
+        <!-- --- NODES COL 1 & COL 2 --- -->
         <!-- RECEITAS -->
-        <rect x="${col1X}" y="${rY}" width="${col1W}" height="${hR}" rx="24" fill="#ecfdf5" stroke="${verde}" stroke-width="2.5" filter="url(#shadow)" />
-        <text x="${col1X + col1W/2}" y="${rY + hR/2 - 10}" text-anchor="middle" font-size="13" font-weight="900" fill="${verde}" style="text-transform:uppercase">Receitas</text>
-        <text x="${col1X + col1W/2}" y="${rY + hR/2 + 15}" text-anchor="middle" font-size="14" font-weight="800" fill="${verde}">${formatCurrencyBR(totalRec)}</text>
+        <rect x="${col1X}" y="${rY}" width="${col1W}" height="${hCol1}" rx="20" fill="#f0fdf4" stroke="${verde}" stroke-width="2" filter="url(#shadow)" />
+        <text x="${col1X + col1W/2}" y="${rY + hCol1/2 - 5}" text-anchor="middle" font-size="12" font-weight="900" fill="${verde}" style="text-transform:uppercase">Receitas</text>
+        <text x="${col1X + col1W/2}" y="${rY + hCol1/2 + 15}" text-anchor="middle" font-size="13" font-weight="800" fill="${verde}">${formatCurrencyBR(rawRec)}</text>
 
         <!-- CUSTO MENSAL -->
-        <rect x="${col2X}" y="${expY}" width="${col2W}" height="${hExp}" rx="24" fill="#fff1f2" stroke="${grena}" stroke-width="2.5" filter="url(#shadow)" />
-        <text x="${col2X + col2W/2}" y="${expY + hExp/2 - 10}" text-anchor="middle" font-size="11" font-weight="900" fill="${grena}" style="text-transform:uppercase">Custo Mensal</text>
-        <text x="${col2X + col2W/2}" y="${expY + hExp/2 + 15}" text-anchor="middle" font-size="14" font-weight="800" fill="${grena}">${formatCurrencyBR(totalExp)}</text>
+        <rect x="${col2X}" y="${expY}" width="${col2W}" height="${Math.max(60, hExp)}" rx="20" fill="#fff1f2" stroke="${grena}" stroke-width="2" filter="url(#shadow)" />
+        <text x="${col2X + col2W/2}" y="${expY + Math.max(60, hExp)/2 - 5}" text-anchor="middle" font-size="10" font-weight="900" fill="${grena}" style="text-transform:uppercase">Custo Mensal</text>
+        <text x="${col2X + col2W/2}" y="${expY + Math.max(60, hExp)/2 + 15}" text-anchor="middle" font-size="12" font-weight="800" fill="${grena}">${formatCurrencyBR(rawExp)}</text>
 
         <!-- SALDO LIVRE -->
-        <rect x="${col2X}" y="${saldoY}" width="${col2W}" height="${hSaldo}" rx="24" fill="#ecfdf5" stroke="${verde}" stroke-width="2.5" filter="url(#shadow)" />
-        <text x="${col2X + col2W/2}" y="${saldoY + hSaldo/2 - 10}" text-anchor="middle" font-size="11" font-weight="900" fill="${verde}" style="text-transform:uppercase">Saldo Livre</text>
-        <text x="${col2X + col2W/2}" y="${saldoY + hSaldo/2 + 15}" text-anchor="middle" font-size="14" font-weight="800" fill="${verde}">${formatCurrencyBR(saldoLivre)}</text>
+        ${saldoLivre > 0 ? `
+          <rect x="${col2X}" y="${saldoY}" width="${col2W}" height="${Math.max(50, hSaldo)}" rx="20" fill="#f0fdf4" stroke="${verde}" stroke-width="2" filter="url(#shadow)" />
+          <text x="${col2X + col2W/2}" y="${saldoY + Math.max(50, hSaldo)/2 - 5}" text-anchor="middle" font-size="10" font-weight="900" fill="${verde}" style="text-transform:uppercase">Saldo Livre</text>
+          <text x="${col2X + col2W/2}" y="${saldoY + Math.max(50, hSaldo)/2 + 15}" text-anchor="middle" font-size="12" font-weight="800" fill="${verde}">${formatCurrencyBR(saldoLivre)}</text>
+        ` : `
+          <text x="${col2X + col2W/2}" y="${expY + hExp + 25}" text-anchor="middle" font-size="9" font-weight="800" fill="${textMuted}" style="text-transform:uppercase">Saldo Livre: R$ 0,00</text>
+        `}
 
-        <!-- DESTINOS -->
-        ${despesas.slice(0, 6).map((cat, i) => {
-          const h = Math.max(54, cat.flow * scale * 1.4); 
-          const y = 60 + (i * (h + 10)); 
-          const color = palette[i % palette.length];
-          const fill = fillPalette[i % fillPalette.length];
+        <!-- --- PASSO 4: DESTINOS (COL 3) --- -->
+        ${(() => {
+          let currentY = 80;
+          let currentSourceY = expY;
+          const gapDest = 12;
           
-          return `
-            <path d="M${col2X + col2W},${expY + (hExp/6)*i + 15} C${col2X + col2W + 80},${expY + (hExp/6)*i + 15} ${col3X - 80},${y + h/2} ${col3X},${y + h/2}" stroke="url(#grad-d-${i})" stroke-width="${Math.max(3, cat.flow * scale)}" fill="none" opacity="0.5" />
-            <rect x="${col3X}" y="${y}" width="${col3W}" height="${h}" rx="16" fill="${fill}" stroke="${color}" stroke-opacity="0.3" stroke-width="2" filter="url(#shadow)" />
-            <rect x="${col3X}" y="${y}" width="6" height="${h}" rx="3" fill="${color}" />
-            <text x="${col3X + 105}" y="${y + h/2 - 8}" text-anchor="middle" font-size="9" font-weight="900" fill="${textMuted}" style="text-transform:uppercase">${cat.to.substring(0, 20)}</text>
-            <text x="${col3X + 105}" y="${y + h/2 + 15}" text-anchor="middle" font-size="13" font-weight="800" fill="${color}">${formatCurrencyBR(cat.flow)}</text>
-          `;
-        }).join('')}
+          return despesas.slice(0, 6).map((cat, i) => {
+            const h = Math.max(56, cat.flow * scale * 1.5); 
+            const y = currentY;
+            const linkH = cat.flow * scale;
+            const color = palette[i % palette.length];
+            const fill = fillPalette[i % fillPalette.length];
+            
+            const path = `M${col2X + col2W},${currentSourceY + linkH/2} C${col2X + col2W + 80},${currentSourceY + linkH/2} ${col3X - 80},${y + h/2} ${col3X},${y + h/2}`;
+            
+            const itemHtml = `
+              <path d="${path}" stroke="${color}" stroke-width="${Math.max(2, linkH)}" fill="none" opacity="0.25" />
+              <rect x="${col3X}" y="${y}" width="${col3W}" height="${h}" rx="15" fill="${fill}" stroke="${color}" stroke-opacity="0.4" stroke-width="2" filter="url(#shadow)" />
+              <rect x="${col3X}" y="${y}" width="6" height="${h}" rx="3" fill="${color}" />
+              <text x="${col3X + 110}" y="${y + h/2 - 8}" text-anchor="middle" font-size="9" font-weight="900" fill="${textMuted}" style="text-transform:uppercase">${cat.to.substring(0, 22)}</text>
+              <text x="${col3X + 110}" y="${y + h/2 + 14}" text-anchor="middle" font-size="12" font-weight="800" fill="${color}">${formatCurrencyBR(cat.flow)}</text>
+            `;
+            
+            currentY += h + gapDest;
+            currentSourceY += linkH;
+            return itemHtml;
+          }).join('');
+        })()}
       </svg>`;
       container.innerHTML = svgHtml;
     }
+
 
 
 
