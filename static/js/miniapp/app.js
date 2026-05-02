@@ -4123,6 +4123,7 @@ lucide.createIcons();
       }
     }
     window.sendLivroCaixa = sendLivroCaixa;
+    window.downloadLivroCaixa = () => sendLivroCaixa('mes');
 
     let lastModoDeusData = null;
     let currentParcTab = 'ativos';
@@ -4280,37 +4281,19 @@ lucide.createIcons();
       }
 
       const mdCaixaPuro = document.getElementById('mdCaixaPuro');
+      const mdLimiteDiarioSeguroSub = document.getElementById('mdLimiteDiarioSeguroSub');
       if (mdCaixaPuro) mdCaixaPuro.textContent = fmt.format(vg.resultado_mes || 0);
-
-      const mdComprometido = document.getElementById('mdComprometido');
-      if (mdComprometido) {
-          const val = (vg.comprometimento_faturas || 0) + (vg.comprometimento_agendamentos || 0);
-          mdComprometido.textContent = fmt.format(val);
-      }
-
-      // 2.5 Limite Diário Seguro ou Bloqueio
-      const mdLimiteDiario = document.getElementById('mdLimiteDiario');
-      const mdLimiteDiarioSub = document.getElementById('mdLimiteDiarioSub');
-      if (mdLimiteDiario) {
+      
+      if (mdLimiteDiarioSeguroSub) {
           if (vg.resultado_mes <= 0) {
-              mdLimiteDiario.textContent = "🛑 BLOQUEIO";
-              mdLimiteDiario.className = "text-2xl font-black text-rose-500 animate-pulse";
-              if (mdLimiteDiarioSub) {
-                  mdLimiteDiarioSub.textContent = "VOCÊ NÃO PODE MAIS GASTAR";
-                  mdLimiteDiarioSub.className = "text-[10px] font-bold text-rose-500 uppercase font-mono";
-              }
+              mdLimiteDiarioSeguroSub.innerHTML = "<span class='text-rose-500 animate-pulse'>🛑 BLOQUEIO: VOCÊ NÃO PODE MAIS GASTAR</span>";
           } else {
-              mdLimiteDiario.textContent = fmt.format(vg.limite_diario_seguro || 0);
-              mdLimiteDiario.className = "text-2xl font-black text-telegram-text font-financial";
-              if (mdLimiteDiarioSub) {
-                  mdLimiteDiarioSub.textContent = "POR DIA";
-                  mdLimiteDiarioSub.className = "text-[10px] font-bold text-emerald-500 uppercase font-mono";
-              }
+              const limite = vg.limite_diario_seguro || 0;
+              mdLimiteDiarioSeguroSub.innerHTML = `LIMITE DIÁRIO: <span class="text-emerald-500">${fmt.format(limite)}</span>`;
           }
       }
 
-      // VAZAMENTOS
-      const vValEl = document.getElementById('mdVazamentosValor');
+      const mdComprometido = document.getElementById('mdComprometido');
       if (vValEl) vValEl.textContent = fmt.format(vg.vazamentos_financeiros || 0);
 
       const rMes = vg.resultado_mes || 0;

@@ -9,10 +9,12 @@ ContaComigo é uma plataforma financeira inovadora que combina a conveniência d
     *   Entendimento contextual para transações, faturas, e dúvidas financeiras.
     *   Respostas rápidas e inteligentes para otimizar seu dia a dia.
 
-*   **Integração Open Finance (Aba "Contas"):**
+*   **Integração Open Finance (Aba "Contas" - Modo Deus):**
     *   Sincronização segura e automática via Pierre API para uma visão consolidada.
-    *   Interface integrada diretamente na navegação principal, eliminando fricção.
-    *   Gestão de saldos, transações e faturas com visual unificado.
+    *   **Análise Comportamental do Alfredo:** Insights baseados em média histórica de gastos e comprometimento de renda.
+    *   **Métricas de Saúde Financeira:** Score rígido e detecção proativa de "Vazamentos" (juros e taxas).
+    *   Interface unificada com Limite Diário Seguro e bloqueio automático de gastos em caso de déficit.
+    *   Gestão de saldos, parcelamentos (com filtro inteligente de encargos) e faturas.
 
 *   **Planning Hub & Gestão de Agenda:**
     *   Centralização de orçamentos, limites de gastos e compromissos financeiros na aba **"Agenda"**.
