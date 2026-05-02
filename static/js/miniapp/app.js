@@ -1174,10 +1174,11 @@ lucide.createIcons();
       setActiveHomeChartPill(homeChartCards[0].id);
     }
 
-        function buildChartDataFromSummary(summary) {
-      const now = new Date();
-      const startDay = new Date(now.getFullYear(), now.getMonth(), 1).getDay();
-      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    function buildChartDataFromSummary(summary) {
+      const periodStartRaw = summary?.period_start || '';
+      const periodStart = periodStartRaw ? new Date(`${periodStartRaw}T12:00:00`) : new Date();
+      const startDay = new Date(periodStart.getFullYear(), periodStart.getMonth(), 1).getDay();
+      const daysInMonth = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0).getDate();
       
       // Lê dados do heatmap_daily (todos os dias do mês) em vez de apenas recentes
       const activity = summary?.heatmap_daily || {};
@@ -1359,7 +1360,10 @@ lucide.createIcons();
       if (missing.length > 5) console.warn('renderHomeOverview: muitos elementos ausentes no DOM:', missing.join(', '));
 
       if (homeBalance) homeBalance.textContent = formatCurrencyBR(balance);
-      if (homeBalanceHint) homeBalanceHint.textContent = balance >= 0 ? 'Você está fechando o mês no azul.' : 'As despesas estão pressionando o mês.';
+      if (homeBalanceHint) {
+        const periodLabel = summary?.period_label ? ` (${summary.period_label})` : '';
+        homeBalanceHint.textContent = balance >= 0 ? `Você está fechando o período no azul${periodLabel}.` : `As despesas estão pressionando o período${periodLabel}.`;
+      }
 
       if (homeLevel) homeLevel.textContent = String(summary?.level || 1);
       if (homeXp) homeXp.textContent = String(summary?.xp || 0);
@@ -1830,9 +1834,12 @@ lucide.createIcons();
         container.classList.add('min-h-[280px]');
       }
 
-      const now = new Date();
+      const periodStartRaw = summary?.period_start || '';
+      const now = periodStartRaw ? new Date(`${periodStartRaw}T12:00:00`) : new Date();
+      const today = new Date();
+      const isCurrentPeriod = now.getFullYear() === today.getFullYear() && now.getMonth() === today.getMonth();
       const monthNames = ['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
-      const monthLabel = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+      const monthLabel = (summary?.period_label || `${monthNames[now.getMonth()]} ${now.getFullYear()}`).toUpperCase();
       
       const recT = Number(summary?.receita || 0);
       const desT = Number(summary?.despesa || 0);
@@ -1867,7 +1874,7 @@ lucide.createIcons();
                   const total = s.incT + s.expT;
                   const incP = total > 0 ? (s.incT / total * 100) : 0;
                   const expP = 100 - incP;
-                  const isToday = parseInt(d.date) === now.getDate();
+                  const isToday = isCurrentPeriod && parseInt(d.date) === today.getDate();
 
                   let cellClass = "bg-telegram-card border-telegram-separator/50";
                   let textCol = "text-telegram-text";

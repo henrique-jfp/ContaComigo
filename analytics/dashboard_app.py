@@ -425,6 +425,14 @@ def _month_bounds(reference: date | None = None) -> tuple[date, date]:
     return start, end
 
 
+def _month_label_pt(reference: date) -> str:
+    meses = [
+        "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+        "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+    ]
+    return f"{meses[reference.month - 1]} {reference.year}"
+
+
 def _lancamento_tipo_norm_expr():
     return func.lower(func.trim(func.coalesce(Lancamento.tipo, "")))
 
@@ -1924,6 +1932,24 @@ def miniapp_overview():
         else:
             # Comportamento padrão: Mês Atual
             start_date, end_date = _month_bounds()
+            has_current_month_data = db.query(Lancamento.id).filter(
+                Lancamento.id_usuario == usuario.id,
+                Lancamento.data_transacao >= datetime.combine(start_date, datetime.min.time()),
+                Lancamento.data_transacao <= datetime.combine(end_date, datetime.max.time()),
+                or_(_income_type_condition(), _expense_type_condition()),
+                not_(Lancamento.tipo.ilike('transfer%'))
+            ).first()
+            if not has_current_month_data:
+                latest_transaction_date = db.query(func.max(Lancamento.data_transacao)).filter(
+                    Lancamento.id_usuario == usuario.id,
+                    or_(_income_type_condition(), _expense_type_condition()),
+                    not_(Lancamento.tipo.ilike('transfer%'))
+                ).scalar()
+                if latest_transaction_date:
+                    latest_date = latest_transaction_date.date() if isinstance(latest_transaction_date, datetime) else latest_transaction_date
+                    start_date, end_date = _month_bounds(latest_date)
+                    period = "latest_month"
+        period_label = _month_label_pt(start_date)
         
         # --- OTIMIZAÇÃO MASSIVA: Agregações do Mês Atual (Gargalo de 11s resolvido) ---
         # 1. Fluxo de Caixa Diário via SQL (Substitui totais_mes e garante agrupamento correto)
@@ -2315,6 +2341,10 @@ def miniapp_overview():
                 "balance": round(float(balance), 2),
                 "receita": round(float(receita), 2),
                 "despesa": round(float(despesa), 2),
+                "period": period,
+                "period_start": start_date.isoformat(),
+                "period_end": end_date.isoformat(),
+                "period_label": period_label,
                 "progress_pct": max(0, min(int(progress_pct), 100)),
                 "level": level,
                 "xp": xp,
