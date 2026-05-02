@@ -143,9 +143,14 @@
 
       <!-- BLOCO 9: Alertas do Alfredo -->
       <div id="mdAlertasBlock" class="hidden glass-card p-5 rounded-3xl bg-telegram-card border-l-4 border-brand">
-        <h3 class="text-xs font-bold text-telegram-text mb-4 uppercase tracking-widest flex items-center gap-2">
-          <i data-lucide="bell" class="w-3 h-3"></i> Alertas do Alfredo
-        </h3>
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-full overflow-hidden bg-brand/10 shrink-0">
+            <img src="/static/img/alfredo.png" alt="Alfredo" class="h-full w-full object-cover" onerror="this.style.display='none'">
+          </div>
+          <h3 class="text-xs font-bold text-telegram-text uppercase tracking-widest flex items-center gap-2">
+            Alertas do Alfredo
+          </h3>
+        </div>
         <div id="mdAlertasList" class="space-y-4"></div>
       </div>
 

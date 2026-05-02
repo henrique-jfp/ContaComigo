@@ -1251,61 +1251,117 @@ lucide.createIcons();
 
     function renderSankeyPremium(container, data) {
       if (!container || !data.length) return;
-      const width = 800; const height = 650; // Altura aumentada
-      const vProfundo = '#064E3B'; const gProfundo = '#4a1019';
-      const palette = ['#D4AF37', '#818cf8', '#f472b6', '#fbbf24', '#34d399', '#a78bfa'];
       
+      const width = 800; 
+      const height = 650;
+      const grena = '#7b1e2d';
+      const verde = '#10b981';
+      const verdeSuave = '#d1fae5';
+      const grenaSuave = '#fee2e2';
+      const textMuted = '#64748b';
+      
+      // Paleta de cores para destinos conforme a imagem
+      const palette = ['#fbbf24', '#818cf8', '#f472b6', '#fbbf24', '#f43f5e', '#a78bfa'];
+      const fillPalette = ['#fef3c7', '#e0e7ff', '#fce7f3', '#fef3c7', '#ffe4e6', '#ede9fe'];
+
       const totalRec = data.filter(d => d.from === 'Receitas').reduce((a, b) => a + b.flow, 0);
       const totalExp = data.filter(d => d.from === 'Caixa' && d.to === 'Despesas').reduce((a, b) => a + b.flow, 0);
       const despesas = data.filter(d => d.from === 'Despesas');
+      const saldoLivre = Math.max(0, totalRec - totalExp);
       
-      const maxHeight = 500; // Área útil aumentada
-      const scale = maxHeight / Math.max(totalRec, totalExp, 1);
+      const totalCol2 = totalExp + saldoLivre;
+      const maxHeight = 500;
+      const scale = maxHeight / Math.max(totalRec, totalCol2, 1);
       
-      const rY = 50 + (maxHeight - Math.max(100, totalRec * scale)) / 2;
-      const hR = Math.max(100, totalRec * scale);
-      const cY = 50 + (maxHeight - Math.max(100, totalExp * scale)) / 2;
-      const hC = Math.max(100, totalExp * scale);
+      // Coordenadas Coluna 1 (Entradas)
+      const col1X = 25;
+      const col1W = 140;
+      const hR = Math.max(120, totalRec * scale);
+      const rY = 60 + (maxHeight - hR) / 2;
 
-      let svgHtml = `<svg viewBox=\"0 0 ${width} ${height}\" xmlns=\"http://www.w3.org/2000/svg\" style=\"width:100%; height:auto; overflow:visible;\">
+      // Coordenadas Coluna 2 (Gestão)
+      const col2X = 330;
+      const col2W = 140;
+      const hExp = totalExp * scale;
+      const hSaldo = saldoLivre * scale;
+      const gapCol2 = 10;
+      const totalH2 = hExp + hSaldo + gapCol2;
+      const startY2 = 60 + (maxHeight - totalH2) / 2;
+      const expY = startY2;
+      const saldoY = startY2 + hExp + gapCol2;
+
+      // Coordenadas Coluna 3 (Destinos)
+      const col3X = 630;
+      const col3W = 230;
+      const gapDest = 10;
+      const nDest = Math.min(6, despesas.length);
+      const hDestBase = (maxHeight - (nDest - 1) * gapDest) / nDest;
+
+      let svgHtml = `<svg viewBox="0 0 900 ${height}" xmlns="http://www.w3.org/2000/svg" style="width:100%; height:auto; overflow:visible;">
         <defs>
-          <linearGradient id=\"g-main-flow\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"0%\">
-            <stop offset=\"0%\" stop-color=\"#10b981\" stop-opacity=\"0.6\"/>
-            <stop offset=\"100%\" stop-color=\"#7b1e2d\" stop-opacity=\"0.6\"/>
+          <linearGradient id="grad-rec-exp" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="${verde}" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="${grena}" stop-opacity="0.3"/>
           </linearGradient>
-          ${despesas.map((c, i) => `<linearGradient id=\"g-cat-flow-${i}\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"0%\"><stop offset=\"0%\" stop-color=\"${gProfundo}\" stop-opacity=\"0.5\"/><stop offset=\"100%\" stop-color=\"${palette[i % palette.length]}\" stop-opacity=\"0.6\"/></linearGradient>`).join('')}
+          <linearGradient id="grad-rec-saldo" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="${verde}" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="${verde}" stop-opacity="0.3"/>
+          </linearGradient>
+          ${despesas.map((c, i) => `
+            <linearGradient id="grad-dest-${i}" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="${grena}" stop-opacity="0.2"/>
+              <stop offset="100%" stop-color="${palette[i % palette.length]}" stop-opacity="0.4"/>
+            </linearGradient>
+          `).join('')}
         </defs>
         
-        <text x=\"85\" y=\"30\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"900\" fill=\"${vProfundo}\" style=\"text-transform:uppercase; letter-spacing:1px\">Entrada</text>
-        <text x=\"300\" y=\"30\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"900\" fill=\"${gProfundo}\" style=\"text-transform:uppercase; letter-spacing:1px\">Gestão</text>
-        <text x=\"610\" y=\"30\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"900\" fill=\"#64748b\" style=\"text-transform:uppercase; letter-spacing:1px\">Saídas</text>
+        <!-- Labels de Coluna -->
+        <text x="${col1X + col1W/2}" y="35" text-anchor="middle" font-size="11" font-weight="900" fill="${textMuted}" style="text-transform:uppercase; letter-spacing:1.5px">Entradas</text>
+        <text x="${col2X + col2W/2}" y="35" text-anchor="middle" font-size="11" font-weight="900" fill="${textMuted}" style="text-transform:uppercase; letter-spacing:1.5px">Gestão</text>
+        <text x="${col3X + 115}" y="35" text-anchor="middle" font-size="11" font-weight="900" fill="${textMuted}" style="text-transform:uppercase; letter-spacing:1.5px">Destinos</text>
 
-        <!-- Fluxo Principal -->
-        <path d=\"M145,${rY} C200,${rY} 200,${cY} 240,${cY} L240,${cY + hC} C200,${cY + hC} 200,${rY + hR} 145,${rY + hR} Z\" fill=\"url(#g-main-flow)\" />
-
-        <rect x=\"25\" y=\"${rY}\" width=\"120\" height=\"${hR}\" rx=\"18\" fill=\"rgba(16, 185, 129, 0.12)\" stroke=\"#10b981\" stroke-width=\"3\" />
-        <text x=\"85\" y=\"${rY + hR / 2 - 8}\" text-anchor=\"middle\" font-size=\"15\" font-weight=\"900\" fill=\"${vProfundo}\">RECEITAS</text>
-        <text x=\"85\" y=\"${rY + hR / 2 + 16}\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"bold\" fill=\"#059669\">${formatCurrencyBR(totalRec)}</text>
-
-        <rect x=\"240\" y=\"${cY}\" width=\"120\" height=\"${hC}\" rx=\"18\" fill=\"rgba(123, 30, 45, 0.12)\" stroke=\"#7b1e2d\" stroke-width=\"3\" />
-        <text x=\"300\" y=\"${cY + hC / 2 - 8}\" text-anchor=\"middle\" font-size=\"15\" font-weight=\"900\" fill=\"${gProfundo}\">CAIXA</text>
-        <text x=\"300\" y=\"${cY + hC / 2 + 14}\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"bold\" fill=\"${gProfundo}\">GESTÃO</text>
+        <!-- Fluxo: Receitas -> Custo Mensal -->
+        <path d="M${col1X + col1W},${rY} C${col1X + col1W + 100},${rY} ${col2X - 100},${expY} ${col2X},${expY} L${col2X},${expY + hExp} C${col2X - 100},${expY + hExp} ${col1X + col1W + 100},${rY + hExp} ${col1X + col1W},${rY + hExp} Z" fill="url(#grad-rec-exp)" />
         
-        ${despesas.slice(0, 5).map((cat, i) => {
-          const h = Math.max(75, cat.flow * scale); 
-          const y = 60 + (i * 95); 
+        <!-- Fluxo: Receitas -> Saldo Livre -->
+        <path d="M${col1X + col1W},${rY + hExp} C${col1X + col1W + 100},${rY + hExp} ${col2X - 100},${saldoY} ${col2X},${saldoY} L${col2X},${saldoY + hSaldo} C${col2X - 100},${saldoY + hSaldo} ${col1X + col1W + 100},${rY + hExp + hSaldo} ${col1X + col1W},${rY + hExp + hSaldo} Z" fill="url(#grad-rec-saldo)" />
+
+        <!-- Col 1: RECEITAS -->
+        <rect x="${col1X}" y="${rY}" width="${col1W}" height="${hR}" rx="22" fill="${verdeSuave}" stroke="${verde}" stroke-width="2" />
+        <text x="${col1X + col1W/2}" y="${rY + hR/2 - 8}" text-anchor="middle" font-size="13" font-weight="900" fill="${verde}" style="text-transform:uppercase">Receitas</text>
+        <text x="${col1X + col1W/2}" y="${rY + hR/2 + 14}" text-anchor="middle" font-size="13" font-weight="bold" fill="${verde}">${formatCurrencyBR(totalRec)}</text>
+
+        <!-- Col 2: CUSTO MENSAL -->
+        <rect x="${col2X}" y="${expY}" width="${col2W}" height="${Math.max(80, hExp)}" rx="22" fill="${grenaSuave}" stroke="${grena}" stroke-width="2" />
+        <text x="${col2X + col2W/2}" y="${expY + Math.max(80, hExp)/2 - 8}" text-anchor="middle" font-size="11" font-weight="900" fill="${grena}" style="text-transform:uppercase">Custo Mensal</text>
+        <text x="${col2X + col2W/2}" y="${expY + Math.max(80, hExp)/2 + 14}" text-anchor="middle" font-size="13" font-weight="bold" fill="${grena}">${formatCurrencyBR(totalExp)}</text>
+
+        <!-- Col 2: SALDO LIVRE -->
+        <rect x="${col2X}" y="${saldoY}" width="${col2W}" height="${Math.max(60, hSaldo)}" rx="22" fill="${verdeSuave}" stroke="${verde}" stroke-width="2" />
+        <text x="${col2X + col2W/2}" y="${saldoY + Math.max(60, hSaldo)/2 - 8}" text-anchor="middle" font-size="11" font-weight="900" fill="${verde}" style="text-transform:uppercase">Saldo Livre</text>
+        <text x="${col2X + col2W/2}" y="${saldoY + Math.max(60, hSaldo)/2 + 14}" text-anchor="middle" font-size="13" font-weight="bold" fill="${verde}">${formatCurrencyBR(saldoLivre)}</text>
+
+        <!-- Col 3: DESTINOS -->
+        ${despesas.slice(0, 6).map((cat, i) => {
+          const h = Math.max(50, cat.flow * scale * 1.5); 
+          const y = 60 + (i * (h + gapDest)); 
           const color = palette[i % palette.length];
+          const fillColor = fillPalette[i % fillPalette.length];
+          
           return `
-            <path d=\"M360,${cY + (hC/5)*i + 15} C440,${cY + (hC/5)*i + 15} 440,${y + h/2} 510,${y + h/2}\" stroke=\"url(#g-cat-flow-${i})\" stroke-width=\"${Math.max(6, cat.flow * scale * 0.8)}\" fill=\"none\" opacity=\"0.8\" />
-            <rect x=\"510\" y=\"${y}\" width=\"230\" height=\"${h}\" rx=\"18\" fill=\"rgba(255,255,255,0.06)\" stroke=\"${color}\" stroke-opacity=\"0.7\" stroke-width=\"2.5\" />
-            <rect x=\"510\" y=\"${y}\" width=\"6\" height=\"${h}\" rx=\"3\" fill=\"${color}\" />
-            <text x=\"625\" y=\"${y + h/2 - 8}\" text-anchor=\"middle\" font-size=\"12\" font-weight=\"900\" fill=\"${gProfundo}\">${cat.to.toUpperCase()}</text>
-            <text x=\"625\" y=\"${y + h/2 + 16}\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"bold\" fill=\"${color}\">${formatCurrencyBR(cat.flow)}</text>
+            <!-- Fluxo Custo Mensal -> Destino -->
+            <path d="M${col2X + col2W},${expY + (hExp/nDest)*i + 20} C${col2X + col2W + 100},${expY + (hExp/nDest)*i + 20} ${col3X - 100},${y + h/2} ${col3X},${y + h/2}" stroke="url(#grad-dest-${i})" stroke-width="${Math.max(4, cat.flow * scale * 1.2)}" fill="none" opacity="0.6" />
+            
+            <rect x="${col3X}" y="${y}" width="${col3W}" height="${h}" rx="18" fill="${fillColor}" stroke="${color}" stroke-opacity="0.6" stroke-width="2" />
+            <rect x="${col3X}" y="${y}" width="5" height="${h}" rx="2.5" fill="${color}" />
+            <text x="${col3X + 115}" y="${y + h/2 - 8}" text-anchor="middle" font-size="10" font-weight="900" fill="${textMuted}" style="text-transform:uppercase">${cat.to.substring(0, 25)}</text>
+            <text x="${col3X + 115}" y="${y + h/2 + 14}" text-anchor="middle" font-size="12" font-weight="bold" fill="${color}">${formatCurrencyBR(cat.flow)}</text>
           `;
         }).join('')}
       </svg>`;
       container.innerHTML = svgHtml;
     }
+
 
     function destroyHomeCharts() {
       try {

@@ -7,7 +7,12 @@
         <button class="modal-close-btn" onclick="closeOrcamentoModal()"><i data-lucide="x" class="w-6 h-6"></i></button>
       </div>
       <div class="modal-body space-y-4">
-        <p class="text-xs text-telegram-hint">Defina um teto de gastos para uma categoria. O Alfredo te avisará ao chegar perto!</p>
+        <div class="flex items-center gap-3 p-3 rounded-2xl bg-brand/5 border border-brand/10">
+          <div class="w-10 h-10 rounded-full overflow-hidden bg-white shrink-0">
+            <img src="/static/img/alfredo.png" alt="Alfredo" class="h-full w-full object-cover">
+          </div>
+          <p class="text-xs text-telegram-hint leading-tight">Defina um teto de gastos para uma categoria. O <b>Alfredo</b> te avisará ao chegar perto!</p>
+        </div>
         
         <div class="floating-field">
           <select id="orcamentoCategoria" class="floating-select peer" required></select>

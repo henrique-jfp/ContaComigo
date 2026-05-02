@@ -51,8 +51,16 @@
         </div>
 
         <div class="glass-card alfredo-card rounded-3xl p-5">
-          <p class="alfredo-kicker text-xs font-bold uppercase tracking-[0.2em]">Recadinho do Alfredo</p>
-          <p id="gameAlfredoNote" class="alfredo-body mt-2 text-sm font-semibold">Carregando recomendação...</p>
+          <div class="flex items-start gap-4">
+            <div class="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center shrink-0 overflow-hidden">
+              <img src="/static/img/alfredo.png" alt="Alfredo" class="h-full w-full object-cover" onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden');">
+              <span class="hidden text-xl font-black text-white">A</span>
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="alfredo-kicker text-xs font-bold uppercase tracking-[0.2em] opacity-80">Recadinho do Alfredo</p>
+              <p id="gameAlfredoNote" class="alfredo-body mt-2 text-sm font-semibold">Carregando recomendação...</p>
+            </div>
+          </div>
         </div>
 
         <div class="glass-card rounded-3xl p-5">
