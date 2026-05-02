@@ -4,9 +4,14 @@
     <div class="flex items-center justify-between mb-4">
       <div>
         <h2 id="modoDeusMonthYear" class="text-xl font-black text-telegram-text uppercase tracking-tight font-serif">--</h2>
-        <button onclick="loadModoDeus(true)" class="text-[9px] font-black text-brand mt-1.5 flex items-center gap-1 opacity-70 hover:opacity-100 transition tracking-[0.1em] font-mono">
-          <i data-lucide="refresh-cw" class="w-3 h-3"></i> FORÇAR SINCRONIZAÇÃO
-        </button>
+        <div class="flex gap-2 mt-1.5">
+          <button onclick="loadModoDeus(true)" class="text-[9px] font-black text-brand flex items-center gap-1 opacity-70 hover:opacity-100 transition tracking-[0.1em] font-mono">
+            <i data-lucide="refresh-cw" class="w-3 h-3"></i> SINCRONIZAR
+          </button>
+          <button onclick="downloadLivroCaixa()" class="text-[9px] font-black text-emerald-600 flex items-center gap-1 opacity-70 hover:opacity-100 transition tracking-[0.1em] font-mono">
+            <i data-lucide="download" class="w-3 h-3"></i> LIVRO CAIXA (PDF)
+          </button>
+        </div>
       </div>
       <div class="text-right">
         <div id="modoDeusScore" class="text-5xl font-black text-telegram-text leading-none font-serif tracking-tighter">--</div>
@@ -39,23 +44,23 @@
 
       <!-- BLOCO 2: Cards de métricas principais -->
       <div class="grid grid-cols-2 gap-3">
-        <div class="glass-card p-5 rounded-3xl bg-telegram-card/50 col-span-2 relative overflow-hidden">
+        <div class="glass-card p-5 rounded-3xl bg-telegram-card/50 col-span-2 relative overflow-hidden border-l-4 border-brand">
           <div class="absolute top-0 right-0 p-4 opacity-10">
-            <i data-lucide="shield-check" class="w-16 h-16 text-brand"></i>
+            <i data-lucide="wallet" class="w-16 h-16 text-brand"></i>
           </div>
-          <p class="text-[9px] font-black uppercase tracking-[0.25em] text-brand/80 mb-2 font-mono">Análise de Patrimônio</p>
-          <h3 id="mdPatrimonio" class="text-3xl font-black text-telegram-text truncate font-financial">--</h3>
-          <p id="mdPatrimonioVar" class="text-[10px] mt-2 font-bold flex items-center gap-1 uppercase tracking-wider font-mono">--</p>
+          <p class="text-[9px] font-black uppercase tracking-[0.25em] text-brand/80 mb-2 font-mono">Saldo Disponível Real</p>
+          <h3 id="mdSaldoLivre" class="text-3xl font-black text-telegram-text truncate font-financial">--</h3>
+          <p id="mdSaldoLivreLabel" class="text-[10px] mt-2 font-bold flex items-center gap-1 uppercase tracking-wider font-mono">O QUE SOBRA NO MÊS</p>
         </div>
         <div class="glass-card p-5 rounded-3xl bg-telegram-card/50">
-          <p class="text-[9px] font-black uppercase tracking-[0.2em] text-telegram-hint mb-2 font-mono">Liquidez</p>
-          <h3 id="mdDisponivel" class="text-xl font-bold text-telegram-text truncate font-financial">--</h3>
-          <p id="mdLimiteDiario" class="text-[9px] mt-2 text-telegram-hint font-bold font-mono">--/DIA MÉDIA</p>
+          <p class="text-[9px] font-black uppercase tracking-[0.2em] text-telegram-hint mb-2 font-mono">Caixa Atual</p>
+          <h3 id="mdCaixaPuro" class="text-xl font-bold text-telegram-text truncate font-financial">--</h3>
+          <p class="text-[9px] mt-2 text-telegram-hint font-bold font-mono">TOTAL NAS CONTAS</p>
         </div>
         <div class="glass-card p-5 rounded-3xl bg-telegram-card/50">
-          <p class="text-[9px] font-black uppercase tracking-[0.2em] text-telegram-hint mb-2 font-mono">Resultado Mensal</p>
-          <h3 id="mdResultado" class="text-xl font-bold truncate font-financial">--</h3>
-          <p id="mdResultadoLabel" class="text-[9px] mt-2 text-telegram-hint font-bold font-mono uppercase">DESEMPENHO</p>
+          <p class="text-[9px] font-black uppercase tracking-[0.2em] text-telegram-hint mb-2 font-mono">Comprometido</p>
+          <h3 id="mdComprometido" class="text-xl font-bold truncate font-financial text-rose-500">--</h3>
+          <p class="text-[9px] mt-2 text-telegram-hint font-bold font-mono uppercase">CARTÃO + BOLETOS</p>
         </div>
       </div>
 
@@ -76,7 +81,24 @@
         </div>
       </div>
 
-      <!-- BLOCO 4: Top categorias -->
+      <!-- BLOCO 4: Vazamentos Financeiros -->
+      <div id="mdVazamentosBlock" class="glass-card p-5 rounded-3xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/50 dark:border-rose-900/30">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-900/50 flex items-center justify-center shrink-0">
+            <i data-lucide="alert-triangle" class="w-5 h-5 text-rose-600 dark:text-rose-400"></i>
+          </div>
+          <div>
+            <h3 class="text-xs font-bold text-rose-900 dark:text-rose-100 uppercase tracking-widest">Vazamentos Financeiros</h3>
+            <p class="text-[9px] font-bold text-rose-600 dark:text-rose-400 font-mono uppercase tracking-tighter">TAXAS, JUROS E ANUIDADES</p>
+          </div>
+        </div>
+        <div class="flex items-baseline gap-2">
+          <h3 id="mdVazamentosValor" class="text-2xl font-black text-rose-600 dark:text-rose-400 font-financial">--</h3>
+          <span class="text-[10px] font-bold text-rose-400 uppercase font-mono">ESTE MÊS</span>
+        </div>
+      </div>
+
+      <!-- BLOCO 5: Top categorias -->
       <div class="glass-card p-5 rounded-3xl bg-telegram-card">
         <h3 class="text-xs font-bold text-telegram-text mb-4 uppercase tracking-widest">Onde o dinheiro foi</h3>
         <div id="mdTopCategories" class="space-y-4">
@@ -84,7 +106,7 @@
         </div>
       </div>
 
-      <!-- BLOCO 5: Assinaturas + Parcelamentos -->
+      <!-- BLOCO 6: Assinaturas + Parcelamentos -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <!-- Assinaturas -->
         <div class="glass-card p-5 rounded-3xl bg-telegram-card">
@@ -108,7 +130,7 @@
         </div>
       </div>
 
-      <!-- BLOCO 6: Faturas -->
+      <!-- BLOCO 7: Faturas -->
       <div class="glass-card p-5 rounded-3xl bg-telegram-card">
         <h3 class="text-xs font-bold text-telegram-text mb-4 uppercase tracking-widest">Evolução de Faturas</h3>
         <div class="h-32 w-full mb-6">
@@ -120,7 +142,15 @@
         </div>
       </div>
 
-      <!-- BLOCO 7: Metas + Orçamentos -->
+      <!-- BLOCO 8: Timeline Consolidada -->
+      <div class="glass-card p-5 rounded-3xl bg-telegram-card">
+        <h3 class="text-xs font-bold text-telegram-text mb-4 uppercase tracking-widest">Extrato Consolidado</h3>
+        <div id="mdTimelineList" class="space-y-3">
+          <!-- Injetado via JS -->
+        </div>
+      </div>
+
+      <!-- BLOCO 9: Metas + Orçamentos -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="glass-card p-5 rounded-3xl bg-telegram-card">
           <h3 class="text-xs font-bold text-telegram-text mb-4 uppercase tracking-widest">Metas</h3>
@@ -132,16 +162,7 @@
         </div>
       </div>
 
-      <!-- BLOCO 8: Carteira FIIs -->
-      <div id="mdFiisBlock" class="hidden glass-card p-5 rounded-3xl bg-telegram-card">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-xs font-bold text-telegram-text uppercase tracking-widest">Carteira de FIIs</h3>
-          <span id="mdRendaFII" class="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold">--</span>
-        </div>
-        <div id="mdFiisList" class="space-y-3"></div>
-      </div>
-
-      <!-- BLOCO 9: Alertas do Alfredo -->
+      <!-- BLOCO 10: Alertas do Alfredo -->
       <div id="mdAlertasBlock" class="hidden glass-card p-5 rounded-3xl bg-telegram-card border-l-4 border-brand">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-full overflow-hidden bg-brand/10 shrink-0">
@@ -154,13 +175,13 @@
         <div id="mdAlertasList" class="space-y-4"></div>
       </div>
 
-      <!-- BLOCO 10: Próximos Vencimentos -->
+      <!-- BLOCO 11: Próximos Vencimentos -->
       <div class="glass-card p-5 rounded-3xl bg-telegram-card">
         <h3 class="text-xs font-bold text-telegram-text mb-4 uppercase tracking-widest">Próximos 30 dias</h3>
         <div id="mdVencimentosList" class="space-y-3"></div>
       </div>
 
-      <!-- BLOCO 11: Insights Rápidos -->
+      <!-- BLOCO 12: Insights Rápidos -->
       <div id="mdInsightsBlock" class="glass-card p-5 rounded-3xl bg-telegram-card/50 border border-brand/10">
         <div id="mdInsightsList" class="space-y-2 text-xs text-telegram-text leading-relaxed">
           <!-- Injetado via JS -->

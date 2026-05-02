@@ -85,6 +85,7 @@ from pierre_finance.client import PierreClient
 from finance_utils import is_expense_type
 import google.generativeai as genai
 from types import SimpleNamespace
+from gerente_financeiro.pdf_generator import generate_financial_pdf, generate_livro_caixa_pdf
 
 # Criar app Flask
 app = Flask(__name__, 
@@ -1400,6 +1401,50 @@ def _generate_local_book_pdf(lancamentos):
     return buffer.getvalue()
 
 
+@app.route('/api/miniapp/livro_caixa/download')
+def miniapp_livro_caixa_download():
+    """Gera e retorna o PDF do Livro Caixa para download direto."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+        # Busca todos os lançamentos syncados via Open Finance (ou todos se preferir)
+        # Ordenados por data decrescente
+        lancamentos = db.query(Lancamento).options(
+            joinedload(Lancamento.categoria),
+            joinedload(Lancamento.subcategoria),
+            joinedload(Lancamento.conta)
+        ).filter(
+            Lancamento.id_usuario == usuario.id,
+            Lancamento.origem == 'open_finance'
+        ).order_by(Lancamento.data_transacao.desc()).limit(1000).all()
+
+        mes_ano_str = datetime.now().strftime('%m/%Y')
+        pdf_bytes = generate_livro_caixa_pdf(
+            user_name=usuario.nome_completo or "Usuário",
+            lancamentos=lancamentos,
+            mes_ano_str=mes_ano_str
+        )
+
+        response = make_response(pdf_bytes)
+        response.headers['Content-Type'] = 'application/pdf'
+        filename = f"Livro_Caixa_{usuario.id}_{datetime.now().strftime('%Y%m%d')}.pdf"
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+        return response
+
+    except Exception as e:
+        logger.error(f"Erro ao baixar livro caixa: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
 @app.route('/api/miniapp/history')
 def miniapp_history():
     """Lista os ultimos lancamentos para o miniapp"""
@@ -1527,6 +1572,7 @@ def miniapp_modo_deus():
             ).all()
             snap_map = {s.id_conta: s for s in snapshots}
 
+            saldo_bancario_puro = 0.0
             for c in contas:
                 ultimo_snapshot = snap_map.get(c.id)
                 base_balance = float(ultimo_snapshot.saldo or 0) if ultimo_snapshot else 0.0
@@ -1546,13 +1592,34 @@ def miniapp_modo_deus():
                         "limite": float(c.limite_cartao or 0) if c.tipo == "Cartão de Crédito" else None
                     })
 
-                if c.tipo == "Cartão de Crédito":
-                    divida_cartoes += abs(current_acc_balance)
-                    total_patrimonio_contas -= abs(current_acc_balance)
-                else:
-                    total_patrimonio_contas += current_acc_balance
+                if c.tipo != "Cartão de Crédito":
                     if c.tipo in ["Conta Corrente", "Carteira Digital", "Conta Poupança"]:
-                        saldo_disponivel += max(0, current_acc_balance)
+                        saldo_bancario_puro += current_acc_balance
+
+            # 2. Busca Faturas em Aberto/Atrasadas (Comprometimento de Cartão)
+            faturas_pendentes_valor = db.query(func.sum(FaturaCartao.valor_total)).filter(
+                FaturaCartao.id_usuario == user_id,
+                FaturaCartao.status != 'paga'
+            ).scalar() or 0.0
+
+            # 3. Busca Lembretes/Agendamentos do mês (Comprometimento de Boletos)
+            agendamentos_mes_valor = db.query(func.sum(Agendamento.valor)).filter(
+                Agendamento.id_usuario == user_id,
+                Agendamento.ativo == True,
+                Agendamento.proxima_data_execucao >= start_month,
+                Agendamento.proxima_data_execucao <= end_month
+            ).scalar() or 0.0
+
+            # CÁLCULO MESTRE: Saldo Disponível Real (O que sobra depois de pagar tudo do mês)
+            saldo_disponivel_real = float(saldo_bancario_puro) - float(faturas_pendentes_valor) - float(agendamentos_mes_valor)
+
+            # --- VAZAMENTOS FINANCEIROS (Tarifas, Juros, IOF) ---
+            vazamentos_valor = abs(float(db.query(func.sum(Lancamento.valor)).filter(
+                Lancamento.id_usuario == user_id,
+                _expense_type_condition(),
+                Lancamento.data_transacao >= datetime.combine(start_month, time.min),
+                func.lower(Lancamento.descricao).op('~')('juros|multa|encargo|iof|tarifa|anuidade|cesta serv|manutencao conta')
+            ).scalar() or 0))
 
             # --- LÓGICA DE PATRIMÔNIO HISTÓRICO (Lucro/Prejuízo Total) ---
             # Filtro para ignorar APENAS Faturas (ID Subcat 584) nos totais de Receita/Despesa.
@@ -1571,37 +1638,22 @@ def miniapp_modo_deus():
             patrimonio_liquido = float(total_receitas_hist) - abs(float(total_despesas_hist))
             
             # Fluxo de Caixa Mensal (Cálculo Granular para evitar duplicidade)
-            lancamentos_entrada_mes = db.query(Lancamento).options(joinedload(Lancamento.categoria), joinedload(Lancamento.subcategoria)).filter(
+            entradas_mes = db.query(func.sum(Lancamento.valor)).filter(
                 Lancamento.id_usuario == user_id,
                 _income_type_condition(),
                 Lancamento.data_transacao >= datetime.combine(start_month, time.min),
-                Lancamento.data_transacao <= datetime.combine(end_month, time.max)
-            ).all()
+                Lancamento.data_transacao <= datetime.combine(end_month, time.max),
+                Lancamento.is_transferencia_interna == False
+            ).scalar() or 0.0
 
-            entradas_mes_real = 0.0
-            for lanc in lancamentos_entrada_mes:
-                if lanc.is_transferencia_interna:
-                    continue
-                entradas_mes_real += abs(float(lanc.valor))
-            
-            entradas_mes = entradas_mes_real
-            
-            # --- LÓGICA DE DUPLICIDADE DE SAÍDAS ---
-            lancamentos_saida_mes = db.query(Lancamento).options(joinedload(Lancamento.categoria), joinedload(Lancamento.subcategoria)).filter(
+            saidas_mes = db.query(func.sum(Lancamento.valor)).filter(
                 Lancamento.id_usuario == user_id,
                 _expense_type_condition(),
                 Lancamento.data_transacao >= datetime.combine(start_month, time.min),
-                Lancamento.data_transacao <= datetime.combine(end_month, time.max)
-            ).all()
-
-            saidas_mes_real = 0.0
-            for lanc in lancamentos_saida_mes:
-                # Usa a regra centralizada para evitar duplicidade com faturas e transferências
-                if lanc.is_transferencia_interna:
-                    continue
-                saidas_mes_real += abs(float(lanc.valor))
+                Lancamento.data_transacao <= datetime.combine(end_month, time.max),
+                Lancamento.is_transferencia_interna == False
+            ).scalar() or 0.0
             
-            saidas_mes = saidas_mes_real
             resultado_mes = float(entradas_mes) - abs(float(saidas_mes))
             
             # Limite Diário Seguro (Baseado estritamente no Lucro Mensal)
@@ -1614,14 +1666,16 @@ def miniapp_modo_deus():
             
             result['visao_geral'] = {
                 "patrimonio_liquido": patrimonio_liquido,
-                "saldo_disponivel": saldo_disponivel,
+                "saldo_disponivel_real": saldo_disponivel_real,
+                "saldo_bancario_puro": float(saldo_bancario_puro),
+                "comprometimento_faturas": float(faturas_pendentes_valor),
+                "comprometimento_agendamentos": float(agendamentos_mes_valor),
+                "vazamentos_financeiros": vazamentos_valor,
                 "resultado_mes": resultado_mes,
                 "entradas_mes": float(entradas_mes),
                 "saidas_mes": abs(float(saidas_mes)),
                 "dias_restantes_mes": dias_restantes,
                 "limite_diario_seguro": limite_diario,
-                "divida_cartoes": divida_cartoes,
-                "variacao_patrimonio_pct": 0.0,  # TODO: Implementar cálculo real
                 "minhas_contas": minhas_contas_list
             }
         except Exception as e:
@@ -1938,6 +1992,24 @@ def miniapp_modo_deus():
             ins = []
             vg = result.get('visao_geral', {})
             if vg.get('resultado_mes', 0) < 0: ins.append(f"O mês está fechando no vermelho em R$ {abs(vg['resultado_mes']):.2f}")
+            # --- TIMELINE CONSOLIDADA (Extrato Unificado) ---
+            timeline_query = db.query(Lancamento).options(joinedload(Lancamento.conta)).filter(
+                Lancamento.id_usuario == user_id,
+                Lancamento.origem == 'open_finance'
+            ).order_by(Lancamento.data_transacao.desc()).limit(20).all()
+            
+            timeline_list = []
+            for tx in timeline_query:
+                timeline_list.append({
+                    "id": tx.id,
+                    "descricao": tx.descricao,
+                    "valor": float(tx.valor),
+                    "tipo": tx.tipo,
+                    "data": tx.data_transacao.isoformat(),
+                    "conta_nome": tx.conta.nome if tx.conta else "Conta"
+                })
+            result['timeline'] = timeline_list
+
             if result.get('top_categorias') and result['top_categorias'][0]['percentual_do_total_gastos'] > 40: ins.append(f"{result['top_categorias'][0]['nome']} consome {result['top_categorias'][0]['percentual_do_total_gastos']:.0f}% dos gastos.")
             result['insights_rapidos'] = ins[:3]
         except Exception as e:

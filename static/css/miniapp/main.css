@@ -231,7 +231,7 @@
   .modal-overlay {
     position: fixed;
     inset: 0;
-    z-index: 60;
+    z-index: 200; /* Superior ao bottomNav (100) */
     display: flex;
     align-items: flex-end; /* Mobile-first: bottom-sheet */
     justify-content: center;

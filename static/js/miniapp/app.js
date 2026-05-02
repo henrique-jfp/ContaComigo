@@ -4101,6 +4101,24 @@ lucide.createIcons();
       return `<div class="w-6 h-6 shrink-0 rounded-full overflow-hidden bg-brand/10 flex items-center justify-center shadow-sm border border-brand/20"><i data-lucide="tag" class="w-3 h-3 text-brand"></i></div>`;
     }
 
+    async function downloadLivroCaixa() {
+      try {
+        if (!sessionId) {
+            showToast('Sessão expirada', 'error');
+            return;
+        }
+        showToast('Gerando seu Livro Caixa...', 'info');
+        
+        // Abre o PDF em uma nova aba passando o sessionId
+        const url = `/api/miniapp/livro_caixa/download?session_id=${encodeURIComponent(sessionId)}`;
+        window.open(url, '_blank');
+      } catch (err) {
+        console.error('Erro ao baixar Livro Caixa:', err);
+        showToast('Erro ao baixar relatório', 'error');
+      }
+    }
+    window.downloadLivroCaixa = downloadLivroCaixa;
+
     function renderModoDeus(data) {
       const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
       // Fix bug: datas ISO puro (YYYY-MM-DD) sem hora são interpretadas como Meia Noite UTC, 
@@ -4202,34 +4220,26 @@ lucide.createIcons();
         lEl.className = `text-[10px] font-bold px-2 py-0.5 rounded-full ${score >= 80 ? 'bg-green-100 text-green-700' : (score >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700')}`;
       }
 
-      const mdPatrimonio = document.getElementById('mdPatrimonio');
-      if (mdPatrimonio) mdPatrimonio.textContent = fmt.format(vg.patrimonio_liquido || 0);
-
-      const vpcEl = document.getElementById('mdPatrimonioVar');
-      if (vpcEl) {
-        vpcEl.textContent = 'LUCRO/PREJUÍZO ACUMULADO';
-        vpcEl.className = 'text-[10px] mt-1 font-semibold text-brand/70';
+      // MÉTRICAS TOPO: Saldo Disponível Real
+      const mdSaldoLivre = document.getElementById('mdSaldoLivre');
+      if (mdSaldoLivre) {
+          const val = vg.saldo_disponivel_real || 0;
+          mdSaldoLivre.textContent = fmt.format(val);
+          mdSaldoLivre.className = `text-3xl font-black truncate font-financial ${val >= 0 ? 'text-telegram-text' : 'text-rose-500'}`;
       }
 
-      const mdDisponivel = document.getElementById('mdDisponivel');
-      const mdLimiteDiario = document.getElementById('mdLimiteDiario');
-      if (mdDisponivel && mdLimiteDiario) {
-        if (vg.resultado_mes <= 0) {
-          // Se estiver negativo ou zero, o foco é o bloqueio total
-          mdDisponivel.textContent = "🛑 BLOQUEIO";
-          mdDisponivel.className = 'text-xl font-black text-red-500 truncate font-financial animate-pulse';
+      const mdCaixaPuro = document.getElementById('mdCaixaPuro');
+      if (mdCaixaPuro) mdCaixaPuro.textContent = fmt.format(vg.saldo_bancario_puro || 0);
 
-          mdLimiteDiario.textContent = 'GASTOS CONGELADOS';
-          mdLimiteDiario.className = 'text-[9px] mt-1 text-red-500/80 font-black font-mono';
-        } else {
-          // Se estiver positivo, o valor principal é quanto ele pode gastar por dia
-          mdDisponivel.textContent = fmt.format(vg.limite_diario_seguro || 0);
-          mdDisponivel.className = 'text-xl font-black text-telegram-text truncate font-financial';
-
-          mdLimiteDiario.textContent = 'LIMITE DIÁRIO SEGURO';
-          mdLimiteDiario.className = 'text-[9px] mt-1 text-emerald-500 font-black font-mono';
-        }
+      const mdComprometido = document.getElementById('mdComprometido');
+      if (mdComprometido) {
+          const val = (vg.comprometimento_faturas || 0) + (vg.comprometimento_agendamentos || 0);
+          mdComprometido.textContent = fmt.format(val);
       }
+
+      // VAZAMENTOS
+      const vValEl = document.getElementById('mdVazamentosValor');
+      if (vValEl) vValEl.textContent = fmt.format(vg.vazamentos_financeiros || 0);
       const rMes = vg.resultado_mes || 0;
       const rEl = document.getElementById('mdResultado');
       if (rEl) {
@@ -4298,7 +4308,7 @@ lucide.createIcons();
                     <span class="text-telegram-text font-black">${fmt.format(c.total)}</span>
                   </div>
                   <div class="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div class="h-full rounded-full transition-all duration-1000" style="width: ${(c.total / maxT * 100)}%; background-color: ${c.cor_hex}"></div>
+                    <div class="h-full rounded-full transition-all duration-1000" style="width: ${(c.total / maxT * 100)}%; background-color: ${c.cor_hex || '#82293e'}"></div>
                   </div>
                 </button>
                 ${subsHtml}
@@ -4311,200 +4321,217 @@ lucide.createIcons();
         }
       }
 
-      // Função global para o toggle
-      window.toggleCategorySubs = function(id) {
-        const subs = document.getElementById(`${id}-subs`);
-        const icon = document.getElementById(`${id}-icon`);
-        if (subs) {
-          const isHidden = subs.classList.contains('hidden');
-          // Fecha outros? (opcional, vamos deixar abrir múltiplos por enquanto)
-          subs.classList.toggle('hidden');
-          if (icon) {
-            icon.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
-          }
-        }
-      };
-
-      const mdTotalAssinaturas = document.getElementById('mdTotalAssinaturas');
+      // ASSINATURAS
       const assL = document.getElementById('mdAssinaturasList');
       const assBlock = assL?.closest('.glass-card');
       if (assL) {
         const assObj = data.assinaturas || { lista: [], total_mensal: 0 };
-        if (assObj.lista.length > 0) {
+        const mdTotalAssinaturas = document.getElementById('mdTotalAssinaturas');
+        if (assObj.lista && assObj.lista.length > 0) {
           if (assBlock) assBlock.classList.remove('hidden');
           assL.innerHTML = '';
           if (mdTotalAssinaturas) mdTotalAssinaturas.textContent = fmt.format(assObj.total_mensal);
           assObj.lista.slice(0, 10).forEach(a => {
             const logo = getBrandLogoHtml(a.descricao);
-            assL.innerHTML += `<div class="flex items-center justify-between gap-3"><div class="flex items-center gap-3 min-w-0">${logo}<span class="text-[12px] font-bold text-telegram-text truncate">${a.descricao}</span></div><span class="text-[12px] text-telegram-text font-black whitespace-nowrap">${fmt.format(a.valor)}</span></div>`;
+            assL.innerHTML += `
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3 min-w-0">
+                  ${logo}
+                  <span class="text-[10px] font-bold text-telegram-text truncate">${a.descricao}</span>
+                </div>
+                <span class="text-[10px] text-rose-500 font-black whitespace-nowrap">${fmt.format(a.valor)}</span>
+              </div>`;
           });
         } else if (assBlock) {
           assBlock.classList.add('hidden');
         }
       }
 
-      const mdTotalParcelas = document.getElementById('mdTotalParcelas');
+      // PARCELAMENTOS
       const parcL = document.getElementById('mdParcelasList');
       const parcBlock = parcL?.closest('.glass-card');
       if (parcL) {
         const parcObj = data.parcelamentos || { lista: [], total_mensal_parcelas: 0 };
-        if (parcObj.lista.length > 0) {
+        const mdTotalParcelas = document.getElementById('mdTotalParcelas');
+        if (parcObj.lista && parcObj.lista.length > 0) {
           if (parcBlock) parcBlock.classList.remove('hidden');
           parcL.innerHTML = '';
           if (mdTotalParcelas) mdTotalParcelas.textContent = fmt.format(parcObj.total_mensal_parcelas);
           parcObj.lista.slice(0, 10).forEach(p => {
-            parcL.innerHTML += `<div><div class="flex justify-between text-[11px] mb-1"><span class="text-telegram-text truncate mr-2">${p.descricao}</span><span class="text-telegram-hint">${p.parcela_atual}/${p.total_parcelas}</span></div><div class="h-1 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-amber-500" style="width: ${p.percentual_concluido}%"></div></div></div>`;
+            parcL.innerHTML += `
+              <div class="flex items-center justify-between">
+                <div class="min-w-0">
+                  <p class="text-[10px] font-bold text-telegram-text truncate">${p.descricao}</p>
+                  <p class="text-[8px] text-telegram-hint uppercase font-mono">${p.parcela_atual}/${p.total_parcelas} • ${dtFmt(p.data_proxima_parcela)}</p>
+                </div>
+                <span class="text-[10px] font-black text-amber-600 shrink-0 ml-2">${fmt.format(p.valor_parcela)}</span>
+              </div>`;
           });
         } else if (parcBlock) {
           parcBlock.classList.add('hidden');
         }
       }
 
-      const cartL = document.getElementById('mdCartoesList');
-      const cartBlock = cartL?.closest('.glass-card');
-       if (cartL) {
+      // CARTOES / FATURAS
+      const cardL = document.getElementById('mdCartoesList');
+      if (cardL) {
         const cards = data.cartoes || [];
-        const pastBills = data.faturas_historico || [];
-        
-        if (cards.length > 0 || pastBills.length > 0) {
-          if (cartBlock) cartBlock.classList.remove('hidden');
-          cartL.innerHTML = '';
-          
-          // 1. Faturas em Aberto
-          if (cards.length > 0) {
-            cards.forEach(c => {
-              const v = c.dias_para_vencer;
-              const b = v !== null && v <= 7 ? `<span class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[8px] font-bold">VENCE EM ${v}D</span>` : (v !== null && v <= 14 ? `<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[8px] font-bold">VENCE EM ${v}D</span>` : '');
-              cartL.innerHTML += `
-                <div class="flex items-center gap-3">
-                  <div class="w-2 h-2 rounded-full" style="background-color: ${c.cor_hex}"></div>
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2">
-                      <span class="text-[11px] font-bold text-telegram-text truncate">${c.nome_conta}</span>${b}
-                    </div>
-                    <p class="text-[9px] text-telegram-hint">Vence ${dtFmt(c.data_vencimento)}</p>
-                  </div>
-                  <div class="text-right">
-                    <div class="text-[11px] font-bold text-telegram-text">${fmt.format(c.valor_total)}</div>
-                    <p class="text-[9px] text-telegram-hint">de ${fmt.format(c.limite_cartao)}</p>
-                  </div>
-                </div>`;
-            });
-          }
-
-          // 2. Histórico de Faturas (Pagas)
-          if (pastBills.length > 0) {
-            cartL.innerHTML += `
-              <div class="mt-4 pt-3 border-t border-telegram-separator">
-                <h4 class="text-[9px] font-bold text-telegram-hint uppercase tracking-wider mb-3">Faturas Pagas Recentemente</h4>
-                <div class="space-y-3">
-                  ${pastBills.map(f => `
-                    <div class="flex items-center justify-between opacity-70">
-                      <div class="min-w-0">
-                        <p class="text-[10px] font-bold text-telegram-text truncate">${f.nome_conta}</p>
-                        <p class="text-[8px] text-telegram-hint">Paga em ${dtFmt(f.data_vencimento)}</p>
-                      </div>
-                      <div class="text-right">
-                        <p class="text-[10px] font-black text-emerald-600">${fmt.format(f.valor_total)}</p>
-                        <span class="text-[7px] font-bold px-1 rounded bg-emerald-100 text-emerald-700">PAGA</span>
-                      </div>
-                    </div>
-                  `).join('')}
+        if (cards.length > 0) {
+          cardL.innerHTML = cards.map(c => `
+            <div class="space-y-2">
+              <div class="flex justify-between items-center text-[10px]">
+                <span class="font-bold text-telegram-text uppercase tracking-wider">${c.nome_conta}</span>
+                <span class="font-black ${c.status === 'atrasada' ? 'text-red-600' : 'text-telegram-hint'} uppercase font-mono">${c.status}</span>
+              </div>
+              <div class="flex justify-between items-end">
+                <div>
+                   <p class="text-[8px] text-telegram-hint uppercase font-mono">Vencimento ${dtFmt(c.data_vencimento)}</p>
+                   <p class="text-lg font-black text-telegram-text font-financial">${fmt.format(c.valor_total)}</p>
                 </div>
-              </div>`;
-          }
-        } else if (cartBlock) {
-          cartBlock.classList.add('hidden');
+                <div class="text-right">
+                   <p class="text-[8px] text-telegram-hint uppercase font-mono">Limite Cartão</p>
+                   <p class="text-[10px] font-bold text-emerald-600">${fmt.format(c.limite_cartao)}</p>
+                </div>
+              </div>
+              <div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div class="h-full bg-rose-500" style="width: ${Math.min(100, (c.valor_total / (c.limite_cartao || 1) * 100))}%"></div>
+              </div>
+            </div>
+          `).join('');
+        } else {
+          cardL.innerHTML = '<p class="text-[10px] text-telegram-hint italic">Nenhum cartão conectado.</p>';
         }
       }
 
-      const mL = document.getElementById('mdMetasList');
-      const mBlock = mL?.closest('.glass-card');
-      if (mL) {
+      // TIMELINE CONSOLIDADA
+      const timeL = document.getElementById('mdTimelineList');
+      if (timeL) {
+        const timeline = data.timeline || [];
+        if (timeline.length > 0) {
+          timeL.innerHTML = timeline.map(tx => {
+            const isRec = tx.tipo === 'Receita';
+            return `
+              <div class="flex items-center justify-between py-2 border-b border-telegram-separator/20 last:border-0">
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="w-8 h-8 rounded-full ${isRec ? 'bg-emerald-500/10' : 'bg-rose-500/10'} flex items-center justify-center shrink-0">
+                    <i data-lucide="${isRec ? 'arrow-down-left' : 'arrow-up-right'}" class="w-4 h-4 ${isRec ? 'text-emerald-600' : 'text-rose-600'}"></i>
+                  </div>
+                  <div class="min-w-0">
+                    <p class="text-[10px] font-bold text-telegram-text truncate">${tx.descricao}</p>
+                    <p class="text-[8px] text-telegram-hint uppercase font-mono">${dtFmt(tx.data)} • ${tx.conta_nome || 'Conta'}</p>
+                  </div>
+                </div>
+                <span class="text-[10px] font-black ${isRec ? 'text-emerald-600' : 'text-rose-600'} shrink-0 ml-2">
+                  ${isRec ? '+' : '-'} ${fmt.format(Math.abs(tx.valor))}
+                </span>
+              </div>
+            `;
+          }).join('');
+        } else {
+          timeL.innerHTML = '<p class="text-[10px] text-telegram-hint italic text-center py-4">Nenhuma transação recente encontrada.</p>';
+        }
+      }
+
+      const metasL = document.getElementById('mdMetasList');
+      const mBlock = metasL?.closest('.glass-card');
+      if (metasL) {
         const metas = data.metas || [];
         if (metas.length > 0) {
           if (mBlock) mBlock.classList.remove('hidden');
-          mL.innerHTML = '';
-          metas.forEach(m => {
-            mL.innerHTML += `<div><div class="flex justify-between text-[11px] mb-1"><span class="text-telegram-text truncate mr-2">${m.descricao}</span><span class="text-telegram-text font-bold">${m.percentual.toFixed(0)}%</span></div><div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-green-500" style="width: ${m.percentual}%"></div></div></div>`;
-          });
+          metasL.innerHTML = metas.map(m => `
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-[10px]">
+                <span class="font-bold text-telegram-text">${m.descricao}</span>
+                <span class="font-black text-brand">${Math.round(m.percentual)}%</span>
+              </div>
+              <div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div class="h-full bg-brand" style="width: ${m.percentual}%"></div>
+              </div>
+            </div>`).join('');
         } else if (mBlock) {
           mBlock.classList.add('hidden');
         }
       }
 
-      const oL = document.getElementById('mdOrcamentosList');
-      const oBlock = oL?.closest('.glass-card');
-      if (oL) {
+      const orcL = document.getElementById('mdOrcamentosList');
+      const oBlock = orcL?.closest('.glass-card');
+      if (orcL) {
         const orcs = data.orcamentos || [];
         if (orcs.length > 0) {
           if (oBlock) oBlock.classList.remove('hidden');
-          oL.innerHTML = '';
-          orcs.forEach(o => {
-            const cC = o.status === 'estourado' ? 'bg-red-100 text-red-700' : (o.status === 'atencao' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700');
-            oL.innerHTML += `<div class="flex items-center justify-between"><span class="text-[11px] text-telegram-text font-medium">${o.categoria}</span><span class="px-2 py-0.5 rounded-full ${cC} text-[9px] font-bold">${o.percentual_usado.toFixed(0)}% usado</span></div>`;
-          });
+          orcL.innerHTML = orcs.map(o => `
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-[10px]">
+                <span class="font-bold text-telegram-text">${o.categoria}</span>
+                <span class="font-black ${o.status === 'estourado' ? 'text-red-500' : 'text-emerald-500'}">${Math.round(o.percentual_usado)}%</span>
+              </div>
+              <div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div class="h-full ${o.status === 'estourado' ? 'bg-red-500' : 'bg-emerald-500'}" style="width: ${Math.min(100, o.percentual_usado)}%"></div>
+              </div>
+            </div>`).join('');
         } else if (oBlock) {
           oBlock.classList.add('hidden');
         }
       }
-      const fBlock = document.getElementById('mdFiisBlock');
-      if (data.fiis && data.fiis.lista && data.fiis.lista.length > 0) {
-        if (fBlock) fBlock.classList.remove('hidden');
-        const mdRendaFII = document.getElementById('mdRendaFII');
-        if (mdRendaFII) mdRendaFII.textContent = data.fiis.renda_mensal_estimada ? fmt.format(data.fiis.renda_mensal_estimada) + '/mês' : '—';
-        const fL = document.getElementById('mdFiisList');
-        if (fL) {
-          fL.innerHTML = '';
-          data.fiis.lista.forEach(f => {
-            fL.innerHTML += `<div class="flex justify-between items-center text-[11px]"><div><span class="font-bold text-telegram-text">${f.ticker}</span><p class="text-[9px] text-telegram-hint">${f.quantidade_cotas} cotas</p></div><div class="text-right"><span class="text-telegram-text font-bold">${fmt.format(f.valor_posicao)}</span><p class="text-[9px] text-telegram-hint">PM: ${fmt.format(f.preco_medio)}</p></div></div>`;
-          });
+
+      const alertB = document.getElementById('mdAlertasBlock');
+      const alertL = document.getElementById('mdAlertasList');
+      if (alertL) {
+        const alerts = data.alertas || [];
+        if (alerts.length > 0) {
+          alertB.classList.remove('hidden');
+          alertL.innerHTML = alerts.map(a => `
+            <div class="flex gap-3">
+              <div class="mt-1 w-1.5 h-1.5 rounded-full bg-brand shrink-0"></div>
+              <p class="text-[10px] text-telegram-text leading-tight">${a.titulo || 'Alerta'}: ${a.detalhe || a.detalle || ''}</p>
+            </div>
+          `).join('');
+        } else {
+          alertB.classList.add('hidden');
         }
-      } else if (fBlock) {
-        fBlock.classList.add('hidden');
       }
 
-      const aBlock = document.getElementById('mdAlertasBlock');
-      if (data.alertas && data.alertas.length > 0) {
-        if (aBlock) aBlock.classList.remove('hidden');
-        const aI = document.getElementById('mdAlertasList');
-        if (aI) {
-          aI.innerHTML = '';
-          data.alertas.forEach(a => {
-            const dC = a.tipo === 'critico' ? 'bg-red-500' : (a.tipo === 'aviso' ? 'bg-amber-500' : 'bg-blue-500');
-            aI.innerHTML += `<div class="flex items-start gap-3"><div class="w-2 h-2 rounded-full mt-1.5 ${dC}"></div><div><p class="text-[11px] font-bold text-telegram-text">${a.titulo}</p><p class="text-[10px] text-telegram-hint">${a.detalhe}</p></div></div>`;
-          });
+      const venL = document.getElementById('mdVencimentosList');
+      if (venL) {
+        const vens = data.proximos_vencimentos || [];
+        if (vens.length > 0) {
+          venL.innerHTML = vens.map(v => {
+            const dt = new Date(v.data);
+            const diff = Math.ceil((dt - new Date()) / (1000 * 60 * 60 * 24));
+            return `
+              <div class="flex justify-between items-center text-[10px]">
+                <div class="flex items-center gap-2">
+                  <div class="w-1.5 h-1.5 rounded-full ${diff <= 3 ? 'bg-red-500 animate-pulse' : 'bg-slate-300'}"></div>
+                  <span class="font-medium text-telegram-text">${v.descricao}</span>
+                </div>
+                <div class="text-right">
+                  <p class="font-black text-telegram-text">${fmt.format(v.valor)}</p>
+                  <p class="text-[8px] text-telegram-hint uppercase font-mono">${diff} DIAS</p>
+                </div>
+              </div>`;
+          }).join('');
+        } else {
+          venL.innerHTML = '<p class="text-[10px] text-telegram-hint italic">Nada vencendo em breve.</p>';
         }
-      } else if (aBlock) {
-        aBlock.classList.add('hidden');
       }
 
-      const vL = document.getElementById('mdVencimentosList');
-      if (vL) {
-        vL.innerHTML = '';
-        (data.proximos_vencimentos || []).forEach(v => {
-          vL.innerHTML += `<div class="flex items-center justify-between text-[11px]"><div class="flex items-center gap-2"><div class="w-1.5 h-1.5 rounded-full" style="background-color: ${v.cor_hex}"></div><span class="text-telegram-text truncate max-w-[120px]">${v.descricao}</span><span class="text-[9px] text-telegram-hint">${dtFmt(v.data)}</span></div><span class="font-bold text-telegram-text">${fmt.format(v.valor)}</span></div>`;
-        });
-      }
-
-      const iL = document.getElementById('mdInsightsList');
-      if (iL) {
-        iL.innerHTML = '';
-        const ins = data.insights_rapidos || [];
-        if (data.perfil_ia) {
-          iL.innerHTML += `
-            <div class="bg-brand/5 p-4 rounded-2xl mb-4 border border-brand/10">
-              <p class="text-[9px] font-black text-brand uppercase tracking-[0.2em] mb-2 flex items-center gap-2 font-mono">
-                <i data-lucide="brain" class="w-3 h-3"></i> ANÁLISE COMPORTAMENTAL
-              </p>
-              <p class="text-xs italic text-telegram-text leading-relaxed">"${data.perfil_ia}"</p>
-            </div>`;
+      const insB = document.getElementById('mdInsightsBlock');
+      const insL = document.getElementById('mdInsightsList');
+      if (insL) {
+        const insights = data.insights_rapidos || [];
+        if (insights.length > 0) {
+          insB.classList.remove('hidden');
+          insL.innerHTML = insights.map(i => `
+            <div class="flex gap-2">
+              <span class="text-brand shrink-0">✦</span>
+              <p class="text-[10px] text-telegram-text">${i}</p>
+            </div>`).join('');
+        } else {
+          insB.classList.add('hidden');
         }
-        ins.forEach(i => {
-          iL.innerHTML += `<p class="flex items-start gap-2 mb-1"><span>•</span> ${i}</p>`;
-        });
-        if (window.lucide) lucide.createIcons();
       }
+      
+      if (window.lucide) lucide.createIcons();
     }
 
     // --- SISTEMA DE AJUDA DOS GRÁFICOS ---

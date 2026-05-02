@@ -819,3 +819,101 @@ def generate_financial_pdf(context: dict) -> bytes:
     doc.build(elements)
     buffer.seek(0)
     return buffer.getvalue()
+
+
+def generate_livro_caixa_pdf(user_name: str, lancamentos: list, mes_ano_str: str) -> bytes:
+    """
+    Gera um PDF detalhado do Livro Caixa (Extrato Consolidado).
+    Colunas: Data/Hora, Conta, Descrição, Categoria/Sub, Tipo, Valor.
+    """
+    buffer = io.BytesIO()
+    doc = BaseDocTemplate(buffer, pagesize=A4)
+    
+    # Margens e Frame
+    frame = Frame(15*mm, 15*mm, A4[0] - 30*mm, A4[1] - 30*mm, id='normal')
+    template = PageTemplate(id='Normal', frames=[frame], onPage=footer_canvas)
+    doc.addPageTemplates([template])
+    
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # ── Cabeçalho ─────────────────────────────────────────────
+    elements.append(Paragraph(f"<b>LIVRO CAIXA CONSOLIDADO</b>", 
+                    ParagraphStyle('h1', fontSize=18, textColor=C_NAVY, spaceAfter=5)))
+    elements.append(Paragraph(f"Cliente: {user_name.upper()}  |  Período: {mes_ano_str}", 
+                    ParagraphStyle('sub', fontSize=10, textColor=C_MUTED, spaceAfter=20)))
+
+    # ── Resumo Rápido ─────────────────────────────────────────
+    total_ent = sum(float(l.valor) for l in lancamentos if not is_expense_type(l.tipo))
+    total_sai = sum(abs(float(l.valor)) for l in lancamentos if is_expense_type(l.tipo))
+    saldo = total_ent - total_sai
+
+    resumo_data = [
+        [Paragraph("<b>Total Entradas</b>", style('r1', textColor=C_MUTED)), 
+         Paragraph(f"<b>{fmt_brl(total_ent)}</b>", style('v1', textColor=C_EMERALD, alignment=2))],
+        [Paragraph("<b>Total Saídas</b>", style('r2', textColor=C_MUTED)), 
+         Paragraph(f"<b>{fmt_brl(total_sai)}</b>", style('v2', textColor=C_RED, alignment=2))],
+        [Paragraph("<b>Saldo Líquido</b>", style('r3', textColor=C_NAVY)), 
+         Paragraph(f"<b>{fmt_brl(saldo)}</b>", style('v3', textColor=C_INDIGO, alignment=2))]
+    ]
+    resumo_table = Table(resumo_data, colWidths=[40*mm, 40*mm])
+    resumo_table.setStyle(TableStyle([
+        ('LINEBELOW', (0, 0), (-1, -1), 0.5, C_BORDER),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(resumo_table)
+    elements.append(Spacer(1, 10*mm))
+
+    # ── Tabela de Lançamentos ─────────────────────────────────
+    header = [
+        Paragraph('<b>Data/Hora</b>', style('th0', fontSize=8, textColor=C_WHITE)),
+        Paragraph('<b>Conta</b>',     style('th1', fontSize=8, textColor=C_WHITE)),
+        Paragraph('<b>Descrição</b>', style('th2', fontSize=8, textColor=C_WHITE)),
+        Paragraph('<b>Categoria</b>', style('th3', fontSize=8, textColor=C_WHITE)),
+        Paragraph('<b>Valor</b>',     style('th4', fontSize=8, textColor=C_WHITE, alignment=2)),
+    ]
+    
+    rows = [header]
+    for l in lancamentos:
+        dt_str = l.data_transacao.strftime('%d/%m/%y %H:%M') if l.data_transacao else '-'
+        conta = (l.conta.nome if l.conta else (l.forma_pagamento or '-'))[:15]
+        desc = (l.descricao or '-')[:35]
+        
+        cat = (l.categoria.nome if l.categoria else 'Outros')
+        sub = (f" / {l.subcategoria.nome}" if l.subcategoria else '')
+        cat_full = f"{cat}{sub}"[:25]
+        
+        is_exp = is_expense_type(l.tipo)
+        val_f = abs(float(l.valor))
+        val_str = fmt_brl(val_f)
+        val_para_tabela = Paragraph(f"<b>{'-' if is_exp else '+'}{val_str}</b>", 
+                                   style('val', fontSize=8, textColor=(C_RED if is_exp else C_EMERALD), alignment=2))
+
+        rows.append([
+            Paragraph(dt_str, style('td0', fontSize=7)),
+            Paragraph(conta,  style('td1', fontSize=7)),
+            Paragraph(desc,   style('td2', fontSize=7)),
+            Paragraph(cat_full, style('td3', fontSize=7)),
+            val_para_tabela
+        ])
+
+    # ColWidths: total ~180mm
+    t = Table(rows, colWidths=[28*mm, 30*mm, 55*mm, 42*mm, 25*mm], repeatRows=1)
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), C_NAVY),
+        ('TEXTCOLOR', (0, 0), (-1, 0), C_WHITE),
+        ('FONTNAME', (0, 0), (-1, 0), FONT_BOLD),
+        ('ALIGN', (4, 0), (4, -1), 'RIGHT'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [C_BG, C_WHITE]),
+        ('GRID', (0, 0), (-1, -1), 0.2, C_BORDER),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    
+    elements.append(t)
+    
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
