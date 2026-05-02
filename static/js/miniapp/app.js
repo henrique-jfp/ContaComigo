@@ -4518,55 +4518,36 @@ lucide.createIcons();
         if (alerts.length > 0) {
           alertB.classList.remove('hidden');
           alertL.innerHTML = alerts.map(a => `
-            <div class="flex gap-3">
-              <div class="mt-1 w-1.5 h-1.5 rounded-full ${a.tipo === 'critico' ? 'bg-red-500' : 'bg-brand'} shrink-0"></div>
-              <p class="text-[10px] text-telegram-text leading-tight">${a.titulo || 'Alerta'}: ${a.detalhe || a.detalle || ''}</p>
+            <div class="flex gap-3 p-4 rounded-2xl ${a.tipo === 'critico' ? 'bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800' : 'bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800'}">
+              <div class="w-8 h-8 rounded-full shrink-0 flex items-center justify-center ${a.tipo === 'critico' ? 'bg-rose-500' : 'bg-amber-500'} text-white">
+                <i data-lucide="${a.tipo === 'critico' ? 'alert-octagon' : 'alert-triangle'}" class="w-4 h-4"></i>
+              </div>
+              <div>
+                <p class="text-[11px] font-black uppercase tracking-wider ${a.tipo === 'critico' ? 'text-rose-600' : 'text-amber-600'}">${a.titulo}</p>
+                <p class="text-xs text-telegram-text font-medium mt-0.5 leading-snug">${a.detalhe}</p>
+              </div>
             </div>
           `).join('');
+          if (window.lucide) lucide.createIcons();
         } else {
           alertB.classList.add('hidden');
         }
       }
 
-      // VENCIMENTOS
-      const venL = document.getElementById('mdVencimentosList');
-      if (venL) {
-        const vens = data.proximos_vencimentos || [];
-        if (vens.length > 0) {
-          venL.innerHTML = vens.map(v => {
-            const dt = new Date(v.data);
-            const diff = Math.ceil((dt - new Date()) / (1000 * 60 * 60 * 24));
-            return `
-              <div class="flex justify-between items-center text-[10px]">
-                <div class="flex items-center gap-2">
-                  <div class="w-1.5 h-1.5 rounded-full ${diff <= 3 ? 'bg-red-500 animate-pulse' : 'bg-slate-300'}"></div>
-                  <span class="font-medium text-telegram-text">${v.descricao}</span>
-                </div>
-                <div class="text-right">
-                  <p class="font-black text-telegram-text">${fmt.format(v.valor)}</p>
-                  <p class="text-[8px] text-telegram-hint uppercase font-mono">${diff} DIAS</p>
-                </div>
-              </div>`;
-          }).join('');
-        } else {
-          venL.innerHTML = '<p class="text-[10px] text-telegram-hint italic">Nada vencendo em breve.</p>';
-        }
-      }
-
-      // INSIGHTS
+      // INSIGHTS E ANÁLISE NARRATIVA
       const insB = document.getElementById('mdInsightsBlock');
       const insL = document.getElementById('mdInsightsList');
       if (insL) {
         const insights = data.insights_rapidos || [];
         if (insights.length > 0) {
-          insB.classList.remove('hidden');
+          if (insB) insB.classList.remove('hidden');
+          // Renderiza o conteúdo (agora um texto rico)
           insL.innerHTML = insights.map(i => `
-            <div class="flex gap-2">
-              <span class="text-brand shrink-0">✦</span>
-              <p class="text-[10px] text-telegram-text">${i}</p>
+            <div class="p-1">
+              <p class="text-xs leading-relaxed text-telegram-text">${i.replace(/\n/g, '<br>')}</p>
             </div>`).join('');
         } else {
-          insB.classList.add('hidden');
+          if (insB) insB.classList.add('hidden');
         }
       }
       
