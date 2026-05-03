@@ -234,14 +234,23 @@ def _upsert_accounts_and_balances(usuario: Usuario, db: Session, client: PierreC
         else:
             conta.tipo = "Conta Corrente"
 
-        # Campos específicos para Cartão de Crédito
-        cc = acc.get("creditCard") or acc.get("creditData") or {}
-        if cc:
-            # Pierre usa 'creditLimit' ou 'limit'
-            conta.limite_cartao = _safe_decimal(cc.get("creditLimit") or cc.get("limit"))
-            # Fechamento e Vencimento
-            conta.dia_fechamento = int(cc.get("closingDay") or 0) or conta.dia_fechamento
-            conta.dia_vencimento = int(cc.get("dueDay") or cc.get("due_day") or 0) or conta.dia_vencimento
+        # Campos específicos para Cartão de Crédito - Busca Robustecida
+        cc = acc.get("creditCard") or acc.get("creditData") or acc.get("metadata") or {}
+
+        # Limite
+        limite_val = cc.get("creditLimit") or cc.get("limit") or acc.get("limit") or acc.get("creditLimit")
+        if limite_val:
+            conta.limite_cartao = _safe_decimal(limite_val)
+
+        # Vencimento (Due Day)
+        dia_v = cc.get("dueDay") or cc.get("due_day") or acc.get("dueDay") or acc.get("due_day")
+        if dia_v and int(dia_v) > 0:
+            conta.dia_vencimento = int(dia_v)
+
+        # Fechamento (Closing Day)
+        dia_f = cc.get("closingDay") or cc.get("closing_day") or acc.get("closingDay") or acc.get("closing_day")
+        if dia_f and int(dia_f) > 0:
+            conta.dia_fechamento = int(dia_f)
 
         db.flush()
         accounts_map[ext_id] = conta.id
@@ -312,6 +321,15 @@ def _upsert_bill_summaries(usuario: Usuario, db: Session, client: PierreClient, 
 
             fatura.valor_total = _safe_decimal(s.get("billAmount") or s.get("amount") or s.get("totalAmount") or 0)
             fatura.data_vencimento = ref_date.date()
+            
+            # --- APRENDIZADO DE METADADOS DA CONTA ---
+            # Se a conta não tem dia_vencimento/fechamento, aprendemos com a fatura real
+            conta = db.query(Conta).filter(Conta.id == conta_id).first()
+            if conta:
+                if dv: 
+                    conta.dia_vencimento = dv.day
+                if df: 
+                    conta.dia_fechamento = df.day
             
             status_raw = str(s.get("status") or "").upper()
             hoje = datetime.now(timezone.utc).date()

@@ -1561,6 +1561,45 @@ def miniapp_history():
         db.close()
 
 
+def _get_card_due_date(db, conta, today_date):
+    """
+    Descobre o dia de vencimento real da conta (priorizando histórico de faturas)
+    e retorna um objeto date projetado para o próximo vencimento.
+    """
+    # 1. Tenta pegar do cadastro da conta
+    dia_v = conta.dia_vencimento
+    
+    # 2. Se não tem no cadastro, busca no histórico de faturas fechadas
+    if dia_v is None:
+        last_f = db.query(FaturaCartao).filter(
+            FaturaCartao.id_conta == conta.id
+        ).order_by(FaturaCartao.data_vencimento.desc()).first()
+        
+        if last_f and last_f.data_vencimento:
+            dia_v = last_f.data_vencimento.day
+        else:
+            dia_v = 12 # Fallback final baseado no perfil do usuário
+    
+    try:
+        # Projeta para este mês
+        dt_proj = today_date.replace(day=dia_v)
+        # Se já passou (ou é hoje e queremos a próxima), projeta para o mês que vem
+        if dt_proj < today_date:
+            # Pula para o próximo mês (adicionando 32 dias e voltando para o dia correto)
+            next_m = (today_date.replace(day=1) + timedelta(days=32)).replace(day=1)
+            # Ajusta para o dia de vencimento (lidando com meses curtos)
+            last_day_next = (next_m + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+            dia_v_safe = min(dia_v, last_day_next.day)
+            dt_proj = next_m.replace(day=dia_v_safe)
+        return dt_proj
+    except:
+        # Fallback fixo para evitar que a data mude a cada dia e confunda o usuário
+        try:
+            return today_date.replace(day=12)
+        except:
+            return today_date
+
+
 @app.route('/api/miniapp/modo_deus')
 def miniapp_modo_deus():
     """Aba Modo Deus - Painel CFO Pessoal consolidado."""
@@ -2131,19 +2170,13 @@ def miniapp_modo_deus():
                 limite_disp = float(snap.saldo_disponivel or 0) if snap else 0.0
                 limite_tot = float(c.limite_cartao or snap.limite_cartao or 0) if snap else float(c.limite_cartao or 0)
                 
-                # Projeta data de vencimento baseada no dia_vencimento
-                dia_v = c.dia_vencimento or 10
-                try:
-                    dt_venc = today.replace(day=dia_v)
-                    if dt_proj < today:
-                        dt_venc = (today.replace(day=1) + timedelta(days=32)).replace(day=dia_v)
-                except:
-                    dt_venc = today + timedelta(days=7) # Fallback seguro
+                # Projeta data de vencimento baseada no dia_vencimento ou histórico real
+                dt_venc = _get_card_due_date(db, c, today)
 
                 cartoes_list.append({
                     "nome_conta": c.nome,
                     "status": "aberta" if gasto_atual > 0 else "zerada",
-                    "data_vencimento": dt_venc.isoformat() if hasattr(dt_venc, 'isoformat') else str(dt_venc),
+                    "data_vencimento": dt_venc.isoformat(),
                     "valor_total": gasto_atual,
                     "limite_cartao": limite_tot,
                     "limite_disponivel": limite_disp
@@ -2558,18 +2591,8 @@ def miniapp_overview():
                 valor_fatura = float(ultimo_saldo.saldo or 0) if ultimo_saldo else 0.0
                 
                 if valor_fatura > 1.0:
-                    # Tenta descobrir o dia de vencimento real pelo histórico
-                    dia_v = c.dia_vencimento
-                    if dia_v is None:
-                        last_f = db.query(FaturaCartao).filter(FaturaCartao.id_conta == c.id).order_by(FaturaCartao.data_vencimento.desc()).first()
-                        dia_v = last_f.data_vencimento.day if last_f and last_f.data_vencimento else 12
-
-                    try:
-                        dt_proj = today.replace(day=dia_v)
-                        if dt_proj < today:
-                            dt_proj = (today.replace(day=1) + timedelta(days=32)).replace(day=dia_v)
-                    except:
-                        dt_proj = today + timedelta(days=7)
+                    # Usa a helper mestre para garantir consistência total
+                    dt_proj = _get_card_due_date(db, c, today)
                         
                     cards_summary.append({
                         "nome": c.nome,
@@ -4379,23 +4402,15 @@ def toggle_notificacoes():
         db.close()
 
 # --- WEBHOOK MERCADO PAGO ---
-from flask import request
-from gerente_financeiro.monetization import PLAN_PREMIUM_MONTHLY, PLAN_PREMIUM_ANNUAL, PLAN_PRICES
-from gerente_financeiro.monetization import get_db, get_or_create_user, ensure_user_plan_state
-import logging
-
 @app.route('/webhook_mercadopago', methods=['POST'])
 def webhook_mercadopago():
     data = request.json or {}
     topic = data.get('topic') or data.get('type')
-    if topic not in ('payment', 'merchant_order'):  # só processa pagamentos
+    if topic not in ('payment', 'merchant_order'):
         return {"status": "ignored"}
-    # Buscar info do pagamento
     payment = data.get('data', {}).get('id') or data.get('id')
     if not payment:
         return {"status": "no_payment_id"}
-    # Buscar detalhes do pagamento via API Mercado Pago (opcional, pode confiar no webhook se preferir)
-    # Aqui, assume que o external_reference é o user_id
     user_id = None
     try:
         user_id = int(data.get('data', {}).get('external_reference') or data.get('external_reference'))
@@ -4411,13 +4426,10 @@ def webhook_mercadopago():
         plano = PLAN_PREMIUM_ANNUAL
     else:
         return {"status": "invalid_amount"}
-    # Ativar plano premium
     db = next(get_db())
     user = get_or_create_user(db, user_id, None)
     ensure_user_plan_state(db, user, commit=True)
     user.plan = plano
-    # premium_expires_at: 1 mês ou 1 ano
-    from datetime import datetime, timedelta, timezone
     now = datetime.now(timezone.utc)
     if plano == PLAN_PREMIUM_MONTHLY:
         user.premium_expires_at = now + timedelta(days=31)
@@ -4430,8 +4442,6 @@ def webhook_mercadopago():
 
 
 if __name__ == "__main__":
-
-    # Configurar servidor
     port = int(os.environ.get('PORT', 5000))
     debug_mode = not is_render
     
