@@ -1513,6 +1513,8 @@ def miniapp_history():
     offset = max(int(request.args.get("offset", 0)), 0)
     query = (request.args.get("query") or "").strip()
     tipo = (request.args.get("tipo") or "").strip()
+    categoria_id = request.args.get("categoria_id")
+    conta_id = request.args.get("conta_id")
     order = (request.args.get("order") or "date_desc").strip().lower()
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
@@ -1522,41 +1524,72 @@ def miniapp_history():
         if not usuario:
             return jsonify({"ok": False, "error": "user_not_found"}), 404
 
-        base_query = db.query(Lancamento).filter(Lancamento.id_usuario == usuario.id)
+        filters = [Lancamento.id_usuario == usuario.id]
         if query:
-            base_query = base_query.filter(Lancamento.descricao.ilike(f"%{query}%"))
+            filters.append(Lancamento.descricao.ilike(f"%{query}%"))
         if tipo:
             tipo_norm = tipo.strip().lower()
             if tipo_norm in {"entrada", "receita", "credit", "credito", "crédito"}:
-                base_query = base_query.filter(_income_type_condition())
+                filters.append(_income_type_condition())
             elif tipo_norm in {"saída", "saida", "despesa", "debit", "debito", "débito"}:
-                base_query = base_query.filter(_expense_type_condition())
+                filters.append(_expense_type_condition())
             else:
-                base_query = base_query.filter(Lancamento.tipo == tipo)
+                filters.append(Lancamento.tipo == tipo)
         if start_date:
-            base_query = base_query.filter(Lancamento.data_transacao >= datetime.combine(start_date, datetime.min.time()))
+            filters.append(Lancamento.data_transacao >= datetime.combine(start_date, datetime.min.time()))
         if end_date:
-            base_query = base_query.filter(Lancamento.data_transacao <= datetime.combine(end_date, datetime.max.time()))
+            filters.append(Lancamento.data_transacao <= datetime.combine(end_date, datetime.max.time()))
+        if categoria_id and categoria_id != "all":
+            try:
+                filters.append(Lancamento.id_categoria == int(categoria_id))
+            except (ValueError, TypeError): pass
+        if conta_id and conta_id != "all":
+            try:
+                filters.append(Lancamento.id_conta == int(conta_id))
+            except (ValueError, TypeError): pass
 
-        # O frontend nao usa o total atualmente; remover count evita query pesada em bases grandes.
-        total = None
-        base_query = base_query.options(
+        # Calcula o somatório dinâmico dos valores filtrados (antes do limit/offset)
+        total_value = float(db.query(
+            func.coalesce(func.sum(case((_income_type_condition(), func.abs(Lancamento.valor)), else_=-func.abs(Lancamento.valor))), 0)
+        ).filter(*filters).scalar() or 0.0)
+
+        base_query = db.query(Lancamento).filter(*filters).options(
             joinedload(Lancamento.categoria),
             joinedload(Lancamento.subcategoria),
         )
 
-        # Ordem padrao: data da transação decrescente (mais recente primeiro)
-        if order == "date_asc":
+        # Suporte para novas ordenações
+        if order == "valor_desc":
+            base_query = base_query.order_by(func.abs(Lancamento.valor).desc(), Lancamento.id.desc())
+        elif order == "valor_asc":
+            base_query = base_query.order_by(func.abs(Lancamento.valor).asc(), Lancamento.id.asc())
+        elif order == "date_asc":
             base_query = base_query.order_by(Lancamento.data_transacao.asc(), Lancamento.id.asc())
         else:
-            # Padrão agora é date_desc
+            # Padrão: date_desc
             base_query = base_query.order_by(Lancamento.data_transacao.desc(), Lancamento.id.desc())
 
         lancamentos = base_query.offset(offset).limit(limit).all()
-
         itens = [_serialize_miniapp_lancamento(lanc) for lanc in lancamentos]
 
-        return jsonify({"ok": True, "items": itens, "total": total, "offset": offset})
+        # Busca categorias e contas para popular os filtros do frontend (apenas se reset=true ou primeira carga)
+        available_filters = None
+        if offset == 0:
+            cats = db.query(Categoria).order_by(Categoria.nome).all()
+            contas = db.query(Conta).filter(Conta.id_usuario == usuario.id).order_by(Conta.nome).all()
+            available_filters = {
+                "categories": [{"id": c.id, "nome": c.nome} for c in cats],
+                "accounts": [{"id": c.id, "nome": c.nome} for c in contas]
+            }
+
+        return jsonify({
+            "ok": True, 
+            "items": itens, 
+            "total_value": total_value,
+            "total": None, # count opcional
+            "offset": offset,
+            "available_filters": available_filters
+        })
     finally:
         db.close()
 

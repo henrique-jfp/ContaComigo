@@ -128,9 +128,15 @@ lucide.createIcons();
     const historyRefresh = document.getElementById('historyRefresh');
     const historyLoadMore = document.getElementById('historyLoadMore');
     const historyDate = document.getElementById('historyDate');
+    const historyCategoria = document.getElementById('historyCategoria');
+    const historyConta = document.getElementById('historyConta');
+    const historyTotalBar = document.getElementById('historyTotalBar');
+    const historyTotalValue = document.getElementById('historyTotalValue');
     const historyClearFilters = document.getElementById('historyClearFilters');
     
     const agendamentoList = document.getElementById('agendamentoList');
+    const summaryTotalAgendado = document.getElementById('summaryTotalAgendado');
+    const summaryTotalMetas = document.getElementById('summaryTotalMetas');
     const agendamentoStatus = document.getElementById('agendamentoStatus');
     const agendaTabAgendamentos = document.getElementById('agendaTabAgendamentos');
     const agendaTabLembretes = document.getElementById('agendaTabLembretes');
@@ -3364,21 +3370,54 @@ lucide.createIcons();
     async function loadHistory(reset = false) {
       if (!sessionId) return;
       if (reset) { historyOffset = 0; renderHistorySkeleton(6); }
+      
+      const q = historyQuery.value || '';
+      const t = historyTipo.value || '';
+      const cat = historyCategoria?.value || 'all';
+      const cta = historyConta?.value || 'all';
+      const ord = historyOrder.value || 'date_desc';
+      const dt = historyDate?.value || '';
+
       const params = new URLSearchParams({
         limit: historyLimit,
         offset: historyOffset,
-        query: historyQuery.value || '',
-        tipo: historyTipo.value || '',
-        order: historyOrder.value || 'date_desc'
+        query: q,
+        tipo: t,
+        categoria_id: cat,
+        conta_id: cta,
+        order: ord
       });
-      if (historyDate?.value) {
-        params.set('start_date', historyDate.value);
-        params.set('end_date', historyDate.value);
+      if (dt) {
+        params.set('start_date', dt);
+        params.set('end_date', dt);
       }
+
       try {
         const response = await fetchWithSession(`/api/miniapp/history?${params.toString()}`);
         const data = await response.json();
         if (!data.ok) return;
+
+        // Atualizar barra de total se houver filtro ativo
+        if (historyTotalBar) {
+          const hasFilter = q || t || cat !== 'all' || cta !== 'all' || dt;
+          historyTotalBar.classList.toggle('hidden', !hasFilter);
+          if (historyTotalValue) {
+            historyTotalValue.textContent = formatMoney(data.total_value || 0, data.total_value >= 0 ? 'Entrada' : 'Saída');
+          }
+        }
+
+        // Popular filtros se vierem na resposta (offset 0)
+        if (data.available_filters) {
+          if (historyCategoria && historyCategoria.options.length <= 1) {
+            historyCategoria.innerHTML = '<option value="all">Todas as categorias</option>' + 
+              data.available_filters.categories.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+          }
+          if (historyConta && historyConta.options.length <= 1) {
+            historyConta.innerHTML = '<option value="all">Todas as contas</option>' + 
+              data.available_filters.accounts.map(a => `<option value="${a.id}">${a.nome}</option>`).join('');
+          }
+        }
+
         historyStatus.textContent = '';
         if (reset) historyCache = [];
         if (reset) historyList.innerHTML = '';
@@ -3627,6 +3666,11 @@ lucide.createIcons();
         metaStatus.textContent = '';
         if (metasAgendaStatus) metasAgendaStatus.textContent = 'Seus objetivos financeiros.';
         metasCache = data.items || [];
+
+        // Somatório de Metas
+        const totalMetas = metasCache.reduce((acc, item) => acc + (Number(item.valor_meta) || 0), 0);
+        if (summaryTotalMetas) summaryTotalMetas.textContent = formatMoney(totalMetas, 'Entrada');
+
         metaList.innerHTML = '';
         if (metasAgendaList) metasAgendaList.innerHTML = '';
 
