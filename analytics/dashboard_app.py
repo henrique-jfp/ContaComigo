@@ -2489,6 +2489,30 @@ def miniapp_overview():
                 "vence": f.data_vencimento.isoformat() if f.data_vencimento else None
             })
 
+        # PROJEÇÃO: Se uma conta de cartão tem saldo mas não apareceu no radar (sem FaturaCartao record), projeta
+        cc_contas = db.query(Conta).filter(Conta.id_usuario == usuario.id, Conta.tipo == 'Cartão de Crédito').all()
+        for c in cc_contas:
+            if c.id not in seen_accounts:
+                ultimo_saldo = db.query(SaldoConta).filter(SaldoConta.id_conta == c.id).order_by(SaldoConta.capturado_em.desc()).first()
+                # Para cartões, o 'saldo' positivo no snapshot representa o gasto da fatura atual
+                valor_fatura = float(ultimo_saldo.saldo or 0) if ultimo_saldo else 0.0
+                
+                if valor_fatura > 1.0:
+                    dia_v = c.dia_vencimento or 10
+                    try:
+                        dt_proj = today.replace(day=dia_v)
+                        if dt_proj < today:
+                            dt_proj = (today.replace(day=1) + timedelta(days=32)).replace(day=dia_v)
+                    except:
+                        dt_proj = today + timedelta(days=7)
+                        
+                    cards_summary.append({
+                        "nome": c.nome,
+                        "fatura": valor_fatura,
+                        "limite": float(c.limite_cartao or 0),
+                        "vence": dt_proj.isoformat()
+                    })
+
         parcelas_db = db.query(ParcelamentoItem).filter(
             ParcelamentoItem.id_usuario == usuario.id,
             or_(ParcelamentoItem.data_proxima_parcela.is_(None), ParcelamentoItem.data_proxima_parcela >= (today - timedelta(days=2)))

@@ -2101,6 +2101,7 @@ lucide.createIcons();
           cards.forEach(card => {
             const fatura = card.fatura || 0;
             const limite = card.limite || 0;
+            const disponivel = Math.max(0, limite - fatura);
             const pct = limite > 0 ? Math.min(100, Math.round((fatura / limite) * 100)) : null;
             const hoje = new Date();
             hoje.setHours(0,0,0,0);
@@ -2125,8 +2126,8 @@ lucide.createIcons();
             }
             
             homeCardsGrid.innerHTML += `
-              <div class="glass-card p-4 rounded-2xl bg-telegram-card/40 min-w-[150px] shrink-0 snap-center border border-telegram-separator/30">
-                <div class="flex items-center gap-2 mb-2">
+              <div class="glass-card p-4 rounded-2xl bg-telegram-card/40 min-w-[170px] shrink-0 snap-center border border-telegram-separator/30">
+                <div class="flex items-center gap-2 mb-3">
                   <div class="w-6 h-6 rounded-lg ${bgAccent} flex items-center justify-center">
                     <i data-lucide="credit-card" class="w-3 h-3 ${iconColor}"></i>
                   </div>
@@ -2134,25 +2135,30 @@ lucide.createIcons();
                   ${badge}
                 </div>
                 
-                <div class="space-y-0.5">
-                  <p class="text-[8px] font-black text-telegram-hint uppercase mb-0.5">Fatura Atual</p>
-                  <p class="text-sm font-black text-telegram-text font-financial">${formatCurrencyBR(fatura)}</p>
+                <div class="space-y-3">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <p class="text-[8px] font-black text-telegram-hint uppercase mb-0.5">Fatura</p>
+                      <p class="text-sm font-black text-telegram-text font-financial">${formatCurrencyBR(fatura)}</p>
+                    </div>
+                    <div class="text-right">
+                      <p class="text-[8px] font-black text-telegram-hint uppercase mb-0.5">Disponível</p>
+                      <p class="text-[10px] font-bold text-emerald-500 font-financial">${formatCurrencyBR(disponivel)}</p>
+                    </div>
+                  </div>
                   
-                  <div class="flex items-end justify-between mt-3">
-                    <div class="flex flex-col">
-                      <span class="text-[7px] font-black text-telegram-hint/50 uppercase tracking-widest">Vence</span>
-                      <span class="text-[9px] font-bold text-telegram-text">${venceStr}</span>
+                  <div class="space-y-1.5">
+                    <div class="flex items-center justify-between">
+                       <span class="text-[7px] font-black text-telegram-hint/50 uppercase tracking-widest">Vence ${venceStr}</span>
+                       ${pct !== null ? `<span class="text-[8px] font-black ${statusColor}">${pct}%</span>` : ''}
                     </div>
-                    <div class="text-right flex flex-col items-end">
-                      ${pct !== null ? `
-                        <span class="text-[8px] font-black ${statusColor} mb-0.5">${pct}%</span>
-                        <div class="w-10 h-0.5 bg-telegram-separator/20 rounded-full overflow-hidden">
-                          <div class="h-full ${statusColor.replace('text', 'bg')}" style="width: ${pct}%"></div>
-                        </div>
-                      ` : `
-                        <span class="text-[7px] font-black text-telegram-hint/40 italic">S/ LIMITE</span>
-                      `}
-                    </div>
+                    ${pct !== null ? `
+                      <div class="w-full h-1 bg-telegram-separator/20 rounded-full overflow-hidden">
+                        <div class="h-full ${statusColor.replace('text', 'bg')} transition-all duration-700" style="width: ${pct}%"></div>
+                      </div>
+                    ` : `
+                      <div class="text-[7px] font-black text-telegram-hint/40 italic">SEM LIMITE DEFINIDO</div>
+                    `}
                   </div>
                 </div>
               </div>
