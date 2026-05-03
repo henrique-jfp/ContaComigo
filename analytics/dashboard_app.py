@@ -1878,28 +1878,29 @@ def miniapp_modo_deus():
             cc_contas = db.query(Conta).filter(Conta.id_usuario == user_id, Conta.tipo == 'Cartão de Crédito').all()
             for c in cc_contas:
                 if c.id not in contas_com_fatura_no_radar:
-                    # Pega o saldo/fatura atual do snapshot mais recente
+                    # Pega o saldo atual do snapshot mais recente
                     ultimo_saldo = db.query(SaldoConta).filter(SaldoConta.id_conta == c.id).order_by(SaldoConta.capturado_em.desc()).first()
-                    valor_fatura = float(ultimo_saldo.fatura_atual or 0) if ultimo_saldo else 0.0
+                    # Para cartões, o 'saldo' positivo no snapshot representa o gasto da fatura atual
+                    valor_fatura = float(ultimo_saldo.saldo or 0) if ultimo_saldo else 0.0
                     
-                    if valor_fatura > 1.0: # Ignora faturas irrelevantes
-                        # Projeta a data baseada no dia_vencimento
+                    if valor_fatura > 1.0: 
+                        # Projeta a data baseada no dia_vencimento ou fallback dia 10
                         dia_v = c.dia_vencimento or 10
                         try:
-                            # Tenta este mês, se já passou, tenta o próximo
+                            # Tenta este mês
                             dt_proj = today.replace(day=dia_v)
                             if dt_proj < today:
-                                # Próximo mês
+                                # Se já passou do dia este mês, projeta para o próximo
                                 dt_proj = (today.replace(day=1) + timedelta(days=32)).replace(day=dia_v)
                         except:
-                            dt_proj = today + timedelta(days=7) # Fallback
+                            dt_proj = today + timedelta(days=7)
 
                         if dt_proj <= v_limit:
                             lista_v.append({
-                                "descricao": f"Fatura {c.nome} (Estimada)",
+                                "descricao": f"Fatura {c.nome} (Projetada)",
                                 "valor": valor_fatura,
                                 "data": dt_proj.isoformat(),
-                                "cor": "#f87171" # Rosa claro (estimativa)
+                                "cor": "#f87171"
                             })
 
             # 3. Agendamentos
@@ -1916,15 +1917,17 @@ def miniapp_modo_deus():
                     "cor": "#3b82f6"
                 })
             
-            # 4. Parcelamentos (Garantindo que apareçam independente de ser Date/DateTime)
+            # 4. Parcelamentos
             parc_v = db.query(ParcelamentoItem).filter(
                 ParcelamentoItem.id_usuario == user_id,
                 ParcelamentoItem.parcela_atual < ParcelamentoItem.total_parcelas
             ).all()
             for p in parc_v:
                 if p.data_proxima_parcela:
-                    # Normaliza para date para comparação segura
-                    dt_p = p.data_proxima_parcela.date() if hasattr(p.data_proxima_parcela, 'date') else p.data_proxima_parcela
+                    dt_p = p.data_proxima_parcela
+                    # Garante que dt_p é apenas data para comparação
+                    if hasattr(dt_p, 'date'): dt_p = dt_p.date()
+                    
                     if today <= dt_p <= v_limit:
                         lista_v.append({
                             "descricao": f"Parc. {p.descricao} ({p.parcela_atual + 1}/{p.total_parcelas})",
