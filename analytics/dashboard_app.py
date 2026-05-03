@@ -1848,42 +1848,61 @@ def miniapp_modo_deus():
         # --- SEÇÃO 5: CARTÕES E VENCIMENTOS (Radar de 30 Dias) ---
         try:
             v_limit = today + timedelta(days=30)
-            # Query ultra-inclusiva: faturas não pagas OU que vencem nos próximos 30 dias
-            faturas = db.query(FaturaCartao).join(Conta).filter(
+            
+            # 1. Buscar faturas detalhadas existentes
+            faturas_detalhe = db.query(FaturaCartao).join(Conta).filter(
                 FaturaCartao.id_usuario == user_id,
                 or_(
                     not_(FaturaCartao.status.ilike('%paga%')),
                     and_(FaturaCartao.data_vencimento >= today, FaturaCartao.data_vencimento <= v_limit)
                 )
-            ).order_by(FaturaCartao.data_vencimento.asc()).all()
+            ).all()
             
-            lista_c = []
-            seen_accs = set()
-            for f in faturas:
-                if f.id_conta in seen_accs: continue
-                seen_accs.add(f.id_conta)
-                lista_c.append({
-                    "nome_conta": f.conta.nome, "valor_total": float(f.valor_total),
-                    "data_vencimento": f.data_vencimento.isoformat() if f.data_vencimento else None,
-                    "status": f.status, "limite_cartao": float(f.conta.limite_cartao or 0)
-                })
-            result['cartoes'] = lista_c
-
             lista_v = []
-            # 1. Faturas que precisam de atenção
-            for f in faturas:
-                if not 'paga' in str(f.status).lower():
-                    # Fallback para hoje + 5 dias se data for nula para não sumir do radar
-                    dt_venc = f.data_vencimento or (today + timedelta(days=5))
-                    status_clean = str(f.status).replace('_', ' ').title()
-                    lista_v.append({
-                        "descricao": f"Fatura {f.conta.nome} ({status_clean})", 
-                        "valor": float(f.valor_total), 
-                        "data": dt_venc.isoformat(), 
-                        "cor": "#ef4444" # Vermelho alerta
-                    })
+            contas_com_fatura_no_radar = set()
 
-            # 2. Agendamentos (Contas Fixas)
+            for f in faturas_detalhe:
+                if not 'paga' in str(f.status).lower():
+                    dt_venc = f.data_vencimento or (today + timedelta(days=5))
+                    if dt_venc <= v_limit:
+                        contas_com_fatura_no_radar.add(f.id_conta)
+                        status_label = str(f.status).replace('_', ' ').title()
+                        lista_v.append({
+                            "descricao": f"Fatura {f.conta.nome} ({status_label})", 
+                            "valor": float(f.valor_total), 
+                            "data": dt_venc.isoformat(), 
+                            "cor": "#ef4444"
+                        })
+
+            # 2. PROJEÇÃO: Se uma conta de cartão tem saldo mas não apareceu no radar, projeta pelo dia_vencimento
+            cc_contas = db.query(Conta).filter(Conta.id_usuario == user_id, Conta.tipo == 'Cartão de Crédito').all()
+            for c in cc_contas:
+                if c.id not in contas_com_fatura_no_radar:
+                    # Pega o saldo/fatura atual do snapshot mais recente
+                    ultimo_saldo = db.query(SaldoConta).filter(SaldoConta.id_conta == c.id).order_by(SaldoConta.capturado_em.desc()).first()
+                    valor_fatura = float(ultimo_saldo.fatura_atual or 0) if ultimo_saldo else 0.0
+                    
+                    if valor_fatura > 1.0: # Ignora faturas irrelevantes
+                        # Projeta a data baseada no dia_vencimento
+                        dia_v = c.dia_vencimento or 10
+                        try:
+                            # Tenta este mês, se já passou, tenta o próximo
+                            dt_proj = today.replace(day=dia_v)
+                            if dt_proj < today:
+                                # Próximo mês
+                                dt_proj = (today.replace(day=1) + timedelta(days=32)).replace(day=dia_v)
+                        except:
+                            dt_proj = today + timedelta(days=7) # Fallback
+
+                        if dt_proj <= v_limit:
+                            lista_v.append({
+                                "descricao": f"Fatura {c.nome} (Estimada)",
+                                "valor": valor_fatura,
+                                "data": dt_proj.isoformat(),
+                                "cor": "#f87171" # Rosa claro (estimativa)
+                            })
+
+            # 3. Agendamentos
             agend_v = db.query(Agendamento).filter(
                 Agendamento.id_usuario == user_id, 
                 Agendamento.ativo == True, 
@@ -1894,25 +1913,26 @@ def miniapp_modo_deus():
                     "descricao": a.descricao, 
                     "valor": float(a.valor), 
                     "data": a.proxima_data_execucao.isoformat(), 
-                    "cor": "#3b82f6" # Azul fixo
+                    "cor": "#3b82f6"
                 })
             
-            # 3. Parcelamentos Individuais (vencendo em breve)
+            # 4. Parcelamentos (Garantindo que apareçam independente de ser Date/DateTime)
             parc_v = db.query(ParcelamentoItem).filter(
                 ParcelamentoItem.id_usuario == user_id,
-                ParcelamentoItem.parcela_atual < ParcelamentoItem.total_parcelas,
-                ParcelamentoItem.data_proxima_parcela <= v_limit,
-                ParcelamentoItem.data_proxima_parcela >= today
+                ParcelamentoItem.parcela_atual < ParcelamentoItem.total_parcelas
             ).all()
             for p in parc_v:
-                lista_v.append({
-                    "descricao": f"Parc. {p.descricao} ({p.parcela_atual + 1}/{p.total_parcelas})",
-                    "valor": float(p.valor_parcela),
-                    "data": p.data_proxima_parcela.isoformat(),
-                    "cor": "#f59e0b" # Laranja parcelas
-                })
+                if p.data_proxima_parcela:
+                    # Normaliza para date para comparação segura
+                    dt_p = p.data_proxima_parcela.date() if hasattr(p.data_proxima_parcela, 'date') else p.data_proxima_parcela
+                    if today <= dt_p <= v_limit:
+                        lista_v.append({
+                            "descricao": f"Parc. {p.descricao} ({p.parcela_atual + 1}/{p.total_parcelas})",
+                            "valor": float(p.valor_parcela),
+                            "data": dt_p.isoformat(),
+                            "cor": "#fbbf24"
+                        })
             
-            # Ordenar por data (mais próximos primeiro)
             result['proximos_vencimentos'] = sorted(lista_v, key=lambda x: x['data'])
             
         except Exception as e:
@@ -2055,6 +2075,9 @@ def miniapp_modo_deus():
 
             if usuario.perfil_ia:
                 msg += f"\n\n<b>Sua Identidade Financeira:</b> {usuario.perfil_ia}"
+
+            # Limpeza final: Converter eventuais negritos de Markdown para HTML
+            msg = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', msg)
 
             result['insights_rapidos'] = [msg]
         except Exception as e:

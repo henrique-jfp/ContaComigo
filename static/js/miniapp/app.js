@@ -4534,6 +4534,36 @@ lucide.createIcons();
         }
       }
 
+      // VENCIMENTOS (Radar de 30 dias)
+      const venL = document.getElementById('mdVencimentosList');
+      if (venL) {
+        const vens = data.proximos_vencimentos || [];
+        if (vens.length > 0) {
+          venL.innerHTML = vens.map(v => {
+            const dt = new Date(v.data);
+            const diff = Math.ceil((dt - new Date()) / (1000 * 60 * 60 * 24));
+            return `
+              <div class="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+                <div class="flex items-center gap-3">
+                  <div class="w-8 h-8 rounded-full flex items-center justify-center" style="background-color: ${v.cor}20; color: ${v.cor}">
+                    <i data-lucide="${v.descricao.includes('Fatura') ? 'credit-card' : (v.descricao.includes('Parc') ? 'tag' : 'calendar')}" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <p class="text-[10px] font-bold text-telegram-text">${v.descricao}</p>
+                    <p class="text-[8px] text-telegram-hint uppercase font-mono">${dt.toLocaleDateString('pt-BR', {day:'2-digit', month:'short'})}</p>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <p class="text-[11px] font-black text-telegram-text">${fmt.format(v.valor)}</p>
+                  <p class="text-[8px] font-bold ${diff <= 3 ? 'text-rose-500 animate-pulse' : 'text-telegram-hint'} uppercase font-mono">${diff <= 0 ? 'HOJE' : 'EM ' + diff + ' DIAS'}</p>
+                </div>
+              </div>`;
+          }).join('');
+        } else {
+          venL.innerHTML = '<p class="text-[10px] text-telegram-hint italic py-4 text-center">Nada vencendo nos próximos 30 dias. Alfredo está orgulhoso!</p>';
+        }
+      }
+
       // INSIGHTS E ANÁLISE NARRATIVA
       const insB = document.getElementById('mdInsightsBlock');
       const insL = document.getElementById('mdInsightsList');
