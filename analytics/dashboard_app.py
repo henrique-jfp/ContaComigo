@@ -1878,22 +1878,23 @@ def miniapp_modo_deus():
             cc_contas = db.query(Conta).filter(Conta.id_usuario == user_id, Conta.tipo == 'Cartão de Crédito').all()
             for c in cc_contas:
                 if c.id not in contas_com_fatura_no_radar:
-                    # Pega o saldo atual do snapshot mais recente
                     ultimo_saldo = db.query(SaldoConta).filter(SaldoConta.id_conta == c.id).order_by(SaldoConta.capturado_em.desc()).first()
-                    # Para cartões, o 'saldo' positivo no snapshot representa o gasto da fatura atual
                     valor_fatura = float(ultimo_saldo.saldo or 0) if ultimo_saldo else 0.0
                     
                     if valor_fatura > 1.0: 
-                        # Projeta a data baseada no dia_vencimento ou fallback dia 10
-                        dia_v = c.dia_vencimento or 10
+                        # Projeta a data baseada no dia_vencimento ou histórico
+                        dia_v = c.dia_vencimento
+                        if dia_v is None:
+                            # Tenta descobrir pela última fatura fechada
+                            last_f = db.query(FaturaCartao).filter(FaturaCartao.id_conta == c.id).order_by(FaturaCartao.data_vencimento.desc()).first()
+                            dia_v = last_f.data_vencimento.day if last_f and last_f.data_vencimento else 12 # Fallback 12 (mais comum para o user)
+                        
                         try:
-                            # Tenta este mês
                             dt_proj = today.replace(day=dia_v)
                             if dt_proj < today:
-                                # Se já passou do dia este mês, projeta para o próximo
                                 dt_proj = (today.replace(day=1) + timedelta(days=32)).replace(day=dia_v)
                         except:
-                            dt_proj = today + timedelta(days=7)
+                            dt_proj = today + timedelta(days=10)
 
                         if dt_proj <= v_limit:
                             lista_v.append({
@@ -2557,7 +2558,12 @@ def miniapp_overview():
                 valor_fatura = float(ultimo_saldo.saldo or 0) if ultimo_saldo else 0.0
                 
                 if valor_fatura > 1.0:
-                    dia_v = c.dia_vencimento or 10
+                    # Tenta descobrir o dia de vencimento real pelo histórico
+                    dia_v = c.dia_vencimento
+                    if dia_v is None:
+                        last_f = db.query(FaturaCartao).filter(FaturaCartao.id_conta == c.id).order_by(FaturaCartao.data_vencimento.desc()).first()
+                        dia_v = last_f.data_vencimento.day if last_f and last_f.data_vencimento else 12
+
                     try:
                         dt_proj = today.replace(day=dia_v)
                         if dt_proj < today:
