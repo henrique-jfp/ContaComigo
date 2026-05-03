@@ -4446,32 +4446,55 @@ lucide.createIcons();
       if (cardL) {
         const cards = data.cartoes || [];
         if (cards.length > 0) {
-          cardL.innerHTML = cards.map(c => `
-            <div class="space-y-2">
+          cardL.innerHTML = cards.map(c => {
+            const usagePct = Math.min(100, (c.valor_total / (c.limite_cartao || 1) * 100));
+            // Cores dinâmicas: Verde (<50%), Amarelo (50-80%), Vermelho (>80%)
+            const barColor = usagePct > 80 ? 'bg-rose-500' : (usagePct > 50 ? 'bg-amber-500' : 'bg-emerald-500');
+            const statusColor = c.status === 'atrasada' ? 'text-rose-600' : 'text-telegram-hint';
+
+            return `
+            <div class="space-y-2 p-1">
               <div class="flex justify-between items-center text-[10px]">
-                <span class="font-bold text-telegram-text uppercase tracking-wider">${c.nome_conta}</span>
-                <span class="font-black ${c.status === 'atrasada' ? 'text-red-600' : 'text-telegram-hint'} uppercase font-mono">${c.status}</span>
+                <span class="font-black text-telegram-text uppercase tracking-widest">${c.nome_conta}</span>
+                <span class="font-black ${statusColor} uppercase font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">${c.status}</span>
               </div>
               <div class="flex justify-between items-end">
                 <div>
-                   <p class="text-[8px] text-telegram-hint uppercase font-mono">Vencimento ${dtFmt(c.data_vencimento)}</p>
-                   <p class="text-lg font-black text-telegram-text font-financial">${fmt.format(c.valor_total)}</p>
+                   <p class="text-[8px] text-telegram-hint uppercase font-mono font-bold">Vencimento ${dtFmt(c.data_vencimento)}</p>
+                   <p class="text-xl font-black text-telegram-text font-financial">${fmt.format(c.valor_total)}</p>
                 </div>
                 <div class="text-right">
-                   <p class="text-[8px] text-telegram-hint uppercase font-mono">Limite Cartão</p>
-                   <p class="text-[10px] font-bold text-emerald-600">${fmt.format(c.limite_cartao)}</p>
+                   <p class="text-[8px] text-telegram-hint uppercase font-mono font-bold">Disponível</p>
+                   <p class="text-[10px] font-black text-emerald-600">${fmt.format(c.limite_disponivel || (c.limite_cartao - c.valor_total))}</p>
                 </div>
               </div>
-              <div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                <div class="h-full bg-rose-500" style="width: ${Math.min(100, (c.valor_total / (c.limite_cartao || 1) * 100))}%"></div>
+              <div class="relative pt-1">
+                <div class="flex mb-1 items-center justify-between">
+                  <div>
+                    <span class="text-[8px] font-black inline-block py-0.5 px-2 uppercase rounded-full text-telegram-hint bg-slate-100 dark:bg-slate-800">
+                      Uso do Limite
+                    </span>
+                  </div>
+                  <div class="text-right">
+                    <span class="text-[9px] font-black inline-block text-telegram-text">
+                      ${usagePct.toFixed(0)}%
+                    </span>
+                  </div>
+                </div>
+                <div class="overflow-hidden h-2 mb-1 text-xs flex rounded-full bg-slate-100 dark:bg-slate-800">
+                  <div style="width:${usagePct}%" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center ${barColor} transition-all duration-1000"></div>
+                </div>
+                <div class="flex justify-between text-[8px] text-telegram-hint font-bold uppercase font-mono">
+                  <span>R$ 0</span>
+                  <span>Limite ${fmt.format(c.limite_cartao)}</span>
+                </div>
               </div>
-            </div>
-          `).join('');
+            </div>`;
+          }).join('<div class="h-px bg-telegram-separator my-4 opacity-30"></div>');
         } else {
-          cardL.innerHTML = '<p class="text-[10px] text-telegram-hint italic">Nenhum cartão conectado.</p>';
+          cardL.innerHTML = '<p class="text-[10px] text-telegram-hint italic py-4 text-center">Nenhum cartão conectado para análise.</p>';
         }
       }
-
       // METAS
       const metasL = document.getElementById('mdMetasList');
       const mBlock = metasL?.closest('.glass-card');

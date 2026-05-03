@@ -2087,15 +2087,74 @@ def miniapp_modo_deus():
             logger.error(f"Erro na análise profunda: {e}")
             result['insights_rapidos'] = ["Alfredo está processando seus dados para gerar um relatório completo. Continue registrando seus gastos."]
 
-        # --- SEÇÃO FINAL: EVOLUÇÃO ---
+        # --- SEÇÃO FINAL: EVOLUÇÃO E DISSECAÇÃO DE CARTÕES ---
         try:
+            # 1. Gráfico de Evolução (Faturas Fechadas)
             f_evol = db.query(
                 extract('month', FaturaCartao.data_vencimento).label('mes'),
                 extract('year', FaturaCartao.data_vencimento).label('ano'),
                 func.sum(FaturaCartao.valor_total).label('total')
             ).filter(FaturaCartao.id_usuario == user_id, FaturaCartao.data_vencimento >= (today - timedelta(days=180))).group_by('ano', 'mes').order_by('ano', 'mes').all()
-            result['faturas_evolucao'] = {"labels": [f"{int(f.mes):02d}/{str(int(f.ano))[2:]}" for f in f_evol], "data": [float(f.total) for f in f_evol]}
-        except: result['faturas_evolucao'] = {"labels": [], "data": []}
+            
+            # Se houver pouco histórico de faturas fechadas, usa Lançamentos Reais como fallback
+            if len(f_evol) < 2:
+                f_evol_lanc = db.query(
+                    extract('month', Lancamento.data_transacao).label('mes'),
+                    extract('year', Lancamento.data_transacao).label('ano'),
+                    func.sum(Lancamento.valor).label('total')
+                ).join(Conta, Lancamento.id_conta == Conta.id).filter(
+                    Lancamento.id_usuario == user_id, 
+                    Conta.tipo == 'Cartão de Crédito',
+                    Lancamento.valor < 0,
+                    Lancamento.data_transacao >= (today - timedelta(days=180))
+                ).group_by('ano', 'mes').order_by('ano', 'mes').all()
+                
+                result['faturas_evolucao'] = {
+                    "labels": [f"{int(f.mes):02d}/{str(int(f.ano))[2:]}" for f in f_evol_lanc], 
+                    "data": [abs(float(f.total)) for f in f_evol_lanc]
+                }
+            else:
+                result['faturas_evolucao'] = {
+                    "labels": [f"{int(f.mes):02d}/{str(int(f.ano))[2:]}" for f in f_evol], 
+                    "data": [float(f.total) for f in f_evol]
+                }
+            
+            # 2. Lista de Cartões (Dissecação de Uso e Limites)
+            cartoes_list = []
+            cc_contas = db.query(Conta).filter(Conta.id_usuario == user_id, Conta.tipo == 'Cartão de Crédito').all()
+            
+            for c in cc_contas:
+                # Pega snapshot mais recente de saldo/uso
+                snap = db.query(SaldoConta).filter(SaldoConta.id_conta == c.id).order_by(SaldoConta.capturado_em.desc()).first()
+                gasto_atual = float(snap.saldo or 0) if snap else 0.0
+                limite_disp = float(snap.saldo_disponivel or 0) if snap else 0.0
+                limite_tot = float(c.limite_cartao or snap.limite_cartao or 0) if snap else float(c.limite_cartao or 0)
+                
+                # Projeta data de vencimento baseada no dia_vencimento
+                dia_v = c.dia_vencimento or 10
+                try:
+                    dt_venc = today.replace(day=dia_v)
+                    if dt_proj < today:
+                        dt_venc = (today.replace(day=1) + timedelta(days=32)).replace(day=dia_v)
+                except:
+                    dt_venc = today + timedelta(days=7) # Fallback seguro
+
+                cartoes_list.append({
+                    "nome_conta": c.nome,
+                    "status": "aberta" if gasto_atual > 0 else "zerada",
+                    "data_vencimento": dt_venc.isoformat() if hasattr(dt_venc, 'isoformat') else str(dt_venc),
+                    "valor_total": gasto_atual,
+                    "limite_cartao": limite_tot,
+                    "limite_disponivel": limite_disp
+                })
+            
+            result['cartoes'] = cartoes_list
+
+        except Exception as e:
+            logger.error(f"Erro na Evolução de Faturas: {e}", exc_info=True)
+            if 'faturas_evolucao' not in result:
+                result['faturas_evolucao'] = {"labels": [], "data": []}
+            result['cartoes'] = []
 
         result['perfil_ia'] = usuario.perfil_ia
         _cache[cache_key_val] = (result, now_ts)
