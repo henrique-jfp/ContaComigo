@@ -1897,6 +1897,21 @@ def miniapp_modo_deus():
                     "cor": "#3b82f6" # Azul fixo
                 })
             
+            # 3. Parcelamentos Individuais (vencendo em breve)
+            parc_v = db.query(ParcelamentoItem).filter(
+                ParcelamentoItem.id_usuario == user_id,
+                ParcelamentoItem.parcela_atual < ParcelamentoItem.total_parcelas,
+                ParcelamentoItem.data_proxima_parcela <= v_limit,
+                ParcelamentoItem.data_proxima_parcela >= today
+            ).all()
+            for p in parc_v:
+                lista_v.append({
+                    "descricao": f"Parc. {p.descricao} ({p.parcela_atual + 1}/{p.total_parcelas})",
+                    "valor": float(p.valor_parcela),
+                    "data": p.data_proxima_parcela.isoformat(),
+                    "cor": "#f59e0b" # Laranja parcelas
+                })
+            
             # Ordenar por data (mais próximos primeiro)
             result['proximos_vencimentos'] = sorted(lista_v, key=lambda x: x['data'])
             
@@ -1904,65 +1919,147 @@ def miniapp_modo_deus():
             logger.error(f"Erro no Radar de Vencimentos: {e}", exc_info=True)
             result['proximos_vencimentos'] = []
 
-        # --- SEÇÃO 8: SCORE E ALERTAS (Resilientes) ---
-        # ... (mantém lógica de score) ...
+        # --- SEÇÃO 8: SCORE E ALERTAS (Análise Comportamental e Rigor) ---
+        try:
+            score = 100
+            alertas = []
+            vg = result.get('visao_geral', {})
+            
+            # 1. Alerta de Déficit (Sempre mostrar se negativo)
+            res_mes_val = vg.get('resultado_mes', 0)
+            if res_mes_val < 0:
+                score -= 40
+                alertas.append({
+                    "tipo": "critico", 
+                    "titulo": "Alfredo avisa: Déficit Mensal", 
+                    "detalhe": f"Você gastou R$ {abs(res_mes_val):.2f} além do que recebeu este mês."
+                })
+            
+            # 2. Alerta de Vazamentos
+            vaz_v = vg.get('vazamentos_financeiros', 0)
+            if vaz_v > 0:
+                score -= 10
+                alertas.append({"tipo": "aviso", "titulo": "Cuidado com Vazamentos", "detalhe": f"Você já perdeu R$ {vaz_v:.2f} em taxas e juros."})
+            
+            # 3. Análise Comportamental (Encapsulada para não quebrar o resto)
+            try:
+                tres_meses_atras = start_month - timedelta(days=90)
+                # Query SQL bruta para performance e precisão
+                sql_media = text("""
+                    SELECT AVG(total_mes) FROM (
+                        SELECT SUM(ABS(valor)) as total_mes 
+                        FROM lancamentos 
+                        WHERE id_usuario = :uid AND valor < 0 
+                        AND data_transacao >= :inicio AND data_transacao < :fim
+                        GROUP BY date_trunc('month', data_transacao)
+                    ) as sub
+                """)
+                media_res = db.execute(sql_media, {"uid": user_id, "inicio": tres_meses_atras, "fim": start_month}).scalar()
+                media_gastos_hist = float(media_res) if media_res else 0.0
+                
+                if media_gastos_hist > 0 and saidas_mes > (media_gastos_hist * 1.15):
+                    score -= 10
+                    alertas.append({
+                        "tipo": "aviso", 
+                        "titulo": "Gasto Acima da Média", 
+                        "detalhe": f"Seus gastos estão 15% acima da sua média histórica de R$ {media_gastos_hist:.2f}."
+                    })
+            except Exception as e:
+                logger.warning(f"Falha ao calcular média histórica: {e}")
 
-        # --- SEÇÃO 9: ANÁLISE COMPORTAMENTAL PROFUNDA (Relatório Narrativo) ---
+            # 4. Alerta de Comprometimento
+            receita_mes = vg.get('entradas_mes', 0)
+            if receita_mes > 0:
+                comp = (vg.get('comprometimento_faturas', 0) + vg.get('comprometimento_agendamentos', 0))
+                perc = (comp / receita_mes) * 100
+                if perc > 40:
+                    score -= 15
+                    alertas.append({"tipo": "aviso", "titulo": "Renda Comprometida", "detalhe": f"Você já comprometeu {perc:.1f}% da sua renda mensal."})
+
+            score = max(5, score)
+            label = "Excelente" if score >= 90 else ("Bom" if score >= 75 else ("Atenção" if score >= 50 else "Crítico"))
+            result['health'] = {"score": score, "label": label}
+            result['alertas'] = alertas
+        except Exception as e:
+            logger.error(f"Erro fatal no Score/Alertas: {e}", exc_info=True)
+            result['health'] = {"score": 100, "label": "Ok"}
+            result['alertas'] = []
+
+        # --- SEÇÃO 9: ANÁLISE COMPORTAMENTAL PROFUNDA (Relatório Narrativo Alfredo 2.0) ---
         try:
             vg = result.get('visao_geral', {})
             ent_m = vg.get('entradas_mes', 0)
             sai_m = vg.get('saidas_mes', 0)
             res_m = vg.get('resultado_mes', 0)
             
-            # Texto base da análise
-            status_financeiro = "saudável" if res_m > 0 else "em sinal de alerta"
-            if res_m < 0: status_financeiro = "em déficit crítico"
+            # Diagnóstico Geral
+            nome_u = usuario.nome_completo.split(' ')[0] if usuario.nome_completo else "Usuário"
+            status_cor = "✅ SAUDÁVEL" if res_m > 0 else "⚠️ ALERTA"
+            if res_m < 0: status_cor = "🚨 CRÍTICO"
 
-            analise_texto = f"Sua vida financeira este mês está {status_financeiro}. "
+            msg = f"<b>RELATÓRIO ALFREDO: {today.strftime('%B').upper()}</b>\n\n"
+            msg += f"Fala, {nome_u}! Analisei sua vida financeira este mês e o veredito atual é: <b>{status_cor}</b>.\n\n"
             
+            # 1. Saúde do Fluxo de Caixa
             if ent_m > 0:
-                poupanca = ((ent_m - sai_m) / ent_m) * 100
-                if poupanca > 0:
-                    analise_texto += f"Você conseguiu preservar {poupanca:.1f}% da sua renda até agora, o que é um ótimo sinal de controle. "
+                poupanca = ((ent_m - abs(sai_m)) / ent_m) * 100
+                if poupanca > 15:
+                    msg += f"• <b>Gestão de Renda:</b> Você está sendo um mestre! Sobraram {poupanca:.1f}% da sua renda total (R$ {res_m:.2f}). Este valor é perfeito para investir ou reforçar sua reserva.\n"
+                elif poupanca > 0:
+                    msg += f"• <b>Gestão de Renda:</b> Você está equilibrado. Sobraram {poupanca:.1f}% da sua renda. O ideal é tentar chegar nos 15% de sobra no mês que vem para sua segurança.\n"
                 else:
-                    analise_texto += f"Infelizmente, você já consumiu 100% da sua renda e está usando R$ {abs(res_m):.2f} de reservas ou crédito. "
-            
-            # Comparação histórica
-            tres_meses_atras = start_month - timedelta(days=90)
-            media_val = db.execute(text(\"\"\"
-                SELECT AVG(total_mes) FROM (
-                    SELECT SUM(ABS(valor)) as total_mes FROM lancamentos 
-                    WHERE id_usuario = :uid AND valor < 0 AND data_transacao >= :inicio AND data_transacao < :fim
-                    GROUP BY date_trunc('month', data_transacao)
-                ) as sub
-            \"\"\"), {\"uid\": user_id, \"inicio\": tres_meses_atras, \"fim\": start_month}).scalar()
-            
-            if media_val and float(media_val) > 0:
-                m_hist = float(media_val)
-                diff_hist = sai_m - m_hist
-                if diff_hist > 0:
-                    analise_texto += f"Notei que seus gastos estão R$ {diff_hist:.2f} acima da sua média dos últimos 3 meses, sugerindo um desvio no seu padrão de consumo habitual. "
-                else:
-                    analise_texto += f"Parabéns! Você está gastando R$ {abs(diff_hist):.2f} a menos que sua média histórica, demonstrando uma evolução na sua disciplina. "
+                    msg += f"• <b>Gestão de Renda:</b> Cuidado! Suas despesas já consumiram 100% da sua receita. Você está operando com R$ {abs(res_m):.2f} no vermelho, o que pode gerar juros caros.\n"
+            else:
+                msg += "• <b>Gestão de Renda:</b> Ainda não detectei entradas de receita este mês. Lembre-se de registrar seus ganhos para uma análise completa.\n"
 
-            # Categorias
+            # 2. Comparação Histórica
+            try:
+                tres_meses_atras = start_month - timedelta(days=90)
+                sql_media = text("""
+                    SELECT AVG(total_mes) FROM (
+                        SELECT SUM(ABS(valor)) as total_mes FROM lancamentos 
+                        WHERE id_usuario = :uid AND valor < 0 AND data_transacao >= :inicio AND data_transacao < :fim
+                        GROUP BY date_trunc('month', data_transacao)
+                    ) as sub
+                """)
+                media_val = db.execute(sql_media, {"uid": user_id, "inicio": tres_meses_atras, "fim": start_month}).scalar()
+                if media_val and float(media_val) > 0:
+                    m_hist = float(media_val)
+                    diff_hist = abs(sai_m) - m_hist
+                    if diff_hist > (m_hist * 0.1):
+                        msg += f"• <b>Padrão de Gastos:</b> Você está gastando R$ {diff_hist:.2f} <b>acima</b> da sua média histórica. Algo fora do comum aconteceu ou você está perdendo o controle dos pequenos gastos.\n"
+                    elif diff_hist < -(m_hist * 0.1):
+                        msg += f"• <b>Padrão de Gastos:</b> Excelente evolução! Seus gastos estão R$ {abs(diff_hist):.2f} <b>abaixo</b> do seu padrão habitual de R$ {m_hist:.2f}. Continue assim!\n"
+                    else:
+                        msg += "• <b>Padrão de Gastos:</b> Você está mantendo seu custo de vida estável dentro da média histórica.\n"
+            except: pass
+
+            # 3. Análise de Vilões (Categorias)
             top_cats = result.get('top_categorias', [])
             if top_cats:
-                analise_texto += f"O maior impacto no seu orçamento vem de {top_cats[0]['nome']}, representando {(top_cats[0]['total']/sai_m*100 if sai_m > 0 else 0):.1f}% das suas despesas. "
+                tc = top_cats[0]
+                msg += f"• <b>Onde mora o perigo:</b> A categoria <b>{tc['nome']}</b> foi seu maior ralo de dinheiro, consumindo R$ {tc['total']:.2f}. Se quiser economizar rápido, comece por aqui.\n"
 
-            # Dica final do Alfredo
+            # 4. Estratégia de Guerra do Alfredo
+            msg += "\n<b>ESTRATÉGIA DO ALFREDO PARA O MÊS:</b>\n"
             if res_m < 0:
-                analise_texto += \"\\n\\n<b>Estratégia do Alfredo:</b> Para reverter esse quadro, recomendo congelar gastos em lazer e alimentação fora de casa pelos próximos 7 dias e priorizar o pagamento da fatura com maior juros.\"
+                msg += "1. Suspenda imediatamente gastos não essenciais (lazer e delivery).\n"
+                msg += "2. Tente renegociar dívidas ou priorizar o pagamento das que possuem juros altos.\n"
+                msg += "3. Use o radar de 'Próximos 30 dias' para se antecipar aos novos boletos e não ser pego de surpresa."
+            elif res_m < (ent_m * 0.1):
+                msg += "1. Você está no limite do seu orçamento. Evite novas compras parceladas esta semana.\n"
+                msg += "2. Registre cada centavo para evitar surpresas no fechamento da fatura."
             else:
-                analise_texto += \"\\n\\n<b>Estratégia do Alfredo:</b> Aproveite este saldo positivo para criar uma reserva de emergência ou antecipar parcelas que possuem juros altos.\"
+                msg += "1. Momento ideal para aplicar a sobra em investimentos de liquidez diária.\n"
+                msg += "2. Se tiver parcelas futuras, considere adiantá-las se houver desconto nos juros."
 
             if usuario.perfil_ia:
-                analise_texto += f\"\\n\\n<b>Seu Perfil:</b> {usuario.perfil_ia}\"
+                msg += f"\n\n<b>Sua Identidade Financeira:</b> {usuario.perfil_ia}"
 
-            result['insights_rapidos'] = [analise_texto]
+            result['insights_rapidos'] = [msg]
         except Exception as e:
-            logger.error(f\"Erro na análise profunda: {e}\")
-            result['insights_rapidos'] = [\"Alfredo está processando seus dados para gerar um relatório completo. Continue registrando seus gastos.\"]
+            logger.error(f"Erro na análise profunda: {e}")
+            result['insights_rapidos'] = ["Alfredo está processando seus dados para gerar um relatório completo. Continue registrando seus gastos."]
 
         # --- SEÇÃO FINAL: EVOLUÇÃO ---
         try:
