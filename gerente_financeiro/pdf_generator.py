@@ -408,6 +408,17 @@ style = get_pdf_style
 
 
 def generate_financial_pdf(context: dict) -> bytes:
+    buffer = io.BytesIO()
+    doc = BaseDocTemplate(buffer, pagesize=A4,
+                          leftMargin=15*mm, rightMargin=15*mm,
+                          topMargin=15*mm, bottomMargin=20*mm)
+    
+    # Setup do Frame e Template (importante para o rodapé aparecer)
+    frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id='normal')
+    template = PageTemplate(id='Normal', frames=[frame], onPage=footer_canvas)
+    doc.addPageTemplates([template])
+
+    elements = []
     s_small  = style('small', fontSize=8.5, textColor=C_MUTED)
     s_label  = style('label', fontName=FONT_BOLD, fontSize=8,
                      textColor=C_MUTED, spaceBefore=0, spaceAfter=2)
