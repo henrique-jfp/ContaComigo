@@ -413,12 +413,21 @@ def generate_financial_pdf(context: dict) -> bytes:
                           leftMargin=15*mm, rightMargin=15*mm,
                           topMargin=15*mm, bottomMargin=20*mm)
     
-    # Setup do Frame e Template (importante para o rodapé aparecer)
-    frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id='normal')
-    template = PageTemplate(id='Normal', frames=[frame], onPage=footer_canvas)
-    doc.addPageTemplates([template])
+    # 1. Template da CAPA (Full Screen - Sem margens no Frame)
+    frame_capa = Frame(0, 0, A4[0], A4[1], id='capa_frame', 
+                       leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
+    template_capa = PageTemplate(id='Capa', frames=[frame_capa])
+    
+    # 2. Template NORMAL (Com margens e Rodapé)
+    frame_normal = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id='normal_frame')
+    template_normal = PageTemplate(id='Normal', frames=[frame_normal], onPage=footer_canvas)
+    
+    doc.addPageTemplates([template_capa, template_normal])
 
     elements = []
+    # Começa explicitamente com o template de Capa
+    elements.append(NextPageTemplate('Capa'))
+    
     s_small  = style('small', fontSize=8.5, textColor=C_MUTED)
     s_label  = style('label', fontName=FONT_BOLD, fontSize=8,
                      textColor=C_MUTED, spaceBefore=0, spaceAfter=2)
