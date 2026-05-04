@@ -185,73 +185,37 @@ def debug_contexto(contexto_dados):
 
 
 # =============================================================================
-#  HANDLER DO COMANDO /relatorio
+#  LÓGICA CORE DE GERAÇÃO E ENVIO DE RELATÓRIO PDF
 # =============================================================================
 
-async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Gera e envia um relatório financeiro detalhado em PDF."""
-    
-    await touch_user_interaction(update.effective_user.id, context)
-    hoje = datetime.now()
-    
-    # Determina o período do relatório (mês atual ou passado)
-    if context.args and context.args[0].lower() in ['passado', 'anterior']:
-        data_alvo = hoje - relativedelta(months=1)
-        periodo_str = f"do mês passado ({data_alvo.strftime('%B de %Y')})"
-    else:
-        data_alvo = hoje
-        periodo_str = "deste mês"
-        
-    mes_alvo = data_alvo.month
-    ano_alvo = data_alvo.year
-
-    await update.message.reply_text(f"Gerando seu relatório {periodo_str}... 🎥\nIsso pode levar alguns segundos.")
-    
-    db = next(get_db())
-    user_id = update.effective_user.id
-    
+async def enviar_relatorio_pdf_usuario(bot, usuario, db, mes_alvo, ano_alvo, periodo_str, context_tg=None):
+    """
+    Geração e envio do relatório PDF isolada para ser usada por comandos ou jobs.
+    """
+    user_id = usuario.telegram_id
     try:
-        usuario_db = get_or_create_user(db, user_id, update.effective_user.full_name)
-        ensure_user_plan_state(db, usuario_db, commit=True)
-        gate = plan_allows_feature(db, usuario_db, "relatorio_pdf")
-        if not gate.allowed:
-            text, keyboard = upgrade_prompt_for_feature("relatorio_pdf")
-            await update.message.reply_html(text, reply_markup=keyboard)
-            return
-
-        # 1. Desativar temporariamente o sistema de cache para garantir dados sempre frescos
+        # 1. Desativar temporariamente o sistema de cache
         old_cache_ttl = getattr(services_module, 'CACHE_TTL', None)
         old_cache_max = getattr(services_module, 'CACHE_MAX_SIZE', None)
         try:
             services_module.CACHE_TTL = 0
             services_module.CACHE_MAX_SIZE = 0
-            logger.debug("CACHE DESATIVADO temporariamente para geração do /relatorio")
-        except Exception:
-            logger.debug("Não foi possível desativar o cache (ignorando)")
+        except Exception: pass
 
-        # Limpa qualquer cache residual do usuário (defensivo)
-        try:
-            limpar_cache_usuario(user_id)
-            logger.debug(f"Cache do usuário {user_id} limpo antes de gerar o relatório")
-        except Exception:
-            logger.debug("Falha ao limpar cache do usuário (não crítico)")
+        # Limpa cache residual
+        try: limpar_cache_usuario(user_id)
+        except Exception: pass
 
-        
-        logger.info(f"Iniciando geração de relatório para usuário {user_id}, mês {mes_alvo}, ano {ano_alvo}")
+        logger.info(f"Gerando relatório para {user_id}, período: {mes_alvo}/{ano_alvo}")
         contexto_dados = gerar_contexto_relatorio(db, user_id, mes_alvo, ano_alvo)
         
         if not contexto_dados:
-            await update.message.reply_text("Não foi possível encontrar seu usuário. Tente usar o bot uma vez para se registrar.")
-            return
+            logger.warning(f"Contexto vazio para usuário {user_id}")
+            return False
         
-        # 2. Validar e completar contexto
         contexto_dados = validar_e_completar_contexto(contexto_dados)
         
-        # 3. Debug do contexto (pode ser removido em produção)
-        debug_contexto(contexto_dados)
-        
-        # 3.1 Gerar Análise de IA (Insights Reais do Alfredo)
-        logger.info("Gerando análise de IA para o relatório...")
+        # 3.1 Gerar Análise de IA
         try:
             resumo_dados = (
                 f"Usuário: {getattr(contexto_dados.get('usuario'), 'nome_completo', 'Usuário')}\n"
@@ -261,7 +225,6 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
                 f"Saldo: R$ {contexto_dados.get('saldo_mes'):.2f}\n"
                 f"Taxa de Poupança: {contexto_dados.get('taxa_poupanca'):.1f}%\n"
             )
-            
             gastos = contexto_dados.get('gastos_agrupados', [])
             if gastos:
                 resumo_dados += "\nMaiores Gastos por Categoria:\n"
@@ -269,237 +232,124 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
                     resumo_dados += f"- {cat}: R$ {val:.2f}\n"
             
             prompt_ia = [
-                {"role": "system", "content": (
-                    "Você é o Alfredo, um assistente financeiro inteligente, direto e parceiro. "
-                    "Analise os dados financeiros do usuário e forneça 3 a 4 insights curtos e acionáveis. "
-                    "Seja honesto sobre a situação (elogie se estiver bem, alerte se estiver gastando demais). "
-                    "Use um tom profissional mas próximo. Mantenha a resposta em português do Brasil e curta (máximo 700 caracteres)."
-                )},
-                {"role": "user", "content": f"Aqui estão meus dados do mês para o relatório:\n{resumo_dados}"}
+                {"role": "system", "content": "Você é o Alfredo, um assistente financeiro inteligente e direto. Analise os dados e forneça 3 a 4 insights curtos."},
+                {"role": "user", "content": f"Dados:\n{resumo_dados}"}
             ]
-            
             analise_resultado = await _smart_ai_completion_async(prompt_ia)
-            
             if analise_resultado:
-                if isinstance(analise_resultado, str):
-                    contexto_dados["analise_ia"] = analise_resultado
-                else:
-                    choice = (analise_resultado.get("choices") or [{}])[0]
-                    contexto_dados["analise_ia"] = (choice.get("message") or {}).get("content", "")
-            
-            logger.info("✅ Análise de IA gerada com sucesso para o relatório")
+                if isinstance(analise_resultado, str): contexto_dados["analise_ia"] = analise_resultado
+                else: contexto_dados["analise_ia"] = analise_resultado.get("choices", [{}])[0].get("message", {}).get("content", "")
         except Exception as e:
-            logger.error(f"Erro ao gerar análise de IA para relatório: {e}")
-            contexto_dados["analise_ia"] = "Não foi possível gerar a análise automática agora. Mas continue acompanhando seus gastos pelo Alfredo!"
-        
-        if not contexto_dados.get("has_data"):
-            await update.message.reply_text(f"Não encontrei dados suficientes para {periodo_str} para gerar um relatório.")
-            return
+            logger.error(f"Erro IA relatório: {e}")
+            contexto_dados["analise_ia"] = "Continue acompanhando seus gastos pelo Alfredo!"
 
-        # 4. Gerar o gráfico de pizza dinamicamente
-        logger.info("Gerando gráfico de pizza...")
+        if not contexto_dados.get("has_data"):
+            logger.info(f"Usuário {user_id} sem dados para o período.")
+            return False
+
+        # 4. Gráficos
         try:
             grafico_buffer = gerar_grafico_para_relatorio(contexto_dados.get("gastos_por_categoria_dict", {}))
-            
             if grafico_buffer:
-                grafico_bytes = grafico_buffer.getvalue()
-                grafico_base64 = base64.b64encode(grafico_bytes).decode('utf-8')
-                contexto_dados["grafico_pizza_base64"] = grafico_base64
-                # Também disponibiliza os bytes do PNG diretamente para o gerador de PDF
-                contexto_dados["grafico_pizza_png_bytes"] = grafico_bytes
-                logger.info("Gráfico gerado com sucesso")
-            else:
-                contexto_dados["grafico_pizza_base64"] = None
-                logger.warning("Falha ao gerar gráfico")
-        except Exception as e:
-            logger.error(f"Erro ao gerar gráfico: {e}")
-            contexto_dados["grafico_pizza_base64"] = None
+                contexto_dados["grafico_pizza_png_bytes"] = grafico_buffer.getvalue()
+        except Exception as e: logger.error(f"Erro gráfico pizza: {e}")
 
-        # 4.1 Gerar gráfico de evolução mensal (últimos 6 meses)
-        logger.info("Gerando gráfico de evolução mensal...")
         try:
             grafico_evolucao = gerar_grafico_evolucao_mensal(contexto_dados.get("lancamentos_historico", []))
-            if grafico_evolucao:
-                contexto_dados["grafico_evolucao_png_bytes"] = grafico_evolucao.getvalue()
-            else:
-                contexto_dados["grafico_evolucao_png_bytes"] = None
-        except Exception as e:
-            logger.error(f"Erro ao gerar gráfico de evolução: {e}")
-            contexto_dados["grafico_evolucao_png_bytes"] = None
+            if grafico_evolucao: contexto_dados["grafico_evolucao_png_bytes"] = grafico_evolucao.getvalue()
+        except Exception as e: logger.error(f"Erro gráfico evolução: {e}")
 
-        # 4.2 Gerar Perfil Semanal
-        logger.info("Gerando perfil semanal...")
         try:
             from .services import gerar_grafico_perfil_semanal
-            
-            # Buscar a lista filtrada de lançamentos que já foi processada no contexto
             financeiros_full = contexto_dados.get('lista_despesas', []) + contexto_dados.get('lista_receitas', [])
             grafico_semanal = gerar_grafico_perfil_semanal(financeiros_full)
-            
-            if grafico_semanal:
-                contexto_dados["grafico_semanal_png_bytes"] = grafico_semanal.getvalue()
-            else:
-                contexto_dados["grafico_semanal_png_bytes"] = None
-        except Exception as e:
-            logger.error(f"Erro ao gerar perfil semanal: {e}")
-            contexto_dados["grafico_semanal_png_bytes"] = None
+            if grafico_semanal: contexto_dados["grafico_semanal_png_bytes"] = grafico_semanal.getvalue()
+        except Exception as e: logger.error(f"Erro gráfico semanal: {e}")
+
+        # 5. Render HTML
+        contexto_dados['now'] = datetime.now
+        template = env.get_template('relatorio_inspiracao.html')
+        html_renderizado = template.render(contexto_dados)
+
+        # 6. PDF ReportLab
+        data_referencia = datetime(ano_alvo, mes_alvo, 1)
+        pdf_context = {
+            'periodo_inicio': data_referencia.strftime('01/%m/%Y'),
+            'periodo_fim': (data_referencia + relativedelta(day=31)).strftime('%d/%m/%Y'),
+            'usuario_nome': usuario.nome_completo or 'Você',
+            'periodo_extenso': f"{contexto_dados.get('mes_nome')} de {ano_alvo}",
+            'total_receitas': contexto_dados.get('receita_total', 0),
+            'total_gastos': contexto_dados.get('despesa_total', 0),
+            'saldo_periodo': contexto_dados.get('saldo_mes', 0),
+            'taxa_poupanca': contexto_dados.get('taxa_poupanca', 0),
+            'score_financeiro': contexto_dados.get('score_financeiro'),
+            'gastos_agrupados': contexto_dados.get('gastos_agrupados', []),
+            'grafico_pizza_png': contexto_dados.get('grafico_pizza_png_bytes'),
+            'grafico_evolucao_png': contexto_dados.get('grafico_evolucao_png_bytes'),
+            'grafico_semanal_png': contexto_dados.get('grafico_semanal_png_bytes'),
+            'top_gastos': contexto_dados.get('lista_despesas', [])[:10],
+            'top_receitas': contexto_dados.get('lista_receitas', [])[:10],
+            'analise_ia': contexto_dados.get('analise_ia'),
+            'metas': contexto_dados.get('metas', []),
+        }
         
-        # 5. Renderizar o template HTML com os dados
-        logger.info("Renderizando template HTML...")
-        try:
-            # Adicionar utilitários ao contexto (ex.: now()) para uso no template
-            contexto_dados['now'] = datetime.now
-            # Garantir que mes_nome e ano estejam corretos para o período solicitado
-            contexto_dados['mes_nome'] = contexto_dados.get('mes_nome') or data_alvo.strftime('%B')
-            contexto_dados['ano'] = contexto_dados.get('ano') or ano_alvo
+        pdf_bytes = generate_financial_pdf(pdf_context)
+        if not pdf_bytes: return False
 
-            # Injetar imagens de inspiração (img-pdf-exemplo) como data URIs para uso no template
-            try:
-                import glob
-                imagens_dir = os.path.join(os.path.dirname(__file__), '..', 'img-pdf-exemplo')
-                imagens = []
-                if os.path.isdir(imagens_dir):
-                    for nome in sorted(os.listdir(imagens_dir)):
-                        caminho = os.path.join(imagens_dir, nome)
-                        if os.path.isfile(caminho) and nome.lower().endswith(('.png', '.jpg', '.jpeg', '.svg')):
-                            with open(caminho, 'rb') as fimg:
-                                b = fimg.read()
-                            mime = 'image/png' if nome.lower().endswith('.png') else 'image/jpeg'
-                            datauri = f"data:{mime};base64,{base64.b64encode(b).decode('ascii')}"
-                            imagens.append(datauri)
-                contexto_dados['inspiracao_images'] = imagens
-            except Exception as e:
-                logger.debug(f"Falha ao carregar imagens de inspiração: {e}")
-
-            # opcional: adicionar build_stamp se houver (para o rodapé do template)
-            try:
-                import subprocess
-                commit = None
-                try:
-                    commit = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], cwd=os.path.join(os.path.dirname(__file__), '..')).decode().strip()
-                except Exception:
-                    commit = None
-                contexto_dados['build_stamp'] = commit
-            except Exception:
-                contexto_dados['build_stamp'] = None
-
-            # Usar o template de inspiração (contendo galerias/imagens)
-            # Se quiser reverter para o template antigo, troque o nome abaixo
-            template = env.get_template('relatorio_inspiracao.html')
-            html_renderizado = template.render(contexto_dados)
-            logger.info(f"Template renderizado. Tamanho: {len(html_renderizado)} caracteres")
-            
-            # Debug: salva HTML temporariamente para verificação (apenas em desenvolvimento)
-            # Descomente as linhas abaixo se precisar verificar o HTML gerado
-            # with open(f"debug_relatorio_{user_id}.html", "w", encoding="utf-8") as f:
-            #     f.write(html_renderizado)
-            # logger.info("HTML de debug salvo")
-            
-        except Exception as e:
-            logger.error(f"Erro ao renderizar template: {e}", exc_info=True)
-            raise
-        
-        # 6. Gerar o PDF
-        logger.info("Gerando PDF...")
-        
-        # SEMPRE usar ReportLab (WeasyPrint removido - não funciona no Railway)
-        logger.info("Usando ReportLab para gerar PDF...")
-        try:
-            if not REPORTLAB_AVAILABLE:
-                raise Exception("ReportLab não está disponível")
-            
-            # Ajustar nomes de campos do contexto para o PDF generator
-            pdf_context = {
-                'periodo_inicio': data_alvo.strftime('%d/%m/%Y'),
-                'periodo_fim': (data_alvo + relativedelta(day=31)).strftime('%d/%m/%Y'),
-                'usuario_nome': getattr(contexto_dados.get('usuario'), 'nome_completo', None) or 'Você',
-                'periodo_extenso': f"{contexto_dados.get('mes_nome', 'Mês Atual')} de {contexto_dados.get('ano', data_alvo.year)}",
-                'total_receitas': contexto_dados.get('receita_total', 0),
-                'total_gastos': contexto_dados.get('despesa_total', 0),
-                'saldo_periodo': contexto_dados.get('saldo_mes', 0),
-                'taxa_poupanca': contexto_dados.get('taxa_poupanca', 0),
-                'score_financeiro': contexto_dados.get('score_financeiro'),
-                'gastos_agrupados': contexto_dados.get('gastos_agrupados', []),
-                'grafico_pizza_png': contexto_dados.get('grafico_pizza_png_bytes'),
-                'grafico_evolucao_png': contexto_dados.get('grafico_evolucao_png_bytes'),
-                'grafico_semanal_png': contexto_dados.get('grafico_semanal_png_bytes'),
-                # Inclui o HTML renderizado opcionalmente para permitir HTML->PDF se disponível
-                'html_renderizado': html_renderizado,
-                'top_gastos': contexto_dados.get('lista_despesas', [])[:10],
-                'top_receitas': contexto_dados.get('lista_receitas', [])[:10],
-                'insights': contexto_dados.get('insights', []),
-                'analise_ia': contexto_dados.get('analise_ia'),
-                'metas': contexto_dados.get('metas', []),
-                'tendencia_receita_percent': contexto_dados.get('tendencia_receita_percent', 0),
-                'tendencia_despesa_percent': contexto_dados.get('tendencia_despesa_percent', 0),
-                'media_receitas_3m': contexto_dados.get('media_receitas_3m', 0),
-                'media_despesas_3m': contexto_dados.get('media_despesas_3m', 0),
-                'media_saldo_3m': contexto_dados.get('media_saldo_3m', 0),
-            }
-            
-            logger.info(f"Gerando PDF com ReportLab - dados: {len(pdf_context.get('gastos_por_categoria', []))} categorias, {len(pdf_context.get('top_gastos', []))} gastos")
-            
-            pdf_bytes = generate_financial_pdf(pdf_context)
-            
-            if not pdf_bytes or len(pdf_bytes) == 0:
-                raise Exception("PDF gerado está vazio")
-            
-            logger.info(f"✅ PDF gerado com sucesso. Tamanho: {len(pdf_bytes)} bytes")
-            
-            # Enviar PDF
-            pdf_filename = f"relatorio_{data_alvo.strftime('%Y-%m')}_{user_id}.pdf"
-            
-            await update.message.reply_document(
-                document=InputFile(io.BytesIO(pdf_bytes), filename=pdf_filename),
-                caption=f"📊 Relatório de {periodo_str}\n\n"
-                       f"📈 Total de receitas: R$ {contexto_dados.get('receita_total', 0):.2f}\n"
-                       f"📉 Total de despesas: R$ {contexto_dados.get('despesa_total', 0):.2f}\n"
-                       f"💰 Saldo: R$ {contexto_dados.get('saldo_mes', 0):.2f}",
-                read_timeout=120,
-                write_timeout=120
-            )
-
-            try:
-                await give_xp_for_action(update.effective_user.id, "RELATORIO_GERADO", context)
-            except Exception:
-                logger.debug("Falha ao conceder XP do relatorio (nao critico).")
-            
-            logger.info("✅ Relatório PDF enviado com sucesso!")
-            return
-            
-        except Exception as e:
-            logger.error(f"❌ Erro ao gerar/enviar PDF: {e}", exc_info=True)
-            await update.message.reply_text(
-                f"❌ Erro ao gerar relatório PDF:\n{str(e)}\n\n"
-                f"Resumo do período:\n"
-                f"📈 Receitas: R$ {contexto_dados.get('receita_total', 0):.2f}\n"
-                f"📉 Despesas: R$ {contexto_dados.get('despesa_total', 0):.2f}\n"
-                f"💰 Saldo: R$ {contexto_dados.get('saldo_mes', 0):.2f}"
-            )
-            return
-
-        
-    # Não há arquivo HTML temporário criado aqui, então nada a limpar.
-
-    except Exception as e:
-        logger.error(f"Erro crítico na geração do relatório: {e}", exc_info=True)
-        await update.message.reply_text(
-            "❌ Ocorreu um erro ao gerar o relatório. Tente novamente em alguns minutos.",
+        # Enviar
+        pdf_filename = f"relatorio_{ano_alvo}_{mes_alvo}_{user_id}.pdf"
+        from telegram import InputFile
+        import io
+        await bot.send_document(
+            chat_id=user_id,
+            document=InputFile(io.BytesIO(pdf_bytes), filename=pdf_filename),
+            caption=f"📊 <b>Seu Relatório Financeiro</b>\nPeríodo: {periodo_str}\n\nAlfredo cuidando das suas finanças! 🚀",
             parse_mode='HTML'
         )
 
+        if context_tg:
+            try: await give_xp_for_action(user_id, "RELATORIO_GERADO", context_tg)
+            except: pass
+        
+        return True
+
+    finally:
+        # Restaura cache
+        try:
+            if old_cache_ttl is not None: services_module.CACHE_TTL = old_cache_ttl
+            if old_cache_max is not None: services_module.CACHE_MAX_SIZE = old_cache_max
+        except: pass
+
+# =============================================================================
+#  HANDLER DO COMANDO /relatorio
+# =============================================================================
+
+async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Gera e envia um relatório financeiro detalhado em PDF."""
+    await touch_user_interaction(update.effective_user.id, context)
+    hoje = datetime.now()
+    if context.args and context.args[0].lower() in ['passado', 'anterior']:
+        data_alvo = hoje - relativedelta(months=1)
+        periodo_str = f"do mês passado ({data_alvo.strftime('%B/%Y')})"
+    else:
+        data_alvo = hoje
+        periodo_str = "deste mês"
+
+    await update.message.reply_text(f"Gerando seu relatório {periodo_str}... 🎥")
+    
+    db = next(get_db())
+    try:
+        usuario_db = get_or_create_user(db, update.effective_user.id, update.effective_user.full_name)
+        ensure_user_plan_state(db, usuario_db, commit=True)
+        if not plan_allows_feature(db, usuario_db, "relatorio_pdf").allowed:
+            text, keyboard = upgrade_prompt_for_feature("relatorio_pdf")
+            await update.message.reply_html(text, reply_markup=keyboard)
+            return
+
+        success = await enviar_relatorio_pdf_usuario(
+            context.bot, usuario_db, db, data_alvo.month, data_alvo.year, periodo_str, context
+        )
+        if not success:
+            await update.message.reply_text("Não encontrei dados suficientes para gerar o relatório agora.")
     finally:
         db.close()
-        # Restaura os valores de cache originais (se existiam)
-        try:
-            if old_cache_ttl is not None:
-                services_module.CACHE_TTL = old_cache_ttl
-            if old_cache_max is not None:
-                services_module.CACHE_MAX_SIZE = old_cache_max
-            logger.debug("CACHE restaurado aos valores anteriores após geração do relatório")
-        except Exception:
-            logger.debug("Falha ao restaurar configuração de cache (não crítico)")
-        
-
-# Cria o handler para ser importado no bot.py
-relatorio_handler = CommandHandler('relatorio', gerar_relatorio_comando)

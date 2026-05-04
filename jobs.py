@@ -9,6 +9,8 @@ from gerente_financeiro.assistente_proativo import job_assistente_proativo, job_
 from gerente_financeiro.wrapped_anual import job_wrapped_anual
 from gerente_financeiro.ai_memory_service import job_atualizar_perfis_ia
 from alerts import job_metas_mensal
+from gerente_financeiro.relatorio_handler import enviar_relatorio_pdf_usuario
+from dateutil.relativedelta import relativedelta
 from gerente_financeiro.gamification_missions_service import (
     reset_daily_missions_for_all_users,
     reset_weekly_missions_for_all_users,
@@ -169,6 +171,44 @@ def configurar_jobs(job_queue):
             job_gamification_monthly_awards,
             time=time(hour=0, minute=15),
             name="gamification_monthly_awards"
+        )
+
+        async def job_relatorio_mensal_automatico(context: ContextTypes.DEFAULT_TYPE):
+            """Envia o relatório PDF completo do mês anterior para todos os usuários no dia 1º"""
+            from datetime import datetime
+            hoje = datetime.now()
+            if hoje.day != 1:
+                return
+            
+            logger.info("📊 Iniciando Job de Relatório Mensal Automático...")
+            db = next(get_db())
+            try:
+                # Busca todos os usuários com Telegram ID
+                usuarios = db.query(Usuario).filter(Usuario.telegram_id.isnot(None)).all()
+                mes_passado = hoje - relativedelta(months=1)
+                periodo_str = mes_passado.strftime("%B/%Y")
+                
+                enviados = 0
+                for usuario in usuarios:
+                    # Verifica se o usuário quer receber insights/relatórios
+                    if getattr(usuario, 'notif_insights', True):
+                        try:
+                            # Chama a função core de envio de PDF
+                            success = await enviar_relatorio_pdf_usuario(
+                                context.bot, usuario, db, mes_passado.month, mes_passado.year, periodo_str
+                            )
+                            if success: enviados += 1
+                        except Exception as e:
+                            logger.error(f"Erro ao enviar relatório automático para {usuario.id}: {e}")
+                
+                logger.info(f"✅ Relatório Mensal Automático concluído: {enviados} usuários notificados.")
+            finally:
+                db.close()
+
+        job_queue.run_daily(
+            job_relatorio_mensal_automatico,
+            time=time(hour=9, minute=30),
+            name="relatorio_mensal_automatico"
         )
 
         async def job_trial_monetizacao(context: ContextTypes.DEFAULT_TYPE):

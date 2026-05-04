@@ -646,8 +646,11 @@ async def enviar_resumo_semanal_usuario(bot, usuario: Usuario):
     """Gera e envia o resumo semanal em HTML para o usuário"""
     db = next(get_db())
     try:
-        hoje = datetime.now()
+        from datetime import timezone as dt_timezone
+        hoje = datetime.now(dt_timezone.utc)
         data_inicio = hoje - timedelta(days=7)
+        
+        logger.info(f"📊 Processando resumo semanal para {usuario.telegram_id} (id:{usuario.id})")
         
         lancamentos = db.query(Lancamento).filter(
             and_(
@@ -659,14 +662,18 @@ async def enviar_resumo_semanal_usuario(bot, usuario: Usuario):
         ).all()
         
         if not lancamentos:
+            logger.info(f"ℹ️ Usuário {usuario.id} não teve lançamentos nos últimos 7 dias. Pulando resumo.")
             return False
             
         receitas = sum(float(l.valor) for l in lancamentos if getattr(l, 'tipo', '') in ("Entrada", "Receita") or float(l.valor) > 0)
         despesas = sum(abs(float(l.valor)) for l in lancamentos if getattr(l, 'tipo', '') in ("Saída", "Despesa") or float(l.valor) < 0)
-        saldo_semana = receitas - despesas
         
         if receitas == 0 and despesas == 0:
+            logger.info(f"ℹ️ Usuário {usuario.id} teve lançamentos mas totais são zero. Pulando resumo.")
             return False
+
+        saldo_semana = receitas - despesas
+        logger.info(f"✅ Gerando resumo para {usuario.id}: rec={receitas}, desp={despesas}")
 
         # Top gastos
         gastos = [l for l in lancamentos if (getattr(l, 'tipo', '') in ("Saída", "Despesa") or float(l.valor) < 0)]
@@ -757,13 +764,18 @@ async def job_resumo_semanal(context):
         # Notifica usuários ativos ou que pediram insights
         usuarios = db.query(Usuario).filter(Usuario.telegram_id.isnot(None)).all()
         
+        logger.info(f"🔍 Candidatos ao resumo semanal: {len(usuarios)} usuários encontrados.")
+        
         enviados = 0
         for usuario in usuarios:
-            if getattr(usuario, 'notif_insights', True):
+            notif_insights = getattr(usuario, 'notif_insights', True)
+            if notif_insights:
                 if await enviar_resumo_semanal_usuario(context.bot, usuario):
                     enviados += 1
+            else:
+                logger.info(f"🚫 Usuário {usuario.id} desativou notif_insights. Pulando.")
                     
-        logger.info(f"✅ Resumo Semanal concluído: {enviados} usuários notificados.")
+        logger.info(f"✅ Job Resumo Semanal finalizado: {enviados} usuários notificados.")
     except Exception as e:
         logger.error(f"Erro no job de resumo semanal: {e}")
 
