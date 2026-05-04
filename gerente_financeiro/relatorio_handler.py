@@ -336,7 +336,7 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
         periodo_str = "deste mês"
 
     await update.message.reply_text(f"Gerando seu relatório {periodo_str}... 🎥")
-    
+
     db = next(get_db())
     try:
         usuario_db = get_or_create_user(db, update.effective_user.id, update.effective_user.full_name)
@@ -353,3 +353,6 @@ async def gerar_relatorio_comando(update: Update, context: ContextTypes.DEFAULT_
             await update.message.reply_text("Não encontrei dados suficientes para gerar o relatório agora.")
     finally:
         db.close()
+
+# Cria o handler para ser importado no bot.py
+relatorio_handler = CommandHandler('relatorio', gerar_relatorio_comando)
