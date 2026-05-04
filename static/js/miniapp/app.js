@@ -365,7 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
       panel.classList.add('active');
 
       // Garante que ícones do Lucide sejam renderizados se o painel tiver conteúdo estático novo
-      if (window.lucide) /* Huge Icons Migration: Lucide init removed */
+      if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
 
       if (!keepNav) {
         setActiveNav(tabName);
@@ -2467,7 +2467,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
       }).join('');
       
-      if (window.lucide) /* Huge Icons Migration: Lucide init removed */
+      if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
     }
 
     async function forcePierreSync() {
@@ -2477,7 +2477,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const originalHtml = btn.innerHTML;
       btn.disabled = true;
       btn.innerHTML = '<i class="w-3 h-3 animate-spin" data-lucide="refresh-cw"></i> Sincronizando...';
-      if (window.lucide) /* Huge Icons Migration: Lucide init removed */
+      if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
 
       try {
         const response = await fetchWithSession('/api/miniapp/pierre/sync', { method: 'POST' });
@@ -2493,7 +2493,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } finally {
         btn.disabled = false;
         btn.innerHTML = originalHtml;
-        if (window.lucide) /* Huge Icons Migration: Lucide init removed */
+        if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
       }
     }
 
@@ -4091,7 +4091,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (skeleton) skeleton.classList.add('hidden');
         if (content) content.classList.remove('hidden');
-        if (window.lucide) /* Huge Icons Migration: Lucide init removed */
+        if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
       } catch (err) {
         console.error('Erro Modo Deus:', err);
         showToast('Falha na conexão do Modo Deus', 'error');
@@ -4301,7 +4301,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           `;
         });
-        if (window.lucide) /* Huge Icons Migration: Lucide init removed */
+        if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
       }
 
       // 0.1 Gráfico de Faturas
@@ -4495,7 +4495,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="text-[10px] text-rose-500 font-black whitespace-nowrap">${fmt.format(a.valor)}</span>
               </div>`;
               });
-              if (window.lucide) /* Huge Icons Migration: Lucide init removed */
+              if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
               } else if (assBlock) {
           assBlock.classList.add('hidden');
         }
@@ -4624,7 +4624,7 @@ document.addEventListener('DOMContentLoaded', () => {
               </div>
             </div>
           `).join('');
-          if (window.lucide) /* Huge Icons Migration: Lucide init removed */
+          if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
         } else {
           alertB.classList.add('hidden');
         }
@@ -4677,7 +4677,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
       
-      if (window.lucide) /* Huge Icons Migration: Lucide init removed */
+      if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
     }
 
     // --- SISTEMA DE AJUDA DOS GRÁFICOS ---
