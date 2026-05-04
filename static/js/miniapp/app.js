@@ -2170,7 +2170,7 @@ document.addEventListener('DOMContentLoaded', () => {
               </div>
             `;
           });
-          if (window.lucide) /* Huge Icons Migration: Lucide init removed */
+          if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
         }
       }
 
