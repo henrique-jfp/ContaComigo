@@ -425,8 +425,6 @@ def generate_financial_pdf(context: dict) -> bytes:
     doc.addPageTemplates([template_capa, template_normal])
 
     elements = []
-    # Começa explicitamente com o template de Capa
-    elements.append(NextPageTemplate('Capa'))
     
     s_small  = style('small', fontSize=8.5, textColor=C_MUTED)
     s_label  = style('label', fontName=FONT_BOLD, fontSize=8,
@@ -454,8 +452,9 @@ def generate_financial_pdf(context: dict) -> bytes:
         score = min(base + bonus_saldo + bonus_med, 100)
 
     # ── 1. CAPA ──────────────────────────────────────────────
+    # Reduzido 2mm para garantir que caiba no frame sem erro de precisão
     elements.append(GradientCover(
-        A4[0], A4[1],
+        A4[0] - 2*mm, A4[1] - 2*mm,
         context.get('usuario_nome', 'Investidor'),
         context.get('periodo_extenso', 'Período Atual'),
         context.get('mes_ano', ''),
