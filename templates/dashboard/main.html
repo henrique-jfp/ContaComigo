@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ContaComigo - Seu Painel</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" crossorigin="anonymous">
+    <link href="{{ url_for('static', filename='vendor/hugeicons/hgi-stroke-rounded.css') }}" rel="stylesheet">
     <!-- Chart.js e plugins: ordem importa! -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@4.1.0/dist/chartjs-chart-matrix.umd.min.js" crossorigin="anonymous"></script>
@@ -20,7 +20,7 @@
     <nav class="navbar navbar-expand-lg navbar-light">
         <div class="container">
             <a class="navbar-brand" href="/">
-                <i class="fas fa-hand-holding-usd"></i> ContaComigo
+                <i class="hgi-stroke hgi-wallet-01"></i> ContaComigo
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -28,23 +28,23 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link active" href="#"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+                        <a class="nav-link active" href="#"><i class="hgi-stroke hgi-dashboard-speed-01"></i> Dashboard</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#transacoes"><i class="fas fa-list"></i> Transações</a>
+                        <a class="nav-link" href="#transacoes"><i class="hgi-stroke hgi-list"></i> Transações</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#graficos"><i class="fas fa-chart-bar"></i> Gráficos</a>
+                        <a class="nav-link" href="#graficos"><i class="hgi-stroke hgi-chart-bar-line"></i> Gráficos</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#metas"><i class="fas fa-bullseye"></i> Metas</a>
+                        <a class="nav-link" href="#metas"><i class="hgi-stroke hgi-target-01"></i> Metas</a>
                     </li>
                 </ul>
                 <ul class="navbar-nav">
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="periodoDropdown" role="button"
                             data-bs-toggle="dropdown">
-                            <i class="fas fa-calendar"></i> {{ mes|default(now.now().month) }}/{{ ano|default(now.now().year) }}
+                            <i class="hgi-stroke hgi-calendar-01"></i> {{ mes|default(now.now().month) }}/{{ ano|default(now.now().year) }}
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item"
@@ -63,7 +63,7 @@
                     </li>
                     <li class="nav-item">
                         <button class="btn btn-outline-dark btn-sm" onclick="atualizarDados()">
-                            <i class="fas fa-sync" id="refresh-icon"></i> Atualizar
+                            <i class="hgi-stroke hgi-refresh" id="refresh-icon"></i> Atualizar
                         </button>
                     </li>
                 </ul>
@@ -77,7 +77,7 @@
             <div class="row">
                 <div class="col-12">
                     <h2 class="mb-5 font-serif font-black text-4xl">
-                        <i class="fas fa-user-circle text-brand opacity-20"></i> Dashboard Financeiro
+                        <i class="hgi-stroke hgi-user-circle text-brand opacity-20"></i> Dashboard Financeiro
                         <small class="text-muted text-sm font-mono block mt-1 uppercase tracking-widest">{{ mes|default(now.now().month) }}/{{ ano|default(now.now().year) }}</small>
                     </h2>
                 </div>
@@ -96,7 +96,7 @@
                                     <small class="text-muted">{{ kpis.qtd_transacoes|default(0) }} transações</small>
                                 </div>
                                 <div class="kpi-icon">
-                                    <i class="fas fa-arrow-up"></i>
+                                    <i class="hgi-stroke hgi-arrow-up-01"></i>
                                 </div>
                             </div>
                         </div>
@@ -115,7 +115,7 @@
                                         }}/dia</small>
                                 </div>
                                 <div class="kpi-icon">
-                                    <i class="fas fa-arrow-down"></i>
+                                    <i class="hgi-stroke hgi-arrow-down-01"></i>
                                 </div>
                             </div>
                         </div>
@@ -135,7 +135,7 @@
                                     </small>
                                 </div>
                                 <div class="kpi-icon">
-                                    <i class="fas fa-wallet"></i>
+                                    <i class="hgi-stroke hgi-wallet-01"></i>
                                 </div>
                             </div>
                         </div>
@@ -153,7 +153,7 @@
                                     <small class="text-muted">Meta: 20%</small>
                                 </div>
                                 <div class="kpi-icon">
-                                    <i class="fas fa-piggy-bank"></i>
+                                    <i class="hgi-stroke hgi-piggy-bank"></i>
                                 </div>
                             </div>
                         </div>
@@ -167,7 +167,7 @@
     <div class="container my-4">
         <!-- GRÁFICOS -->
         <section id="graficos" class="mb-5">
-                        <h3 class="mb-4"><i class="fas fa-chart-bar"></i> Análise Visual</h3>
+                        <h3 class="mb-4"><i class="hgi-stroke hgi-chart-bar-line"></i> Análise Visual</h3>
                         <!-- AQUÁRIO DE TOPO ABERTO - CARD INOVADOR -->
                         <div class="row mb-4">
                                 <div class="col-12">
@@ -235,13 +235,13 @@
                     <div class="card chart-card">
                         <div class="card-header">
                             <h5 class="card-title mb-0">
-                                <i class="fas fa-chart-line"></i> Evolução Mensal
+                                <i class="hgi-stroke hgi-chart-line-data-01"></i> Evolução Mensal
                             </h5>
                         </div>
                         <div class="card-body">
                             <div id="grafico-evolucao" class="chart-container"></div>
                             <div class="loading-spinner text-center" style="display: none;">
-                                <i class="fas fa-spinner fa-spin fa-2x"></i>
+                                <i class="hgi-stroke hgi-refresh hgi-spin hgi-2x"></i>
                                 <p>Carregando gráfico...</p>
                             </div>
                         </div>
@@ -255,13 +255,13 @@
                     <div class="card chart-card">
                         <div class="card-header">
                             <h5 class="card-title mb-0">
-                                <i class="fas fa-chart-bar"></i> Ranking de Gastos
+                                <i class="hgi-stroke hgi-chart-bar-line"></i> Ranking de Gastos
                             </h5>
                         </div>
                         <div class="card-body">
                             <div id="grafico-barras" class="chart-container"></div>
                             <div class="loading-spinner text-center" style="display: none;">
-                                <i class="fas fa-spinner fa-spin fa-2x"></i>
+                                <i class="hgi-stroke hgi-refresh hgi-spin hgi-2x"></i>
                                 <p>Carregando gráfico...</p>
                             </div>
                         </div>
@@ -272,7 +272,7 @@
 
         <!-- TRANSAÇÕES RECENTES -->
         <section id="transacoes" class="mb-5">
-            <h3 class="mb-4"><i class="fas fa-list"></i> Transações Recentes</h3>
+            <h3 class="mb-4"><i class="hgi-stroke hgi-list"></i> Transações Recentes</h3>
             <div class="card">
                 <div class="card-header">
                     <div class="d-flex justify-content-between align-items-center">
@@ -339,7 +339,7 @@
                         </div>
                         {% else %}
                         <div class="text-center py-4">
-                            <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                            <i class="hgi-stroke hgi-inbox hgi-2x text-muted mb-3"></i>
                             <h5>Nenhuma transação encontrada</h5>
                             <p class="text-muted">Não há movimentações para o período selecionado.</p>
                         </div>
@@ -352,7 +352,7 @@
         <!-- METAS -->
         {% if dados.metas %}
         <section id="metas" class="mb-5">
-            <h3 class="mb-4"><i class="fas fa-bullseye"></i> Metas Financeiras</h3>
+            <h3 class="mb-4"><i class="hgi-stroke hgi-target-01"></i> Metas Financeiras</h3>
             <div class="row">
                 {% for meta in dados.metas %}
                 <div class="col-md-6 mb-3">
@@ -438,7 +438,7 @@
         // Função para atualizar dados
         function atualizarDados() {
             const refreshIcon = document.getElementById('refresh-icon');
-            refreshIcon.classList.add('fa-spin');
+            refreshIcon.classList.add('hgi-spin');
 
             // Atualizar KPIs
             fetch(`/api/kpis/${USER_ID}?mes=${MES_ATUAL}&ano=${ANO_ATUAL}`)
@@ -459,7 +459,7 @@
             carregarGraficos();
 
             setTimeout(() => {
-                refreshIcon.classList.remove('fa-spin');
+                refreshIcon.classList.remove('hgi-spin');
             }, 1000);
         }
 

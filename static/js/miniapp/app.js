@@ -78,6 +78,75 @@ document.addEventListener('DOMContentLoaded', () => {
   // Mapa global de instâncias de Chart para evitar reuso de canvas sem destruir
   const CHART_INSTANCES = new Map();
 
+  // Mapa de equivalencia Lucide -> Hugeicons (stroke rounded)
+  const HUGEICON_MAP = {
+    'alert-octagon': 'hgi-alert-02',
+    'alert-triangle': 'hgi-alert-01',
+    'bar-chart-3': 'hgi-chart-bar-line',
+    'bell': 'hgi-notification-01',
+    'bell-ring': 'hgi-notification-03',
+    'calendar': 'hgi-calendar-01',
+    'calendar-range': 'hgi-calendar-04',
+    'car': 'hgi-car-01',
+    'check-circle': 'hgi-checkmark-circle-01',
+    'chevron-down': 'hgi-arrow-down-01',
+    'chevron-right': 'hgi-arrow-right-01',
+    'clock': 'hgi-clock-01',
+    'coins': 'hgi-coins-01',
+    'credit-card': 'hgi-credit-card',
+    'crown': 'hgi-crown',
+    'download': 'hgi-download-01',
+    'file-text': 'hgi-file-01',
+    'filter': 'hgi-filter',
+    'flame': 'hgi-fire',
+    'gauge': 'hgi-dashboard-speed-01',
+    'ghost': 'hgi-alien',
+    'git-branch': 'hgi-git-branch',
+    'help-circle': 'hgi-help-circle',
+    'history': 'hgi-clock-01',
+    'home': 'hgi-home-03',
+    'heart-pulse': 'hgi-health',
+    'info': 'hgi-information-circle',
+    'landmark': 'hgi-bank',
+    'layout-grid': 'hgi-layout-grid',
+    'line-chart': 'hgi-chart-line-data-01',
+    'pencil': 'hgi-pencil',
+    'pencil-line': 'hgi-pencil-edit-01',
+    'pie-chart': 'hgi-pie-chart',
+    'popcorn': 'hgi-popcorn',
+    'plus': 'hgi-plus-sign',
+    'plus-circle': 'hgi-plus-sign-circle',
+    'refresh-cw': 'hgi-refresh',
+    'receipt': 'hgi-invoice',
+    'search': 'hgi-search-01',
+    'shield-alert': 'hgi-shield',
+    'shield-check': 'hgi-security-check',
+    'shopping-cart': 'hgi-shopping-cart-01',
+    'sparkles': 'hgi-sparkles',
+    'tag': 'hgi-tag-01',
+    'target': 'hgi-target-01',
+    'trash-2': 'hgi-delete-01',
+    'trophy': 'hgi-cup',
+    'user': 'hgi-user',
+    'utensils': 'hgi-restaurant-01',
+    'x': 'hgi-cancel-01'
+  };
+
+  function applyHugeicons(root = document) {
+    const nodes = [];
+    if (root instanceof Element && root.hasAttribute('data-lucide')) {
+      nodes.push(root);
+    }
+    nodes.push(...root.querySelectorAll('[data-lucide]'));
+    nodes.forEach((el) => {
+      const lucideName = el.getAttribute('data-lucide');
+      if (!lucideName) return;
+      const mapped = HUGEICON_MAP[lucideName] || (lucideName.startsWith('hgi-') ? lucideName : `hgi-${lucideName}`);
+      el.classList.add('hgi-stroke', mapped);
+      el.removeAttribute('data-lucide');
+    });
+  }
+
 
     // DOM Elements
     const panels = document.querySelectorAll('.panel');
@@ -365,7 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
       panel.classList.add('active');
 
       // Garante que ícones do Lucide sejam renderizados se o painel tiver conteúdo estático novo
-      if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
+      applyHugeicons();
 
       if (!keepNav) {
         setActiveNav(tabName);
@@ -1978,7 +2047,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       renderHomeRecent(summary?.recent || []);
       renderHomeRadar(summary);
-      /* Huge Icons Migration: Lucide init removed */
+      applyHugeicons();
     }
 
     function renderPremiumHeatmap(container, heatmapData, summary) {
@@ -2170,7 +2239,7 @@ document.addEventListener('DOMContentLoaded', () => {
               </div>
             `;
           });
-          if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
+          applyHugeicons();
         }
       }
 
@@ -2467,7 +2536,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
       }).join('');
       
-      if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
+      applyHugeicons();
     }
 
     async function forcePierreSync() {
@@ -2477,7 +2546,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const originalHtml = btn.innerHTML;
       btn.disabled = true;
       btn.innerHTML = '<i class="w-3 h-3 animate-spin" data-lucide="refresh-cw"></i> Sincronizando...';
-      if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
+      applyHugeicons();
 
       try {
         const response = await fetchWithSession('/api/miniapp/pierre/sync', { method: 'POST' });
@@ -2493,7 +2562,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } finally {
         btn.disabled = false;
         btn.innerHTML = originalHtml;
-        if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
+        applyHugeicons();
       }
     }
 
@@ -2732,7 +2801,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
       }).join('');
       
-      /* Huge Icons Migration: Lucide init removed */
+      applyHugeicons();
     }
 
     async function saveFaturaEdits() {
@@ -3457,7 +3526,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         historyOffset = reset ? data.items.length : historyOffset + data.items.length;
-        /* Huge Icons Migration: Lucide init removed */
+        applyHugeicons();
       } catch(e){}
     }
 
@@ -3623,7 +3692,7 @@ document.addEventListener('DOMContentLoaded', () => {
           summaryValue.textContent = formatMoney(totalLimites, 'Saída');
         }
 
-        /* Huge Icons Migration: Lucide init removed */
+        applyHugeicons();
       } catch(e) {}
     }
 
@@ -3740,7 +3809,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         });
         animateMetaProgressBars();
-        /* Huge Icons Migration: Lucide init removed */
+        applyHugeicons();
       } catch(e){}
     }
 
@@ -3820,7 +3889,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           `).join('');
         }
-        /* Huge Icons Migration: Lucide init removed */
+        applyHugeicons();
       } catch(e){}
     }
 
@@ -4066,6 +4135,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     bindAdaptiveLayoutListeners();
     setupHomeChartsCarousel();
+    applyHugeicons();
 
     // --- MODO DEUS ---
     async function loadModoDeus(force = false) {
@@ -4091,7 +4161,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (skeleton) skeleton.classList.add('hidden');
         if (content) content.classList.remove('hidden');
-        if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
+        applyHugeicons();
       } catch (err) {
         console.error('Erro Modo Deus:', err);
         showToast('Falha na conexão do Modo Deus', 'error');
@@ -4301,7 +4371,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           `;
         });
-        if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
+        applyHugeicons();
       }
 
       // 0.1 Gráfico de Faturas
@@ -4495,7 +4565,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="text-[10px] text-rose-500 font-black whitespace-nowrap">${fmt.format(a.valor)}</span>
               </div>`;
               });
-              if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
+              applyHugeicons();
               } else if (assBlock) {
           assBlock.classList.add('hidden');
         }
@@ -4624,7 +4694,7 @@ document.addEventListener('DOMContentLoaded', () => {
               </div>
             </div>
           `).join('');
-          if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
+          applyHugeicons();
         } else {
           alertB.classList.add('hidden');
         }
@@ -4677,7 +4747,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
       
-      if (window.lucide) { /* Huge Icons Migration: Lucide init removed */ }
+      applyHugeicons();
     }
 
     // --- SISTEMA DE AJUDA DOS GRÁFICOS ---

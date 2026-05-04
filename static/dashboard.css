@@ -577,6 +577,20 @@ body {
     animation: pulse 1s infinite;
 }
 
+.hgi-stroke {
+    display: inline-block;
+    line-height: 1;
+    vertical-align: middle;
+}
+
+.hgi-spin {
+    animation: pulse 1s infinite;
+}
+
+.hgi-2x {
+    font-size: 2em;
+}
+
 /* ===== RESPONSIVIDADE ===== */
 @media (max-width: 768px) {
     .hero-title {
