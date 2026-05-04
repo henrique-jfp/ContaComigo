@@ -9,6 +9,7 @@ import sys
 import logging
 import signal
 import asyncio
+import inspect
 from enum import Enum, auto
 from threading import Thread
 from dataclasses import dataclass
@@ -161,7 +162,7 @@ def start_telegram_bot(enable_health_server: bool = True):
             if application:
                 # python-telegram-bot 22+ exige um event loop ativo na thread.
                 try:
-                    asyncio.get_running_loop()
+                    loop = asyncio.get_running_loop()
                 except RuntimeError:
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
@@ -174,11 +175,29 @@ def start_telegram_bot(enable_health_server: bool = True):
                 max_retries = 5
                 while retry_count < max_retries:
                     try:
-                        application.run_polling(
-                            allowed_updates=None,
-                            drop_pending_updates=True,
-                            stop_signals=(),
-                        )
+                        polling_result = None
+                        if inspect.iscoroutinefunction(application.run_polling):
+                            coro = application.run_polling(
+                                allowed_updates=None,
+                                drop_pending_updates=True,
+                                stop_signals=(),
+                            )
+                            if loop.is_running():
+                                polling_result = asyncio.run_coroutine_threadsafe(coro, loop).result()
+                            else:
+                                polling_result = loop.run_until_complete(coro)
+                        else:
+                            polling_result = application.run_polling(
+                                allowed_updates=None,
+                                drop_pending_updates=True,
+                                stop_signals=(),
+                            )
+                            if asyncio.iscoroutine(polling_result):
+                                if loop.is_running():
+                                    polling_result = asyncio.run_coroutine_threadsafe(polling_result, loop).result()
+                                else:
+                                    polling_result = loop.run_until_complete(polling_result)
+                        _ = polling_result
                         break # Se retornar normalmente, sai do loop
                     except telegram.error.Conflict:
                         retry_count += 1
