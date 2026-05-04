@@ -3126,6 +3126,93 @@ def miniapp_lembretes_update(lembrete_id: int):
     finally:
         db.close()
 
+
+@app.route('/api/miniapp/openfinance/lembretes')
+def miniapp_openfinance_lembretes():
+    """Retorna assinaturas e parcelamentos detectados via Open Finance (somente leitura)."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == session["user_id"]).first()
+        if not usuario or not usuario.pierre_api_key:
+            return jsonify({"ok": True, "assinaturas": [], "parcelamentos": []})
+
+        today = datetime.now(timezone.utc).date()
+        start_window = today - timedelta(days=120)
+
+        servicos_assinatura = [
+            'netflix', 'spotify', 'amazon', 'disney', 'hbo', 'globoplay', 'youtube', 'deezer',
+            'apple', 'claro', 'vivo', 'tim', 'sky', 'chatgpt', 'openai', 'google one', 'icloud', 'smartfit'
+        ]
+        termos_recorrentes = ['assinatura', 'subscription', 'plano mensal', 'mensalidade']
+        regex_servicos = '|'.join(servicos_assinatura)
+        regex_recorrentes = '|'.join(termos_recorrentes)
+
+        lanc_ass = db.query(Lancamento).filter(
+            Lancamento.id_usuario == usuario.id,
+            Lancamento.origem == 'open_finance',
+            _expense_type_condition(),
+            Lancamento.data_transacao >= start_window,
+            or_(
+                func.lower(Lancamento.descricao).op('~')(regex_servicos),
+                func.lower(Lancamento.descricao).op('~')(regex_recorrentes)
+            )
+        ).all()
+
+        assinaturas_map = {}
+        for l in lanc_ass:
+            desc = (l.descricao or '').strip()
+            if not desc:
+                continue
+            key = desc.split()[0].lower()
+            data_tx = l.data_transacao.date() if isinstance(l.data_transacao, datetime) else l.data_transacao
+            valor = abs(float(l.valor or 0))
+            current = assinaturas_map.get(key)
+            if not current or (data_tx and (not current["ultima_data"] or data_tx > current["ultima_data"])):
+                assinaturas_map[key] = {
+                    "descricao": desc,
+                    "valor": valor,
+                    "ultima_data": data_tx
+                }
+
+        assinaturas = []
+        for item in assinaturas_map.values():
+            ultima = item.get("ultima_data")
+            proxima = (ultima + timedelta(days=30)) if ultima else None
+            assinaturas.append({
+                "descricao": item.get("descricao"),
+                "valor": item.get("valor"),
+                "proxima_data_execucao": proxima.isoformat() if proxima else None
+            })
+
+        parcelas_db = db.query(ParcelamentoItem).filter(
+            ParcelamentoItem.id_usuario == usuario.id
+        ).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(30).all()
+
+        parcelamentos = []
+        for p in parcelas_db:
+            if p.total_parcelas and p.parcela_atual and p.parcela_atual >= p.total_parcelas:
+                continue
+            if p.data_proxima_parcela and p.data_proxima_parcela < today - timedelta(days=1):
+                continue
+            parcelamentos.append({
+                "descricao": p.descricao,
+                "valor": float(p.valor_parcela or 0),
+                "parcela_atual": p.parcela_atual,
+                "total_parcelas": p.total_parcelas,
+                "proxima_data_execucao": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None
+            })
+
+        return jsonify({"ok": True, "assinaturas": assinaturas, "parcelamentos": parcelamentos})
+    except Exception as e:
+        logger.error(f"Erro ao montar lembretes Open Finance: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": "openfinance_reminders_error"}), 500
+    finally:
+        db.close()
+
 @app.route('/api/miniapp/orcamentos', methods=['GET', 'POST'])
 def miniapp_orcamentos():
     """Lista ou cria limites de orçamento para categorias."""

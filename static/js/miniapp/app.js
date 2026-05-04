@@ -249,6 +249,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const orcamentoValor = document.getElementById('orcamentoValor');
     const orcamentoSave = document.getElementById('orcamentoSave');
 
+    const openFinanceLembretesWrap = document.getElementById('openFinanceLembretesWrap');
+    const openFinanceLembretesList = document.getElementById('openFinanceLembretesList');
+
     const editModal = document.getElementById('editModal');
     const editModalBadge = document.getElementById('editModalBadge');
     const editDraftInfo = document.getElementById('editDraftInfo');
@@ -3844,6 +3847,17 @@ document.addEventListener('DOMContentLoaded', () => {
           agendamentoStatus.textContent = isReminder ? 'Nenhum lembrete.' : 'Nenhum agendamento.';
           agendamentoList.innerHTML = `<div class="rounded-2xl border border-dashed border-telegram-separator bg-telegram-card p-4 text-sm text-telegram-hint">Nenhum ${isReminder ? 'lembrete ativo' : 'agendamento futuro'}.</div>`;
           if (lembreteHistoryWrap) lembreteHistoryWrap.classList.add('hidden');
+          if (openFinanceLembretesWrap) {
+            if (isReminder) {
+              const counts = await loadOpenFinanceLembretes();
+              if (summaryLabel && summaryValue && counts) {
+                const totalOpenFinance = counts.assinaturas + counts.parcelamentos;
+                summaryValue.textContent = `${items.length + totalOpenFinance} itens`;
+              }
+            } else {
+              openFinanceLembretesWrap.classList.add('hidden');
+            }
+          }
           return;
         }
         agendamentoStatus.textContent = '';
@@ -3889,8 +3903,87 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           `).join('');
         }
+        if (openFinanceLembretesWrap) {
+          if (isReminder) {
+            const counts = await loadOpenFinanceLembretes();
+            if (summaryLabel && summaryValue && counts) {
+              const totalOpenFinance = counts.assinaturas + counts.parcelamentos;
+              summaryValue.textContent = `${items.length + totalOpenFinance} itens`;
+            }
+          } else {
+            openFinanceLembretesWrap.classList.add('hidden');
+          }
+        }
         applyHugeicons();
       } catch(e){}
+    }
+
+    async function loadOpenFinanceLembretes() {
+      if (!sessionId || !openFinanceLembretesWrap || !openFinanceLembretesList) return;
+      try {
+        openFinanceLembretesWrap.classList.remove('hidden');
+        openFinanceLembretesList.innerHTML = '<div class="text-xs text-telegram-hint text-center p-4 border border-dashed rounded-2xl border-telegram-separator bg-telegram-card">Carregando do Open Finance...</div>';
+        const response = await fetchWithSession('/api/miniapp/openfinance/lembretes');
+        const data = await response.json();
+        if (!data.ok) {
+          openFinanceLembretesWrap.classList.add('hidden');
+          return null;
+        }
+
+        const assinaturas = Array.isArray(data.assinaturas) ? data.assinaturas : [];
+        const parcelamentos = Array.isArray(data.parcelamentos) ? data.parcelamentos : [];
+
+        if (!assinaturas.length && !parcelamentos.length) {
+          openFinanceLembretesList.innerHTML = '<div class="text-xs text-telegram-hint text-center p-4 border border-dashed rounded-2xl border-telegram-separator bg-telegram-card">Nenhum compromisso do Open Finance.</div>';
+          return { assinaturas: 0, parcelamentos: 0 };
+        }
+
+        const blocks = [];
+
+        if (assinaturas.length) {
+          blocks.push('<p class="text-[10px] font-bold uppercase tracking-wider text-telegram-hint">Assinaturas</p>');
+          blocks.push(assinaturas.map((item) => {
+            const dateText = item.proxima_data_execucao ? new Date(item.proxima_data_execucao).toLocaleDateString('pt-BR') : 'Sem data';
+            return `
+              <div class="rounded-2xl border border-telegram-separator bg-telegram-card p-4 shadow-soft">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="min-w-0 flex-1">
+                    <p class="font-semibold text-sm text-telegram-text truncate">${item.descricao || 'Assinatura'}</p>
+                    <p class="mt-1 text-[11px] sm:text-xs text-telegram-hint">Mensal • ${dateText}</p>
+                  </div>
+                  <span class="text-xs font-semibold text-blue-500 whitespace-nowrap">${item.valor == null ? 'Sem valor' : formatMoney(item.valor, 'Saída')}</span>
+                </div>
+              </div>
+            `;
+          }).join(''));
+        }
+
+        if (parcelamentos.length) {
+          blocks.push('<p class="mt-4 text-[10px] font-bold uppercase tracking-wider text-telegram-hint">Parcelamentos</p>');
+          blocks.push(parcelamentos.map((item) => {
+            const dateText = item.proxima_data_execucao ? new Date(item.proxima_data_execucao).toLocaleDateString('pt-BR') : 'Sem data';
+            const parcelaLabel = item.parcela_atual && item.total_parcelas ? `Parcela ${item.parcela_atual}/${item.total_parcelas}` : 'Parcela';
+            return `
+              <div class="rounded-2xl border border-telegram-separator bg-telegram-card p-4 shadow-soft">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="min-w-0 flex-1">
+                    <p class="font-semibold text-sm text-telegram-text truncate">${item.descricao || 'Parcelamento'}</p>
+                    <p class="mt-1 text-[11px] sm:text-xs text-telegram-hint">${parcelaLabel} • ${dateText}</p>
+                  </div>
+                  <span class="text-xs font-semibold text-amber-500 whitespace-nowrap">${item.valor == null ? 'Sem valor' : formatMoney(item.valor, 'Saída')}</span>
+                </div>
+              </div>
+            `;
+          }).join(''));
+        }
+
+        openFinanceLembretesList.innerHTML = blocks.join('');
+        applyHugeicons();
+        return { assinaturas: assinaturas.length, parcelamentos: parcelamentos.length };
+      } catch (e) {
+        openFinanceLembretesWrap.classList.add('hidden');
+        return null;
+      }
     }
 
     // Refresh and Modal binds
