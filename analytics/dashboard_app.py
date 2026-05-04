@@ -2868,7 +2868,8 @@ def miniapp_lancamento_update(lancamento_id: int):
                 
                 regra.id_categoria = lancamento.id_categoria
                 regra.id_subcategoria = lancamento.id_subcategoria
-                logger.info(f"Regra de aprendizado salva para user {usuario.id}: {nome_limpo} -> {lancamento.id_categoria}")
+                regra.tipo_sugerido = lancamento.tipo
+                logger.info(f"Regra de aprendizado salva para user {usuario.id}: {nome_limpo} -> {lancamento.id_categoria} ({lancamento.tipo})")
 
         db.commit()
         _invalidate_financial_cache(session["user_id"])
@@ -3166,8 +3167,14 @@ def miniapp_orcamentos():
                     "valor_gasto": float(gasto),
                     "periodo": periodo
                 })
-            categorias = db.query(Categoria).order_by(Categoria.nome).all()
-            cats = [{"id": c.id, "nome": c.nome} for c in categorias]
+            categorias = db.query(Categoria).options(joinedload(Categoria.subcategorias)).order_by(Categoria.nome).all()
+            cats = [
+                {
+                    "id": c.id, 
+                    "nome": c.nome,
+                    "subcategorias": [{"id": s.id, "nome": s.nome} for s in c.subcategorias]
+                } for c in categorias
+            ]
             return jsonify({"ok": True, "items": items, "categorias": cats})
 
         data = request.get_json(silent=True) or {}

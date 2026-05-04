@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
   ghost.parentElement.addEventListener('touchstart', () => ghost.classList.add('lift'));
   ghost.parentElement.addEventListener('touchend', () => ghost.classList.remove('lift'));
 });
-lucide.createIcons();
+/* Huge Icons Migration: Lucide init removed */
 
     // Chart.js Global Defaults
     if (window.Chart) {
@@ -365,7 +365,7 @@ lucide.createIcons();
       panel.classList.add('active');
 
       // Garante que ícones do Lucide sejam renderizados se o painel tiver conteúdo estático novo
-      if (window.lucide) lucide.createIcons();
+      if (window.lucide) /* Huge Icons Migration: Lucide init removed */
 
       if (!keepNav) {
         setActiveNav(tabName);
@@ -597,25 +597,25 @@ lucide.createIcons();
     async function ensureCategoriesLoaded() {
       if (categoriesDataCache && editCategoria.options.length > 1) return;
       try {
-        const res = await fetchWithSession('/api/miniapp/orcamentos'); // Reaproveita rota que já traz categorias
+        const res = await fetchWithSession('/api/miniapp/orcamentos'); 
         const data = await res.json();
         if (data.ok && data.categorias) {
           categoriesDataCache = data.categorias;
-          editCategoria.innerHTML = '<option value="">Selecione a categoria</option>' + 
+          editCategoria.innerHTML = '<option value="">Selecione a categoria</option>' +
             data.categorias.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
         }
       } catch (e) { console.error('Erro ao carregar categorias:', e); }
     }
-
     function updateSubcategories(catId, selectedSubId = null) {
-      if (!categoriesDataCache) return;
+      editSubcategoria.innerHTML = '<option value="">Sem subcategoria</option>';
+      if (!catId || !categoriesDataCache) return;
+      
       const cat = categoriesDataCache.find(c => String(c.id) === String(catId));
       if (cat && cat.subcategorias) {
-        editSubcategoria.innerHTML = '<option value="">Selecione a subcategoria</option>' + 
-          cat.subcategorias.map(s => `<option value="${s.id}">${s.nome}</option>`).join('');
+        editSubcategoria.innerHTML += cat.subcategorias.map(s => 
+          `<option value="${s.id}">${s.nome}</option>`
+        ).join('');
         if (selectedSubId) editSubcategoria.value = selectedSubId;
-      } else {
-        editSubcategoria.innerHTML = '<option value="">Selecione a subcategoria</option>';
       }
     }
 
@@ -1978,7 +1978,7 @@ lucide.createIcons();
 
       renderHomeRecent(summary?.recent || []);
       renderHomeRadar(summary);
-      lucide.createIcons();
+      /* Huge Icons Migration: Lucide init removed */
     }
 
     function renderPremiumHeatmap(container, heatmapData, summary) {
@@ -2170,7 +2170,7 @@ lucide.createIcons();
               </div>
             `;
           });
-          if (window.lucide) lucide.createIcons();
+          if (window.lucide) /* Huge Icons Migration: Lucide init removed */
         }
       }
 
@@ -2467,7 +2467,7 @@ lucide.createIcons();
         `;
       }).join('');
       
-      if (window.lucide) lucide.createIcons();
+      if (window.lucide) /* Huge Icons Migration: Lucide init removed */
     }
 
     async function forcePierreSync() {
@@ -2477,7 +2477,7 @@ lucide.createIcons();
       const originalHtml = btn.innerHTML;
       btn.disabled = true;
       btn.innerHTML = '<i class="w-3 h-3 animate-spin" data-lucide="refresh-cw"></i> Sincronizando...';
-      if (window.lucide) lucide.createIcons();
+      if (window.lucide) /* Huge Icons Migration: Lucide init removed */
 
       try {
         const response = await fetchWithSession('/api/miniapp/pierre/sync', { method: 'POST' });
@@ -2493,7 +2493,7 @@ lucide.createIcons();
       } finally {
         btn.disabled = false;
         btn.innerHTML = originalHtml;
-        if (window.lucide) lucide.createIcons();
+        if (window.lucide) /* Huge Icons Migration: Lucide init removed */
       }
     }
 
@@ -2732,7 +2732,7 @@ lucide.createIcons();
         `;
       }).join('');
       
-      lucide.createIcons();
+      /* Huge Icons Migration: Lucide init removed */
     }
 
     async function saveFaturaEdits() {
@@ -3457,7 +3457,7 @@ lucide.createIcons();
         });
 
         historyOffset = reset ? data.items.length : historyOffset + data.items.length;
-        lucide.createIcons();
+        /* Huge Icons Migration: Lucide init removed */
       } catch(e){}
     }
 
@@ -3623,7 +3623,7 @@ lucide.createIcons();
           summaryValue.textContent = formatMoney(totalLimites, 'Saída');
         }
 
-        lucide.createIcons();
+        /* Huge Icons Migration: Lucide init removed */
       } catch(e) {}
     }
 
@@ -3740,7 +3740,7 @@ lucide.createIcons();
           }
         });
         animateMetaProgressBars();
-        lucide.createIcons();
+        /* Huge Icons Migration: Lucide init removed */
       } catch(e){}
     }
 
@@ -3820,7 +3820,7 @@ lucide.createIcons();
             </div>
           `).join('');
         }
-        lucide.createIcons();
+        /* Huge Icons Migration: Lucide init removed */
       } catch(e){}
     }
 
@@ -4091,7 +4091,7 @@ lucide.createIcons();
 
         if (skeleton) skeleton.classList.add('hidden');
         if (content) content.classList.remove('hidden');
-        if (window.lucide) lucide.createIcons();
+        if (window.lucide) /* Huge Icons Migration: Lucide init removed */
       } catch (err) {
         console.error('Erro Modo Deus:', err);
         showToast('Falha na conexão do Modo Deus', 'error');
@@ -4301,7 +4301,7 @@ lucide.createIcons();
             </div>
           `;
         });
-        if (window.lucide) lucide.createIcons();
+        if (window.lucide) /* Huge Icons Migration: Lucide init removed */
       }
 
       // 0.1 Gráfico de Faturas
@@ -4495,7 +4495,7 @@ lucide.createIcons();
                 <span class="text-[10px] text-rose-500 font-black whitespace-nowrap">${fmt.format(a.valor)}</span>
               </div>`;
               });
-              if (window.lucide) lucide.createIcons();
+              if (window.lucide) /* Huge Icons Migration: Lucide init removed */
               } else if (assBlock) {
           assBlock.classList.add('hidden');
         }
@@ -4624,7 +4624,7 @@ lucide.createIcons();
               </div>
             </div>
           `).join('');
-          if (window.lucide) lucide.createIcons();
+          if (window.lucide) /* Huge Icons Migration: Lucide init removed */
         } else {
           alertB.classList.add('hidden');
         }
@@ -4677,7 +4677,7 @@ lucide.createIcons();
         }
       }
       
-      if (window.lucide) lucide.createIcons();
+      if (window.lucide) /* Huge Icons Migration: Lucide init removed */
     }
 
     // --- SISTEMA DE AJUDA DOS GRÁFICOS ---
