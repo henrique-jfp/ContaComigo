@@ -135,8 +135,8 @@ lucide.createIcons();
     const historyClearFilters = document.getElementById('historyClearFilters');
     
     const agendamentoList = document.getElementById('agendamentoList');
-    const summaryTotalAgendado = document.getElementById('summaryTotalAgendado');
-    const summaryTotalMetas = document.getElementById('summaryTotalMetas');
+    const summaryLabel = document.getElementById('summaryLabel');
+    const summaryValue = document.getElementById('summaryValue');
     const agendamentoStatus = document.getElementById('agendamentoStatus');
     const agendaTabAgendamentos = document.getElementById('agendaTabAgendamentos');
     const agendaTabLembretes = document.getElementById('agendaTabLembretes');
@@ -3615,6 +3615,14 @@ lucide.createIcons();
                 </div>
             </div>`;
         }).join('');
+
+        // Somatório de Limites (Contextual)
+        if (summaryLabel && summaryValue) {
+          const totalLimites = data.items.reduce((acc, item) => acc + (Number(item.valor_limite) || 0), 0);
+          summaryLabel.textContent = 'Total Limites';
+          summaryValue.textContent = formatMoney(totalLimites, 'Saída');
+        }
+
         lucide.createIcons();
       } catch(e) {}
     }
@@ -3667,9 +3675,12 @@ lucide.createIcons();
         if (metasAgendaStatus) metasAgendaStatus.textContent = 'Seus objetivos financeiros.';
         metasCache = data.items || [];
 
-        // Somatório de Metas
-        const totalMetas = metasCache.reduce((acc, item) => acc + (Number(item.valor_meta) || 0), 0);
-        if (summaryTotalMetas) summaryTotalMetas.textContent = formatMoney(totalMetas, 'Entrada');
+        // Somatório de Metas (Contextual)
+        if (summaryLabel && summaryValue) {
+          const totalMetas = metasCache.reduce((acc, item) => acc + (Number(item.valor_meta) || 0), 0);
+          summaryLabel.textContent = 'Total Metas';
+          summaryValue.textContent = formatMoney(totalMetas, 'Entrada');
+        }
 
         metaList.innerHTML = '';
         if (metasAgendaList) metasAgendaList.innerHTML = '';
@@ -3747,6 +3758,18 @@ lucide.createIcons();
         const data = await response.json();
         const items = data.items || [];
         const historyItems = data.history || [];
+
+        // Somatório do Planejamento (Contextual: Agendamentos ou Lembretes)
+        if (summaryLabel && summaryValue) {
+          if (isReminder) {
+            summaryLabel.textContent = 'Total Lembretes';
+            summaryValue.textContent = `${items.length} itens`;
+          } else {
+            const total = items.reduce((acc, item) => acc + (Number(item.valor) || 0), 0);
+            summaryLabel.textContent = 'Total Agendado';
+            summaryValue.textContent = formatMoney(total, 'Saída');
+          }
+        }
         
         if (!data.ok || (items.length === 0 && historyItems.length === 0)) {
           agendamentoStatus.textContent = isReminder ? 'Nenhum lembrete.' : 'Nenhum agendamento.';
