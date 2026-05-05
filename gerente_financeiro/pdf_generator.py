@@ -95,6 +95,11 @@ class GradientCover(Flowable):
 
     def __init__(self, user_name, period_str, mes_ano):
         Flowable.__init__(self)
+        # Força tamanho zero para nunca disputar espaço de frame
+        self.width = 0
+        self.height = 0
+        self._fixedWidth = 0
+        self._fixedHeight = 0
         self.user_name = user_name
         self.period_str = period_str
         self.mes_ano = mes_ano
