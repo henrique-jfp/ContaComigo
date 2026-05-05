@@ -21,6 +21,7 @@ from functools import lru_cache  # <-- Cache em memória
 import time  # <-- Para timestamps do cache
 import requests
 import google.generativeai as genai
+from finance_utils import is_income_type, is_expense_type
 
 from database.database import listar_objetivos_usuario
 from models import (
@@ -593,29 +594,32 @@ def gerar_contexto_relatorio(db, telegram_id: int, mes: int, ano: int):
             'now': datetime.now,
         }
 
-    # ── Filtra transferências ───────────────────────────────
-    financeiros = [l for l in lancamentos_mes_atual if not _is_transferencia(l)]
+    # ── Filtra transferências e tipos válidos ───────────────
+    financeiros = [
+        l for l in lancamentos_mes_atual
+        if not _is_transferencia(l) and (is_income_type(l.tipo) or is_expense_type(l.tipo))
+    ]
     despesas_lista = sorted(
-        [l for l in financeiros if l.tipo == 'Despesa'],
+        [l for l in financeiros if is_expense_type(l.tipo)],
         key=lambda l: abs(float(l.valor)),
         reverse=True,
     )
     
     receitas_lista = sorted(
-        [l for l in financeiros if l.tipo == 'Receita'],
+        [l for l in financeiros if is_income_type(l.tipo)],
         key=lambda l: float(l.valor),
         reverse=True,
     )
 
-    receitas_atual = sum(float(l.valor) for l in financeiros if l.tipo == 'Receita')
-    despesas_atual = sum(abs(float(l.valor)) for l in financeiros if l.tipo == 'Despesa')
+    receitas_atual = sum(float(l.valor) for l in financeiros if is_income_type(l.tipo))
+    despesas_atual = sum(abs(float(l.valor)) for l in financeiros if is_expense_type(l.tipo))
     saldo_atual = receitas_atual - despesas_atual
     taxa_poupanca_atual = (saldo_atual / receitas_atual * 100) if receitas_atual > 0 else 0
 
     # ── Gastos por categoria ────────────────────────────────
     gastos_por_categoria: dict[str, float] = {}
     for l in financeiros:
-        if l.tipo == 'Despesa':
+        if is_expense_type(l.tipo):
             cat = l.categoria.nome if l.categoria else 'Sem Categoria'
             gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0) + abs(float(l.valor))
 
@@ -623,9 +627,13 @@ def gerar_contexto_relatorio(db, telegram_id: int, mes: int, ano: int):
 
     # ── Histórico filtrado ──────────────────────────────────
     df_hist = pd.DataFrame([
-        {'data': l.data_transacao, 'valor': float(l.valor), 'tipo': l.tipo}
+        {
+            'data': l.data_transacao,
+            'valor': float(l.valor),
+            'tipo': 'Receita' if is_income_type(l.tipo) else 'Despesa',
+        }
         for l in lancamentos_historico_6m
-        if not _is_transferencia(l)
+        if not _is_transferencia(l) and (is_income_type(l.tipo) or is_expense_type(l.tipo))
     ])
 
     dados_mensais = pd.DataFrame()
@@ -669,8 +677,8 @@ def gerar_contexto_relatorio(db, telegram_id: int, mes: int, ano: int):
         })
 
     # ── Número de transações por tipo ──────────────────────
-    qtd_receitas = sum(1 for l in financeiros if l.tipo == 'Receita')
-    qtd_despesas = sum(1 for l in financeiros if l.tipo == 'Despesa')
+    qtd_receitas = sum(1 for l in financeiros if is_income_type(l.tipo))
+    qtd_despesas = sum(1 for l in financeiros if is_expense_type(l.tipo))
 
     # ── Dia com mais gastos ─────────────────────────────────
     if despesas_lista:
