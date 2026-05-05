@@ -93,29 +93,24 @@ def trend_arrow(value) -> tuple[str, HexColor]:
 class GradientCover(Flowable):
     """Capa com fundo escuro, elementos decorativos e badge do usuário."""
 
-    def __init__(self, width, height, user_name, period_str, mes_ano):
+    def __init__(self, user_name, period_str, mes_ano):
         Flowable.__init__(self)
-        self.width = width
-        self.height = height
         self.user_name = user_name
         self.period_str = period_str
         self.mes_ano = mes_ano
 
     def wrap(self, availWidth, availHeight):
-        """Engana o motor de layout retornando um tamanho mínimo, 
-        evitando PageBreaks indesejados e LayoutError."""
-        return 1, 1
+        """Informa tamanho ZERO para que caiba em qualquer frame sem disparar LayoutError."""
+        return 0, 0
 
     def draw(self):
-        # Ignora o wrap e desenha no tamanho real da página A4
+        """Desenha a capa usando coordenadas absolutas da página A4."""
         c = self.canv
-        W, H = A4[0], A4[1]
+        # Salva o estado atual e reseta transformações para desenhar do (0,0) absoluto da folha
+        c.saveState()
+        c.resetTransforms()
         
-        # Como o wrap é 1x1, o ReportLab posiciona o 'cursor' na margem do frame.
-        # Precisamos transladar a origem de volta para o canto (0,0) da página 
-        # para que o desenho da capa (que é full screen) fique correto.
-        # O ReportLab salva o estado do canvas antes do draw, então podemos mexer.
-        c.resetTransforms() 
+        W, H = A4[0], A4[1]
 
         # Fundo principal
         c.setFillColor(C_NAVY)
@@ -185,12 +180,35 @@ class GradientCover(Flowable):
         # Rodapé da capa
         c.setFillColor(HexColor('#475569'))
         c.setFont(FONT_REG, 8)
-        c.drawCentredString(W / 2, 12*mm, "Documento confidencial gerado automaticamente pelo ContaComigo")
+        c.drawRightString(W - 20*mm, 20*mm, "ContaComigo AI v2.0")
+        
+        c.restoreState()
+
+
+class SectionHeader(Flowable):
+    """Título de seção com ícone e linha decorativa."""
+    def __init__(self, title, icon="", width=170*mm):
+        Flowable.__init__(self)
+        self.width = width
+        self.height = 10*mm
+        self.title = title
+        self.icon = icon
+
+    def wrap(self, aw, ah):
+        return self.width, self.height
+
+    def draw(self):
+        c = self.canv
+        c.setFillColor(C_NAVY)
+        c.setFont(FONT_BOLD, 14)
+        c.drawString(0, 3*mm, f"{self.icon} {self.title}".strip())
+        c.setStrokeColor(C_BORDER)
+        c.setLineWidth(0.5)
+        c.line(0, 0, self.width, 0)
 
 
 class KPICard(Flowable):
     """Card de KPI premium com indicador de tendência."""
-
     def __init__(self, title, value, subtitle, trend="neutral",
                  width=80*mm, height=38*mm, accent_color=None):
         Flowable.__init__(self)
@@ -201,6 +219,9 @@ class KPICard(Flowable):
         self.subtitle = subtitle
         self.trend = trend
         self.accent = accent_color or C_CYAN
+
+    def wrap(self, aw, ah):
+        return self.width, self.height
 
     def draw(self):
         c = self.canv
@@ -425,19 +446,22 @@ def generate_financial_pdf(context: dict) -> bytes:
                           leftMargin=15*mm, rightMargin=15*mm,
                           topMargin=15*mm, bottomMargin=20*mm)
     
-    # 1. Template da CAPA (Full Screen - Sem margens no Frame)
-    frame_capa = Frame(0, 0, A4[0], A4[1], id='capa_frame', 
-                       leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
-    template_capa = PageTemplate(id='Capa', frames=[frame_capa])
-    
-    # 2. Template NORMAL (Com margens e Rodapé)
-    frame_normal = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id='normal_frame')
-    template_normal = PageTemplate(id='Normal', frames=[frame_normal], onPage=footer_canvas)
-    
-    doc.addPageTemplates([template_capa, template_normal])
+    # Template Único (Simples e Seguro)
+    frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id='normal')
+    template = PageTemplate(id='Normal', frames=[frame], onPage=footer_canvas)
+    doc.addPageTemplates([template])
 
     elements = []
     
+    # ── 1. CAPA ──────────────────────────────────────────────
+    # Usa wrap(0,0) interno para não ocupar espaço no frame e não quebrar layout
+    elements.append(GradientCover(
+        context.get('usuario_nome', 'Investidor'),
+        context.get('periodo_extenso', 'Período Atual'),
+        context.get('mes_ano', ''),
+    ))
+    elements.append(PageBreak())
+
     # Estilos básicos
     s_small  = style('small', fontSize=8.5, textColor=C_MUTED)
     s_label  = style('label', fontName=FONT_BOLD, fontSize=8,
