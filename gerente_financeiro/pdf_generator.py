@@ -431,6 +431,19 @@ def footer_canvas(canvas, doc):
     canvas.restoreState()
 
 
+def make_cover_canvas(context: dict):
+    """Cria função onPage que desenha a capa sem depender de flowables."""
+    def cover_canvas(canvas, doc):
+        cover = GradientCover(
+            context.get('usuario_nome', 'Investidor'),
+            context.get('periodo_extenso', 'Período Atual'),
+            context.get('mes_ano', ''),
+        )
+        cover.canv = canvas
+        cover.draw()
+    return cover_canvas
+
+
 # ── Função principal ─────────────────────────────────────────
 
 # ── Helpers de Estilo ───────────────────────────────────────
@@ -451,20 +464,18 @@ def generate_financial_pdf(context: dict) -> bytes:
                           leftMargin=15*mm, rightMargin=15*mm,
                           topMargin=15*mm, bottomMargin=20*mm)
     
-    # Template Único (Simples e Seguro)
+    # Templates (Capa sem rodapé + conteúdo com rodapé)
     frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id='normal')
-    template = PageTemplate(id='Normal', frames=[frame], onPage=footer_canvas)
-    doc.addPageTemplates([template])
+    cover_template = PageTemplate(id='Cover', frames=[frame], onPage=make_cover_canvas(context))
+    normal_template = PageTemplate(id='Normal', frames=[frame], onPage=footer_canvas)
+    doc.addPageTemplates([cover_template, normal_template])
 
     elements = []
     
     # ── 1. CAPA ──────────────────────────────────────────────
-    # Usa wrap(0,0) interno para não ocupar espaço no frame e não quebrar layout
-    elements.append(GradientCover(
-        context.get('usuario_nome', 'Investidor'),
-        context.get('periodo_extenso', 'Período Atual'),
-        context.get('mes_ano', ''),
-    ))
+    # A capa é desenhada pelo template "Cover" no onPage
+    elements.append(Spacer(1, 1))
+    elements.append(NextPageTemplate('Normal'))
     elements.append(PageBreak())
 
     # Estilos básicos
