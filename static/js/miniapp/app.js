@@ -4592,6 +4592,15 @@ document.addEventListener('DOMContentLoaded', () => {
           if (catsBlock) catsBlock.classList.remove('hidden');
           catsL.innerHTML = '';
           const maxT = topCats[0].total;
+
+          window.toggleCategorySubs = (catId) => {
+            const subs = document.getElementById(`${catId}-subs`);
+            const icon = document.getElementById(`${catId}-icon`);
+            if (!subs) return;
+            const isHidden = subs.classList.contains('hidden');
+            subs.classList.toggle('hidden', !isHidden);
+            if (icon) icon.classList.toggle('rotate-180', isHidden);
+          };
           
           topCats.forEach((c, idx) => {
             const hasSub = c.subcategorias && c.subcategorias.length > 0;
