@@ -101,6 +101,10 @@ class GradientCover(Flowable):
         self.period_str = period_str
         self.mes_ano = mes_ano
 
+    def wrap(self, availWidth, availHeight):
+        """Informa ao ReportLab o tamanho que este elemento ocupa."""
+        return self.width, self.height
+
     def draw(self):
         c = self.canv
         W, H = self.width, self.height
@@ -426,6 +430,7 @@ def generate_financial_pdf(context: dict) -> bytes:
 
     elements = []
     
+    # Estilos básicos
     s_small  = style('small', fontSize=8.5, textColor=C_MUTED)
     s_label  = style('label', fontName=FONT_BOLD, fontSize=8,
                      textColor=C_MUTED, spaceBefore=0, spaceAfter=2)
@@ -443,22 +448,24 @@ def generate_financial_pdf(context: dict) -> bytes:
     m3_d  = context.get('media_despesas_3m', 0)
     m3_s  = context.get('media_saldo_3m', 0)
 
-    # Score financeiro (simples: baseado em poupança e saldo)
+    # Score financeiro
     score = context.get('score_financeiro')
     if score is None:
-        base = min(poup / 30 * 60, 60)          # até 60 pts pela poupança
-        bonus_saldo = 20 if saldo > 0 else 0     # 20 pts se saldo positivo
-        bonus_med   = 20 if m3_s > 0 else 0      # 20 pts se média histórica ok
+        base = min(poup / 30 * 60, 60)
+        bonus_saldo = 20 if saldo > 0 else 0
+        bonus_med   = 20 if m3_s > 0 else 0
         score = min(base + bonus_saldo + bonus_med, 100)
 
     # ── 1. CAPA ──────────────────────────────────────────────
-    # Reduzido 2mm para garantir que caiba no frame sem erro de precisão
+    # Reduzimos um pouco mais para segurança (5mm)
     elements.append(GradientCover(
-        A4[0] - 2*mm, A4[1] - 2*mm,
+        A4[0] - 5*mm, A4[1] - 5*mm,
         context.get('usuario_nome', 'Investidor'),
         context.get('periodo_extenso', 'Período Atual'),
         context.get('mes_ano', ''),
     ))
+    
+    # Avisa que a PRÓXIMA página deve usar o template Normal
     elements.append(NextPageTemplate('Normal'))
     elements.append(PageBreak())
 
