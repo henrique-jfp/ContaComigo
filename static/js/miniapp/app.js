@@ -3656,8 +3656,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadOrcamentos() {
       if (!sessionId) return;
+      const isLimitsMode = agendaMode === 'limites';
       try {
-        if (orcamentoAgendaWrap) orcamentoAgendaWrap.classList.remove('hidden');
+        if (orcamentoAgendaWrap) orcamentoAgendaWrap.classList.toggle('hidden', !isLimitsMode);
+        if (!isLimitsMode) return;
         if (agendamentoList) agendamentoList.innerHTML = '';
         if (lembreteHistoryWrap) lembreteHistoryWrap.classList.add('hidden');
         if (agendamentoStatus) agendamentoStatus.textContent = '';
@@ -3691,10 +3693,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }).join('');
 
         // Somatório de Limites (Contextual)
-        if (summaryLabel && summaryValue) {
+        if (summaryLabel && summaryValue && isLimitsMode) {
           const totalLimites = data.items.reduce((acc, item) => acc + (Number(item.valor_limite) || 0), 0);
           summaryLabel.textContent = 'Total Limites';
-          summaryValue.textContent = formatMoney(totalLimites, 'Saída');
+          summaryValue.textContent = formatCurrency(totalLimites);
         }
 
         applyHugeicons();
@@ -3750,10 +3752,10 @@ document.addEventListener('DOMContentLoaded', () => {
         metasCache = data.items || [];
 
         // Somatório de Metas (Contextual)
-        if (summaryLabel && summaryValue) {
+        if (summaryLabel && summaryValue && agendaMode === 'metas') {
           const totalMetas = metasCache.reduce((acc, item) => acc + (Number(item.valor_meta) || 0), 0);
           summaryLabel.textContent = 'Total Metas';
-          summaryValue.textContent = formatMoney(totalMetas, 'Entrada');
+          summaryValue.textContent = formatCurrency(totalMetas);
         }
 
         metaList.innerHTML = '';
@@ -3834,14 +3836,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const historyItems = data.history || [];
 
         // Somatório do Planejamento (Contextual: Agendamentos ou Lembretes)
-        if (summaryLabel && summaryValue) {
+        if (summaryLabel && summaryValue && (agendaMode === 'agendamentos' || agendaMode === 'lembretes')) {
           if (isReminder) {
             summaryLabel.textContent = 'Total Lembretes';
             summaryValue.textContent = `${items.length} itens`;
           } else {
             const total = items.reduce((acc, item) => acc + (Number(item.valor) || 0), 0);
             summaryLabel.textContent = 'Total Agendado';
-            summaryValue.textContent = formatMoney(total, 'Saída');
+            summaryValue.textContent = formatCurrency(total);
           }
         }
         
