@@ -594,7 +594,7 @@ def generate_financial_pdf(context: dict) -> bytes:
         img.drawHeight = 85*mm
         elements.append(img)
         elements.append(Paragraph(
-            "Transferências excluídas do cálculo de despesas.",
+            "Transferências internas (ex: pagamento de fatura) excluídas do cálculo de despesas.",
             s_caption
         ))
     else:
