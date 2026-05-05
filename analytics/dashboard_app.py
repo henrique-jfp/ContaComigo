@@ -3190,20 +3190,27 @@ def miniapp_openfinance_lembretes():
 
         parcelas_db = db.query(ParcelamentoItem).filter(
             ParcelamentoItem.id_usuario == usuario.id
-        ).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(30).all()
+        ).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(50).all()
 
         parcelamentos = []
         for p in parcelas_db:
             if p.total_parcelas and p.parcela_atual and p.parcela_atual >= p.total_parcelas:
                 continue
-            if p.data_proxima_parcela and p.data_proxima_parcela < today - timedelta(days=1):
+            proxima_data = p.data_proxima_parcela
+            conta = p.conta
+            if conta and conta.tipo == "Cartão de Crédito":
+                try:
+                    proxima_data = _get_card_due_date(db, conta, today)
+                except Exception:
+                    proxima_data = p.data_proxima_parcela
+            if proxima_data and proxima_data < today - timedelta(days=1):
                 continue
             parcelamentos.append({
                 "descricao": p.descricao,
                 "valor": float(p.valor_parcela or 0),
                 "parcela_atual": p.parcela_atual,
                 "total_parcelas": p.total_parcelas,
-                "proxima_data_execucao": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None
+                "proxima_data_execucao": proxima_data.isoformat() if proxima_data else None
             })
 
         return jsonify({"ok": True, "assinaturas": assinaturas, "parcelamentos": parcelamentos})

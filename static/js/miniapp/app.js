@@ -1071,6 +1071,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (lembreteHistoryList) lembreteHistoryList.innerHTML = '';
       if (lembreteHistoryStatus) lembreteHistoryStatus.textContent = '';
       if (orcamentoAgendaWrap) orcamentoAgendaWrap.classList.add('hidden');
+      if (openFinanceLembretesWrap) openFinanceLembretesWrap.classList.add('hidden');
     }
 
     function refreshAgendaTabs() {
@@ -1132,6 +1133,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (orcamentoAgendaWrap) orcamentoAgendaWrap.classList.toggle('hidden', mode !== 'limites');
       if (metasAgendaWrap) metasAgendaWrap.classList.toggle('hidden', mode !== 'metas');
       if (agendamentoList) agendamentoList.classList.toggle('hidden', mode !== 'agendamentos' && mode !== 'lembretes');
+      if (openFinanceLembretesWrap) openFinanceLembretesWrap.classList.toggle('hidden', mode !== 'lembretes');
       
       updateAgendaModalLabels();
       try {
