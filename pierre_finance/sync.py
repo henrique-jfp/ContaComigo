@@ -597,6 +597,23 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
             continue
 
         cnpj, nome_fantasia = _extrair_dados_contraparte(tx)
+        
+        # --- MELHORIA DE DESCRIÇÃO (Injeção de Contraparte) ---
+        # Se a descrição for genérica (Caixa/Pix/Debito) e tivermos o nome da contraparte, unimos os dois.
+        descricao_original = (tx.get("description") or tx.get("name") or "Transação").strip()
+        descricao = descricao_original
+        
+        termos_genericos = [
+            "pix enviado", "pix recebido", "compra cartao debito", "compra no debito", 
+            "compra debito", "pag boleto ibc", "pagamento efetuado", "pagamento recebido"
+        ]
+        
+        desc_norm_para_check = descricao_original.lower()
+        if nome_fantasia and any(termo in desc_norm_para_check for termo in termos_genericos):
+            # Evita duplicar se o nome já estiver na descrição
+            if nome_fantasia.lower() not in desc_norm_para_check:
+                descricao = f"{descricao_original} - {nome_fantasia}"
+
         tipo = _inferir_tipo(descricao, valor_bruto, acc_type, tx_type, nome_contraparte=nome_fantasia, usuario_nome=usuario.nome_completo)
 
         # Converte para valor com sinal (Receita positiva, Despesa negativa) para o ReconciliationService
@@ -758,6 +775,23 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
             continue
 
         cnpj, nome_fantasia = _extrair_dados_contraparte(tx)
+        
+        # --- MELHORIA DE DESCRIÇÃO (Injeção de Contraparte) ---
+        # Se a descrição for genérica (Caixa/Pix/Debito) e tivermos o nome da contraparte, unimos os dois.
+        descricao_original = (tx.get("description") or tx.get("name") or "Transação").strip()
+        descricao = descricao_original
+        
+        termos_genericos = [
+            "pix enviado", "pix recebido", "compra cartao debito", "compra no debito", 
+            "compra debito", "pag boleto ibc", "pagamento efetuado", "pagamento recebido"
+        ]
+        
+        desc_norm_para_check = descricao_original.lower()
+        if nome_fantasia and any(termo in desc_norm_para_check for termo in termos_genericos):
+            # Evita duplicar se o nome já estiver na descrição
+            if nome_fantasia.lower() not in desc_norm_para_check:
+                descricao = f"{descricao_original} - {nome_fantasia}"
+
         tipo = _inferir_tipo(descricao, valor_bruto, acc_type, tx_type, nome_contraparte=nome_fantasia, usuario_nome=usuario.nome_completo)
 
         # Converte para valor com sinal (Receita positiva, Despesa negativa)
