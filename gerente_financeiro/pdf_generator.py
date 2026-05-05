@@ -102,12 +102,20 @@ class GradientCover(Flowable):
         self.mes_ano = mes_ano
 
     def wrap(self, availWidth, availHeight):
-        """Informa ao ReportLab o tamanho que este elemento ocupa."""
-        return self.width, self.height
+        """Engana o motor de layout retornando um tamanho mínimo, 
+        evitando PageBreaks indesejados e LayoutError."""
+        return 1, 1
 
     def draw(self):
+        # Ignora o wrap e desenha no tamanho real da página A4
         c = self.canv
-        W, H = self.width, self.height
+        W, H = A4[0], A4[1]
+        
+        # Como o wrap é 1x1, o ReportLab posiciona o 'cursor' na margem do frame.
+        # Precisamos transladar a origem de volta para o canto (0,0) da página 
+        # para que o desenho da capa (que é full screen) fique correto.
+        # O ReportLab salva o estado do canvas antes do draw, então podemos mexer.
+        c.resetTransforms() 
 
         # Fundo principal
         c.setFillColor(C_NAVY)
@@ -457,15 +465,15 @@ def generate_financial_pdf(context: dict) -> bytes:
         score = min(base + bonus_saldo + bonus_med, 100)
 
     # ── 1. CAPA ──────────────────────────────────────────────
-    # Reduzimos um pouco mais para segurança (5mm)
+    # Agora passamos o tamanho real A4. O método wrap(1,1) garante que caiba.
     elements.append(GradientCover(
-        A4[0] - 5*mm, A4[1] - 5*mm,
+        A4[0], A4[1],
         context.get('usuario_nome', 'Investidor'),
         context.get('periodo_extenso', 'Período Atual'),
         context.get('mes_ano', ''),
     ))
     
-    # Avisa que a PRÓXIMA página deve usar o template Normal
+    # Próxima página usa template Normal (com rodapé e margens)
     elements.append(NextPageTemplate('Normal'))
     elements.append(PageBreak())
 
