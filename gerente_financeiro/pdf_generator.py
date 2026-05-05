@@ -488,19 +488,6 @@ def generate_financial_pdf(context: dict) -> bytes:
         bonus_med   = 20 if m3_s > 0 else 0
         score = min(base + bonus_saldo + bonus_med, 100)
 
-    # ── 1. CAPA ──────────────────────────────────────────────
-    # Agora passamos o tamanho real A4. O método wrap(1,1) garante que caiba.
-    elements.append(GradientCover(
-        A4[0], A4[1],
-        context.get('usuario_nome', 'Investidor'),
-        context.get('periodo_extenso', 'Período Atual'),
-        context.get('mes_ano', ''),
-    ))
-    
-    # Próxima página usa template Normal (com rodapé e margens)
-    elements.append(NextPageTemplate('Normal'))
-    elements.append(PageBreak())
-
     # ── 2. RESUMO EXECUTIVO ───────────────────────────────────
     elements.append(SectionHeader("Resumo Executivo", "📊"))
     elements.append(Spacer(1, 5*mm))
