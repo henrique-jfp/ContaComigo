@@ -541,7 +541,7 @@ def _build_miniapp_insight(usuario: Usuario, balance: float, receita: float, des
         resposta = None
         if config.GEMINI_API_KEY:
             try:
-                genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'"").strip())
+                genai.configure(api_key=config.GEMINI_API_KEY.strip().strip("'").strip())
                 model = genai.GenerativeModel(config.GEMINI_MODEL_NAME)
                 response = model.generate_content(prompt)
                 resposta = _sanitize_response(response.text or "")
