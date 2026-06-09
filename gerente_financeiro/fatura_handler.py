@@ -540,7 +540,7 @@ def _deduplicar_transacoes_fatura(transacoes: list[dict]) -> tuple[list[dict], i
         key = (
             item["data_transacao"].strftime("%Y-%m-%d"),
             _normalizar_texto_parser(item.get("descricao", "")),
-            round(float(item.get("valor", 0.0)), 2),
+            round(float(item.get("valor", 0.0))),
             str(item.get("parcela") or ""),
         )
         if key in seen:
