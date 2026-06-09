@@ -1286,7 +1286,7 @@ def miniapp_pierre_parcelamentos():
         if not usuario:
             return jsonify({"ok": False, "error": "user_not_found"}), 403
 
-        parcelas_db = db.query(ParcelamentoItem).filter(ParcelamentoItem.id_usuario == usuario.id).order_by(ParcelamentoItem.data_proxima_parcela.asc()).all()
+        parcelas_db = db.query(ParcelamentoItem).filter(ParcelamentoItem.id_usuario == usuario.id).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(15).all()
         
         if not parcelas_db:
             return jsonify({"ok": True, "data": "Não encontrei compras parceladas registradas na base local."})
@@ -1555,7 +1555,7 @@ def miniapp_history():
         # Calcula o somatório dinâmico dos valores filtrados (antes do limit/offset)
         total_value = float(db.query(
             func.coalesce(func.sum(case((_income_type_condition(), func.abs(Lancamento.valor)), else_=-func.abs(Lancamento.valor))), 0)
-        ).filter(*filters).scalar() or 0.0)
+        ).filter(*filters).scalar() or 0.0
 
         base_query = db.query(Lancamento).filter(*filters).options(
             joinedload(Lancamento.categoria),
@@ -1601,6 +1601,7 @@ def miniapp_history():
 @app.route('/api/miniapp/overview')
 def miniapp_overview():
     """Retorna o resumo da home do miniapp."""
+    total_value = 0.0  # Inicializa a variável para evitar NameError
     session = _require_session()
     if not session:
         return jsonify({"ok": False, "error": "unauthorized"}), 401
