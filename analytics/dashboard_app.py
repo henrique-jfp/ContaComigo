@@ -2098,6 +2098,7 @@ def miniapp_overview():
                 "plan_label": user_plan_label,
                 "cards": cards_summary or [],
                 "installments": installments_summary or [],
+                "total_value": total_value,
             }
         }
         
