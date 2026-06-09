@@ -1555,7 +1555,7 @@ def miniapp_history():
         # Calcula o somatório dinâmico dos valores filtrados (antes do limit/offset)
         total_value = float(db.query(
             func.coalesce(func.sum(case((_income_type_condition(), func.abs(Lancamento.valor)), else_=-func.abs(Lancamento.valor))), 0)
-        ).filter(*filters).scalar() or 0.0
+        ).filter(*filters).scalar() or 0.0)
 
         base_query = db.query(Lancamento).filter(*filters).options(
             joinedload(Lancamento.categoria),
