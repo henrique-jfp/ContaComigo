@@ -1598,6 +1598,29 @@ def miniapp_history():
         db.close()
 
 
+def _get_card_due_date(db, conta, reference_date: date) -> date:
+    """
+    Projeta a data de vencimento de um cartão de crédito para o mês atual ou seguinte.
+    """
+    if not conta.dia_vencimento:
+        return reference_date + relativedelta(months=1)
+
+    due_day = int(conta.dia_vencimento)
+    try:
+        # Tenta criar a data de vencimento no mês de referência
+        due_date = reference_date.replace(day=due_day)
+    except ValueError:
+        # Se o dia não existe no mês (ex: 31 em Fev), usa o último dia do mês
+        last_day_of_month = (reference_date.replace(day=1) + relativedelta(months=1)) - timedelta(days=1)
+        due_date = last_day_of_month
+
+    # Se a data de vencimento já passou no mês de referência, projeta para o próximo mês
+    if due_date < reference_date:
+        due_date += relativedelta(months=1)
+
+    return due_date
+
+
 @app.route('/api/miniapp/overview')
 def miniapp_overview():
     """Retorna o resumo da home do miniapp."""
