@@ -23,6 +23,8 @@ from sqlalchemy.orm import joinedload
 from datetime import datetime, timedelta, date, timezone, time
 from dateutil.relativedelta import relativedelta
 
+from gerente_financeiro.monetization import PLAN_PREMIUM_ANNUAL, PLAN_PREMIUM_MONTHLY, PLAN_PRICES, ensure_user_plan_state
+
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -69,7 +71,7 @@ template_dir = os.path.join(parent_dir, 'templates')
 static_dir = os.path.join(parent_dir, 'static')
 sys.path.insert(0, parent_dir)
 import config
-from database.database import get_db, buscar_lancamentos_usuario
+from database.database import get_db, buscar_lancamentos_usuario, get_or_create_user
 from models import Usuario, Lancamento, Agendamento, Lembrete, Objetivo, MetaConfirmacao, Categoria, Subcategoria, XpEvent, UserMission, UserAchievement, OrcamentoCategoria, Conta, SaldoConta, FaturaCartao, ParcelamentoItem, Investment, CarteiraFII, HistoricoAlertaFII, PatrimonySnapshot, RegraCategorizacao
 from pierre_finance.categorizador import limpar_descricao
 from gerente_financeiro.prompts import PROMPT_ALFREDO_APRIMORADO as PROMPT_ALFREDO
@@ -148,8 +150,7 @@ def _validate_telegram_init_data(init_data: str) -> dict | None:
     if not received_hash:
         return None
 
-    data_check = "
-".join(f"{k}={parsed[k]}" for k in sorted(parsed.keys()))
+    data_check = "\n".join(f"{k}={parsed[k]}" for k in sorted(parsed.keys()))
 
     # Telegram WebApp (Mini App) validation per official docs:
     # secret_key = HMAC_SHA256(key="WebAppData", msg=bot_token)
@@ -193,6 +194,7 @@ def _validate_telegram_init_data(init_data: str) -> dict | None:
         return json.loads(user_data)
     except json.JSONDecodeError:
         return None
+
 
 
 def _resolve_categoria_ids(payload: dict) -> tuple[int | None, int | None]:
@@ -332,8 +334,7 @@ def _get_miniapp_contexto_conversa(session: dict | None) -> str:
     for row in history[-5:]:
         lines.append(f"Usuario: {row.get('prompt', '')}")
         lines.append(f"Alfredo: {row.get('answer', '')}")
-    return "
-".join(lines)
+    return "\n".join(lines)
 
 
 def _append_miniapp_contexto_conversa(session: dict | None, prompt: str, answer: str) -> None:
@@ -831,17 +832,13 @@ def _run_async(coro):
 def _sanitize_response(text: str) -> str:
     if not text:
         return ""
-    cleaned = re.sub(r'^```(html|json)?
-', '', text, flags=re.MULTILINE)
+    cleaned = re.sub(r'^```(html|json)?\n', '', text, flags=re.MULTILINE)
     cleaned = re.sub(r'```$', '', cleaned, flags=re.MULTILINE)
     cleaned = re.sub(r'<!DOCTYPE[^>]*>', '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'<html[^>]*>|</html>', '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'<head[^>]*>.*?</head>', '', cleaned, flags=re.IGNORECASE | re.DOTALL)
     cleaned = re.sub(r'<body[^>]*>|</body>', '', cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r'
-{3,}', '
-
-', cleaned)
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
     return cleaned.strip()
 
 
@@ -895,8 +892,7 @@ def _format_lancamentos_for_chat(lancamentos: list) -> str:
         lines.append(
             f"• {lanc.descricao} ({data}) <code>{prefix}R$ {abs(valor):.2f}</code>"
         )
-    return "
-".join(lines)
+    return "\n".join(lines)
 
 # Middleware para timing de requisições
 @app.before_request
@@ -1295,19 +1291,14 @@ def miniapp_pierre_parcelamentos():
         if not parcelas_db:
             return jsonify({"ok": True, "data": "Não encontrei compras parceladas registradas na base local."})
             
-        text = "🗓️ <b>Radar de Parcelamentos:</b>
-
-"
+        text = "🗓️ <b>Radar de Parcelamentos:</b>\n\n"
         for p in parcelas_db[:15]:
             desc = p.descricao[:30]
             val = float(p.valor_parcela)
             date_str = p.data_proxima_parcela.strftime('%d/%m/%Y') if p.data_proxima_parcela else "S/D"
             inst_num = p.parcela_atual
             inst_tot = p.total_parcelas
-            text += f"• {desc}
-  R$ {val:.2f} | Venc: {date_str} | Parc: {inst_num}/{inst_tot}
-
-"
+            text += f"• {desc}\n  R$ {val:.2f} | Venc: {date_str} | Parc: {inst_num}/{inst_tot}\n\n"
             
         return jsonify({"ok": True, "data": text})
     except Exception as e:
@@ -3261,10 +3252,7 @@ def miniapp_gerente():
             pergunta_usuario=prompt,
             contexto_financeiro_completo=contexto_financeiro,
             contexto_conversa=contexto_conversa,
-            perfil_ia=f"
-
-# 🧠 PERFIL COMPORTAMENTAL IA
-{usuario.perfil_ia}" if usuario.perfil_ia else ""
+            perfil_ia=f"\n\n# 🧠 PERFIL COMPORTAMENTAL IA\n{usuario.perfil_ia}" if usuario.perfil_ia else ""
         )
 
         resposta = ""
