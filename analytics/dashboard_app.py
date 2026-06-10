@@ -2012,11 +2012,27 @@ def miniapp_overview():
         for c in cc_contas:
             if c.id not in seen_accounts:
                 ultimo_saldo = db.query(SaldoConta).filter(SaldoConta.id_conta == c.id).order_by(SaldoConta.capturado_em.desc()).first()
-                # Para cartões, o 'saldo' positivo no snapshot representa o gasto da fatura atual
+                # Para cartões, o 'saldo' positivo no snapshot representa o gasto da fatura atual (limite utilizado)
                 valor_fatura = float(ultimo_saldo.saldo or 0) if ultimo_saldo else 0.0
                 
                 if valor_fatura > 1.0:
-                    # Usa a helper mestre para garantir consistência total
+                    # Ajuste Inteligente: Se a fatura já fechou (dia > fechamento) mas não venceu (dia < vencimento)
+                    # O 'balance' do Open Finance inclui compras novas do próximo ciclo. Precisamos abater.
+                    dia_venc = int(c.dia_vencimento or 12)
+                    dia_fechamento = dia_venc - 6 # Estimativa padrão de fechamento
+                    
+                    if today.day > dia_fechamento and today.day < dia_venc:
+                        data_corte = today.replace(day=dia_fechamento)
+                        # Soma compras locais após o corte
+                        gastos_novos = db.query(func.sum(func.abs(Lancamento.valor))).filter(
+                            Lancamento.id_usuario == usuario.id,
+                            Lancamento.id_conta == c.id,
+                            _expense_type_condition(),
+                            Lancamento.data_transacao >= datetime.combine(data_corte, datetime.min.time())
+                        ).scalar() or 0.0
+                        valor_fatura = max(0, valor_fatura - float(gastos_novos))
+
+                    # Usa a helper mestre para garantir consistência total da data
                     dt_proj = _get_card_due_date(db, c, today)
                         
                     cards_summary.append({
