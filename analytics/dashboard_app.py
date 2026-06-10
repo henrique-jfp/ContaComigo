@@ -2028,8 +2028,9 @@ def miniapp_overview():
 
         parcelas_db = db.query(ParcelamentoItem).filter(
             ParcelamentoItem.id_usuario == usuario.id,
-            or_(ParcelamentoItem.data_proxima_parcela.is_(None), ParcelamentoItem.data_proxima_parcela >= (today - timedelta(days=2)))
-        ).order_by(ParcelamentoItem.data_proxima_parcela.asc()).limit(3).all()
+            ParcelamentoItem.data_proxima_parcela >= start_date,
+            ParcelamentoItem.data_proxima_parcela <= end_date
+        ).order_by(ParcelamentoItem.data_proxima_parcela.asc()).all()
         
         installments_summary = []
         for p in parcelas_db:
@@ -3982,3 +3983,602 @@ if __name__ == "__main__":
         debug=debug_mode,
         use_reloader=False
     )
+
+
+@app.route('/api/miniapp/modo_deus')
+def miniapp_modo_deus():
+    """Aba Modo Deus - Painel CFO Pessoal consolidado."""
+    session = _require_session()
+    if not session:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    user_id_telegram = session["user_id"]
+    
+    # Cache manual de 10 segundos para maior precisão (v2)
+    cache_key_val = f"modo_deus_v2_{user_id_telegram}"
+    now_ts = datetime.now().timestamp()
+    if cache_key_val in _cache:
+        cached_val, ts = _cache[cache_key_val]
+        if now_ts - ts < 10:
+            return jsonify(cached_val)
+
+    db = next(get_db())
+    try:
+        usuario = db.query(Usuario).filter(Usuario.telegram_id == user_id_telegram).first()
+        if not usuario:
+            return jsonify({"ok": False, "error": "user_not_found"}), 404
+        
+        user_id = usuario.id
+        today = datetime.now(timezone.utc).date()
+        start_month = today.replace(day=1)
+        next_month = (start_month + timedelta(days=32)).replace(day=1)
+        end_month = next_month - timedelta(days=1)
+        
+        result = {
+            "ok": True,
+            "usuario": {"nome": usuario.nome_completo or usuario.first_name or "Usuário"},
+            "alertas": []
+        }
+        
+        # Inicia variáveis globais da função para evitar UnboundLocalError
+        entradas_ano = 0.0; saidas_ano = 0.0
+        entradas_mes = 0.0; saidas_mes = 0.0
+        vazamentos_valor = 0.0
+        resultado_mes = 0.0
+        lancamentos_saida_mes = []
+        
+        # --- SEÇÃO 1: VISÃO GERAL (Cálculo Dinâmico e Tempo Real) ---
+        try:
+            contas = db.query(Conta).filter(Conta.id_usuario == user_id).all()
+            # ... (lógica de contas e snapshots mantida) ...
+            
+            limit_date = datetime.now() - timedelta(days=90)
+            variacoes = db.query(
+                Lancamento.id_conta,
+                func.sum(case((_income_type_condition(), Lancamento.valor), else_=0)).label('ent'),
+                func.sum(case((_expense_type_condition(), Lancamento.valor), else_=0)).label('sai')
+            ).filter(
+                Lancamento.id_usuario == user_id,
+                Lancamento.id_conta != None,
+                Lancamento.data_transacao >= limit_date
+            ).group_by(Lancamento.id_conta).all()
+            
+            var_map = {v.id_conta: (float(v.ent or 0), float(v.sai or 0)) for v in variacoes}
+
+            subq_snaps = db.query(
+                SaldoConta.id_conta,
+                func.max(SaldoConta.capturado_em).label('max_cap')
+            ).filter(SaldoConta.id_conta.in_([c.id for c in contas])).group_by(SaldoConta.id_conta).subquery()
+
+            snapshots = db.query(SaldoConta).join(
+                subq_snaps, and_(SaldoConta.id_conta == subq_snaps.c.id_conta, SaldoConta.capturado_em == subq_snaps.c.max_cap)
+            ).all()
+            snap_map = {s.id_conta: s for s in snapshots}
+
+            minhas_contas_list = []
+            saldo_bancario_puro = 0.0
+            for c in contas:
+                ultimo_snapshot = snap_map.get(c.id)
+                base_balance = float(ultimo_snapshot.saldo or 0) if ultimo_snapshot else 0.0
+                ent, sai = var_map.get(c.id, (0.0, 0.0))
+                current_acc_balance = base_balance + ent - abs(sai)
+                
+                if c.nome != "ContaComigo Digital":
+                    minhas_contas_list.append({
+                        "id": c.id, "nome": c.nome, "tipo": c.tipo,
+                        "saldo": current_acc_balance,
+                        "saldo_disponivel": float(ultimo_snapshot.saldo_disponivel or 0) if ultimo_snapshot else 0.0,
+                        "limite": float(c.limite_cartao or 0) if c.tipo == "Cartão de Crédito" else None
+                    })
+
+                if c.tipo != "Cartão de Crédito" and c.tipo in ["Conta Corrente", "Carteira Digital", "Conta Poupança"]:
+                    saldo_bancario_puro += current_acc_balance
+
+            # --- CÁLCULO DE FLUXO ANUAL E MENSAL (LIVRO CAIXA REAL) ---
+            start_year = today.replace(month=1, day=1)
+            lancamentos_reais = db.query(Lancamento).options(
+                joinedload(Lancamento.categoria),
+                joinedload(Lancamento.subcategoria)
+            ).filter(
+                Lancamento.id_usuario == user_id,
+                Lancamento.data_transacao >= datetime.combine(start_year, time.min),
+                not_(Lancamento.tipo.ilike('transfer%')),
+                not_(func.lower(Lancamento.descricao).like('%fatura%'))
+            ).all()
+
+            entradas_ano = 0.0; saidas_ano = 0.0
+            entradas_mes = 0.0; saidas_mes = 0.0
+            vazamentos_valor = 0.0
+            lancamentos_saida_mes = []
+
+            for l in lancamentos_reais:
+                if l.id_subcategoria == 584: continue
+                if l.subcategoria and "transfer" in l.subcategoria.nome.lower(): continue
+                
+                val = float(l.valor or 0)
+                is_cur_month = l.data_transacao >= datetime.combine(start_month, time.min)
+
+                if val > 0:
+                    entradas_ano += val
+                    if is_cur_month: entradas_mes += val
+                else:
+                    saidas_ano += abs(val)
+                    if is_cur_month:
+                        saidas_mes += abs(val)
+                        lancamentos_saida_mes.append(l)
+                        if any(term in (l.descricao or "").lower() for term in ['juros', 'multa', 'encargo', 'iof', 'tarifa', 'anuidade', 'cesta serv']):
+                            vazamentos_valor += abs(val)
+
+            patrimonio_anual = entradas_ano - saidas_ano
+            resultado_mes = entradas_mes - saidas_mes
+            dias_restantes = (end_month - today).days + 1
+            limite_diario = (resultado_mes / dias_restantes) if (dias_restantes > 0 and resultado_mes > 0) else 0
+            
+            faturas_pendentes_valor = db.query(func.sum(FaturaCartao.valor_total)).filter(
+                FaturaCartao.id_usuario == user_id,
+                FaturaCartao.status != 'paga'
+            ).scalar() or 0.0
+
+            agendamentos_mes_valor = db.query(func.sum(Agendamento.valor)).filter(
+                Agendamento.id_usuario == user_id,
+                Agendamento.ativo == True,
+                Agendamento.proxima_data_execucao >= start_month,
+                Agendamento.proxima_data_execucao <= end_month
+            ).scalar() or 0.0
+
+            result['visao_geral'] = {
+                "patrimonio_liquido": patrimonio_anual,
+                "saldo_disponivel_real": patrimonio_anual, # Mapeado para Patrimônio Anual
+                "saldo_bancario_puro": resultado_mes,    # Mapeado para Resultado do Mês
+                "comprometimento_faturas": float(faturas_pendentes_valor),
+                "comprometimento_agendamentos": float(agendamentos_mes_valor),
+                "vazamentos_financeiros": vazamentos_valor,
+                "resultado_mes": resultado_mes,
+                "entradas_mes": entradas_mes,
+                "saidas_mes": saidas_mes,
+                "dias_restantes_mes": dias_restantes,
+                "limite_diario_seguro": limite_diario,
+                "minhas_contas": minhas_contas_list
+            }
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (visao_geral): {e}", exc_info=True)
+            result['visao_geral'] = {}
+
+        # --- SEÇÃO 2: TOP CATEGORIAS ---
+        try:
+            total_gastos_real = saidas_mes 
+            cat_totals = {}
+            for lanc in lancamentos_saida_mes:
+                cat_nome = (lanc.categoria.nome if lanc.categoria else "Outros")
+                cat_totals[cat_nome] = cat_totals.get(cat_nome, 0.0) + abs(float(lanc.valor))
+
+            top_cats_data = sorted(cat_totals.items(), key=lambda x: x[1], reverse=True)[:6]
+            top_categorias_list = []
+            colors = ["#D85A30","#378ADD","#7F77DD","#888780","#1D9E75","#BA7517"]
+            total_mapeado = 0
+            for i, (cat_name, total_cat) in enumerate(top_cats_data):
+                v_cat = abs(float(total_cat))
+                if v_cat < 0.01: continue
+                total_mapeado += v_cat
+                sub_totals = {}
+                for lanc in lancamentos_saida_mes:
+                    if lanc.categoria and lanc.categoria.nome == cat_name:
+                        sub_n = (lanc.subcategoria.nome if lanc.subcategoria else "Geral")
+                        sub_totals[sub_n] = sub_totals.get(sub_n, 0.0) + abs(float(lanc.valor))
+                
+                top_categorias_list.append({
+                    "nome": cat_name, "total": v_cat,
+                    "percentual_do_total_gastos": (v_cat / total_gastos_real * 100) if total_gastos_real > 0 else 0,
+                    "cor_hex": colors[i % len(colors)],
+                    "subcategorias": [{"nome": sn, "total": sv} for sn, sv in sorted(sub_totals.items(), key=lambda x: x[1], reverse=True)]
+                })
+            
+            restante = total_gastos_real - total_mapeado
+            if restante > 0.01:
+                top_categorias_list.append({
+                    "nome": "Outros", "total": restante,
+                    "percentual_do_total_gastos": (restante / total_gastos_real * 100) if total_gastos_real > 0 else 0,
+                    "cor_hex": "#94a3b8", "subcategorias": [{"nome": "Diversos", "total": restante}]
+                })
+            result['top_categorias'] = top_categorias_list
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (top_categorias): {e}", exc_info=True)
+            result['top_categorias'] = []
+
+        # --- SEÇÃO 3: ASSINATURAS ---
+        try:
+            servicos_assinatura = ['netflix', 'spotify', 'amazon', 'disney', 'hbo', 'globoplay', 'youtube', 'deezer', 'apple', 'claro', 'vivo', 'tim', 'sky', 'chatgpt', 'openai', 'google one', 'icloud', 'smartfit']
+            termos_recorrentes = ['assinatura', 'subscription', 'plano mensal', 'mensalidade']
+            regex_servicos = '|'.join(servicos_assinatura)
+            regex_recorrentes = '|'.join(termos_recorrentes)
+            
+            lanc_ass = db.query(Lancamento).filter(
+                Lancamento.id_usuario == user_id, _expense_type_condition(),
+                Lancamento.data_transacao >= (today - timedelta(days=90)),
+                or_(func.lower(Lancamento.descricao).op('~')(regex_servicos), func.lower(Lancamento.descricao).op('~')(regex_recorrentes))
+            ).all()
+
+            agend_ass = db.query(Agendamento).filter(Agendamento.id_usuario == user_id, Agendamento.ativo == True, Agendamento.frequencia == 'mensal').all()            
+            
+            lista_ass = []
+            seen = set()
+            for l in lanc_ass:
+                desc = (l.descricao or "").split()[0].lower()
+                if desc and desc not in seen:
+                    lista_ass.append({"descricao": l.descricao, "valor": abs(float(l.valor))})
+                    seen.add(desc)
+            for a in agend_ass:
+                desc = (a.descricao or "").split()[0].lower()
+                if desc and desc not in seen:
+                    lista_ass.append({"descricao": a.descricao, "valor": float(a.valor)})
+                    seen.add(desc)
+            
+            result['assinaturas'] = {"lista": lista_ass, "total_mensal": sum(x['valor'] for x in lista_ass)}
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (assinaturas): {e}", exc_info=True)
+            result['assinaturas'] = {"lista": [], "total_mensal": 0}
+
+        # --- SEÇÃO 4: PARCELAMENTOS (Apenas ativos no mês atual) ---
+        try:
+            parcelas = db.query(ParcelamentoItem).filter(ParcelamentoItem.id_usuario == user_id).all()
+            ativos = []; vencidos = []
+            termos_juros = ['juros', 'encargo', 'iof', 'multa', 'tarifa']
+            juros_parcelas_mes = 0.0
+            
+            # Mês e ano atual para filtro de "Ativos no mês"
+            mes_atual = today.month
+            ano_atual = today.year
+
+            for p in parcelas:
+                desc_lower = (p.descricao or "").lower()
+                if any(t in desc_lower for t in termos_juros):
+                    if p.parcela_atual < p.total_parcelas:
+                        juros_parcelas_mes += float(p.valor_parcela)
+                    continue
+                    
+                item = {
+                    "descricao": p.descricao, "valor_parcela": float(p.valor_parcela),
+                    "parcela_atual": p.parcela_atual, "total_parcelas": p.total_parcelas,
+                    "data_proxima_parcela": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None
+                }
+                
+                # Na aba "Ativos", apenas o que vence NO MÊS ATUAL e ainda não terminou.
+                is_this_month = False
+                if p.data_proxima_parcela:
+                    if p.data_proxima_parcela.year == ano_atual and p.data_proxima_parcela.month == mes_atual:
+                        is_this_month = True
+
+                if p.parcela_atual < p.total_parcelas and is_this_month:
+                    ativos.append(item)
+                else:
+                    vencidos.append(item)
+            
+            # Ordenar ativos por data de vencimento
+            ativos = sorted(ativos, key=lambda x: x['data_proxima_parcela'] or "")
+            
+            total_mensal_parcelas = sum(x['valor_parcela'] for x in ativos)
+            result['parcelamentos'] = {
+                "ativos": ativos, "vencidos": vencidos,
+                "total_mensal_parcelas": total_mensal_parcelas
+            }
+            if 'visao_geral' in result:
+                result['visao_geral']['comprometimento_faturas'] += total_mensal_parcelas
+                result['visao_geral']['vazamentos_financeiros'] += juros_parcelas_mes
+                
+        except Exception as e:
+            logger.error(f"Erro Modo Deus (parcelamentos): {e}", exc_info=True)
+            result['parcelamentos'] = {"ativos": [], "vencidos": [], "total_mensal_parcelas": 0}
+
+        # --- SEÇÃO 5: CARTÕES E VENCIMENTOS (Radar de 30 Dias) ---
+        try:
+            v_limit = today + timedelta(days=30)
+            
+            # 1. Buscar faturas detalhadas existentes
+            faturas_detalhe = db.query(FaturaCartao).join(Conta).filter(
+                FaturaCartao.id_usuario == user_id,
+                or_(
+                    not_(FaturaCartao.status.ilike('%paga%')),
+                    and_(FaturaCartao.data_vencimento >= today, FaturaCartao.data_vencimento <= v_limit)
+                )
+            ).all()
+            
+            lista_v = []
+            contas_com_fatura_no_radar = set()
+
+            for f in faturas_detalhe:
+                if not 'paga' in str(f.status).lower():
+                    dt_venc = f.data_vencimento or (today + timedelta(days=5))
+                    if dt_venc <= v_limit:
+                        contas_com_fatura_no_radar.add(f.id_conta)
+                        status_label = str(f.status).replace('_', ' ').title()
+                        lista_v.append({
+                            "descricao": f"Fatura {f.conta.nome} ({status_label})", 
+                            "valor": float(f.valor_total), 
+                            "data": dt_venc.isoformat(), 
+                            "cor": "#ef4444"
+                        })
+
+            # 2. PROJEÇÃO: Se uma conta de cartão tem saldo mas não apareceu no radar, projeta pelo dia_vencimento
+            cc_contas = db.query(Conta).filter(Conta.id_usuario == user_id, Conta.tipo == 'Cartão de Crédito').all()
+            for c in cc_contas:
+                if c.id not in contas_com_fatura_no_radar:
+                    ultimo_saldo = db.query(SaldoConta).filter(SaldoConta.id_conta == c.id).order_by(SaldoConta.capturado_em.desc()).first()
+                    valor_fatura = float(ultimo_saldo.saldo or 0) if ultimo_saldo else 0.0
+                    
+                    if valor_fatura > 1.0: 
+                        # Projeta a data baseada no dia_vencimento ou histórico
+                        dia_v = c.dia_vencimento
+                        if dia_v is None:
+                            # Tenta descobrir pela última fatura fechada
+                            last_f = db.query(FaturaCartao).filter(FaturaCartao.id_conta == c.id).order_by(FaturaCartao.data_vencimento.desc()).first()
+                            dia_v = last_f.data_vencimento.day if last_f and last_f.data_vencimento else 12 # Fallback 12 (mais comum para o user)
+                        
+                        try:
+                            dt_proj = today.replace(day=dia_v)
+                            if dt_proj < today:
+                                dt_proj = (today.replace(day=1) + timedelta(days=32)).replace(day=dia_v)
+                        except:
+                            dt_proj = today + timedelta(days=10)
+
+                        if dt_proj <= v_limit:
+                            lista_v.append({
+                                "descricao": f"Fatura {c.nome} (Projetada)",
+                                "valor": valor_fatura,
+                                "data": dt_proj.isoformat(),
+                                "cor": "#f87171"
+                            })
+
+            # 3. Agendamentos
+            agend_v = db.query(Agendamento).filter(
+                Agendamento.id_usuario == user_id, 
+                Agendamento.ativo == True, 
+                Agendamento.proxima_data_execucao <= v_limit
+            ).all()
+            for a in agend_v:
+                lista_v.append({
+                    "descricao": a.descricao, 
+                    "valor": float(a.valor), 
+                    "data": a.proxima_data_execucao.isoformat(), 
+                    "cor": "#3b82f6"
+                })
+            
+            # 4. Parcelamentos
+            parc_v = db.query(ParcelamentoItem).filter(
+                ParcelamentoItem.id_usuario == user_id,
+                ParcelamentoItem.parcela_atual < ParcelamentoItem.total_parcelas
+            ).all()
+            for p in parc_v:
+                if p.data_proxima_parcela:
+                    dt_p = p.data_proxima_parcela
+                    # Garante que dt_p é apenas data para comparação
+                    if hasattr(dt_p, 'date'): dt_p = dt_p.date()
+                    
+                    if today <= dt_p <= v_limit:
+                        lista_v.append({
+                            "descricao": f"Parc. {p.descricao} ({p.parcela_atual + 1}/{p.total_parcelas})",
+                            "valor": float(p.valor_parcela),
+                            "data": dt_p.isoformat(),
+                            "cor": "#fbbf24"
+                        })
+            
+            result['proximos_vencimentos'] = sorted(lista_v, key=lambda x: x['data'])
+            
+        except Exception as e:
+            logger.error(f"Erro no Radar de Vencimentos: {e}", exc_info=True)
+            result['proximos_vencimentos'] = []
+
+        # --- SEÇÃO 8: SCORE E ALERTAS (Análise Comportamental e Rigor) ---
+        try:
+            score = 100
+            alertas = []
+            vg = result.get('visao_geral', {})
+            
+            # 1. Alerta de Déficit (Sempre mostrar se negativo)
+            res_mes_val = vg.get('resultado_mes', 0)
+            if res_mes_val < 0:
+                score -= 40
+                alertas.append({
+                    "tipo": "critico", 
+                    "titulo": "Alfredo avisa: Déficit Mensal", 
+                    "detalhe": f"Você gastou R$ {abs(res_mes_val):.2f} além do que recebeu este mês."
+                })
+            
+            # 2. Alerta de Vazamentos
+            vaz_v = vg.get('vazamentos_financeiros', 0)
+            if vaz_v > 0:
+                score -= 10
+                alertas.append({"tipo": "aviso", "titulo": "Cuidado com Vazamentos", "detalhe": f"Você já perdeu R$ {vaz_v:.2f} em taxas e juros."})
+            
+            # 3. Análise Comportamental (Encapsulada para não quebrar o resto)
+            try:
+                tres_meses_atras = start_month - timedelta(days=90)
+                # Query SQL bruta para performance e precisão
+                sql_media = text("""
+                    SELECT AVG(total_mes) FROM (
+                        SELECT SUM(ABS(valor)) as total_mes 
+                        FROM lancamentos 
+                        WHERE id_usuario = :uid AND valor < 0 
+                        AND data_transacao >= :inicio AND data_transacao < :fim
+                        GROUP BY date_trunc('month', data_transacao)
+                    ) as sub
+                """)
+                media_res = db.execute(sql_media, {"uid": user_id, "inicio": tres_meses_atras, "fim": start_month}).scalar()
+                media_gastos_hist = float(media_res) if media_res else 0.0
+                
+                if media_gastos_hist > 0 and saidas_mes > (media_gastos_hist * 1.15):
+                    score -= 10
+                    alertas.append({
+                        "tipo": "aviso", 
+                        "titulo": "Gasto Acima da Média", 
+                        "detalhe": f"Seus gastos estão 15% acima da sua média histórica de R$ {media_gastos_hist:.2f}."
+                    })
+            except Exception as e:
+                logger.warning(f"Falha ao calcular média histórica: {e}")
+
+            # 4. Alerta de Comprometimento
+            receita_mes = vg.get('entradas_mes', 0)
+            if receita_mes > 0:
+                comp = (vg.get('comprometimento_faturas', 0) + vg.get('comprometimento_agendamentos', 0))
+                perc = (comp / receita_mes) * 100
+                if perc > 40:
+                    score -= 15
+                    alertas.append({"tipo": "aviso", "titulo": "Renda Comprometida", "detalhe": f"Você já comprometeu {perc:.1f}% da sua renda mensal."})
+
+            score = max(5, score)
+            label = "Excelente" if score >= 90 else ("Bom" if score >= 75 else ("Atenção" if score >= 50 else "Crítico"))
+            result['health'] = {"score": score, "label": label}
+            result['alertas'] = alertas
+        except Exception as e:
+            logger.error(f"Erro fatal no Score/Alertas: {e}", exc_info=True)
+            result['health'] = {"score": 100, "label": "Ok"}
+            result['alertas'] = []
+
+        # --- SEÇÃO 9: ANÁLISE COMPORTAMENTAL PROFUNDA (Relatório Narrativo Alfredo 2.0) ---
+        try:
+            vg = result.get('visao_geral', {})
+            ent_m = vg.get('entradas_mes', 0)
+            sai_m = vg.get('saidas_mes', 0)
+            res_m = vg.get('resultado_mes', 0)
+            
+            # Diagnóstico Geral
+            nome_u = usuario.nome_completo.split(' ')[0] if usuario.nome_completo else "Usuário"
+            status_cor = "✅ SAUDÁVEL" if res_m > 0 else "⚠️ ALERTA"
+            if res_m < 0: status_cor = "🚨 CRÍTICO"
+
+            msg = f"<b>RELATÓRIO ALFREDO: {today.strftime('%B').upper()}</b>\n\n"
+            msg += f"Fala, {nome_u}! Analisei sua vida financeira este mês e o veredito atual é: <b>{status_cor}</b>.\n\n"
+            
+            # 1. Saúde do Fluxo de Caixa
+            if ent_m > 0:
+                poupanca = ((ent_m - abs(sai_m)) / ent_m) * 100
+                if poupanca > 15:
+                    msg += f"• <b>Gestão de Renda:</b> Você está sendo um mestre! Sobraram {poupanca:.1f}% da sua renda total (R$ {res_m:.2f}). Este valor é perfeito para investir ou reforçar sua reserva.\n"
+                elif poupanca > 0:
+                    msg += f"• <b>Gestão de Renda:</b> Você está equilibrado. Sobraram {poupanca:.1f}% da sua renda. O ideal é tentar chegar nos 15% de sobra no mês que vem para sua segurança.\n"
+                else:
+                    msg += f"• <b>Gestão de Renda:</b> Cuidado! Suas despesas já consumiram 100% da sua receita. Você está operando com R$ {abs(res_m):.2f} no vermelho, o que pode gerar juros caros.\n"
+            else:
+                msg += "• <b>Gestão de Renda:</b> Ainda não detectei entradas de receita este mês. Lembre-se de registrar seus ganhos para uma análise completa.\n"
+
+            # 2. Comparação Histórica
+            try:
+                tres_meses_atras = start_month - timedelta(days=90)
+                sql_media = text("""
+                    SELECT AVG(total_mes) FROM (
+                        SELECT SUM(ABS(valor)) as total_mes FROM lancamentos 
+                        WHERE id_usuario = :uid AND valor < 0 AND data_transacao >= :inicio AND data_transacao < :fim
+                        GROUP BY date_trunc('month', data_transacao)
+                    ) as sub
+                """)
+                media_val = db.execute(sql_media, {"uid": user_id, "inicio": tres_meses_atras, "fim": start_month}).scalar()
+                if media_val and float(media_val) > 0:
+                    m_hist = float(media_val)
+                    diff_hist = abs(sai_m) - m_hist
+                    if diff_hist > (m_hist * 0.1):
+                        msg += f"• <b>Padrão de Gastos:</b> Você está gastando R$ {diff_hist:.2f} <b>acima</b> da sua média histórica. Algo fora do comum aconteceu ou você está perdendo o controle dos pequenos gastos.\n"
+                    elif diff_hist < -(m_hist * 0.1):
+                        msg += f"• <b>Padrão de Gastos:</b> Excelente evolução! Seus gastos estão R$ {abs(diff_hist):.2f} <b>abaixo</b> do seu padrão habitual de R$ {m_hist:.2f}. Continue assim!\n"
+                    else:
+                        msg += "• <b>Padrão de Gastos:</b> Você está mantendo seu custo de vida estável dentro da média histórica.\n"
+            except: pass
+
+            # 3. Análise de Vilões (Categorias)
+            top_cats = result.get('top_categorias', [])
+            if top_cats:
+                tc = top_cats[0]
+                msg += f"• <b>Onde mora o perigo:</b> A categoria <b>{tc['nome']}</b> foi seu maior ralo de dinheiro, consumindo R$ {tc['total']:.2f}. Se quiser economizar rápido, comece por aqui.\n"
+
+            # 4. Estratégia de Guerra do Alfredo
+            msg += "\n<b>ESTRATÉGIA DO ALFREDO PARA O MÊS:</b>\n"
+            if res_m < 0:
+                msg += "1. Suspenda imediatamente gastos não essenciais (lazer e delivery).\n"
+                msg += "2. Tente renegociar dívidas ou priorizar o pagamento das que possuem juros altos.\n"
+                msg += "3. Use o radar de 'Próximos 30 dias' para se antecipar aos novos boletos e não ser pego de surpresa."
+            elif res_m < (ent_m * 0.1):
+                msg += "1. Você está no limite do seu orçamento. Evite novas compras parceladas esta semana.\n"
+                msg += "2. Registre cada centavo para evitar surpresas no fechamento da fatura."
+            else:
+                msg += "1. Momento ideal para aplicar a sobra em investimentos de liquidez diária.\n"
+                msg += "2. Se tiver parcelas futuras, considere adiantá-las se houver desconto nos juros."
+
+            if usuario.perfil_ia:
+                msg += f"\n\n<b>Sua Identidade Financeira:</b> {usuario.perfil_ia}"
+
+            # Limpeza final: Converter eventuais negritos de Markdown para HTML
+            msg = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', msg)
+
+            result['insights_rapidos'] = [msg]
+        except Exception as e:
+            logger.error(f"Erro na análise profunda: {e}")
+            result['insights_rapidos'] = ["Alfredo está processando seus dados para gerar um relatório completo. Continue registrando seus gastos."]
+
+        # --- SEÇÃO FINAL: EVOLUÇÃO E DISSECAÇÃO DE CARTÕES ---
+        try:
+            # 1. Gráfico de Evolução (Faturas Fechadas)
+            f_evol = db.query(
+                extract('month', FaturaCartao.data_vencimento).label('mes'),
+                extract('year', FaturaCartao.data_vencimento).label('ano'),
+                func.sum(FaturaCartao.valor_total).label('total')
+            ).filter(FaturaCartao.id_usuario == user_id, FaturaCartao.data_vencimento >= (today - timedelta(days=180))).group_by('ano', 'mes').order_by('ano', 'mes').all()
+            
+            # Se houver pouco histórico de faturas fechadas, usa Lançamentos Reais como fallback
+            if len(f_evol) < 2:
+                f_evol_lanc = db.query(
+                    extract('month', Lancamento.data_transacao).label('mes'),
+                    extract('year', Lancamento.data_transacao).label('ano'),
+                    func.sum(Lancamento.valor).label('total')
+                ).join(Conta, Lancamento.id_conta == Conta.id).filter(
+                    Lancamento.id_usuario == user_id, 
+                    Conta.tipo == 'Cartão de Crédito',
+                    Lancamento.valor < 0,
+                    Lancamento.data_transacao >= (today - timedelta(days=180))
+                ).group_by('ano', 'mes').order_by('ano', 'mes').all()
+                
+                result['faturas_evolucao'] = {
+                    "labels": [f"{int(f.mes):02d}/{str(int(f.ano))[2:]}" for f in f_evol_lanc], 
+                    "data": [abs(float(f.total)) for f in f_evol_lanc]
+                }
+            else:
+                result['faturas_evolucao'] = {
+                    "labels": [f"{int(f.mes):02d}/{str(int(f.ano))[2:]}" for f in f_evol], 
+                    "data": [float(f.total) for f in f_evol]
+                }
+            
+            # 2. Lista de Cartões (Dissecação de Uso e Limites)
+            cartoes_list = []
+            cc_contas = db.query(Conta).filter(Conta.id_usuario == user_id, Conta.tipo == 'Cartão de Crédito').all()
+            
+            for c in cc_contas:
+                # Pega snapshot mais recente de saldo/uso
+                snap = db.query(SaldoConta).filter(SaldoConta.id_conta == c.id).order_by(SaldoConta.capturado_em.desc()).first()
+                gasto_atual = float(snap.saldo or 0) if snap else 0.0
+                limite_disp = float(snap.saldo_disponivel or 0) if snap else 0.0
+                limite_tot = float(c.limite_cartao or snap.limite_cartao or 0) if snap else float(c.limite_cartao or 0)
+                
+                # Projeta data de vencimento baseada no dia_vencimento ou histórico real
+                dt_venc = _get_card_due_date(db, c, today)
+
+                cartoes_list.append({
+                    "nome_conta": c.nome,
+                    "status": "aberta" if gasto_atual > 0 else "zerada",
+                    "data_vencimento": dt_venc.isoformat(),
+                    "valor_total": gasto_atual,
+                    "limite_cartao": limite_tot,
+                    "limite_disponivel": limite_disp
+                })
+            
+            result['cartoes'] = cartoes_list
+
+        except Exception as e:
+            logger.error(f"Erro na Evolução de Faturas: {e}", exc_info=True)
+            if 'faturas_evolucao' not in result:
+                result['faturas_evolucao'] = {"labels": [], "data": []}
+            result['cartoes'] = []
+
+        result['perfil_ia'] = usuario.perfil_ia
+        _cache[cache_key_val] = (result, now_ts)
+        return jsonify(result)
+    finally:
+        db.close()
+
+
