@@ -73,6 +73,7 @@ sys.path.insert(0, parent_dir)
 import config
 from database.database import get_db, buscar_lancamentos_usuario, get_or_create_user
 from models import Usuario, Lancamento, Agendamento, Lembrete, Objetivo, MetaConfirmacao, Categoria, Subcategoria, XpEvent, UserMission, UserAchievement, OrcamentoCategoria, Conta, SaldoConta, FaturaCartao, ParcelamentoItem, Investment, CarteiraFII, HistoricoAlertaFII, PatrimonySnapshot, RegraCategorizacao
+from gerente_financeiro.dynamic_insights import get_dynamic_alfredo_insight
 from pierre_finance.categorizador import limpar_descricao
 from gerente_financeiro.prompts import PROMPT_ALFREDO_APRIMORADO as PROMPT_ALFREDO
 from gerente_financeiro.services import preparar_contexto_financeiro_completo
@@ -1215,7 +1216,10 @@ def miniapp_pierre_dashboard():
                 "totalInstallments": p.total_parcelas
             })
 
-        # 4. Cálculo Dinâmico de Saúde e Insight Rápido (Fallback se IA falhar ou estiver em hot-path)
+        # NOVO: Alfredo Dinâmico (Personality-driven & 8h Rotation)
+        fast_insight = await get_dynamic_alfredo_insight(db, usuario, total_balance, cleaned_categories, installments_res)
+
+        # Cálculo Dinâmico de Saúde e Insight Rápido (Fallback se IA falhar ou estiver em hot-path)
         total_expenses = sum(cleaned_categories.values())
         
         if total_balance < 100:
@@ -1694,7 +1698,7 @@ def _get_card_due_date(db, conta, reference_date: date) -> date:
 
 
 @app.route('/api/miniapp/overview')
-def miniapp_overview():
+async def miniapp_overview():
     """Retorna o resumo da home do miniapp."""
     total_value = 0.0  # Inicializa a variável para evitar NameError
     session = _require_session()
@@ -1849,26 +1853,12 @@ def miniapp_overview():
                     "periodo": o.periodo or 'monthly'
                 })
 
-        # --- ALFREDO EM DESTAQUE: Fast Insight (Garante funcionamento instantâneo sem IA) ---
-        # Forçamos False aqui para garantir performance instantânea no carregamento inicial
-        hotpath_ai_enabled = False 
+        # --- ALFREDO DINÂMICO (Personality-driven & 8h Rotation) ---
+        categories_for_ai = { (c['label']): c['value'] for c in categories[:5] }
+        parcelas_db = db.query(ParcelamentoItem).filter(ParcelamentoItem.id_usuario == usuario.id).all()
+        installments_for_ai = [{"desc": p.descricao, "valor": float(p.valor_parcela)} for p in parcelas_db if p.parcela_atual < p.total_parcelas]
         
-        if not hotpath_ai_enabled or balance == 0:
-            if balance > 0:
-                fast_text = f"Excelente! Você está com R$ {balance:.2f} de folga este mês. "
-                if categories:
-                    fast_text += f"Seu maior gasto foi com {categories[0]['label'].title()}."
-                insight = fast_text
-            elif balance < 0:
-                fast_text = f"Atenção: Suas despesas superaram a receita em R$ {abs(balance):.2f}. "
-                if budget_items:
-                    estourados = [b['label'] for b in budget_items if b['realizado'] > b['orcamento']]
-                    if estourados: fast_text += f"O limite de {estourados[0]} foi ultrapassado."
-                insight = fast_text
-            else:
-                insight = "Alfredo está monitorando seus primeiros lançamentos. Vamos colocar as contas em ordem!"
-        else:
-            insight = _build_miniapp_insight(usuario, balance, receita, despesa, categories, cashflow)
+        insight = await get_dynamic_alfredo_insight(db, usuario, balance, categories_for_ai, installments_for_ai)
 
         recent_items = (
             db.query(Lancamento)
@@ -4057,7 +4047,7 @@ if __name__ == "__main__":
 
 
 @app.route('/api/miniapp/modo_deus')
-def miniapp_modo_deus():
+async def miniapp_modo_deus():
     """Aba Modo Deus - Painel CFO Pessoal consolidado."""
     session = _require_session()
     if not session:
