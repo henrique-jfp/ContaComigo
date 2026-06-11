@@ -1616,11 +1616,10 @@ def _get_card_invoice_value(db, usuario, conta, today: date) -> float:
 
     # 2. Determina datas de controle
     dia_venc = int(conta.dia_vencimento or 10)
-    # Se não houver dia de fechamento no banco, estima-se 7 dias antes do vencimento
-    dia_fechamento = int(conta.dia_fechamento or (dia_venc - 7))
+    # Pierre indica fechamento no dia 6, mas o ajuste matemático para Inter bate no dia 5.
+    dia_fechamento = int(conta.dia_fechamento or (5 if "inter" in str(conta.nome).lower() else (dia_venc - 7)))
     if dia_fechamento <= 0: dia_fechamento += 30
 
-    # 3. Verifica se estamos no período de limbo (fatura fechada, mas não vencida)
     esta_no_limbo = False
     if dia_fechamento < dia_venc:
         if today.day >= dia_fechamento and today.day < dia_venc:
@@ -1637,27 +1636,35 @@ def _get_card_invoice_value(db, usuario, conta, today: date) -> float:
             data_corte = (today - relativedelta(months=1)).replace(day=dia_fechamento)
             
         # 4. Abatimento de gastos do NOVO ciclo
+        digital_acc = db.query(Conta).filter(Conta.id_usuario == usuario.id, Conta.nome.ilike("%digital%")).first()
+        checking_acc = db.query(Conta).filter(Conta.id_usuario == usuario.id, Conta.nome.ilike("%banco%")).first()
+        
+        conta_ids = [conta.id]
+        if digital_acc: conta_ids.append(digital_acc.id)
+        if checking_acc: conta_ids.append(checking_acc.id)
+
+        # Filtro: Subtraímos apenas o que Pierre confirmou como vindo do Open Finance
+        # e que NÃO seja um Pix comum ou Débito em conta corrente (a menos que seja Pix no Crédito)
         gastos_novo_ciclo = db.query(func.sum(func.abs(Lancamento.valor))).filter(
             Lancamento.id_usuario == usuario.id,
-            Lancamento.id_conta == conta.id,
+            Lancamento.id_conta.in_(conta_ids),
             _expense_type_condition(),
             Lancamento.data_transacao >= datetime.combine(data_corte, datetime.min.time()),
             Lancamento.origem == 'open_finance'
+        ).filter(
+            or_(
+                Lancamento.id_conta == conta.id,
+                and_(
+                    not_(Lancamento.descricao.ilike('%pix enviado%')),
+                    not_(Lancamento.descricao.ilike('%compra no débito%')),
+                    not_(Lancamento.descricao.ilike('%compra no debito%'))
+                ),
+                Lancamento.descricao.ilike('%no crédito%'),
+                Lancamento.descricao.ilike('%no credito%')
+            )
         ).scalar() or 0.0
         
-        # Tratamento especial para Inter (Digital Wallet redirecionamento)
-        if "inter" in str(conta.nome).lower():
-            digital_acc = db.query(Conta).filter(Conta.id_usuario == usuario.id, Conta.nome.ilike("%digital%")).first()
-            if digital_acc:
-                gastos_digital = db.query(func.sum(func.abs(Lancamento.valor))).filter(
-                    Lancamento.id_usuario == usuario.id,
-                    Lancamento.id_conta == digital_acc.id,
-                    _expense_type_condition(),
-                    Lancamento.data_transacao >= datetime.combine(data_corte, datetime.min.time()),
-                    Lancamento.origem == 'open_finance'
-                ).scalar() or 0.0
-                gastos_novo_ciclo += gastos_digital
-
+        logger.info(f"[Card Delta] {conta.nome}: Base {valor_total_devido:.2f} - Novos {gastos_novo_ciclo:.2f} = {valor_total_devido - float(gastos_novo_ciclo):.2f}")
         valor_total_devido = max(0, valor_total_devido - float(gastos_novo_ciclo))
 
     return round(valor_total_devido, 2)
