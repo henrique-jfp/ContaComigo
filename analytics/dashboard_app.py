@@ -1167,8 +1167,12 @@ def miniapp_pierre_dashboard():
             if c.id == (digital_acc.id if digital_acc else None):
                 saldo_val = total_balance
             else:
-                s = snapshots_map.get(c.id)
-                saldo_val = float(s.saldo) if s else 0.0
+                if c.tipo == "Cartão de Crédito":
+                    # Usa a helper unificada para cartões
+                    saldo_val = _get_card_invoice_value(db, usuario, c, datetime.now(timezone.utc).date())
+                else:
+                    s = snapshots_map.get(c.id)
+                    saldo_val = float(s.saldo) if s else 0.0
             
             display_info = None
             if c.tipo == "Cartão de Crédito":
@@ -1598,6 +1602,67 @@ def miniapp_history():
         db.close()
 
 
+def _get_card_invoice_value(db, usuario, conta, today: date) -> float:
+    """
+    Calcula o valor da fatura de um cartão de forma genérica.
+    Se estiver no 'limbo' (entre fechamento e vencimento), subtrai gastos do novo ciclo.
+    """
+    # 1. Pega o saldo mais recente (limite utilizado total)
+    ultimo_saldo = db.query(SaldoConta).filter(SaldoConta.id_conta == conta.id).order_by(SaldoConta.capturado_em.desc()).first()
+    valor_total_devido = float(ultimo_saldo.saldo or 0) if ultimo_saldo else 0.0
+    
+    if valor_total_devido <= 1.0:
+        return valor_total_devido
+
+    # 2. Determina datas de controle
+    dia_venc = int(conta.dia_vencimento or 10)
+    # Se não houver dia de fechamento no banco, estima-se 7 dias antes do vencimento
+    dia_fechamento = int(conta.dia_fechamento or (dia_venc - 7))
+    if dia_fechamento <= 0: dia_fechamento += 30
+
+    # 3. Verifica se estamos no período de limbo (fatura fechada, mas não vencida)
+    esta_no_limbo = False
+    if dia_fechamento < dia_venc:
+        if today.day >= dia_fechamento and today.day < dia_venc:
+            esta_no_limbo = True
+    else: # Ciclo cruza a virada do mês
+        if today.day >= dia_fechamento or today.day < dia_venc:
+            esta_no_limbo = True
+
+    if esta_no_limbo:
+        # Define a data exata do último fechamento
+        if today.day >= dia_fechamento:
+            data_corte = today.replace(day=dia_fechamento)
+        else: # Já virou o mês, o fechamento foi no mês anterior
+            data_corte = (today - relativedelta(months=1)).replace(day=dia_fechamento)
+            
+        # 4. Abatimento de gastos do NOVO ciclo
+        gastos_novo_ciclo = db.query(func.sum(func.abs(Lancamento.valor))).filter(
+            Lancamento.id_usuario == usuario.id,
+            Lancamento.id_conta == conta.id,
+            _expense_type_condition(),
+            Lancamento.data_transacao >= datetime.combine(data_corte, datetime.min.time()),
+            Lancamento.origem == 'open_finance'
+        ).scalar() or 0.0
+        
+        # Tratamento especial para Inter (Digital Wallet redirecionamento)
+        if "inter" in str(conta.nome).lower():
+            digital_acc = db.query(Conta).filter(Conta.id_usuario == usuario.id, Conta.nome.ilike("%digital%")).first()
+            if digital_acc:
+                gastos_digital = db.query(func.sum(func.abs(Lancamento.valor))).filter(
+                    Lancamento.id_usuario == usuario.id,
+                    Lancamento.id_conta == digital_acc.id,
+                    _expense_type_condition(),
+                    Lancamento.data_transacao >= datetime.combine(data_corte, datetime.min.time()),
+                    Lancamento.origem == 'open_finance'
+                ).scalar() or 0.0
+                gastos_novo_ciclo += gastos_digital
+
+        valor_total_devido = max(0, valor_total_devido - float(gastos_novo_ciclo))
+
+    return round(valor_total_devido, 2)
+
+
 def _get_card_due_date(db, conta, reference_date: date) -> date:
     """
     Projeta a data de vencimento de um cartão de crédito para o mês atual ou seguinte.
@@ -2011,27 +2076,10 @@ def miniapp_overview():
         cc_contas = db.query(Conta).filter(Conta.id_usuario == usuario.id, Conta.tipo == 'Cartão de Crédito').all()
         for c in cc_contas:
             if c.id not in seen_accounts:
-                ultimo_saldo = db.query(SaldoConta).filter(SaldoConta.id_conta == c.id).order_by(SaldoConta.capturado_em.desc()).first()
-                # Para cartões, o 'saldo' positivo no snapshot representa o gasto da fatura atual (limite utilizado)
-                valor_fatura = float(ultimo_saldo.saldo or 0) if ultimo_saldo else 0.0
+                # Usa a nova helper para garantir consistência e cálculo de limbo
+                valor_fatura = _get_card_invoice_value(db, usuario, c, today)
                 
                 if valor_fatura > 1.0:
-                    # Ajuste Inteligente: Se a fatura já fechou (dia > fechamento) mas não venceu (dia < vencimento)
-                    # O 'balance' do Open Finance inclui compras novas do próximo ciclo. Precisamos abater.
-                    dia_venc = int(c.dia_vencimento or 12)
-                    dia_fechamento = dia_venc - 6 # Estimativa padrão de fechamento
-                    
-                    if today.day > dia_fechamento and today.day < dia_venc:
-                        data_corte = today.replace(day=dia_fechamento)
-                        # Soma compras locais após o corte
-                        gastos_novos = db.query(func.sum(func.abs(Lancamento.valor))).filter(
-                            Lancamento.id_usuario == usuario.id,
-                            Lancamento.id_conta == c.id,
-                            _expense_type_condition(),
-                            Lancamento.data_transacao >= datetime.combine(data_corte, datetime.min.time())
-                        ).scalar() or 0.0
-                        valor_fatura = max(0, valor_fatura - float(gastos_novos))
-
                     # Usa a helper mestre para garantir consistência total da data
                     dt_proj = _get_card_due_date(db, c, today)
                         
@@ -4074,17 +4122,22 @@ def miniapp_modo_deus():
             minhas_contas_list = []
             saldo_bancario_puro = 0.0
             for c in contas:
-                ultimo_snapshot = snap_map.get(c.id)
-                base_balance = float(ultimo_snapshot.saldo or 0) if ultimo_snapshot else 0.0
-                ent, sai = var_map.get(c.id, (0.0, 0.0))
-                current_acc_balance = base_balance + ent - abs(sai)
+                if c.tipo == "Cartão de Crédito":
+                    # Usa a nova helper unificada para cartões
+                    current_acc_balance = _get_card_invoice_value(db, usuario, c, today)
+                else:
+                    # Para contas normais, o snapshot mais recente é o saldo real
+                    ultimo_snapshot = snap_map.get(c.id)
+                    current_acc_balance = float(ultimo_snapshot.saldo or 0) if ultimo_snapshot else 0.0
                 
                 if c.nome != "ContaComigo Digital":
+                    display_info = f"Fatura: R$ {abs(current_acc_balance):.2f}" if c.tipo == "Cartão de Crédito" else None
                     minhas_contas_list.append({
                         "id": c.id, "nome": c.nome, "tipo": c.tipo,
                         "saldo": current_acc_balance,
-                        "saldo_disponivel": float(ultimo_snapshot.saldo_disponivel or 0) if ultimo_snapshot else 0.0,
-                        "limite": float(c.limite_cartao or 0) if c.tipo == "Cartão de Crédito" else None
+                        "saldo_disponivel": float(snap_map.get(c.id).saldo_disponivel or 0) if snap_map.get(c.id) else 0.0,
+                        "limite": float(c.limite_cartao or 0) if c.tipo == "Cartão de Crédito" else None,
+                        "display_info": display_info
                     })
 
                 if c.tipo != "Cartão de Crédito" and c.tipo in ["Conta Corrente", "Carteira Digital", "Conta Poupança"]:
@@ -4318,23 +4371,12 @@ def miniapp_modo_deus():
             cc_contas = db.query(Conta).filter(Conta.id_usuario == user_id, Conta.tipo == 'Cartão de Crédito').all()
             for c in cc_contas:
                 if c.id not in contas_com_fatura_no_radar:
-                    ultimo_saldo = db.query(SaldoConta).filter(SaldoConta.id_conta == c.id).order_by(SaldoConta.capturado_em.desc()).first()
-                    valor_fatura = float(ultimo_saldo.saldo or 0) if ultimo_saldo else 0.0
+                    # Usa a helper unificada para garantir consistência em todo o CFO
+                    valor_fatura = _get_card_invoice_value(db, usuario, c, today)
                     
                     if valor_fatura > 1.0: 
                         # Projeta a data baseada no dia_vencimento ou histórico
-                        dia_v = c.dia_vencimento
-                        if dia_v is None:
-                            # Tenta descobrir pela última fatura fechada
-                            last_f = db.query(FaturaCartao).filter(FaturaCartao.id_conta == c.id).order_by(FaturaCartao.data_vencimento.desc()).first()
-                            dia_v = last_f.data_vencimento.day if last_f and last_f.data_vencimento else 12 # Fallback 12 (mais comum para o user)
-                        
-                        try:
-                            dt_proj = today.replace(day=dia_v)
-                            if dt_proj < today:
-                                dt_proj = (today.replace(day=1) + timedelta(days=32)).replace(day=dia_v)
-                        except:
-                            dt_proj = today + timedelta(days=10)
+                        dt_proj = _get_card_due_date(db, c, today)
 
                         if dt_proj <= v_limit:
                             lista_v.append({
@@ -4565,9 +4607,11 @@ def miniapp_modo_deus():
             cc_contas = db.query(Conta).filter(Conta.id_usuario == user_id, Conta.tipo == 'Cartão de Crédito').all()
             
             for c in cc_contas:
-                # Pega snapshot mais recente de saldo/uso
+                # Usa a helper mestre para o valor real da fatura (fechada ou atual)
+                gasto_atual = _get_card_invoice_value(db, usuario, c, today)
+                
+                # Pega snapshot mais recente apenas para o limite disponível
                 snap = db.query(SaldoConta).filter(SaldoConta.id_conta == c.id).order_by(SaldoConta.capturado_em.desc()).first()
-                gasto_atual = float(snap.saldo or 0) if snap else 0.0
                 limite_disp = float(snap.saldo_disponivel or 0) if snap else 0.0
                 limite_tot = float(c.limite_cartao or snap.limite_cartao or 0) if snap else float(c.limite_cartao or 0)
                 
