@@ -1131,7 +1131,7 @@ def pierre_connected_banks():
 
 
 @app.route('/api/miniapp/pierre/dashboard')
-def miniapp_pierre_dashboard():
+async def miniapp_pierre_dashboard():
     """Endpoint agregado para o Modo Deus (Pierre Finance) lendo dados locais"""
     session = _require_session()
     if not session:
