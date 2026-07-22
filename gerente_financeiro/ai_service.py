@@ -123,7 +123,7 @@ async def _cerebras_chat_completion_async(messages: list[dict], tools: list[dict
     api_key = str(config.CEREBRAS_API_KEY).strip().strip("'\"").strip()
 
     payload = {
-        "model": "llama3.1-8b", # FORÇADO: ID oficial de produção da Cerebras
+        "model": config.CEREBRAS_MODEL_NAME, # Usa o modelo definido no config ou .env
         "messages": messages,
         "temperature": 0.2,
         "max_tokens": 2048,

@@ -322,6 +322,8 @@ def _upsert_bill_summaries(usuario: Usuario, db: Session, client: PierreClient, 
             fatura.valor_total = _safe_decimal(s.get("billAmount") or s.get("amount") or s.get("totalAmount") or 0)
             fatura.data_vencimento = ref_date.date()
             
+            df = _parse_iso_date(s.get("closeDate") or s.get("closing_date"))
+
             # --- APRENDIZADO DE METADADOS DA CONTA ---
             # Se a conta não tem dia_vencimento/fechamento, aprendemos com a fatura real
             conta = db.query(Conta).filter(Conta.id == conta_id).first()
@@ -350,7 +352,6 @@ def _upsert_bill_summaries(usuario: Usuario, db: Session, client: PierreClient, 
                 
             fatura.mes_referencia = ref_date.replace(day=1).date()
 
-            df = _parse_iso_date(s.get("closeDate") or s.get("closing_date"))
             if df:
                 fatura.data_fechamento = df.date()
             updated += 1
@@ -512,14 +513,8 @@ def _sync_payment_reminders(usuario: Usuario, db: Session, client: PierreClient)
 
 def _enrich_user_profile(usuario: Usuario, client: PierreClient):
     """Enriquece o perfil IA do usuário com dados do Pierre get-book."""
-    try:
-        book_res = client.get_book(include_categories=True)
-        if isinstance(book_res, dict):
-            summary = book_res.get("summary") or book_res.get("data", {}).get("summary")
-            if summary:
-                usuario.perfil_ia = str(summary)
-    except Exception as e:
-        logger.warning(f"Erro ao enriquecer perfil IA via get-book: {e}")
+    # Desativado pois o endpoint get-book não está mais disponível na API Pierre.
+    pass
 
 
 def _extrair_lista_de_resposta(res) -> list:
