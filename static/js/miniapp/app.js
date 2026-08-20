@@ -4431,24 +4431,24 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- INJEÇÃO DO PATRIMÔNIO TOTAL COMO PRIMEIRO CARD (ALINHADO COM AS CONTAS) ---
         const pTotal = vg.patrimonio_liquido || 0;
         accL.innerHTML += `
-          <div class="glass-card p-4 rounded-2xl bg-brand/10 min-w-[150px] flex-shrink-0 border-2 border-brand/20">
+          <div class="glass-card p-4 rounded-2xl bg-telegram-card/40 min-w-[150px] flex-shrink-0 border border-telegram-separator/30">
             <div class="flex items-center gap-2 mb-2">
-              <div class="w-6 h-6 rounded-lg bg-brand flex items-center justify-center">
-                <i data-lucide="shield-check" class="w-3 h-3 text-white"></i>
+              <div class="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                <i data-lucide="shield-check" class="w-3 h-3 text-slate-600 dark:text-slate-300"></i>
               </div>
-              <span class="text-[9px] font-black text-brand uppercase truncate">PATRIMÔNIO (ANO)</span>
+              <span class="text-[9px] font-black text-telegram-hint uppercase truncate">PATRIMÔNIO (ANO)</span>
             </div>
             <p class="text-[8px] font-black text-telegram-hint uppercase mb-0.5">Saldo Líquido</p>
             <div class="text-sm font-black ${pTotal >= 0 ? 'text-telegram-text' : 'text-rose-500'} font-financial">${fmt.format(pTotal)}</div>
-            <div class="text-[8px] text-brand font-bold mt-1 uppercase">Receita - Despesa</div>
+            <div class="text-[8px] text-telegram-hint font-bold mt-1 uppercase">Receita - Despesa</div>
           </div>
         `;
 
         vg.minhas_contas.filter(acc => acc.nome !== 'Carteira' || acc.saldo > 0).forEach(acc => {
           const isCard = acc.tipo === 'Cartão de Crédito';
           const icon = isCard ? 'credit-card' : 'landmark';
-          const color = isCard ? 'text-brand' : 'text-emerald-500';
-          const bg = isCard ? 'bg-brand/5' : 'bg-emerald-500/5';
+          const color = isCard ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400';
+          const bg = isCard ? 'bg-amber-500/10 dark:bg-amber-500/20' : 'bg-blue-500/10 dark:bg-blue-500/20';
           
           const labelPrincipal = isCard ? 'Fatura Atual' : 'Saldo';
           const labelSecundario = isCard ? 'Disponível' : 'Limite';
