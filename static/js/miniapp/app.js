@@ -4261,8 +4261,28 @@ document.addEventListener('DOMContentLoaded', () => {
       // Se não for forçado e já estiver visível, não recarrega (opcional)
       if (!force && content && !content.classList.contains('hidden')) return;
 
-      if (skeleton) skeleton.classList.remove('hidden');
-      if (content) content.classList.add('hidden');
+      // Se não tem cache, mostra o skeleton inicial
+      let hasCache = false;
+      try {
+        const cachedStr = localStorage.getItem('miniapp_modo_deus_cache');
+        if (cachedStr) {
+          const cachedData = JSON.parse(cachedStr);
+          if (cachedData) {
+            renderModoDeus(cachedData);
+            if (skeleton) skeleton.classList.add('hidden');
+            if (content) content.classList.remove('hidden');
+            applyHugeicons();
+            hasCache = true;
+          }
+        }
+      } catch (e) {
+        console.warn("Erro Cache Modo Deus:", e);
+      }
+
+      if (!hasCache) {
+        if (skeleton) skeleton.classList.remove('hidden');
+        if (content) content.classList.add('hidden');
+      }
 
       try {
         const response = await fetchWithSession('/api/miniapp/modo_deus');
@@ -4272,6 +4292,9 @@ document.addEventListener('DOMContentLoaded', () => {
           showToast('Erro ao carregar Modo Deus', 'error');
           return;
         }
+
+        // Salva cache
+        localStorage.setItem('miniapp_modo_deus_cache', JSON.stringify(data));
 
         renderModoDeus(data);
 
