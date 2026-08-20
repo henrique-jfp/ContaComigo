@@ -2053,8 +2053,8 @@ async def miniapp_overview():
             )
         ).order_by(FaturaCartao.data_vencimento.asc()).all()
         
-        # Filtro corrigido: faturas em aberto no passado não são ocultadas (são atrasadas e não pagas)
-        faturas_db = [f for f in faturas_db if f.status != "paga" or f.data_vencimento >= current_month_start]
+        # Filtro: faturas "em_aberto" com vencimento passado são tratadas como pagas para que a projeção atue
+        faturas_db = [f for f in faturas_db if not (f.status == "em_aberto" and f.data_vencimento < today)]
         
         cards_summary = []
         seen_accounts = set()
@@ -2093,13 +2093,19 @@ async def miniapp_overview():
         ).order_by(ParcelamentoItem.data_proxima_parcela.asc()).all()
         
         installments_summary = []
+        seen_insts = set()
         for p in parcelas_db:
-            installments_summary.append({
-                "desc": p.descricao,
-                "valor": float(p.valor_parcela),
-                "parcela": f"{p.parcela_atual}/{p.total_parcelas}",
-                "vence": p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None
-            })
+            clean_desc = p.descricao.lower().strip()
+            vence = p.data_proxima_parcela.isoformat() if p.data_proxima_parcela else None
+            key = (clean_desc, float(p.valor_parcela), vence)
+            if key not in seen_insts:
+                seen_insts.add(key)
+                installments_summary.append({
+                    "desc": p.descricao.upper(),
+                    "valor": float(p.valor_parcela),
+                    "parcela": f"{p.parcela_atual}/{p.total_parcelas}",
+                    "vence": vence
+                })
 
         # Otimização: Top vilões reais (maiores gastos por descrição) via Agregação SQL
         villains_start = today - timedelta(days=90)
