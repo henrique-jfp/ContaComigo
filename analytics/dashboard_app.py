@@ -1621,8 +1621,8 @@ def _get_card_invoice_value(db, usuario, conta, today: date) -> float:
 
     # 2. Determina datas de controle
     dia_venc = int(conta.dia_vencimento or 10)
-    # Pierre indica fechamento no dia 6, mas o ajuste matemático para Inter bate no dia 5.
-    dia_fechamento = int(conta.dia_fechamento or (5 if "inter" in str(conta.nome).lower() else (dia_venc - 7)))
+    # Correção: Usa dia 6 como padrão para Inter quando não há fechamento registrado
+    dia_fechamento = int(conta.dia_fechamento or (6 if "inter" in str(conta.nome).lower() else max(dia_venc - 7, 1)))
     if dia_fechamento <= 0: dia_fechamento += 30
 
     esta_no_limbo = False
@@ -2057,6 +2057,9 @@ async def miniapp_overview():
                 FaturaCartao.mes_referencia >= current_month_start
             )
         ).order_by(FaturaCartao.data_vencimento.asc()).all()
+        
+        # Filtro: faturas "em_aberto" com vencimento passado são tratadas como pagas para que a projeção atue
+        faturas_db = [f for f in faturas_db if not (f.status == "em_aberto" and f.data_vencimento < today)]
         
         cards_summary = []
         seen_accounts = set()
