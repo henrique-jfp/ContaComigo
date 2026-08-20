@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import unittest
 from dataclasses import dataclass
 from pathlib import Path
 
-from gerente_financeiro.fatura_handler import _parse_fatura_pipeline
+from gerente_financeiro.fatura_handler import _parse_fatura_pdf_local
 
 
 @dataclass(frozen=True)
@@ -22,7 +23,6 @@ if not BRADESCO_PDF.exists():
     BRADESCO_PDF = ROOT / "faturas_system" / "Bradesco_Fatura.pdf"
 
 
-# Amostras-âncora do PDF Inter para evitar regressões sem precisar listar 100+ itens.
 INTER_ANCHORS = {
     TxSignature("10/11/2025", -8.87, "PIXCREDPARCELADO"),
     TxSignature("25/01/2026", -150.00, "COCOBAMBURIOBOTAFOG"),
@@ -36,7 +36,6 @@ INTER_ANCHORS = {
     TxSignature("07/02/2026", -8.07, "HNTCOMERCIOHORTIFRUT"),
 }
 
-# Verdade-terreno extraída das linhas de lançamentos detectáveis do PDF Bradesco.
 BRADESCO_EXPECTED = {
     TxSignature("02/03/2026", -1.71, "IOF ADIC ROTATIVO/ATRASO"),
     TxSignature("02/03/2026", -0.44, "IOF DIARIO ROTATIV/ATRASO"),
@@ -93,7 +92,6 @@ def _f1(expected: set[TxSignature], parsed: set[TxSignature]) -> float:
 
 
 def _inter_score(parsed_set: set[TxSignature], parsed_count: int, debit_total: float) -> float:
-    # Baseline real do PDF do workspace.
     expected_count = 139
     expected_total = 2210.36
 
@@ -106,28 +104,30 @@ def _inter_score(parsed_set: set[TxSignature], parsed_count: int, debit_total: f
     return 0.50 * total_score + 0.30 * anchors_score + 0.20 * count_score
 
 
-def test_fatura_parse_assertividade_acima_98():
-    assert INTER_PDF.exists(), f"PDF não encontrado: {INTER_PDF}"
-    assert BRADESCO_PDF.exists(), f"PDF não encontrado: {BRADESCO_PDF}"
+class TestFaturaParseAccuracy(unittest.TestCase):
+    @unittest.skipIf(not INTER_PDF.exists() or not BRADESCO_PDF.exists(), "PDFs de teste de fatura não encontrados no workspace")
+    def test_fatura_parse_assertividade_acima_98(self):
+        inter_tx, _inter_ign, inter_origin, _total_inter = _parse_fatura_pdf_local(INTER_PDF.read_bytes())
+        br_tx, _br_ign, br_origin, _total_br = _parse_fatura_pdf_local(BRADESCO_PDF.read_bytes())
 
-    inter_tx, _inter_ign, inter_origin = _parse_fatura_pipeline(INTER_PDF.read_bytes())
-    br_tx, _br_ign, br_origin = _parse_fatura_pipeline(BRADESCO_PDF.read_bytes())
+        self.assertEqual(inter_origin, "Inter")
+        self.assertEqual(br_origin, "Bradesco")
 
-    assert inter_origin == "Inter"
-    assert br_origin == "Bradesco"
+        inter_set = _normalize(inter_tx)
+        br_set = _normalize(br_tx)
 
-    inter_set = _normalize(inter_tx)
-    br_set = _normalize(br_tx)
+        inter_debit_total = round(sum(-float(t["valor"]) for t in inter_tx if float(t["valor"]) < 0), 2)
+        inter_score = _inter_score(inter_set, len(inter_tx), inter_debit_total)
 
-    inter_debit_total = round(sum(-float(t["valor"]) for t in inter_tx if float(t["valor"]) < 0), 2)
-    inter_score = _inter_score(inter_set, len(inter_tx), inter_debit_total)
+        br_score = _f1(BRADESCO_EXPECTED, br_set)
+        assertividade = (inter_score + br_score) / 2.0
 
-    br_score = _f1(BRADESCO_EXPECTED, br_set)
+        self.assertGreaterEqual(
+            assertividade,
+            0.98,
+            f"Assertividade abaixo do alvo: {assertividade * 100:.2f}% (Inter={inter_score * 100:.2f}%, Bradesco={br_score * 100:.2f}%)"
+        )
 
-    assertividade = (inter_score + br_score) / 2.0
 
-    # Guard rail forte para regressão real do parser.
-    assert assertividade >= 0.98, (
-        f"Assertividade abaixo do alvo: {assertividade * 100:.2f}% "
-        f"(Inter={inter_score * 100:.2f}%, Bradesco={br_score * 100:.2f}%)"
-    )
+if __name__ == "__main__":
+    unittest.main()

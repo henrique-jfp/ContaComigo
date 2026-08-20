@@ -1,3 +1,4 @@
+import unittest
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -33,47 +34,47 @@ class DummyItem:
     valor_unitario: float = 0.0
 
 
-def test_infer_category_from_description_ifood():
-    assert infer_category_from_description('Compra iFood do almoço') == 'Alimentação'
+class TestWrappedAnual(unittest.TestCase):
+    def test_infer_category_from_description_ifood(self):
+        self.assertEqual(infer_category_from_description('Compra iFood do almoço'), 'Alimentação')
+
+    def test_infer_payment_method_pix_and_card(self):
+        self.assertEqual(infer_payment_method('PIX', None), 'Pix')
+        self.assertEqual(infer_payment_method('Cartao Visa', 'Pagamento com Visa'), 'Cartão de Crédito')
+        self.assertEqual(infer_payment_method(None, 'boleto bancario'), 'Boleto')
+
+    def test_derive_lancamento_meta_prefers_inferred_when_categoria_receita_on_despesa(self):
+        lanc = DummyLancamento(
+            tipo='Despesa',
+            categoria=DummyCategoria(nome='Receitas Extras'),
+            descricao='Compra no mercado',
+            meio_pagamento='cartao debito',
+            valor=123.45
+        )
+
+        tipo_eff, categoria_eff, metodo = derive_lancamento_meta(lanc)
+        self.assertIn(tipo_eff, ('Despesa', 'Receita'))
+        self.assertEqual(categoria_eff, 'Alimentação')
+        self.assertTrue(metodo.lower().startswith('cart') or metodo == 'Cartão' or metodo == 'Cartão de Crédito')
+
+    def test_resumir_itens_comprados_gera_topos(self):
+        lancamentos = [
+            DummyLancamento(itens=[
+                DummyItem(nome_item='Leite', quantidade=2, valor_unitario=5.0),
+                DummyItem(nome_item='Pão', quantidade=1, valor_unitario=10.0),
+            ]),
+            DummyLancamento(itens=[
+                DummyItem(nome_item='Leite', quantidade=1, valor_unitario=5.0),
+                DummyItem(nome_item='Chocolate', quantidade=1, valor_unitario=25.0),
+            ]),
+        ]
+
+        resumo = resumir_itens_comprados(lancamentos)
+
+        self.assertEqual(resumo['top_por_qtd'][0]['nome'], 'Leite')
+        self.assertEqual(resumo['top_por_valor'][0]['nome'], 'Chocolate')
+        self.assertEqual(resumo['baratos_por_valor'][0]['nome'], 'Pão')
 
 
-def test_infer_payment_method_pix_and_card():
-    assert infer_payment_method('PIX', None) == 'Pix'
-    assert infer_payment_method('Cartao Visa', 'Pagamento com Visa') == 'Cartão de Crédito'
-    assert infer_payment_method(None, 'boleto bancario') == 'Boleto'
-
-
-def test_derive_lancamento_meta_prefers_inferred_when_categoria_receita_on_despesa():
-    # Caso onde categoria registrada diz 'Receitas' mas tipo é 'Despesa' -> usar inferência
-    lanc = DummyLancamento(
-        tipo='Despesa',
-        categoria=DummyCategoria(nome='Receitas Extras'),
-        descricao='Compra no mercado',
-        meio_pagamento='cartao debito',
-        valor=123.45
-    )
-
-    tipo_eff, categoria_eff, metodo = derive_lancamento_meta(lanc)
-    assert tipo_eff in ('Despesa', 'Receita')
-    # A inferência deve reconhecer 'mercado' -> Alimentação
-    assert categoria_eff == 'Alimentação'
-    assert metodo.lower().startswith('cart') or metodo == 'Cartão' or metodo == 'Cartão de Crédito'
-
-
-def test_resumir_itens_comprados_gera_topos():
-    lancamentos = [
-        DummyLancamento(itens=[
-            DummyItem(nome_item='Leite', quantidade=2, valor_unitario=5.0),
-            DummyItem(nome_item='Pão', quantidade=1, valor_unitario=10.0),
-        ]),
-        DummyLancamento(itens=[
-            DummyItem(nome_item='Leite', quantidade=1, valor_unitario=5.0),
-            DummyItem(nome_item='Chocolate', quantidade=1, valor_unitario=25.0),
-        ]),
-    ]
-
-    resumo = resumir_itens_comprados(lancamentos)
-
-    assert resumo['top_por_qtd'][0]['nome'] == 'Leite'
-    assert resumo['top_por_valor'][0]['nome'] == 'Chocolate'
-    assert resumo['baratos_por_valor'][0]['nome'] == 'Pão'
+if __name__ == "__main__":
+    unittest.main()

@@ -1191,6 +1191,8 @@ def _resumo_contas_local(db, usuario_id: int) -> str:
         data_ag = getattr(lembrete, "proxima_data_execucao", None)
         if not data_ag:
             continue
+        if isinstance(data_ag, datetime):
+            data_ag = data_ag.date()
         valor_txt = (
             f" (<code>{_formatar_valor_brasileiro(float(lembrete.valor or 0))}</code>)"
             if getattr(lembrete, "valor", None) is not None else ""
