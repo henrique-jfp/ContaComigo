@@ -1609,65 +1609,43 @@ def miniapp_history():
 
 def _get_card_invoice_value(db, usuario, conta, today: date) -> float:
     """
-    Calcula o valor da fatura de um cartão de forma genérica.
-    Se estiver no 'limbo' (entre fechamento e vencimento), subtrai gastos do novo ciclo.
+    Calcula o valor projetado da fatura atual baseado nos gastos a partir do último corte,
+    ignorando o saldo total (que contamina a previsão com compras futuras parceladas).
     """
-    # 1. Pega o saldo mais recente (limite utilizado total)
-    ultimo_saldo = db.query(SaldoConta).filter(SaldoConta.id_conta == conta.id).order_by(SaldoConta.capturado_em.desc()).first()
-    valor_total_devido = float(ultimo_saldo.saldo or 0) if ultimo_saldo else 0.0
-    
-    if valor_total_devido <= 1.0:
-        return valor_total_devido
-
-    # 2. Determina datas de controle
     dia_venc = int(conta.dia_vencimento or 10)
-    # Correção: Usa dia 6 como padrão para Inter quando não há fechamento registrado
     dia_fechamento = int(conta.dia_fechamento or (6 if "inter" in str(conta.nome).lower() else max(dia_venc - 7, 1)))
     if dia_fechamento <= 0: dia_fechamento += 30
 
-    esta_no_limbo = False
-    if dia_fechamento < dia_venc:
-        if today.day >= dia_fechamento and today.day < dia_venc:
-            esta_no_limbo = True
-    else: # Ciclo cruza a virada do mês
-        if today.day >= dia_fechamento or today.day < dia_venc:
-            esta_no_limbo = True
+    # Define a última data de fechamento que ocorreu (Corte)
+    if today.day >= dia_fechamento:
+        data_corte = today.replace(day=dia_fechamento)
+    else:
+        data_corte = (today - relativedelta(months=1)).replace(day=dia_fechamento)
 
-    if esta_no_limbo:
-        # Define a data exata do último fechamento
-        if today.day >= dia_fechamento:
-            data_corte = today.replace(day=dia_fechamento)
-        else: # Já virou o mês, o fechamento foi no mês anterior
-            data_corte = (today - relativedelta(months=1)).replace(day=dia_fechamento)
-            
-        # 4. Abatimento de gastos do NOVO ciclo
-        digital_acc = db.query(Conta).filter(Conta.id_usuario == usuario.id, Conta.nome.ilike("%digital%")).first()
-        checking_acc = db.query(Conta).filter(Conta.id_usuario == usuario.id, Conta.nome.ilike("%banco%")).first()
-        
-        conta_ids = [conta.id]
-        if digital_acc: conta_ids.append(digital_acc.id)
-        if checking_acc: conta_ids.append(checking_acc.id)
+    # Contas para buscar gastos (incluindo possíveis faturas pagas via digital/débito que ainda contam como gastos caso a conciliação falhe, mas o foco é a conta de crédito principal)
+    digital_acc = db.query(Conta).filter(Conta.id_usuario == usuario.id, Conta.nome.ilike("%digital%")).first()
+    checking_acc = db.query(Conta).filter(Conta.id_usuario == usuario.id, Conta.nome.ilike("%banco%")).first()
+    
+    conta_ids = [conta.id]
+    if digital_acc: conta_ids.append(digital_acc.id)
+    if checking_acc: conta_ids.append(checking_acc.id)
 
-        # Filtro: Subtraímos apenas o que Pierre confirmou como vindo do Open Finance
-        # e que NÃO seja um Pix comum ou Débito em conta corrente (a menos que seja Pix no Crédito)
-        gastos_novo_ciclo = db.query(func.sum(func.abs(Lancamento.valor))).filter(
-            Lancamento.id_usuario == usuario.id,
-            Lancamento.id_conta.in_(conta_ids),
-            _expense_type_condition(),
-            Lancamento.data_transacao >= datetime.combine(data_corte, datetime.min.time()),
-            Lancamento.origem == 'open_finance'
-        ).filter(
-            or_(
-                Lancamento.id_conta == conta.id,
-                Lancamento.descricao.ilike('%no crédito%'),
-                Lancamento.descricao.ilike('%no credito%')
-            )
-        ).scalar() or 0.0
-        
-        logger.info(f"[Card Delta] {conta.nome}: Base {valor_total_devido:.2f} - Novos {gastos_novo_ciclo:.2f} = {valor_total_devido - float(gastos_novo_ciclo):.2f}")
-        valor_total_devido = max(0, valor_total_devido - float(gastos_novo_ciclo))
+    # Gastos consolidados do novo ciclo (desde o corte)
+    gastos_ciclo_atual = db.query(func.sum(func.abs(Lancamento.valor))).filter(
+        Lancamento.id_usuario == usuario.id,
+        Lancamento.id_conta.in_(conta_ids),
+        _expense_type_condition(),
+        Lancamento.data_transacao >= datetime.combine(data_corte, datetime.min.time()),
+        Lancamento.origem == 'open_finance'
+    ).filter(
+        or_(
+            Lancamento.id_conta == conta.id,
+            Lancamento.descricao.ilike('%no crédito%'),
+            Lancamento.descricao.ilike('%no credito%')
+        )
+    ).scalar() or 0.0
 
-    return round(valor_total_devido, 2)
+    return round(float(gastos_ciclo_atual), 2)
 
 
 def _get_card_due_date(db, conta, reference_date: date) -> date:
@@ -2053,8 +2031,8 @@ async def miniapp_overview():
             )
         ).order_by(FaturaCartao.data_vencimento.asc()).all()
         
-        # Filtro: faturas "em_aberto" com vencimento passado são tratadas como pagas para que a projeção atue
-        faturas_db = [f for f in faturas_db if not (f.status == "em_aberto" and f.data_vencimento < today)]
+        # Filtro corrigido: faturas em aberto no passado não são ocultadas (são atrasadas e não pagas)
+        faturas_db = [f for f in faturas_db if f.status != "paga" or f.data_vencimento >= current_month_start]
         
         cards_summary = []
         seen_accounts = set()
