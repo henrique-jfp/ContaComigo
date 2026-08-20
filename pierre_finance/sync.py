@@ -297,6 +297,10 @@ def _upsert_bill_summaries(usuario: Usuario, db: Session, client: PierreClient, 
         res_past = client.get_bills()
         past_bills = _extrair_sumarios_fatura(res_past)
         
+        # Marcar a origem
+        for c in current_bills: c['_is_current'] = True
+        for p in past_bills: p['_is_current'] = False
+        
         all_bills = current_bills + past_bills
 
         for s in all_bills:
@@ -309,6 +313,14 @@ def _upsert_bill_summaries(usuario: Usuario, db: Session, client: PierreClient, 
             dv = _parse_iso_date(dv_raw)
             ref_date = dv or datetime.now(timezone.utc)
             
+            # Se for a fatura atual mas a data de vencimento estiver no passado (bug da API/banco não virou o mês)
+            if s.get('_is_current') and dv and dv.date() < datetime.now(timezone.utc).date():
+                # Empurra a referência para o próximo mês
+                if ref_date.month == 12:
+                    ref_date = ref_date.replace(year=ref_date.year + 1, month=1)
+                else:
+                    ref_date = ref_date.replace(month=ref_date.month + 1)
+            
             fake_ext_id = f"bill_{acc_id}_{ref_date.year}_{ref_date.month:02d}"
 
             fatura = db.query(FaturaCartao).filter(
@@ -319,8 +331,16 @@ def _upsert_bill_summaries(usuario: Usuario, db: Session, client: PierreClient, 
                 fatura = FaturaCartao(id_usuario=usuario.id, id_conta=conta_id, external_id=fake_ext_id)
                 db.add(fatura)
 
-            fatura.valor_total = _safe_decimal(s.get("billAmount") or s.get("amount") or s.get("totalAmount") or 0)
-            fatura.data_vencimento = ref_date.date()
+            # Só sobrescreve se a fatura não estava marcada como paga, ou se é a atual
+            if fatura.status != 'paga':
+                fatura.valor_total = _safe_decimal(s.get("billAmount") or s.get("amount") or s.get("totalAmount") or 0)
+                fatura.data_vencimento = ref_date.date()
+                if s.get('_is_current'):
+                    fatura.status = 'em_aberto'
+                else:
+                    # Se veio do past_bills (fatura fechada real), deixa como 'em_aberto' (o usuário muda pra paga) 
+                    # Mas se o valor for diferente, atualiza
+                    if not fatura.status: fatura.status = 'em_aberto'
             
             df = _parse_iso_date(s.get("closeDate") or s.get("closing_date"))
 

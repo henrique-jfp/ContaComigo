@@ -1653,19 +1653,21 @@ def _get_card_invoice_value(db, usuario, conta, today: date) -> float:
     ).order_by(FaturaCartao.data_vencimento.desc()).first()
 
     if ultima_fatura and ultima_fatura.status != 'paga':
-        # Busca pagamentos realizados após o fechamento dessa última fatura
+        # Busca pagamentos realizados após o fechamento dessa última fatura (apenas valores negativos para evitar contar entrada e saída)
         data_fechamento_anterior = ultima_fatura.data_vencimento - timedelta(days=15)
         pagamentos_realizados = db.query(func.sum(func.abs(Lancamento.valor))).filter(
-            Lancamento.id_conta == conta.id,
+            Lancamento.id_conta.in_(conta_ids),
+            Lancamento.valor < 0,
             Lancamento.data_transacao >= datetime.combine(data_fechamento_anterior, datetime.min.time()),
             or_(
-                Lancamento.descricao.ilike('%pagamento%'),
-                Lancamento.descricao.ilike('%fatura%'),
-                Lancamento.tipo == 'Entrada'
+                Lancamento.descricao.ilike('%pagamento%fatura%'),
+                Lancamento.descricao.ilike('%pagamento%cartão%'),
+                Lancamento.descricao.ilike('%pagamento%cartao%'),
+                Lancamento.descricao.ilike('%fatura%cartão%')
             )
         ).scalar() or 0.0
         
-        saldo_fatura_anterior = max(0.0, float(ultima_fatura.valor_total) - pagamentos_realizados)
+        saldo_fatura_anterior = max(0.0, float(ultima_fatura.valor_total) - float(pagamentos_realizados))
 
     return round(float(gastos_ciclo_atual) + saldo_fatura_anterior, 2)
 
