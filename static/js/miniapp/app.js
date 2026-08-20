@@ -4431,16 +4431,16 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- INJEÇÃO DO PATRIMÔNIO TOTAL COMO PRIMEIRO CARD (ALINHADO COM AS CONTAS) ---
         const pTotal = vg.patrimonio_liquido || 0;
         accL.innerHTML += `
-          <div class="glass-card p-4 rounded-2xl bg-telegram-card/40 min-w-[150px] flex-shrink-0 border border-telegram-separator/30">
-            <div class="flex items-center gap-2 mb-2">
-              <div class="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                <i data-lucide="shield-check" class="w-3 h-3 text-slate-600 dark:text-slate-300"></i>
+          <div class="p-4 rounded-3xl bg-telegram-card/60 backdrop-blur-xl min-w-[155px] flex-shrink-0 border border-telegram-separator/40 flex flex-col justify-between transition-all">
+            <div class="flex items-center gap-2 mb-2.5">
+              <div class="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                <i data-lucide="shield-check" class="w-3.5 h-3.5 text-slate-600 dark:text-slate-300"></i>
               </div>
-              <span class="text-[9px] font-black text-telegram-hint uppercase truncate">PATRIMÔNIO (ANO)</span>
+              <span class="text-[9px] font-black text-telegram-hint uppercase tracking-wider truncate">PATRIMÔNIO (ANO)</span>
             </div>
-            <p class="text-[8px] font-black text-telegram-hint uppercase mb-0.5">Saldo Líquido</p>
-            <div class="text-sm font-black ${pTotal >= 0 ? 'text-telegram-text' : 'text-rose-500'} font-financial">${fmt.format(pTotal)}</div>
-            <div class="text-[8px] text-telegram-hint font-bold mt-1 uppercase">Receita - Despesa</div>
+            <p class="text-[8px] font-black text-telegram-hint uppercase mb-0.5 tracking-wider">Saldo Líquido</p>
+            <div class="text-base font-black ${pTotal >= 0 ? 'text-telegram-text' : 'text-rose-500'} font-financial">${fmt.format(pTotal)}</div>
+            <div class="text-[8px] text-telegram-hint font-bold mt-1.5 uppercase tracking-wider">Receita − Despesa</div>
           </div>
         `;
 
@@ -4455,16 +4455,16 @@ document.addEventListener('DOMContentLoaded', () => {
           const valorSecundario = isCard ? (acc.saldo_disponivel || 0) : (acc.limite || 0);
 
           accL.innerHTML += `
-            <div class="glass-card p-4 rounded-2xl bg-telegram-card/40 min-w-[150px] flex-shrink-0 border border-telegram-separator/30">
-              <div class="flex items-center gap-2 mb-2">
-                <div class="w-6 h-6 rounded-lg ${bg} flex items-center justify-center">
-                  <i data-lucide="${icon}" class="w-3 h-3 ${color}"></i>
+            <div class="p-4 rounded-3xl bg-telegram-card/60 backdrop-blur-xl min-w-[155px] flex-shrink-0 border border-telegram-separator/40 flex flex-col justify-between transition-all">
+              <div class="flex items-center gap-2 mb-2.5">
+                <div class="w-7 h-7 rounded-full ${bg} flex items-center justify-center shrink-0">
+                  <i data-lucide="${icon}" class="w-3.5 h-3.5 ${color}"></i>
                 </div>
-                <span class="text-[9px] font-black text-telegram-hint uppercase truncate">${acc.nome}</span>
+                <span class="text-[9px] font-black text-telegram-hint uppercase tracking-wider truncate">${acc.nome}</span>
               </div>
-              <p class="text-[8px] font-black text-telegram-hint uppercase mb-0.5">${labelPrincipal}</p>
-              <div class="text-sm font-black text-telegram-text font-financial">${fmt.format(acc.saldo)}</div>
-              ${valorSecundario ? `<div class="text-[8px] text-telegram-hint font-bold mt-1 uppercase">${labelSecundario} ${fmt.format(valorSecundario)}</div>` : ''}
+              <p class="text-[8px] font-black text-telegram-hint uppercase mb-0.5 tracking-wider">${labelPrincipal}</p>
+              <div class="text-base font-black text-telegram-text font-financial">${fmt.format(acc.saldo)}</div>
+              ${valorSecundario ? `<div class="text-[8px] text-telegram-hint font-bold mt-1.5 uppercase tracking-wider">${labelSecundario} ${fmt.format(valorSecundario)}</div>` : '<div class="text-[8px] text-transparent mt-1.5 select-none">-</div>'}
             </div>
           `;
         });

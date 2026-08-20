@@ -1659,11 +1659,6 @@ def _get_card_invoice_value(db, usuario, conta, today: date) -> float:
         ).filter(
             or_(
                 Lancamento.id_conta == conta.id,
-                and_(
-                    not_(Lancamento.descricao.ilike('%pix enviado%')),
-                    not_(Lancamento.descricao.ilike('%compra no débito%')),
-                    not_(Lancamento.descricao.ilike('%compra no debito%'))
-                ),
                 Lancamento.descricao.ilike('%no crédito%'),
                 Lancamento.descricao.ilike('%no credito%')
             )
@@ -2626,7 +2621,16 @@ def miniapp_openfinance_lembretes():
             desc = (l.descricao or '').strip()
             if not desc:
                 continue
-            key = desc.split()[0].lower()
+            
+            desc_lower = desc.lower()
+            key = None
+            for s in servicos_assinatura:
+                if s in desc_lower:
+                    key = s
+                    break
+            if not key:
+                key = desc.split()[0].lower()
+                
             data_tx = l.data_transacao.date() if isinstance(l.data_transacao, datetime) else l.data_transacao
             valor = abs(float(l.valor or 0))
             current = assinaturas_map.get(key)
@@ -4273,15 +4277,33 @@ async def miniapp_modo_deus():
             lista_ass = []
             seen = set()
             for l in lanc_ass:
-                desc = (l.descricao or "").split()[0].lower()
-                if desc and desc not in seen:
+                desc = (l.descricao or "").strip()
+                if not desc: continue
+                desc_lower = desc.lower()
+                key = None
+                for s in servicos_assinatura:
+                    if s in desc_lower:
+                        key = s
+                        break
+                if not key: key = desc.split()[0].lower()
+                
+                if key not in seen:
                     lista_ass.append({"descricao": l.descricao, "valor": abs(float(l.valor))})
-                    seen.add(desc)
+                    seen.add(key)
             for a in agend_ass:
-                desc = (a.descricao or "").split()[0].lower()
-                if desc and desc not in seen:
+                desc = (a.descricao or "").strip()
+                if not desc: continue
+                desc_lower = desc.lower()
+                key = None
+                for s in servicos_assinatura:
+                    if s in desc_lower:
+                        key = s
+                        break
+                if not key: key = desc.split()[0].lower()
+                
+                if key not in seen:
                     lista_ass.append({"descricao": a.descricao, "valor": float(a.valor)})
-                    seen.add(desc)
+                    seen.add(key)
             
             result['assinaturas'] = {"lista": lista_ass, "total_mensal": sum(x['valor'] for x in lista_ass)}
         except Exception as e:
