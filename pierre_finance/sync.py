@@ -715,6 +715,17 @@ async def sincronizar_carga_inicial(usuario: Usuario, db: Session) -> dict:
             lanc.forma_pagamento = _normalizar_forma_pagamento(descricao, acc_type)
             # Tenta categorizar na hora
             await enriquecer_um_lancamento(db, lanc)
+            
+            from gerente_financeiro.assistente_proativo import verificar_anomalia_gasto_tempo_real
+            import asyncio
+            if lanc.id_categoria and lanc.tipo in ("Saída", "Despesa"):
+                asyncio.create_task(verificar_anomalia_gasto_tempo_real(
+                    usuario_id=usuario.id,
+                    valor_lancamento=abs(float(lanc.valor)),
+                    id_categoria=lanc.id_categoria,
+                    descricao=lanc.descricao
+                ))
+            
             txs_count += 1
         else:
             # Se já existia, mas não tinha external_id, o register_transaction já cuidou do commit.
@@ -891,6 +902,17 @@ async def sincronizar_incremental(usuario: Usuario, db: Session) -> int:
             lanc.nome_contraparte = nome_fantasia
             lanc.forma_pagamento = _normalizar_forma_pagamento(descricao, acc_type)
             await enriquecer_um_lancamento(db, lanc)
+            
+            from gerente_financeiro.assistente_proativo import verificar_anomalia_gasto_tempo_real
+            import asyncio
+            if lanc.id_categoria and lanc.tipo in ("Saída", "Despesa"):
+                asyncio.create_task(verificar_anomalia_gasto_tempo_real(
+                    usuario_id=usuario.id,
+                    valor_lancamento=abs(float(lanc.valor)),
+                    id_categoria=lanc.id_categoria,
+                    descricao=lanc.descricao
+                ))
+            
             novos += 1
         else:
             # Se já existia, evitamos mudar o tipo para não ocultar do dashboard.

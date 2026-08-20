@@ -3142,6 +3142,16 @@ async def quick_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     novo_lanc.id_subcategoria = subcat_id
                     novo_lanc.forma_pagamento = dados_quick.get("forma_pagamento")
                     db.commit()
+                    
+                    if dados_quick.get("tipo_transacao") == "Despesa" and cat_id:
+                        from gerente_financeiro.assistente_proativo import verificar_anomalia_gasto_tempo_real
+                        import asyncio
+                        asyncio.create_task(verificar_anomalia_gasto_tempo_real(
+                            usuario_id=usuario_db.id,
+                            valor_lancamento=abs(valor_final),
+                            id_categoria=cat_id,
+                            descricao=dados_quick.get("descricao")
+                        ))
                 
                 from gerente_financeiro.gamification_utils import give_xp_for_action
                 try:

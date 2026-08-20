@@ -2292,8 +2292,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
         console.log('loadHomeOverview: sessionId=', sessionId);
+        
+        // --- Cache-First: Stale-while-revalidate ---
         try {
-          console.log("🚀 Carregando visão geral...");
+          const cachedData = localStorage.getItem('miniapp_overview_cache');
+          if (cachedData) {
+            const parsedCache = JSON.parse(cachedData);
+            if (parsedCache) {
+              console.log("⚡ [Cache-First] Renderizando home instantaneamente a partir do cache local");
+              renderHomeOverview(parsedCache);
+            }
+          }
+        } catch (e) {
+          console.warn("Erro ao ler cache do overview:", e);
+        }
+
+        try {
+          console.log("🚀 Carregando visão geral da API...");
           const response = await fetchWithSession('/api/miniapp/overview');
           console.log('loadHomeOverview: response status', response.status);
           const data = await response.json();
@@ -2304,6 +2319,10 @@ document.addEventListener('DOMContentLoaded', () => {
           // Backend pode retornar { summary: {...} } ou { data: {...} }
           const summary = data.summary || data.data || data;
           console.log("✅ Dados recebidos (overview):", summary);
+          
+          // Salva no cache para a próxima abertura
+          localStorage.setItem('miniapp_overview_cache', JSON.stringify(summary || {}));
+          
           renderHomeOverview(summary || {});
         } catch (error) {
           console.error("🔥 Falha crítica ao carregar home:", error);

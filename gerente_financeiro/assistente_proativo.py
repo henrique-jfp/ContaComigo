@@ -192,6 +192,67 @@ def analisar_gastos_usuario(usuario_id: int) -> Optional[Dict]:
         logger.error(f"❌ Erro ao analisar gastos do usuário {usuario_id}: {e}")
         return None
 
+async def verificar_anomalia_gasto_tempo_real(usuario_id: int, valor_lancamento: float, id_categoria: int, descricao: str) -> None:
+    """
+    Verifica no momento da inserção se um gasto é muito fora do padrão para a categoria (Ex: > 2.5x a média).
+    Se for, dispara uma notificação push imediatamente.
+    """
+    if valor_lancamento <= 0:
+        return
+        
+    db = next(get_db())
+    try:
+        # Calcular média histórica para esta categoria (últimos 6 meses, excluindo atual)
+        hoje = datetime.now()
+        data_inicio_historico = hoje - timedelta(days=180)
+        primeiro_dia_mes_atual = hoje.replace(day=1)
+        
+        gasto_historico = db.query(func.sum(Lancamento.valor)).filter(
+            and_(
+                Lancamento.id_usuario == usuario_id,
+                Lancamento.tipo.in_(TIPOS_DESPESA),
+                Lancamento.id_categoria == id_categoria,
+                Lancamento.data_transacao >= data_inicio_historico,
+                Lancamento.data_transacao < primeiro_dia_mes_atual,
+                Lancamento.is_transferencia_interna == False
+            )
+        ).scalar()
+        
+        gasto_historico = float(gasto_historico or 0)
+        media_mensal = gasto_historico / 6 if gasto_historico > 0 else 0
+        
+        # Só alerta se tiver histórico e o gasto atual for mais que 2.5x a média da categoria
+        # E o valor do gasto for relevante (ex: maior que R$ 100)
+        if media_mensal > 0 and valor_lancamento > 100.0 and valor_lancamento > (media_mensal * 2.5):
+            usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+            categoria = db.query(Categoria).filter(Categoria.id == id_categoria).first()
+            
+            if usuario and usuario.telegram_id and categoria:
+                import config
+                from telegram import Bot
+                
+                # Instância local do bot para envio imediato fora do context
+                bot = Bot(token=config.TELEGRAM_TOKEN)
+                
+                msg = (
+                    f"⚠️ <b>Alerta de Gasto Fora do Padrão!</b>\n\n"
+                    f"Olá, {usuario.nome_completo}!\n"
+                    f"Notei um registro atípico agora:\n\n"
+                    f"🛒 <b>{descricao}</b>\n"
+                    f"💰 <b>Valor:</b> R$ {valor_lancamento:.2f}\n"
+                    f"📌 <b>Categoria:</b> {categoria.nome}\n\n"
+                    f"Isso ultrapassa bastante sua média mensal para essa categoria (R$ {media_mensal:.2f}).\n"
+                    f"Tudo certo com essa transação? Caso precise ajustar o orçamento, acesse o /miniapp."
+                )
+                
+                await bot.send_message(chat_id=usuario.telegram_id, text=msg, parse_mode='HTML')
+                logger.info(f"📨 Alerta de anomalia instantânea enviado para {usuario.telegram_id} - Gasto: {valor_lancamento}")
+                
+    except Exception as e:
+        logger.error(f"❌ Erro ao verificar anomalia de tempo real para usuario {usuario_id}: {e}")
+    finally:
+        db.close()
+
 
 # ============================================================================
 # DETECÇÃO DE ASSINATURAS DUPLICADAS
